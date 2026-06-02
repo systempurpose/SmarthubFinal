@@ -238,6 +238,8 @@ app.use((req: Request, res: Response, next) => {
 
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/repair', repairRoutes);
+app.use(express.static('html'));
+app.use('/css', express.static('css'));
 
 ensureBaseDirs();
 

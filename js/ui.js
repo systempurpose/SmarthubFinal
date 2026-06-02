@@ -3,8 +3,10 @@ let currentDeviceId = null;
 let wizardStep = 0;
 
 // ==================== API HELPER ====================
+// ==================== API HELPER ====================
+const BACKEND_URL = 'http://127.0.0.1:3333';
 async function apiCall(endpoint, options = {}) {
-    const res = await fetch(`/api${endpoint}`, {
+    const res = await fetch(`${BACKEND_URL}/api${endpoint}`, {
         headers: { 'Content-Type': 'application/json' },
         ...options
     });

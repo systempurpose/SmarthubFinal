@@ -229,7 +229,7 @@ public partial class MainWindow : Window
                         // ignore
                     }
                 };
-                WebView.Source = new Uri(uiPath);
+                WebView.Source = new Uri("http://127.0.0.1:3333/ui.html");
                 try
                 {
                     WebView.Focus();
@@ -266,7 +266,7 @@ public partial class MainWindow : Window
                 // ignore
             }
         };
-        WebView.Source = new Uri(uiPath);
+        WebView.Source = new Uri("http://127.0.0.1:3333/ui.html");
         try
         {
             WebView.Focus();
