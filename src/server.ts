@@ -78,6 +78,8 @@ import { createAuthMiddleware, registerAuthRoutes } from './routes/authRoutes';
 import { registerWifiRoutes } from './routes/wifiRoutes';
 import { registerAndroidConnectivityRoutes } from './routes/androidConnectivityRoutes';
 import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
+import hardwareRoutes from './routes/hardwareRoutes';
+import repairRoutes from './routes/repairRoutes';
 
 const app = express();
 app.disable('x-powered-by');
@@ -233,6 +235,9 @@ app.use((req: Request, res: Response, next) => {
   if (!blocked) return next();
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
+
+app.use('/api/hardware', hardwareRoutes);
+app.use('/api/repair', repairRoutes);
 
 ensureBaseDirs();
 
