@@ -777,6 +777,7 @@ export function createAuthMiddleware() {
       p.startsWith('/auth/') ||
       p === '/device' ||
       p === '/connection-check' ||
+      p.startsWith('/adb/') ||
       p.startsWith('/wifi/') ||
       p.startsWith('/app-behavior/') ||
       p.startsWith('/android-connectivity/')

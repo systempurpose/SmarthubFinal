@@ -181,6 +181,7 @@ function assertAdbCommandSafe(args: string[]): void {
 async function execAdbWithRetry(args: string[], attempts: number): Promise<string> {
   assertAdbCommandSafe(args);
   let lastErr: unknown;
+  let didRestartServer = false;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const { stdout } = await execFileAsync(ADB, args, {
@@ -194,6 +195,15 @@ async function execAdbWithRetry(args: string[], attempts: number): Promise<strin
       const stderr = typeof e?.stderr === 'string' ? e.stderr : '';
       const msg = String(e?.message || stderr || 'ADB command failed');
       if (attempt < attempts - 1 && isTransientAdbError(msg)) {
+        if (!didRestartServer) {
+          didRestartServer = true;
+          try {
+            await restartAdbServer();
+          } catch {
+            // Best-effort only; backoff and retry anyway.
+          }
+        }
+
         // Backoff a bit and retry; do not run additional recovery commands
         // that could make the USB flap worse.
         await sleep(400 + attempt * 600);
@@ -214,6 +224,7 @@ type AdbExecOptions = {
 async function execAdbWithRetryOptions(args: string[], opts: AdbExecOptions): Promise<string> {
   assertAdbCommandSafe(args);
   let lastErr: unknown;
+  let didRestartServer = false;
   for (let attempt = 0; attempt < opts.attempts; attempt++) {
     try {
       const { stdout } = await execFileAsync(ADB, args, {
@@ -226,6 +237,15 @@ async function execAdbWithRetryOptions(args: string[], opts: AdbExecOptions): Pr
       const stderr = typeof e?.stderr === 'string' ? e.stderr : '';
       const msg = String(e?.message || stderr || 'ADB command failed');
       if (attempt < opts.attempts - 1 && isTransientAdbError(msg)) {
+        if (!didRestartServer) {
+          didRestartServer = true;
+          try {
+            await restartAdbServer();
+          } catch {
+            // Ignore restart failures; retrying the command may still work.
+          }
+        }
+
         const id = extractDeviceId(args);
         if (id) {
           // Give the USB stack time to settle if the device is flapping.
@@ -343,6 +363,33 @@ export async function adb(...args: string[]): Promise<string> {
     );
   }
   return enqueueGlobal(() => execAdbWithRetry(args, 2));
+}
+
+export async function restartAdbServer(): Promise<{ killed: boolean; started: boolean }> {
+  const result = { killed: false, started: false };
+
+  try {
+    await execFileAsync(ADB, ['kill-server'], {
+      maxBuffer: 512 * 1024,
+      timeout: 12_000,
+    });
+    result.killed = true;
+  } catch {
+    // ADB server may already be stopped; continue with start-server.
+  }
+
+  try {
+    await execFileAsync(ADB, ['start-server'], {
+      maxBuffer: 512 * 1024,
+      timeout: 12_000,
+    });
+    result.started = true;
+  } catch (e: any) {
+    const msg = String(e?.message || 'Failed to start ADB server');
+    throw new Error(msg);
+  }
+
+  return result;
 }
 
 export async function adbWithLimits(

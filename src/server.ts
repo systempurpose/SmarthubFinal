@@ -72,6 +72,7 @@ import { registerBlueTestRoutes } from './routes/blueTestRoutes';
 import { registerInstallRoutes } from './routes/installRoutes';
 import { registerCollectRoutes } from './routes/collectRoutes';
 import { registerDeepScanRoutes } from './routes/deepScanRoutes';
+import { registerAdbMaintenanceRoutes } from './routes/adbMaintenanceRoutes';
 import { registerOnlineAiRoutes } from './routes/onlineAiRoutes';
 import { createAuthMiddleware, registerAuthRoutes } from './routes/authRoutes';
 import { registerWifiRoutes } from './routes/wifiRoutes';
@@ -247,6 +248,7 @@ registerDeepScanRoutes(app);
 registerWifiRoutes(app);
 registerAndroidConnectivityRoutes(app);
 registerAppBehaviorRoutes(app);
+registerAdbMaintenanceRoutes(app);
 registerOnlineAiRoutes(app);
 
 async function duMap(deviceId: string, dir: string): Promise<{ map: Record<string, number>; error?: string }> {
