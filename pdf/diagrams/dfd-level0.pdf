@@ -1,0 +1,294 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2941 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD Level 0 \(Context\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+300 250 260 90 re
+S
+BT
+/F1 12 Tf
+315 305 Td
+(P0 SmartHub Diagnostics) Tj
+ET
+BT
+/F1 10 Tf
+315 285 Td
+(\(UI + Node/Express Backend\)) Tj
+ET
+60 420 210 55 re
+S
+BT
+/F1 10 Tf
+70 461 Td
+(E1 Technician) Tj
+ET
+60 330 210 55 re
+S
+BT
+/F1 10 Tf
+70 371 Td
+(E2 Android Phone) Tj
+ET
+60 240 210 55 re
+S
+BT
+/F1 9.60 Tf
+70 281 Td
+(E3 Windows Host OS) Tj
+ET
+BT
+/F1 9.60 Tf
+70 269 Td
+(\(USB/PnP/MTP\)) Tj
+ET
+60 150 210 55 re
+S
+BT
+/F1 9.60 Tf
+70 191 Td
+(E4 ADB / Fastboot Tools) Tj
+ET
+650 420 210 55 re
+S
+BT
+/F1 10 Tf
+660 461 Td
+(E5 Camera Checker) Tj
+ET
+650 300 210 55 re
+S
+BT
+/F1 9.60 Tf
+660 341 Td
+(E6 Offline AI Helper) Tj
+ET
+650 180 210 55 re
+S
+662 180 m
+662 235 l
+S
+BT
+/F1 9.20 Tf
+660 221 Td
+(D1 Storage \(JSON +) Tj
+ET
+BT
+/F1 9.20 Tf
+660 209 Td
+(SQLite\)) Tj
+ET
+212.79 420 m
+351.80 340 l
+S
+351.80 340 m
+345.13 348.45 l
+S
+351.80 340 m
+341.14 341.52 l
+S
+BT
+/F1 8.50 Tf
+272.30 390 Td
+(request / start) Tj
+ET
+351.80 340 m
+212.79 420 l
+S
+212.79 420 m
+219.46 411.55 l
+S
+212.79 420 m
+223.45 418.48 l
+S
+BT
+/F1 8.50 Tf
+272.30 368 Td
+(results / report) Tj
+ET
+270 332.74 m
+300 325.66 l
+S
+300 325.66 m
+291.19 331.85 l
+S
+300 325.66 m
+289.35 324.06 l
+S
+BT
+/F1 8.50 Tf
+275 339.20 Td
+(device signals) Tj
+ET
+227.02 205 m
+328.51 250 l
+S
+328.51 250 m
+317.75 249.60 l
+S
+328.51 250 m
+320.99 242.29 l
+S
+BT
+/F1 8.50 Tf
+261.77 215.50 Td
+(adb/fastboot output) Tj
+ET
+270 278.40 m
+300 281.51 l
+S
+300 281.51 m
+289.64 284.46 l
+S
+300 281.51 m
+290.47 276.50 l
+S
+BT
+/F1 8.50 Tf
+275 289.95 Td
+(USB/PnP evidence) Tj
+ET
+525.90 340 m
+696.39 420 l
+S
+696.39 420 m
+685.64 419.37 l
+S
+696.39 420 m
+689.04 412.13 l
+S
+BT
+/F1 8.50 Tf
+611.15 390 Td
+(capture request) Tj
+ET
+560 308 m
+650 317 l
+S
+650 317 m
+639.65 319.99 l
+S
+650 317 m
+640.45 312.02 l
+S
+BT
+/F1 8.50 Tf
+605 322.50 Td
+(suggest request) Tj
+ET
+650 317 m
+560 308 l
+S
+560 308 m
+570.35 305.01 l
+S
+560 308 m
+569.55 312.98 l
+S
+BT
+/F1 8.50 Tf
+605 300.50 Td
+(AI conclusion) Tj
+ET
+560 260 m
+652.86 235 l
+S
+652.86 235 m
+644.24 241.46 l
+S
+652.86 235 m
+642.16 233.74 l
+S
+BT
+/F1 8.50 Tf
+606.43 257.50 Td
+(write results) Tj
+ET
+652.86 235 m
+560 260 l
+S
+560 260 m
+568.62 253.54 l
+S
+560 260 m
+570.70 261.26 l
+S
+BT
+/F1 8.50 Tf
+606.43 235.50 Td
+(read history/config) Tj
+ET
+40 20 802 90 re
+S
+BT
+/F1 10 Tf
+50 92 Td
+(State / Define / Justify) Tj
+ET
+BT
+/F1 9 Tf
+50 76 Td
+(State \(In this level\): SmartHub is represented as one process \(P0\) with only external entities and top-level flows.) Tj
+ET
+BT
+/F1 9 Tf
+50 65 Td
+(Define \(According to\): Gane and Sarson define a context diagram as the whole system shown as one process with external) Tj
+ET
+BT
+/F1 9 Tf
+50 54 Td
+(interfaces \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 9 Tf
+50 43 Td
+(Justify \(Moreover\): This level gives a clear system scope before internal decomposition, which improves stakeholder) Tj
+ET
+BT
+/F1 9 Tf
+50 32 Td
+(understanding.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub DFD Level 0) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000003081 00000 n 
+0000003217 00000 n 
+0000003274 00000 n 
+0000003323 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+3374
+%%EOF

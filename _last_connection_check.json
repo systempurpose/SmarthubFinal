@@ -1,0 +1,176 @@
+{
+  "adb": {
+    "ok": true,
+    "devices": []
+  },
+  "fastboot": {
+    "ok": true,
+    "devices": []
+  },
+  "hostUsb": {
+    "platform": "win32",
+    "portableDevices": [],
+    "transportDevices": [],
+    "sample": {
+      "count": 10,
+      "delayMs": 300,
+      "anyChange": false,
+      "changeCount": 0,
+      "uniqueSignatures": 1,
+      "stability": 1,
+      "portableSeenCount": 0,
+      "transportSeenCount": 0
+    },
+    "nativeUsbEvidence": {
+      "ok": true,
+      "exePath": "D:\\SmartHubv5\\Bsod tools\\bin\\UsbEvidenceHelper.exe",
+      "durationMs": 249,
+      "evidence": {
+        "ok": true,
+        "error": null,
+        "tool": "UsbEvidenceHelper",
+        "host": "DESKTOP-HLAM7VP",
+        "timestamp": "2026-03-09T11:16:32.5973077+00:00",
+        "devices": [
+          {
+            "instanceId": "USB\\VID_1A2C&PID_0B2A\\6&13E617FF&0&4",
+            "friendlyName": null,
+            "deviceDesc": "USB Composite Device",
+            "manufacturer": "(Standard USB Host Controller)",
+            "className": "USB",
+            "classGuid": "{36fc9e60-c465-11cf-8056-444553540000}",
+            "locationInfo": "Port_#0004.Hub_#0002",
+            "problemCode": 0,
+            "hardwareIds": [
+              "USB\\VID_1A2C&PID_0B2A&REV_0110",
+              "USB\\VID_1A2C&PID_0B2A"
+            ],
+            "compatibleIds": [
+              "USB\\DevClass_00&SubClass_00&Prot_00",
+              "USB\\DevClass_00&SubClass_00",
+              "USB\\DevClass_00",
+              "USB\\COMPOSITE"
+            ],
+            "parentChain": [
+              "USB\\ROOT_HUB30\\5&13EACAE0&0&0",
+              "PCI\\VEN_1022&DEV_15E0&SUBSYS_C9501022&REV_00\\4&28056CF2&0&0341",
+              "PCI\\VEN_1022&DEV_15DB&SUBSYS_00001022&REV_00\\3&11583659&0&41",
+              "ACPI\\PNP0A08\\0",
+              "ACPI_HAL\\PNP0C08\\0",
+              "ROOT\\ACPI_HAL\\0000"
+            ],
+            "vid": "1A2C",
+            "pid": "0B2A"
+          },
+          {
+            "instanceId": "USB\\VID_1A2C&PID_0B2A&MI_00\\7&23E90EC3&0&0000",
+            "friendlyName": null,
+            "deviceDesc": "USB Input Device",
+            "manufacturer": "(Standard system devices)",
+            "className": "HIDClass",
+            "classGuid": "{745a17a0-74d3-11d0-b6fe-00a0c90f57da}",
+            "locationInfo": "0009.0000.0003.004.000.000.000.000.000",
+            "problemCode": 0,
+            "hardwareIds": [
+              "USB\\VID_1A2C&PID_0B2A&REV_0110&MI_00",
+              "USB\\VID_1A2C&PID_0B2A&MI_00"
+            ],
+            "compatibleIds": [
+              "USB\\Class_03&SubClass_01&Prot_01",
+              "USB\\Class_03&SubClass_01",
+              "USB\\Class_03"
+            ],
+            "parentChain": [
+              "USB\\VID_1A2C&PID_0B2A\\6&13E617FF&0&4",
+              "USB\\ROOT_HUB30\\5&13EACAE0&0&0",
+              "PCI\\VEN_1022&DEV_15E0&SUBSYS_C9501022&REV_00\\4&28056CF2&0&0341",
+              "PCI\\VEN_1022&DEV_15DB&SUBSYS_00001022&REV_00\\3&11583659&0&41",
+              "ACPI\\PNP0A08\\0",
+              "ACPI_HAL\\PNP0C08\\0"
+            ],
+            "vid": "1A2C",
+            "pid": "0B2A"
+          },
+          {
+            "instanceId": "USB\\VID_1A2C&PID_0B2A&MI_01\\7&23E90EC3&0&0001",
+            "friendlyName": null,
+            "deviceDesc": "USB Input Device",
+            "manufacturer": "(Standard system devices)",
+            "className": "HIDClass",
+            "classGuid": "{745a17a0-74d3-11d0-b6fe-00a0c90f57da}",
+            "locationInfo": "0009.0000.0003.004.000.000.000.000.000",
+            "problemCode": 0,
+            "hardwareIds": [
+              "USB\\VID_1A2C&PID_0B2A&REV_0110&MI_01",
+              "USB\\VID_1A2C&PID_0B2A&MI_01"
+            ],
+            "compatibleIds": [
+              "USB\\Class_03&SubClass_00&Prot_00",
+              "USB\\Class_03&SubClass_00",
+              "USB\\Class_03"
+            ],
+            "parentChain": [
+              "USB\\VID_1A2C&PID_0B2A\\6&13E617FF&0&4",
+              "USB\\ROOT_HUB30\\5&13EACAE0&0&0",
+              "PCI\\VEN_1022&DEV_15E0&SUBSYS_C9501022&REV_00\\4&28056CF2&0&0341",
+              "PCI\\VEN_1022&DEV_15DB&SUBSYS_00001022&REV_00\\3&11583659&0&41",
+              "ACPI\\PNP0A08\\0",
+              "ACPI_HAL\\PNP0C08\\0"
+            ],
+            "vid": "1A2C",
+            "pid": "0B2A"
+          },
+          {
+            "instanceId": "USB\\VID_10C4&PID_0005\\6&116C5333&0&1",
+            "friendlyName": null,
+            "deviceDesc": "USB Input Device",
+            "manufacturer": "(Standard system devices)",
+            "className": "HIDClass",
+            "classGuid": "{745a17a0-74d3-11d0-b6fe-00a0c90f57da}",
+            "locationInfo": "Port_#0001.Hub_#0003",
+            "problemCode": 0,
+            "hardwareIds": [
+              "USB\\VID_10C4&PID_0005&REV_0000",
+              "USB\\VID_10C4&PID_0005"
+            ],
+            "compatibleIds": [
+              "USB\\Class_03&SubClass_01&Prot_02",
+              "USB\\Class_03&SubClass_01",
+              "USB\\Class_03"
+            ],
+            "parentChain": [
+              "USB\\ROOT_HUB30\\5&372CCF43&0&0",
+              "PCI\\VEN_1022&DEV_15E1&SUBSYS_C9501022&REV_00\\4&28056CF2&0&0441",
+              "PCI\\VEN_1022&DEV_15DB&SUBSYS_00001022&REV_00\\3&11583659&0&41",
+              "ACPI\\PNP0A08\\0",
+              "ACPI_HAL\\PNP0C08\\0",
+              "ROOT\\ACPI_HAL\\0000"
+            ],
+            "vid": "10C4",
+            "pid": "0005"
+          }
+        ]
+      }
+    }
+  },
+  "bsodAnalysis": {
+    "category": "Hardware issues",
+    "primaryReason": "Motherboard / power IC failure",
+    "confidence": "low",
+    "reasons": [
+      "No response from ADB or fastboot. USB-only evidence is most consistent with a device state below Android (firmware/boot-chain failure), a power/mainboard issue, or a host-side cable/port/driver problem.",
+      "USB-only: no ADB/fastboot/MTP evidence was observed. Retry with a known-good data cable/port and re-run the check; if Windows Device Manager shows errors, capture the device name/status/problem code."
+    ],
+    "part1": {
+      "category": "Hardware Malfunction",
+      "primaryReason": "Motherboard / power IC failure",
+      "confidence": "low",
+      "reasons": [
+        "Motherboard / power IC failure",
+        "No ADB, no fastboot, and no MTP device were detected. USB-only evidence points most strongly to Hardware Malfunction (power/mainboard/connector) or a device state below Android boot.",
+        "USB-only: no ADB/fastboot/MTP evidence was observed. Retry with a known-good data cable/port (avoid hubs) and re-run the check."
+      ]
+    }
+  },
+  "summary": "No phone-like USB evidence was detected from this PC (no ADB, fastboot, MTP/Portable, or phone-like USB transport entries). Retry with a known-good data cable/port (avoid hubs) and re-run the check."
+}

@@ -1,0 +1,29 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows-app", "windows-app", "{6EB328DF-219A-878A-0974-07AE6A24F0A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsShell", "windows-app\WindowsShell.csproj", "{98BCB9A9-61F3-C133-5215-D07533F758D0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{98BCB9A9-61F3-C133-5215-D07533F758D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98BCB9A9-61F3-C133-5215-D07533F758D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98BCB9A9-61F3-C133-5215-D07533F758D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98BCB9A9-61F3-C133-5215-D07533F758D0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{98BCB9A9-61F3-C133-5215-D07533F758D0} = {6EB328DF-219A-878A-0974-07AE6A24F0A0}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {29A84D9C-9CDB-4831-9ED6-75A3E2543D61}
+	EndGlobalSection
+EndGlobal

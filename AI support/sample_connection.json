@@ -1,0 +1,15 @@
+{
+  "adb": {"ok": true, "devices": []},
+  "fastboot": {"ok": true, "devices": []},
+  "hostUsb": {
+    "platform": "win32",
+    "portableDevices": [{"name": "itel P55", "status": "OK", "class": "Portable"}],
+    "transportDevices": [],
+    "sample": {"count": 30, "delayMs": 1500, "anyChange": false}
+  },
+  "bsodAnalysis": {
+    "category": "Phone visible as storage (MTP) but not to ADB",
+    "confidence": "medium",
+    "reasons": ["Windows can see the phone as a portable/MTP device."]
+  }
+}

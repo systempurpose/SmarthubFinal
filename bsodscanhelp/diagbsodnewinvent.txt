@@ -1,0 +1,279 @@
+SmartHub — BSOD Diagnose (Evolve + New Inventions) Plan
+Date: 2026-03-17
+
+GOAL
+- Make “Diagnose BSOD phone” more reliable and more accurate.
+- Move from “Possible cause (estimate)” toward “Verified cause” when evidence is strong.
+- Keep the tool honest: never claim “verified” without deterministic evidence.
+
+NON-NEGOTIABLE REALITY (WHY THIS PLAN EXISTS)
+- Android does not have a standard BSOD; many failures look identical (blue/black/blank).
+- USB-only signals are good for TRIAGE, but cannot always prove root cause.
+- Therefore the product must:
+  1) Collect stronger evidence when available
+  2) Separate POSSIBLE vs VERIFIED in the UI
+  3) Measure accuracy using labeled outcomes
+
+OUTPUT MODEL (WHAT THE SYSTEM SHOULD RETURN)
+1) Verdict
+- verdict: possible | verified
+- verdictConfidence: 0.0–1.0 (only high values allow “BSOD detected”)
+
+2) Cause outputs
+- bsod5: required 5 bucket (always returned as a label)
+- broadCause: higher-level bucket (display/firmware/host-usb/power)
+- verifiedBy: evidence flags (only present when verdict=verified)
+
+3) Evidence report
+- evidenceUsed: short list of the strongest signals
+- evidenceMissing: what would upgrade possible→verified
+
+PRIMARY INVENTIONS / UPGRADES (EVIDENCE-FIRST)
+A) Evidence Grade System (must implement)
+- Add evidence flags and thresholds.
+- Examples:
+  - camera_normal_stable
+  - adb_online
+  - fastboot_visible
+  - fastboot_getvar_collected
+  - host_problem_code_present
+  - usb_flapping_detected
+  - safe_mode_confirmed (technician)
+  - repair_confirmed_screen_fixed (technician)
+
+B) Verified-vs-Possible Rules (must implement)
+- Verified only when deterministic evidence is present.
+- Otherwise show Possible cause + next action.
+
+C) Technician Confirmation Hooks (new workflow)
+- Minimal UI actions that record what the technician observed/did:
+  - “Safe Mode fixed issue”
+  - “Known-good screen test fixed issue”
+  - “Works on another PC/cable”
+  - “OEM flash tool reported partition/verity failure”
+- Store as structured evidence so the system can later learn and compute accuracy.
+
+D) Fastboot Evidence Capture (new capability)
+- If fastboot detected, optionally collect:
+  - fastboot getvar all
+- Parse only diagnostic-safe fields; do not bypass security.
+- Use this evidence to verify OS/firmware corruption patterns.
+
+E) Stronger Host USB Evidence (Windows)
+- Use native helpers to record:
+  - ProblemCode (e.g., Code 10/43)
+  - driver/provider
+  - location path
+- Verified “host USB issue” requires strong Windows evidence AND/OR cross-PC confirmation.
+
+F) ADB Evidence Capture (when available)
+- When ADB is ONLINE:
+  - Collect minimal logcat snippet focused on boot/crash loops
+  - Optionally record thermal/battery hints if accessible
+- Use this to verify “incompatible apps” only when logs + fix confirm it.
+
+G) Camera Check Upgrade (optional but high value)
+- Keep “Not BSOD-style case” verified ONLY when:
+  - stability high AND content-visible hint is true
+- If lighting is bad or unstable frames: do not verify.
+
+RELIABILITY GUARDRAILS (PREVENT FALSE CONFIDENCE)
+1) Never show “BSOD detected” unless verdict confidence is high.
+- If confidence low: show “Uncertain” + required next step.
+
+2) Always show top alternative explanations.
+- Example: “Could also be cable/port/driver” when USB is unstable.
+
+3) Separate:
+- “Phone failure” vs “PC/USB stack failure” vs “Unknown”
+
+DATA + ACCURACY (HOW IT ACTUALLY IMPROVES)
+1) Labeling (already started)
+- Add/keep “Label this case” so outcomes are stored.
+- Expand labels to include:
+  - final outcome (bsod5:hardware_failure etc.)
+  - verification evidence (safe_mode_confirmed, screen_fixed)
+
+OVERALL BSOD DIAGNOSE RATING (HOW TO MEASURE IT)
+- Important: SmartHub should NOT “guess” a rating; the rating must come from labeled outcomes in `AI support/memory.sqlite`.
+- There are two useful “overall” views:
+  1) `bsod5` (BSOD-5 buckets): answers “How accurate is the BSOD cause bucket?”
+  2) `broad` (broadCause buckets): answers “Is it display vs firmware vs host-usb vs power?”
+
+How to compute the rating (offline)
+- Run: `py -V:3.15 "AI support\\ai_diagnose.py" --metrics 200 --pretty`
+- Read these fields:
+  - `metrics_by_kind.bsod5.usable` and `metrics_by_kind.bsod5.accuracy_percent`
+  - `metrics_by_kind.broad.usable` and `metrics_by_kind.broad.accuracy_percent`
+  - `phase4_validation.pass` (VERIFIED precision gate)
+
+Label storage note
+- A single case can store multiple labels in one outcome string, e.g.
+  - `broad:software_firmware|bsod5:hardware_failure`
+
+Fast labeling workflow (automatic helper, technician-confirmed)
+- Show what needs labels (includes `suggested_outcome` + `suggested_label_command` as a starting point):
+  - `py -V:3.15 "AI support\\ai_diagnose.py" --label-queue 50 --pretty`
+- Apply/adjust labels to a case:
+  - Replace outcome completely:
+    - `py -V:3.15 "AI support\\ai_diagnose.py" --label-case <ID> --outcome "broad:<key>|bsod5:<key>" --pretty`
+  - Add one label without overwriting the other (recommended):
+    - `py -V:3.15 "AI support\\ai_diagnose.py" --label-case <ID> --merge --outcome "broad:<key>" --pretty`
+    - `py -V:3.15 "AI support\\ai_diagnose.py" --label-case <ID> --merge --outcome "bsod5:<key>" --pretty`
+- Recompute the rating:
+  - `py -V:3.15 "AI support\\ai_diagnose.py" --metrics 200 --pretty`
+- Reminder: `suggested_outcome` is NOT ground truth — technician must confirm/correct it.
+
+Minimum data rule (to avoid fake “100%”)
+- If `usable < 30` for a kind, treat the rating as **INSUFFICIENT DATA** (not a real performance claim).
+- If `phase4_validation.pass == false`, treat VERIFIED precision as **NOT YET DATA-VALIDATED** (even if some cases look good).
+
+2) Metrics that matter (not just accuracy%)
+- Track per-bucket:
+  - precision/recall (especially for VERIFIED)
+  - false-verified rate (must be near 0)
+  - distinct-case metrics (fingerprint-deduped)
+
+3) Confidence calibration
+- Cap displayed confidence until enough labeled cases exist.
+- Show “needs more labeled cases” in Advanced until thresholds reached.
+
+PHASED IMPLEMENTATION (SMALL SAFE STEPS)
+Phase 1 — UI honesty + labeling expansion (quick)
+- Change wording to “Possible cause (estimate)” by default.
+- Add “Verified cause” only when verifiedBy is non-empty.
+- Expand technician actions to record verification evidence.
+
+STATUS (IMPLEMENTED)
+- Implemented “Possible vs Verified” wording in the BSOD Offline AI UI.
+  - Current Verified rule is conservative: only auto-verifies Not-BSOD when the camera check confidently detects NORMAL screen content.
+- Implemented technician confirmation hooks in the BSOD Advanced panel:
+  - “Known-good screen test fixed it” (screenTestFixed)
+  - “Works on another known-good PC/cable” (worksOtherPc)
+  - “Safe Mode improves the issue” (safeModeImproves)
+  - “OEM flash tool reported partition / verity / corruption failure” (oemFlashFailure)
+- Confirmation flags are persisted into offline memory (saved as evidence tokens) so they can be used for future calibration/metrics.
+
+Phase 2 — Evidence capture (medium)
+- Fastboot getvar collection + parsing.
+- Host USB ProblemCode capture improvements.
+- ADB-online minimal logcat capture.
+
+STATUS (IMPLEMENTED — Phase 2)
+- Fastboot getvar collection + parsing is implemented end-to-end:
+  - Backend `/connection-check?deep=1` captures `fastboot getvar all` output reliably (parses stderr, where fastboot typically prints vars).
+  - BSOD UI surfaces a short Fastboot `getvar` summary (product/unlocked/slot/snapshot when available).
+  - Offline AI stores low-cardinality `fastboot_getvar` evidence tokens to improve future similarity + metrics.
+
+- Host USB ProblemCode capture improvements are implemented:
+  - Deep mode enriches sampled Windows PnP devices with driver provider/version + location hints when available.
+  - BSOD UI “Host USB evidence” card now surfaces Windows PnP issue counts + ConfigMgr ProblemCode list and examples.
+  - Offline AI stores compact host-problem-code evidence tokens for better similarity + metrics.
+
+- ADB-online minimal logcat capture is implemented:
+  - Backend deep mode already captures a small, read-only logcat slice and extracts matched failure patterns.
+  - BSOD UI now surfaces matched ADB log patterns in the “Why (key signals)” line when available.
+  - Offline AI persists compact `adb_log` evidence tokens for similarity + metrics.
+
+Phase 3 — Learning loop (medium)
+- Store evidence + final outcomes.
+- Improve heuristics and AI prompts using measured confusions.
+- Add “Top confusion” hints to guide technicians.
+
+STATUS (IMPLEMENTED — Phase 3)
+- Offline AI report now returns an evidence-grade contract:
+  - `verdict`: possible|verified
+  - `verdictConfidence`
+  - `verifiedBy` (only when verified)
+  - `evidenceUsed` + `evidenceMissing`
+- BSOD UI now prefers these fields (with backward-compatible fallback) and shows `evidenceUsed/evidenceMissing` inside Advanced only.
+- Technician confirmation hooks now influence Offline AI scoring and can produce VERIFIED results when consistent:
+  - `repair_confirmed_screen_fixed` (display hardware)
+  - `works_on_other_pc_confirmed` (host USB/driver)
+- “Top confusion” hints are already displayed in Advanced metrics (from `top_confusions`).
+
+Phase 4 — Verified precision hardening (ongoing)
+- Tighten thresholds until false-verified is near zero.
+- Keep possible causes helpful even when not verified.
+
+STATUS (IMPLEMENTED — code/UI/metrics)
+- The VERIFIED gating rules + VERIFIED-only metrics are implemented.
+- Remaining work is data-driven validation: collect more labeled outcomes (especially cases that reach VERIFIED) and confirm false-verified rate stays near 0%.
+
+DONE (DATA-VALIDATED) WHEN
+- The Offline metrics Phase 4 gate shows PASS.
+  - This gate uses a conservative 95% upper bound on false-VERIFIED rate.
+  - It flips automatically once enough VERIFIED-only labeled cases exist and the bound is below the target.
+
+STATUS (PARTIALLY IMPLEMENTED — metrics)
+- Offline metrics now include VERIFIED-only accuracy and false-verified rate:
+  - `metrics_by_kind_verified` and `metrics_by_kind_distinct_verified`
+  - includes `false_verified_rate_percent`
+- BSOD UI shows these VERIFIED-only metrics inside Advanced.
+- Offline metrics also include VERIFIED frequency (how rare VERIFIED is):
+  - `verified_summary.verified_rate_percent` and `verified_summary.distinct_verified_rate_percent`
+- BSOD UI shows Verified rate in Advanced metrics.
+- Offline metrics include a VERIFIED-by breakdown (which verifier paths are used and their labeled accuracy):
+  - `verified_by_breakdown` and `verified_by_breakdown_distinct`
+- BSOD UI shows a compact “Verified by: …” summary in Advanced metrics.
+  - When labeled usable cases exist, it also shows per-flag accuracy (e.g., `camera_normal_stable (12, acc 100%)`).
+
+STATUS (PARTIALLY IMPLEMENTED — rule hardening)
+- VERIFIED gating is now stricter for technician confirmations:
+  - `works_on_other_pc_confirmed` requires at least one supporting local host signal (Windows problem codes and/or USB instability), to avoid accidental VERIFIED claims.
+  - If camera strongly verifies NOT-BSOD, it prevents conflicting VERIFIED-by tech flags.
+  - `safe_mode_confirmed` can produce VERIFIED only when:
+    - the model predicts `software_firmware` and BSOD-5=`incompatible_apps`, AND
+    - an independent device-side signal exists (`adb_online` / ADB log evidence).
+  - `oem_flash_tool_corruption_confirmed` can produce VERIFIED only when:
+    - the model predicts `software_firmware` and BSOD-5 is `corrupt_system_files` or `faulty_os_updates`, AND
+    - an independent mode signal exists (`fastboot_visible` and/or `fastboot_getvar_collected`).
+
+EVIDENCE MISSING KEYS (EXACT) — WHAT THEY MEAN / HOW TO SATISFY
+- `camera_normal_stable`
+  - Run the camera-based check with stable framing + visible content so the tool can deterministically confirm “not BSOD-style” when applicable.
+- `repair_confirmed_screen_fixed`
+  - Technician action: known-good screen test fixed the issue (Advanced checkbox).
+- `works_on_other_pc_confirmed`
+  - Technician action: works on another known-good PC/cable (Advanced checkbox).
+  - Note: Phase 4 requires additional host-side support to actually VERIFY host-usb (e.g., `host_problem_code_present` and/or `usb_flapping_detected`).
+- `safe_mode_confirmed`
+  - Technician action: Safe Mode improves the issue (Advanced checkbox).
+  - Only eligible to VERIFY when the model agrees (software/firmware + incompatible-apps bucket).
+- `adb_online`
+  - Device-side support for Safe Mode verification: ensure ADB can see the device (USB debugging authorized) so the tool has an independent second signal.
+- `adb_log_evidence_present`
+  - Collect a minimal logcat slice (read-only) so the tool can corroborate app/boot-loop patterns.
+- `oem_flash_tool_corruption_confirmed`
+  - Technician action: OEM flash tool reported partition/verity/corruption failure (Advanced checkbox).
+  - Only eligible to VERIFY when the model agrees (software/firmware + corrupt-files or faulty-updates bucket).
+- `fastboot_visible`
+  - Independent mode support for OEM-flash verification: ensure the device is visible in fastboot mode.
+- `fastboot_getvar_collected`
+  - In fastboot mode, collect `fastboot getvar all` (read-only) so corruption/slot/update context can be included as corroborating evidence.
+- `host_problem_code_present`
+  - Host-side evidence: Windows Device Manager / PnP indicates a problem (ProblemCode like 10/43), used to support host-usb verification.
+- `usb_flapping_detected`
+  - Host-side evidence: repeated disconnect/reconnect during deep sampling, used to support host-usb verification.
+
+UI/UX RULES (MUST STAY SIMPLE)
+- Show 1 main verdict line:
+  - “Possible cause (estimate)” OR “Verified cause”
+- Show 1 line “Verified by: …” only when verified.
+- Show 3–5 next actions.
+- Keep the rest in “Advanced”.
+
+PRIVACY + SAFETY
+- Stay local/offline by default.
+- Store only diagnostic metadata, not personal content.
+- Do not attempt any security bypass; fastboot/adb operations must be read-only.
+
+SUCCESS CRITERIA
+- VERIFIED verdicts are rare but extremely accurate.
+- Technicians can understand “why” and “what to do next”.
+- Accuracy metrics improve as labeled cases grow.
+
+NEXT ACTION (RECOMMENDED)
+- Phase 4: Verified precision hardening
+  - Keep VERIFIED rare: tighten rules/thresholds until false-verified rate is near zero.
+  - Add/confirm metrics specifically for VERIFIED outcomes (track false-verified rate separately).

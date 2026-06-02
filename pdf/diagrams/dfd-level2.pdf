@@ -1,0 +1,404 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3857 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD Level 2 \(P3 BSOD Diagnose — USB-only\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+40 445 220 55 re
+S
+BT
+/F1 10 Tf
+50 486 Td
+(E1 Technician) Tj
+ET
+40 360 220 65 re
+S
+BT
+/F1 9.40 Tf
+50 411 Td
+(E3 Windows Host OS) Tj
+ET
+BT
+/F1 9.40 Tf
+50 399 Td
+(\(USB/PnP/MTP evidence\)) Tj
+ET
+40 285 220 55 re
+S
+BT
+/F1 10 Tf
+50 326 Td
+(E5 Camera Checker) Tj
+ET
+40 210 220 55 re
+S
+BT
+/F1 9.40 Tf
+50 251 Td
+(E6 Offline AI Helper) Tj
+ET
+BT
+/F1 9.40 Tf
+50 239 Td
+(\(Python\)) Tj
+ET
+310 470 280 45 re
+S
+BT
+/F1 9.60 Tf
+320 499 Td
+(P3.1 Detect USB-connected device) Tj
+ET
+310 405 280 45 re
+S
+BT
+/F1 9.60 Tf
+320 434 Td
+(P3.2 Collect USB/BSOD evidence) Tj
+ET
+BT
+/F1 9.60 Tf
+320 422 Td
+(\(logs\)) Tj
+ET
+310 340 280 45 re
+S
+BT
+/F1 9.60 Tf
+320 369 Td
+(P3.3 Camera visual check) Tj
+ET
+BT
+/F1 9.60 Tf
+320 357 Td
+(\(screen/photo\)) Tj
+ET
+310 275 280 45 re
+S
+BT
+/F1 9.60 Tf
+320 304 Td
+(P3.4 Generate offline AI) Tj
+ET
+BT
+/F1 9.60 Tf
+320 292 Td
+(suggestion) Tj
+ET
+310 210 280 45 re
+S
+BT
+/F1 9.60 Tf
+320 239 Td
+(P3.5 Build + save diagnostic) Tj
+ET
+BT
+/F1 9.60 Tf
+320 227 Td
+(result) Tj
+ET
+640 470 180 45 re
+S
+652 470 m
+652 515 l
+S
+BT
+/F1 9.60 Tf
+650 501 Td
+(D1 history.json) Tj
+ET
+640 340 180 45 re
+S
+652 340 m
+652 385 l
+S
+BT
+/F1 9.20 Tf
+650 371 Td
+(D4 memory.sqlite) Tj
+ET
+BT
+/F1 9.20 Tf
+650 359 Td
+(\(cases\)) Tj
+ET
+640 275 180 45 re
+S
+652 275 m
+652 320 l
+S
+BT
+/F1 9.20 Tf
+650 306 Td
+(D7 usb-evidence files) Tj
+ET
+260 473 m
+310 492 l
+S
+310 492 m
+299.23 492.19 l
+S
+310 492 m
+302.07 484.71 l
+S
+BT
+/F1 9 Tf
+265 492.50 Td
+(start USB-only BSOD) Tj
+ET
+260 400 m
+310 480 l
+S
+310 480 m
+301.31 473.64 l
+S
+310 480 m
+308.09 469.40 l
+S
+BT
+/F1 9 Tf
+275 450 Td
+(USB enumerate) Tj
+ET
+260 395 m
+310 427 l
+S
+310 427 m
+299.42 424.98 l
+S
+310 427 m
+303.73 418.24 l
+S
+BT
+/F1 9 Tf
+275 399 Td
+(PnP/MTP + logs) Tj
+ET
+260 313 m
+310 362 l
+S
+310 362 m
+300.06 357.86 l
+S
+310 362 m
+305.66 352.14 l
+S
+BT
+/F1 9 Tf
+275 347.50 Td
+(camera frames) Tj
+ET
+260 238 m
+310 297 l
+S
+310 297 m
+300.48 291.96 l
+S
+310 297 m
+306.59 286.78 l
+S
+BT
+/F1 9 Tf
+275 277.50 Td
+(similar cases) Tj
+ET
+310 297 m
+260 230 l
+S
+260 230 m
+269.19 235.62 l
+S
+260 230 m
+262.78 240.41 l
+S
+BT
+/F1 9 Tf
+275 251.50 Td
+(suggest request) Tj
+ET
+450 470 m
+450 450 l
+S
+450 450 m
+454 460 l
+S
+450 450 m
+446 460 l
+S
+BT
+/F1 8.50 Tf
+460 468 Td
+(device found) Tj
+ET
+450 405 m
+450 385 l
+S
+450 385 m
+454 395 l
+S
+450 385 m
+446 395 l
+S
+BT
+/F1 8.50 Tf
+460 403 Td
+(evidence collected) Tj
+ET
+450 340 m
+450 320 l
+S
+450 320 m
+454 330 l
+S
+450 320 m
+446 330 l
+S
+BT
+/F1 8.50 Tf
+460 338 Td
+(visual hints) Tj
+ET
+450 275 m
+450 255 l
+S
+450 255 m
+454 265 l
+S
+450 255 m
+446 265 l
+S
+BT
+/F1 8.50 Tf
+460 273 Td
+(AI suggestion) Tj
+ET
+590 427 m
+640 297 l
+S
+640 297 m
+640.14 307.77 l
+S
+640 297 m
+632.68 304.90 l
+S
+BT
+/F1 9 Tf
+615 350 Td
+(save USB evidence) Tj
+ET
+590 297 m
+640 362 l
+S
+640 362 m
+630.73 356.51 l
+S
+640 362 m
+637.07 351.63 l
+S
+BT
+/F1 9 Tf
+615 339.50 Td
+(save AI memory) Tj
+ET
+590 232 m
+640 492 l
+S
+640 492 m
+634.18 482.94 l
+S
+640 492 m
+642.04 481.42 l
+S
+BT
+/F1 9 Tf
+615 350 Td
+(save run summary) Tj
+ET
+310 220 m
+260 455 l
+S
+260 455 m
+258.17 444.39 l
+S
+260 455 m
+265.99 446.05 l
+S
+BT
+/F1 9 Tf
+255 347.50 Td
+(result summary) Tj
+ET
+40 20 802 95 re
+S
+BT
+/F1 10 Tf
+50 97 Td
+(State / Define / Justify) Tj
+ET
+BT
+/F1 9 Tf
+50 81 Td
+(State \(In this level\): P3 is decomposed into P3.1-P3.5 for detailed USB-only BSOD diagnosis flow.) Tj
+ET
+BT
+/F1 9 Tf
+50 70 Td
+(Define \(According to\): Gane and Sarson Level 2 expands one Level 1 process into lower-level sub-processes while) Tj
+ET
+BT
+/F1 9 Tf
+50 59 Td
+(preserving parent-level data balance \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 9 Tf
+50 48 Td
+(Justify \(Moreover\): This decomposition is required because USB evidence handling, optional camera/AI support, and) Tj
+ET
+BT
+/F1 9 Tf
+50 37 Td
+(final reporting are distinct transformations.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub DFD Level 2 \(P3\)) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000003997 00000 n 
+0000004133 00000 n 
+0000004190 00000 n 
+0000004239 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+4297
+%%EOF

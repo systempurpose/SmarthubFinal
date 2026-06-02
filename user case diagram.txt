@@ -1,0 +1,107 @@
+SmartHub Diagnostics — Use Case Diagram (Text Spec)
+Date: 2026-04-02
+
+Goal
+- Provide a clear use-case diagram for SmartHub Diagnostics (desktop + backend + optional helpers + Android app).
+
+Actors
+1) Technician (Primary user)
+2) Windows PC / Host OS (external system used for USB + drivers)
+3) Android Phone (device under test)
+4) SmartHub Mobile Diagnostics App (on-device companion; requires ADB to control)
+5) Offline AI Helper (Python: ai_diagnose.py / ai_adb_conclude.py)
+6) Camera / Webcam (PC webcam used for screen visual checks)
+7) ADB / Fastboot Platform Tools (external tools)
+
+System Boundary
+- “SmartHub Diagnostics” (Windows desktop UI + Node/Express backend)
+
+Main Use Cases (inside system boundary)
+A) Discover Connected Devices
+- Includes: Read ADB device list (when available)
+- Extends: Detect USB-only presence (Windows Portable/WPD and transport-level USB)
+
+B) Run Full Diagnostics (ADB required)
+- Includes: Collect device snapshot (/collect)
+- Includes: Capture screenshot via ADB (screencap)
+- Includes: Run quick reaction tests (flash/vibrate/sound/touch/wake)
+- Includes: Save results to history
+- Extends: Render Offline AI conclusion for ADB path (ai_adb_conclude.py)
+
+C) Diagnose BSOD / Blank Screen (USB-only mode; no USB debugging required)
+- Includes: Connection check with sampling (/connection-check?autoTest=1&usbOnly=1&skipAdb=1)
+- Includes: Host USB evidence + stability timeline
+- Extends: Camera-based screen visual check (/screen-visual-check)
+- Extends: Offline AI suggestion (ai-no-debug-suggest → ai_diagnose.py)
+- Includes: Technician confirmations (e.g., Safe Mode improves issue)
+
+D) Security Scan (ADB required)
+- Includes: Quick suspicious apps scan (/suspicious-apps)
+- Includes: Full apps + permissions scan (/apps)
+- Extends: Deep APK scan (pull APK + python scan)
+- Includes: File heuristic scan (/file-scan)
+
+E) Install SmartHub Mobile App
+- Includes: Check mobile app state (/mobile-app-state)
+- Extends (no ADB): Download APK from PC (GET /smartlink/agent-apk) + manual MTP install steps
+
+F) View / Export Results
+- Includes: Render findings in UI modals
+- Includes: Save and load history (/history)
+
+External Interactions (associations)
+- Technician ↔ (A, B, C, D, E, F)
+- SmartHub Diagnostics ↔ ADB/Fastboot tools (A, B, D)
+- SmartHub Diagnostics ↔ Windows PC/Host OS USB signals (A, C)
+- SmartHub Diagnostics ↔ Android Phone (A, B, C, D)
+- SmartHub Diagnostics ↔ SmartHub Mobile App (B, reaction tests)
+- SmartHub Diagnostics ↔ Offline AI Helper (B, C)
+- SmartHub Diagnostics ↔ Webcam (C)
+
+Suggested Use-Case Diagram Relationships
+- “Run Full Diagnostics” <<include>> “Collect device snapshot”
+- “Run Full Diagnostics” <<include>> “Save results to history”
+- “Security Scan” <<include>> “Quick suspicious apps scan”
+- “Security Scan” <<include>> “File heuristic scan”
+- “Security Scan” <<extend>> “Deep APK scan” (only for suspicious apps)
+- “Diagnose BSOD (USB-only)” <<include>> “Connection check (USB-only)”
+- “Diagnose BSOD (USB-only)” <<extend>> “Camera visual check” (best-effort)
+- “Diagnose BSOD (USB-only)” <<extend>> “Offline AI suggestion” (best-effort)
+- “Install Mobile App” <<extend>> “Manual MTP install” (when ADB unavailable)
+
+-----------------------------------------------------------------
+Plan to Draw the Use Case Diagram (for PDF)
+
+1) Choose the diagram tool
+- Recommended: diagrams.net (draw.io) OR Microsoft Visio
+- Alternative (fast): Mermaid use-case diagram syntax in Markdown, then export
+
+2) Define diagram layout (simple and readable)
+- Place “SmartHub Diagnostics” as the system boundary box.
+- Put Technician actor on the left (primary).
+- Put external systems/tools on the right (ADB/Fastboot, Offline AI Helper, Webcam, Windows Host OS, Android Phone).
+
+3) Add use cases (ovals) inside the system boundary
+- A) Discover Connected Devices
+- B) Run Full Diagnostics (ADB)
+- C) Diagnose BSOD / Blank Screen (USB-only)
+- D) Security Scan
+- E) Install SmartHub Mobile App
+- F) View / Export Results
+
+4) Add include/extend relationships
+- Use dashed arrows with <<include>> and <<extend>> labels per the relationships listed above.
+
+5) Validate against the current product
+Checklist:
+- USB-only BSOD flow explicitly avoids ADB (skipAdb/usbOnly).
+- Offline AI and camera checks are best-effort (do not block core flow).
+- Full diagnostics and security scanning require ADB.
+
+6) Export to PDF
+- Export diagram page to PDF (A4 portrait or landscape).
+- Ensure text is readable (minimum ~10–11pt equivalent).
+
+7) Insert into final documentation PDF
+- Add a short caption under the diagram: “Figure X. SmartHub Diagnostics Use Case Diagram”.
+- Keep 1 diagram per page if possible.

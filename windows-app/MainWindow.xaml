@@ -1,0 +1,96 @@
+<Window x:Class="WindowsShell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="SmartHub Diagnostics ALPHA"
+        Height="800"
+        Width="1400"
+        MinHeight="640"
+        MinWidth="1024"
+        Background="#020617"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="NoResize">
+  <Grid Background="#020617">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- App header -->
+    <Border Grid.Row="0"
+            Background="#0B1120"
+            Padding="12 10"
+            BorderBrush="#1E293B"
+            BorderThickness="0,0,0,1">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0"
+                    Orientation="Vertical"
+                    Margin="4,0,0,0">
+          <TextBlock Text="SmartHub Diagnostics ALPHA"
+                     FontSize="17"
+                     FontWeight="SemiBold"
+                     Foreground="White" />
+          <TextBlock Text="Desktop companion for local mobile phone checks"
+                     FontSize="11"
+                     Foreground="#9CA3AF" />
+          <TextBlock Text="Includes SmartLink Host for biometric USB debugging &amp; tethering (experimental)"
+                     FontSize="11"
+                     Foreground="#6B7280" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1"
+              Orientation="Horizontal"
+              VerticalAlignment="Center"
+              HorizontalAlignment="Right"
+              Margin="0,0,4,0">
+          <TextBlock Text="Backend: http://localhost:3333"
+                     FontSize="11"
+               Foreground="#9CA3AF"
+               Margin="0" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Main web UI host -->
+    <Border Grid.Row="1"
+            Margin="12"
+            CornerRadius="12"
+            Background="#020617"
+            BorderBrush="#1E293B"
+            BorderThickness="1"
+            SnapsToDevicePixels="True">
+      <wv2:WebView2 x:Name="WebView" />
+    </Border>
+
+    <!-- Footer / status bar -->
+    <Border Grid.Row="2"
+            Background="#020617"
+            Padding="8 6"
+            BorderBrush="#1E293B"
+            BorderThickness="0,1,0,0">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+           <TextBlock Grid.Column="0"
+             Text="Privacy &amp; control: diagnostics and SmartLink actions run locally; SmartLink requires explicit Device Owner setup and biometrics."
+             FontSize="11"
+             Foreground="#6B7280" />
+
+        <TextBlock Grid.Column="1"
+             Text="SmartHub Diagnostics ALPHA"
+                   FontSize="11"
+                   Foreground="#6B7280" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

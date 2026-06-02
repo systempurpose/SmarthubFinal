@@ -1,0 +1,25 @@
+BSOD / No-Debug bundle manifest (SmartHub)
+
+Docs (this folder)
+- bsodscanhelp/README.md
+- bsodscanhelp/bsdscanhelp.txt
+- bsodscanhelp/planforBSoD.txt
+- bsodscanhelp/docs-bsod-plan-README.md
+- bsodscanhelp/schemas/connection-check-v2.json
+- bsodscanhelp/scoring.md
+- bsodscanhelp/test-matrix.md
+- bsodscanhelp/ui-copy.md
+
+Backend implementation
+- src/routes/noDebugRoutes.ts (active /connection-check used by UI)
+- src/routes/aiRoutes.ts (AI suggestions endpoint)
+- src/routes/connectionCheckRoutes.ts (older /connection-check; ensure behavior stays in sync if reused)
+
+Frontend implementation
+- js/ui.js (openNoDebugModal, openQuickNoDebugModal)
+- html/ui.html (no-debug modal markup)
+
+Optional helpers
+- bsod-diagnostic/phone_screen_diag.py (camera-based analysis)
+- bsod-diagnostic/bsod_gui.py (GUI helper)
+- AI support/ai_diagnose.py (AI suggestion helper)

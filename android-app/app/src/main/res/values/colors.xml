@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Match Windows desktop palette (see css/ui.css :root) -->
+    <color name="sh_background">#F1F5F9</color>
+    <color name="sh_surface">#FFFFFF</color>
+    <color name="sh_on_surface">#0F172A</color>
+
+    <color name="sh_primary">#0EA5E9</color>
+    <color name="sh_primary_variant">#0284C7</color>
+    <color name="sh_on_primary">#FFFFFF</color>
+
+    <color name="sh_secondary">#6366F1</color>
+    <color name="sh_secondary_variant">#4F46E5</color>
+    <color name="sh_on_secondary">#FFFFFF</color>
+
+    <color name="sh_muted">#6B7280</color>
+    <color name="sh_border">#4A90A8B8</color>
+    <color name="sh_card_tint">#EFF6FF</color>
+</resources>

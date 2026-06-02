@@ -1,0 +1,175 @@
+SmartHub v5 — System Functions (Feature List)
+Generated: 2026-04-14
+
+Notes
+- This file lists user-facing system functions/capabilities (NOT code-level function names).
+- SmartHub is offline-first and evidence-based. Some features require ADB/USB debugging; USB-only features are conservative by design.
+
+1) Desktop Application (Windows)
+- Launch SmartHub as a Windows desktop app (WPF shell hosting WebView2 UI).
+- Load the local web UI (HTML/JS/CSS) and communicate with the local backend service.
+
+2) Local Backend Service (Node/Express)
+- Provide a local HTTP API (default http://127.0.0.1:3333) for the UI.
+- Health/readiness:
+  - GET /health: confirm backend is running.
+  - POST /shutdown: best-effort shutdown for the Windows shell.
+- Security-by-default:
+  - Local-only access by default (blocks non-loopback unless explicitly enabled).
+  - CORS restrictions for local origins.
+- Read-only enforcement:
+  - GET /read-only: read current read-only status.
+  - POST /read-only: toggle read-only (unless forced by backend config).
+
+3) Device Discovery (ADB)
+- GET /device
+  - List Android devices visible to ADB.
+  - Best-effort fetch model/label using getprop when missing.
+
+4) USB-only / No-USB-Debugging “BSOD-style” Triage (Host-side)
+- GET /connection-check
+  - Identify whether the phone enumerates over USB from Windows evidence.
+  - Collect:
+    - ADB device list (if available).
+    - Fastboot device list (if available).
+    - Windows host USB evidence (portable/WPD/MTP and transport devices).
+  - Deep sampling (optional): detect unstable/flapping USB enumeration across samples.
+  - Transport profiling: infer likely USB transport mode (examples: MTP/portable, fastboot, EDL/9008, MTK preloader/BROM, Samsung download mode, etc.).
+  - Optional helper evidence (Windows-only, best-effort): native USB evidence helpers and event log evidence.
+  - Auto-test verdict (optional): returns a technician-friendly pass/warn/fail with reasons and next actions.
+
+Truthfulness / Safety Gates (Core System Rules)
+- No Windows USB enumeration → result must be INCONCLUSIVE (no phone-state claim).
+- Host COM/WPD failures (e.g. E_NOINTERFACE) → host-only inconclusive (do not infer phone freeze/BSOD).
+- When probing is unavailable (hostUnsupported): ignore camera/OCR hints for verdicts; only manual technician confirmation may record “UI frozen”.
+
+5) Camera / Screen Visual Analysis (Optional)
+- GET /screen-visual-check
+  - Run a Python/OpenCV helper to analyze phone screen appearance using a PC camera.
+  - Provide best-effort hints (dark/blue/normal, artifacts/cracks/lines, visibility hints).
+- GET /screen-camera-snapshot
+  - Capture a snapshot image via the same camera helper and save it for viewing.
+- POST /launch-bsod-gui
+  - Launch the optional standalone BSOD helper GUI (Python).
+
+6) Screen Capture + Display State (ADB-required)
+- GET /screenshot/:id
+  - Capture a device screenshot via ADB (PNG).
+- POST /screen-test/:id
+  - Capture and store a screenshot under local storage and return an image URL.
+- GET /screen-test-image/:deviceId/:file
+  - Fetch a previously saved screenshot image.
+- GET /display-state/:id
+  - Read display state hints via dumpsys display + SurfaceFlinger.
+
+7) Full ADB Diagnostics / Evidence Collection
+- GET /collect/:id
+  - Run a batched, read-only diagnostic snapshot via ADB.
+  - Collect evidence such as:
+    - Build properties, battery status/health, storage usage, memory info.
+    - Logs (error + warning), plus best-effort crash/kernel buffers.
+    - Power/thermal dumps (best-effort).
+  - Analyze heuristics:
+    - Battery health and overheating hints.
+    - Battery/power connection instability (time-series sampling).
+    - Storage pressure analysis.
+    - Memory pressure analysis.
+    - Crash/ANR and log evidence.
+    - USB/ADB instability evidence.
+    - Thermal throttling evidence.
+    - Radio/modem stability evidence.
+
+8) Deep Scan (Lightweight health overview)
+- GET /deep-scan/:id
+  - Produce a lightweight summary of device health based on battery/storage/memory/log evidence.
+  - Optional raw dumps via ?raw=1 (advanced troubleshooting).
+
+9) Quick “Blue/Blank Screen” Interactive Tests (ADB-required)
+- POST /blue-test/volume-max
+  - Set media volume to maximum.
+- POST /blue-test/flash
+  - Trigger flashlight test via the on-device test runner (when available).
+- POST /blue-test/vibrate
+  - Trigger vibration (prefers vibrator_manager when available).
+- POST /blue-test/sound
+  - Trigger a speaker tone test (best-effort).
+- POST /blue-test/touch
+  - Trigger touch test screen in the on-device test runner.
+- POST /blue-test/wake
+  - Attempt to wake/bring attention to the device (best-effort).
+- POST /test/sensors
+  - Read sensor availability/status (best-effort).
+- POST /test/health
+  - Basic health test endpoint (best-effort).
+
+10) Offline AI Helper (Local-only)
+- POST /ai-no-debug-suggest
+  - Generate a ranked diagnosis + confidence + explanations for USB-only cases.
+- POST /ai-no-debug-remember
+  - Save a case into local/offline AI memory (SQLite) for learning/metrics.
+- GET /ai-no-debug-metrics
+  - Compute accuracy/metrics based on remembered labeled cases.
+
+11) Offline AI Conclusion for ADB Diagnostics (Local-only)
+- POST /ai-adb-conclude
+  - Produce a concise ADB-based conclusion summary from diagnostic stage outputs.
+- POST /ai-adb-conclude-remember
+  - Save confirmed outcomes/resolutions into local memory for measurement.
+
+12) Online AI (Optional, Internet-required)
+- GET /online-ai/status
+  - Report whether online AI is configured/enabled.
+- GET /online-ai/config
+  - Show configuration status (API key is not returned).
+- POST /online-ai/config
+  - Save/clear online AI configuration (stored on disk).
+- POST /ai-online-suggest
+  - Call an online AI endpoint for suggestions using a feature summary payload.
+
+13) Apps + Security / Risk Analysis (ADB-required)
+- GET /apps/:id
+  - List installed apps, collect permissions, compute risk levels/scores, and detect suspicious apps.
+  - Optional deep APK scan (bounded) for suspicious packages via a local Python scanner.
+  - Touch/ghost-touch hints from logs and charging status.
+- GET /suspicious-apps/:id
+  - Fast suspicious-app scan (optimized: fewer permission queries, no deep APK scan).
+- GET /app-risk/:id/:pkg
+  - App risk report for a single package (permissions + optional deep APK scan).
+- GET /app-usage/:id
+  - Estimate app code/data sizes (best-effort; may be blocked on non-rooted devices).
+- GET /file-scan/:id
+  - Heuristic scan of user storage paths to flag potentially suspicious file names/extensions.
+- POST /adb-uninstall
+  - Uninstall an app by package name (ADB-required).
+
+14) Android App / On-device Report Integration
+- GET /mobile-app-state/:id
+  - Check whether the SmartHub mobile diagnostics app is installed/running (best-effort).
+- GET /on-device-report/:id
+  - Load the on-device JSON report from the SmartHub mobile app’s external files directory.
+
+15) Installation / SmartLink Support
+- POST /install-app
+  - Install the SmartHub Android diagnostics APK via ADB (and best-effort auto-launch).
+- POST /install-smartlink-app
+  - Install the SmartLink Agent APK via ADB.
+- GET /smartlink/agent-apk
+  - Download the SmartLink Agent APK so a technician can copy it via MTP and install manually.
+- POST /smartlink/challenge
+  - Issue a cryptographic challenge for SmartLink pairing.
+- POST /smartlink/verify
+  - Verify a SmartLink signature and return allowed policy actions.
+
+16) Local History / Reporting
+- GET /history/:id
+  - Load saved diagnostic runs for a device.
+- POST /history/:id
+  - Save a diagnostic run (stages, details, text report, optional screenshot reference).
+
+17) Documentation / Outputs (Repo tools)
+- Generate conceptual mapping artifacts:
+  - PDF: pf/SmartHub_Conceptual_Mapping.pdf
+  - DOCX: pf/SmartHub_Conceptual_Mapping.docx
+- Regenerate diagram PDFs under pdf/diagrams/ (use-case, DFD levels, ERD, network diagram, etc.).
+
+End of list.

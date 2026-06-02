@@ -1,0 +1,143 @@
+SmartHub Diagnostics — Free API vs Offline AI (Notes)
+Last updated: 2026-03-22
+
+Question
+- “Is there any advantage if we use free API for this offline AI?”
+
+Summary
+- Yes, there can be advantages (model quality, faster iteration), but it changes the product from fully-offline to hybrid/online and introduces privacy, reliability, and compliance risks.
+- For SmartHub’s target use (repair technicians, customer devices, sensitive logs), Offline-first is usually the correct default. If an API is added, it should be strictly opt-in and minimize data.
+
+Advantages of using an online “free API”
+1) Potentially better reasoning/model quality
+- Cloud models can be stronger at complex root-cause explanations and natural-language summaries.
+- Can improve technician-facing explanations ("why" + next steps) even when raw signals are messy.
+
+2) Faster updates
+- You can improve prompts/logic server-side without shipping a new installer.
+- Can A/B test phrasing and reduce confusion cases faster.
+
+3) Reduced local dependencies
+- Less pressure to ship Python, model files, or large offline artifacts.
+- Lower local CPU/RAM usage on low-end PCs.
+
+4) Multi-language output
+- Easy to produce technician guidance in multiple languages without building/maintaining translation logic.
+
+Risks / disadvantages (important for SmartHub)
+1) Not offline anymore
+- Requires Internet availability; many repair shops have unstable or restricted Internet.
+- Adds a hard dependency (API downtime or slow response becomes a product issue).
+
+2) Privacy and data exposure
+- Device diagnostics can include app lists, crash logs, identifiers, and usage hints.
+- Sending raw logs to a third party can violate customer expectations and some shop policies.
+
+3) Rate limits and unpredictability
+- “Free” tiers often have strict rate limits, quotas, or can change without notice.
+- Output can vary over time as the provider updates models.
+
+4) Compliance / legal / customer trust
+- You may need clear disclosures and consent (“data sent to external AI service”).
+- Some regions/clients require that diagnostics remain local.
+
+5) Security and prompt injection surface
+- If you ever send logs or app names to an external model, you must treat them as untrusted input.
+- Attackers can craft strings that try to influence AI output (prompt injection), causing unsafe advice.
+
+Recommendation (best fit for SmartHub)
+- Keep Offline AI as the default and primary source of truth.
+- If you add an API, do it as a strictly optional “Online Assist” mode:
+  - OFF by default
+  - Clear consent toggle in UI
+  - Send minimal, redacted features instead of raw logs
+  - Cache results locally per-case fingerprint to reduce repeated calls
+
+Safe hybrid design (practical rules)
+1) Data minimization
+- Prefer sending only derived signals (booleans/counts/severity), e.g.:
+  - "battery_connection_suspected=true"
+  - "power_log_score=7"
+  - "shutdown_category=watchdog"
+  - "usb_instability=true"
+- Avoid sending:
+  - Full logcat dumps
+  - Full app lists
+  - Serial numbers / IMEI / phone number / accounts
+
+2) Redaction
+- Strip email-like strings, UUIDs, long hex tokens, and file paths.
+- Remove package names unless necessary; if needed, send only suspicious package count.
+
+3) Make Offline AI still decide
+- Online API can produce: explanation text, suggested next steps, troubleshooting checklist.
+- Offline engine should still compute: findings, severities, stage OK/Attention, confidence rules.
+
+4) UX clarity
+- Show label clearly:
+  - “Offline AI conclusion” vs “Online Assist suggestion”
+- Never let Online Assist override hard evidence.
+
+When an API is worth it
+- You want better natural-language explanations and next-step guidance.
+- You want rapid iteration and prompt tuning without shipping updates.
+- Your customers are OK with optional data sharing (explicit consent).
+
+When NOT worth it
+- You must be fully offline.
+- You cannot risk sending any diagnostic information outside the shop.
+- You want stable outputs that do not drift with provider changes.
+
+Bottom line
+- Advantage exists, but for SmartHub the safest path is: Offline-first + optional, consent-based Online Assist that sends only redacted feature summaries.
+
+
+Implementation notes (SmartHub)
+- Backend endpoints:
+  - GET /online-ai/status
+    - Returns whether Online Assist is configured and reminds that it requires Internet.
+  - POST /ai-online-suggest
+    - Body: { kind?: string, features: object }
+    - Returns: { ok, requiresInternet: true, text }
+
+- Where to put your API settings (single merged key setup):
+  - Preferred (works from supabase.local.json or environment):
+    - SMARTHUB_AI_API_URL
+      - Example (OpenAI-compatible): https://api.openai.com/v1/chat/completions
+    - SMARTHUB_AI_API_KEY
+      - One API key/token used by Online Assist endpoints
+    - SMARTHUB_AI_MODEL (optional)
+      - Example: gpt-4o-mini (or your provider’s model id)
+    - SMARTHUB_AI_TIMEOUT_MS (optional)
+      - Default 12000
+  - Backward-compatible names still accepted:
+    - SMART_HUB_ONLINE_AI_URL / SMARTHUB_ONLINE_AI_URL
+    - SMART_HUB_ONLINE_AI_KEY / SMARTHUB_ONLINE_AI_KEY
+    - SMART_HUB_ONLINE_AI_MODEL / SMARTHUB_ONLINE_AI_MODEL
+    - SMART_HUB_ONLINE_AI_TIMEOUT_MS / SMARTHUB_ONLINE_AI_TIMEOUT_MS
+
+- Recommended file location for installed/dev setups:
+  - Put the preferred keys in repo root file: supabase.local.json
+  - Example:
+    {
+      "SMARTHUB_AI_API_URL": "https://api.openai.com/v1/chat/completions",
+      "SMARTHUB_AI_API_KEY": "YOUR_ONE_API_KEY",
+      "SMARTHUB_AI_MODEL": "gpt-4o-mini"
+    }
+
+- Where to change provider request/response parsing:
+  - src/routes/onlineAiRoutes.ts
+    - Function: callOnlineAiApi(...)
+    - This is the single place that calls the external API.
+
+Internet requirement
+- Online Assist is best-effort. If there is no Internet (DNS failure/timeout), the backend returns HTTP 503 and sets internetRequired=true.
+
+Installed Windows app note (API key “container”)
+- Environment variables are the most secure option, but for installed apps on other desktops you may want a local per-machine config file.
+- SmartHub backend supports storing Online Assist config in:
+  - %APPDATA%\SmartHubDiagnostics\online-ai-config.json
+- You can set it via backend endpoints (key is never returned by GET):
+  - GET /online-ai/config
+  - POST /online-ai/config  (body can include: url, apiKey, model, clearKey)
+- Environment variables still override the config file if present.

@@ -1,0 +1,354 @@
+Deep No-ADB / Locked-Screen BSOD Diagnosis Plan
+Date: 2026-03-12
+
+Purpose
+- Redesign the SmartHub plan for diagnosing blue screen, blank screen, dark screen, or suspected deep boot failure on phones that cannot use ADB and cannot be unlocked.
+- Keep the plan honest: no bypass of lockscreen, no remote enabling of USB debugging, no exploit workflow, no forensic extraction claims.
+- Use the existing Bsod tools on the Windows host and define where Android-side components written in C/C++, Java, Kotlin, and Assembly are realistically useful.
+
+Reality Check
+- On a normal retail phone that is already locked and has USB debugging OFF, SmartHub cannot deploy new code into Android after the failure happens.
+- Deep detection without ADB is only realistic from three paths:
+  1. Windows host-side USB and power evidence.
+  2. Physical boot-mode detection (fastboot, recovery, download mode, EDL, preloader) triggered by technician button actions.
+  3. Android-side service components that were already preinstalled before the failure, or OEM/service-partner builds with privileged access.
+- Therefore this plan is split into:
+  - Phase A: deployable now in SmartHub with no security bypass.
+  - Phase B: deeper Android-side instrumentation for future builds, preinstalled service app deployments, or OEM-authorized integrations.
+
+Primary Goal
+- Produce a more truthful offline diagnosis for no-ADB / locked-screen phones by answering these questions in order:
+  1. Is the phone actually alive and booting, or is this only a display-path problem?
+  2. Is the phone stuck in a low-level boot or recovery state?
+  3. Is the Windows host misreading the phone because of cable, port, or driver instability?
+  4. If it is a real deep failure, is the strongest evidence pointing to firmware/boot corruption, power instability, storage failure, or display hardware?
+
+Expected Output
+- SmartHub should show a short cause-first result:
+  - Likely cause
+  - Why SmartHub thinks that
+  - Do this first
+  - Confidence
+- It should also show an advanced evidence panel containing:
+  - Host USB evidence
+  - Boot-mode evidence
+  - Visual evidence
+  - Re-enumeration timeline
+  - Similar past cases
+
+==================================================
+Phase A: What SmartHub Can Do Right Now
+==================================================
+
+1) Make Bsod tools the primary evidence source
+
+Required tools already in repo
+- Bsod tools/UsbEvidenceHelper
+- Bsod tools/UsbEventLogHelperRust
+- Bsod tools/UsbPnpSnapshotCpp
+
+Required behavior
+- Every no-ADB BSOD run must collect and persist a unified host evidence snapshot:
+  - current PnP devices
+  - problem codes
+  - recent USB and PnP event log failures
+  - phone-like device matches
+  - connect/disconnect instability
+  - whether evidence points to host-side driver failure instead of phone failure
+
+Implementation notes
+- UsbEvidenceHelper should remain the immediate hardware/pnp truth source.
+- UsbEventLogHelperRust should become the event timeline source.
+- UsbPnpSnapshotCpp should become the device family / problem-code cross-check source.
+- SmartHub backend should compute a host evidence score that can override weak BSOD conclusions when two or more helpers agree on a PC-side problem.
+
+Why this matters
+- This is the strongest available deep evidence path without touching the locked phone OS.
+- It reduces false hardware_failure calls caused by bad Windows USB state.
+
+2) Strengthen low-level mode detection
+
+Required detection targets
+- Fastboot / bootloader
+- Recovery (where detectable by USB identity or technician confirmation)
+- Qualcomm EDL / 9008
+- MediaTek preloader / BROM
+- Samsung download-mode-style transport identities when visible through Windows USB IDs
+- Apple DFU/recovery only if SmartHub wants cross-platform transport classification
+
+Implementation notes
+- Expand VID/PID and device-name heuristics in the backend.
+- Keep a vendor profile table:
+  - Qualcomm / QDLoader / 9008
+  - MediaTek / Preloader / VCOM / BROM
+  - Samsung download-style composite identities when exposed to Windows
+  - generic bootloader / fastboot patterns
+- Add a timed sampling window so SmartHub can tell:
+  - stable low-level mode
+  - unstable reboot loop
+  - short-lived enumeration bursts
+
+Why this matters
+- Deep no-ADB diagnosis depends heavily on whether the phone is alive in Android, alive only in bootloader, or repeatedly falling into transport-only states.
+
+3) Treat lockscreen-visible Android as "alive" evidence even without ADB
+
+Required logic
+- If MTP is stable, or transport transitions eventually become normal portable-device visibility, SmartHub should strongly prefer:
+  - display hardware fault
+  - user-space issue
+  - not_bsod
+- It should avoid calling this a deep BSOD unless other evidence clearly contradicts it.
+
+Implementation notes
+- Keep the current not_bsod guardrails.
+- Add more explicit UI wording:
+  - "Phone appears alive but locked/non-debuggable"
+  - "This is not enough evidence for a deep boot failure"
+
+4) Add a deeper visual evidence pass
+
+Current direction
+- SmartHub already supports optional screen visual checks.
+
+Plan
+- Expand visual classification into these technician-safe buckets:
+  - normal UI visible
+  - backlight on but no content
+  - blue-only screen
+  - logo boot loop
+  - recovery screen / low-level screen pattern
+  - fully dark / no light
+  - cracked / line / banding / dead-row artifact
+
+Important constraint
+- This remains heuristic only. It must never claim to read private content or bypass the lockscreen.
+
+5) Add a re-enumeration timeline
+
+Goal
+- Build a short time-based story of what Windows saw for 15 to 45 seconds after plug-in.
+
+What to record
+- timestamped device identities
+- mode changes
+- event log resets
+- PnP problem-code changes
+- stable vs unstable periods
+
+Why this matters
+- Deep board or storage failures often show as repeating transport churn.
+- Display-only faults usually look much more stable from the USB side.
+
+==================================================
+Phase B: Android-Side Deep Signals for Future Versions
+==================================================
+
+This section is only realistic for:
+- preinstalled SmartHub companion components
+- enterprise fleets where the app was already installed
+- OEM/service-center partner builds
+- recovery or engineering images authorized by the device vendor
+
+It is not realistic for random locked consumer phones after failure happens.
+
+1) C and C++ role
+
+Where to use it
+- Android NDK component inside the SmartHub Android app or OEM service module.
+- Native libraries for collecting low-level crash breadcrumbs that are exposed to app-safe or vendor-safe interfaces.
+- Fast parsing of native tombstone summaries if the app already has access to exported diagnostics.
+- Vendor partnership path: read native display, thermal, storage-health, and restart-reason services when the platform exposes them.
+
+What it can realistically help detect
+- repeated native crash signatures if pre-collected
+- display pipeline health hints exposed through vendor HAL wrappers
+- storage wear or I/O failure counters when available through vendor services
+- thermal throttling or shutdown reasons where Android exposes them to system components
+
+What it cannot do in a locked retail phone by itself
+- read arbitrary kernel state from a normal unprivileged app after the fact
+- bypass lockscreen or USB restrictions
+
+2) Java role
+
+Where to use it
+- Android framework-facing service code for a preinstalled SmartHub companion.
+- Broadcast receivers and background services for lifecycle and reboot history.
+- Safe access to standard Android APIs such as BatteryManager, StorageManager, and system health summaries available to installed apps.
+
+What it can collect before failure occurs
+- reboot timestamps
+- app crash patterns
+- battery temperature trends
+- free storage trends
+- whether the device entered recovery-safe prompts or repeated abnormal restarts
+
+Best use
+- Build a rolling "health breadcrumb" file before the phone ever fails.
+- When the screen later fails, SmartHub can use previously exported breadcrumbs from storage or companion sync history.
+
+3) Kotlin role
+
+Where to use it
+- Same scope as Java, but preferred for new Android app code.
+- Structured data collection, WorkManager jobs, local health snapshotting, and safer app-side state machines.
+
+Best use
+- Implement a preinstalled SmartHub Health Agent.
+- Save encrypted, privacy-scoped health snapshots such as:
+  - last normal boot time
+  - last thermal spike
+  - last storage pressure event
+  - last app crash burst
+  - last display-related warning if available
+
+4) Assembly role
+
+Where to use it realistically
+- only inside OEM/platform engineering code, bootloader diagnostics, or chipset-specific low-level startup instrumentation
+- micro-optimized hardware initialization or early boot diagnostics in vendor code
+
+What SmartHub should assume
+- Assembly is not a normal app-level implementation tool for this product.
+- It only becomes relevant if SmartHub is part of a vendor-authorized platform build or engineering image.
+
+Conclusion on language usage
+- C/C++: useful for native Android or vendor-safe diagnostics when preinstalled or OEM-authorized.
+- Java/Kotlin: best for preinstalled SmartHub health-agent logic and breadcrumb capture.
+- Assembly: only relevant for OEM or firmware-level diagnostic integrations, not normal shop deployments.
+
+==================================================
+Proposed Product Architecture
+==================================================
+
+Layer 1: Windows host evidence (deploy now)
+- Source of truth for non-ADB devices.
+- Uses Bsod tools + PowerShell + fastboot checks.
+
+Layer 2: Visual evidence (deploy now)
+- Camera or technician-confirmed observations.
+- Used mainly to separate display faults from deep non-boot cases.
+
+Layer 3: Boot-mode evidence (deploy now)
+- Fastboot, recovery guidance, transport-mode IDs.
+- Strongest deep-failure evidence available on locked phones.
+
+Layer 4: Preinstalled Android Health Agent (future)
+- Written mainly in Kotlin/Java with optional C/C++ native helpers.
+- Collects breadcrumbs before failure happens.
+
+Layer 5: OEM/service integration (future)
+- Vendor-authorized native and boot-level diagnostics.
+- Only path where Assembly and privileged native services become relevant.
+
+==================================================
+Scoring Model vNext
+==================================================
+
+Top-level outputs
+- not_bsod_alive_display_path
+- locked_but_booting_normally
+- low_level_firmware_failure
+- unstable_power_or_mainboard
+- host_usb_driver_issue
+- uncertain_needs_physical_confirmation
+
+Evidence weights
+- Strong positive evidence
+  - stable MTP or stable normal USB identity
+  - stable fastboot / low-level transport detection
+  - repeated, timed re-enumeration patterns
+  - agreement across two or more Bsod tools helpers
+  - visual proof of normal content or specific screen artifact type
+- Strong negative evidence
+  - host-only USB driver problem signals
+  - single weak camera result without transport support
+  - one-off enumeration burst with no repeat
+
+Confidence rule
+- High confidence only when at least two independent sources agree:
+  - host evidence + mode evidence
+  - host evidence + visual evidence
+  - mode evidence + technician-confirmed physical behavior
+
+==================================================
+Concrete Engineering Tasks
+==================================================
+
+Task 1: Host evidence unification
+- Create one normalized evidence object for UsbEvidenceHelper, UsbEventLogHelper, and UsbPnpSnapshot.
+- Add a single hostVerdict field with explicit reasons.
+
+Task 2: Timed re-enumeration engine
+- Sample host USB state across a longer window.
+- Detect stable, flapping, boot-loop-like, and transport-only patterns.
+
+Task 3: Vendor transport profile table
+- Add vendor-specific VID/PID and name heuristics.
+- Keep this editable as data, not hardcoded only in logic.
+
+Task 4: Visual classifier refresh
+- Expand the visual categories used by the BSOD flow.
+- Record backlight/content/artifact hints separately.
+
+Task 5: New UI wording
+- Show likely cause, why, first action, and advanced evidence.
+- Always explain when the answer is limited because the phone is locked and ADB is unavailable.
+
+Task 6: Memory and evaluation
+- Require technician outcome labeling after confirmed repair.
+- Track real confusion between:
+  - display fault vs deep hardware failure
+  - host USB issue vs phone USB issue
+  - low-level firmware failure vs unstable power/mainboard
+
+Task 7: Future Android agent
+- Design a preinstalled SmartHub Health Agent in Kotlin/Java.
+- Optional native helper in C/C++.
+- Collect privacy-safe breadcrumbs before failure occurs.
+
+==================================================
+Validation Matrix
+==================================================
+
+Cases to test
+- Live phone, broken display assembly, ADB off, lockscreen on
+- Live phone, screen dark, MTP stable, ADB off
+- Fastboot-only bootloader device
+- Qualcomm EDL / 9008 device
+- MediaTek preloader device
+- Boot-loop device with repeated re-enumeration
+- Host PC with broken USB driver causing false negatives
+- Bad cable / bad port / hub instability
+- Dead power/mainboard device with no stable transport
+
+For each case, record
+- SmartHub verdict
+- confidence
+- raw helper evidence
+- final confirmed repair outcome
+- whether the verdict was truthful even when not exact
+
+Success criteria
+- Fewer false BSOD calls on phones that are actually alive.
+- Fewer phone-fault diagnoses when Windows USB is the real problem.
+- Better separation between display-path faults and deep boot failures.
+- Enough labeled cases to report real measured accuracy instead of estimates.
+
+==================================================
+Bottom Line
+==================================================
+
+The deepest practical no-ADB / locked-screen detection path for SmartHub today is:
+- Windows host USB evidence
+- low-level boot-mode evidence
+- camera / technician visual evidence
+- conservative scoring
+
+The deepest future path is:
+- preinstalled Android health-agent code in Kotlin/Java
+- optional native helpers in C/C++
+- OEM-authorized platform diagnostics where native and assembly-level hooks are possible
+
+SmartHub should not promise deep Android internals on a random locked phone unless that deeper instrumentation was already present before the failure or supplied by the OEM.

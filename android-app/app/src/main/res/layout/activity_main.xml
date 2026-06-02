@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/sh_background"
+    android:fillViewport="true"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/sh_card"
+        android:padding="18dp">
+
+        <ImageView
+            android:id="@+id/app_logo"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="SmartHub logo"
+            android:src="@mipmap/ic_launcher_foreground" />
+
+        <TextView
+            android:id="@+id/app_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SmartHub Mobile Diagnostics ALPHA"
+            android:textStyle="bold"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/desktop_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="This app only collects data for the SmartHub desktop tool. All diagnostic results are shown on the PC."
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/connection_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Desktop connection: waiting…"
+            android:textStyle="bold"
+            android:padding="12dp"
+            android:textAppearance="?attr/textAppearanceSubtitle1"
+            android:background="@drawable/sh_status_waiting" />
+
+        <ProgressBar
+            android:id="@+id/diagnostic_spinner"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:indeterminate="true"
+            android:visibility="gone"
+            android:paddingTop="12dp" />
+
+        <TextView
+            android:id="@+id/instructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Connect this phone to the SmartHub desktop via USB.\n2. On the PC, open SmartHub and start a diagnostic.\n3. Keep this app open while the desktop finishes collecting data.\n\nThe phone will not show detailed results; check the SmartHub desktop window for all findings."
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:paddingTop="12dp" />
+
+        <TextView
+            android:id="@+id/last_updated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Report not generated yet."
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:paddingTop="16dp" />
+
+    </LinearLayout>
+
+</ScrollView>

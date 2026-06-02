@@ -1,0 +1,63 @@
+SmartHubv5 — Common Android Problems: Quick Fixes (Original Notes)
+
+Purpose
+- A compact, technician-friendly set of common phone issue fixes.
+- Written as original guidance (not a copy of any specific article).
+
+Battery drains too fast
+- Turn down screen brightness and reduce screen timeout.
+- Limit high-power features when not needed (GPS/location, hotspot, always-on display).
+- Check Settings → Battery for the top draining apps; restrict background activity for offenders.
+- If the phone supports Battery Saver / Power Saving mode, enable it during troubleshooting.
+
+Phone feels frozen or very slow
+- Free up storage: uninstall unused apps and delete/move photos/videos to cloud or SD card.
+- Reboot once to clear temporary stalls.
+- Clear app cache for the worst offender apps (Settings → Apps → Storage → Clear cache).
+- Reduce heavy visuals (live wallpapers, excessive widgets) during diagnosis.
+
+Connectivity issues (Wi‑Fi / Bluetooth / mobile data)
+- Toggle Airplane mode ON for ~30 seconds, then OFF.
+- Toggle only the failing radio (Wi‑Fi/Bluetooth) and retry.
+- Forget and re-add the Wi‑Fi network or re-pair the Bluetooth device.
+- If the issue is intermittent, test near the router and try another network/device to isolate whether it’s the phone or the environment.
+
+Overheating
+- Stop heavy apps and let the phone cool down (remove case, stop charging during stress).
+- Avoid gaming/recording/video calls while charging during troubleshooting.
+- If it repeatedly overheats under light usage, suspect battery health, charging accessory, or a hardware defect.
+
+Sync problems (Google/Dropbox/etc.)
+- Verify internet connectivity first.
+- Confirm the account password is correct and the service is not down.
+- Remove the account from the phone and add it again if sync continues to fail.
+
+Apps crash frequently
+- Update the crashing app and install OS updates if available.
+- Force stop the app and reopen; clear app cache if crashes continue.
+- If multiple unrelated apps crash, suspect low storage, overheating, or OS corruption.
+
+Touchscreen seems unresponsive
+- Try a restart first.
+- Remove screen protectors/cases that may interfere with touch.
+- If there was a drop/liquid exposure, treat as potential hardware damage.
+
+Play Store keeps crashing / apps won’t download
+- Clear cache for Play Store and Google Play Services.
+- Check storage space and date/time settings.
+- Reboot and retry.
+
+Bad autocorrect suggestions
+- Remove learned wrong words from the keyboard’s dictionary (varies by keyboard).
+
+Kids accidentally buy apps
+- Enable purchase authentication (PIN/biometrics) for Play Store purchases.
+
+Home screen clutter
+- Disable “Add icon to Home screen” in Play Store settings.
+
+Too many contacts synced
+- Turn off Contacts sync for the account(s) you don’t want syncing.
+
+Notes
+- These steps are general best-effort tips. When SmartHub’s USB-only evidence indicates a low-level boot mode (EDL/Preloader/Fastboot-only), prioritize firmware/boot repair workflows instead of normal settings changes.

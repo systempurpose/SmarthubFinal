@@ -1,0 +1,38 @@
+SmartHub Diagnostics - End User License Agreement (EULA)
+
+IMPORTANT: By installing or using SmartHub Diagnostics (the "Software"), you agree to be bound by the terms of this End User License Agreement ("Agreement"). If you do not agree to these terms, do not install or use the Software.
+
+1. LICENSE GRANT
+The Software is licensed, not sold. You are granted a non-exclusive, non-transferable license to install and use the Software on a Windows PC for the purpose of performing device diagnostics and support.
+
+2. OWNERSHIP
+All rights, title, and interest in and to the Software, including all updates, enhancements, and documentation, remain with the creator/owner of SmartHub Diagnostics. This Agreement does not transfer any intellectual property rights.
+
+3. PERMITTED USE
+You may:
+- Install and run the Software on one or more PCs that you own or control.
+- Use the Software solely for diagnostic, troubleshooting, and support purposes.
+
+4. RESTRICTIONS
+You may not:
+- Reverse engineer, decompile, or disassemble the Software except where explicitly permitted by applicable law.
+- Sell, rent, lease, or sublicense the Software.
+- Remove or alter any proprietary notices, labels, or marks on the Software.
+- Use the Software for any unlawful purpose.
+
+5. DATA AND PRIVACY
+The Software may read device information, logs, and diagnostic data from connected devices for the purpose of analysis and reporting. This data is processed locally on your PC and is intended for use by technicians. You are responsible for using the Software in compliance with all applicable privacy and data protection laws.
+
+6. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. YOU USE THE SOFTWARE AT YOUR OWN RISK.
+
+7. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE AUTHOR OR DISTRIBUTOR OF THE SOFTWARE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF DATA, PROFITS, OR REVENUE, ARISING OUT OF OR RELATED TO YOUR USE OF THE SOFTWARE.
+
+8. TERMINATION
+This Agreement is effective until terminated. It will terminate automatically if you fail to comply with any term. Upon termination, you must stop using the Software and uninstall it from your systems.
+
+9. GOVERNING LAW
+This Agreement shall be governed by and construed in accordance with the laws of your local jurisdiction, without regard to conflict of laws principles.
+
+By clicking "Next", "Install", or by installing or using the Software, you acknowledge that you have read, understood, and agree to be bound by this Agreement.

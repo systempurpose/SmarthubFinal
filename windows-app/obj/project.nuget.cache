@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "M+8J3GmOi4I=",
+  "success": true,
+  "projectFilePath": "D:\\SmartHubv14\\SmartHubv5\\windows-app\\WindowsShell.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\mark lhemuel\\.nuget\\packages\\microsoft.web.webview2\\1.0.2592.51\\microsoft.web.webview2.1.0.2592.51.nupkg.sha512",
+    "C:\\Users\\mark lhemuel\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.24\\microsoft.netcore.app.ref.8.0.24.nupkg.sha512",
+    "C:\\Users\\mark lhemuel\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.24\\microsoft.windowsdesktop.app.ref.8.0.24.nupkg.sha512",
+    "C:\\Users\\mark lhemuel\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.24\\microsoft.aspnetcore.app.ref.8.0.24.nupkg.sha512",
+    "C:\\Users\\mark lhemuel\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.24\\microsoft.netcore.app.host.win-x64.8.0.24.nupkg.sha512"
+  ],
+  "logs": []
+}

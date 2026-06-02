@@ -1,0 +1,2 @@
+# Optional Python dependencies for security tools
+# Currently only standard library and Android build-tools `aapt` are required.

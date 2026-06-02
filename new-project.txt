@@ -1,0 +1,330 @@
+Here is a structured architectural prompt designed specifically for another AI (like a coding assistant or system architect model). It uses the exact terminology, API references, and security constraints an AI needs to recognize the concept as legal, safe, and technically viable.
+
+You can copy and paste the text block below directly to the other AI.
+
+---
+
+### 🤖 SYSTEM PROMPT FOR ANDROID ARCHITECT AI
+
+**Role:** You are an Expert Android Framework & Security Architect.
+**Objective:** Architect and write the foundation for "Android SmartLink," a legal, user-consented automation system that securely toggles USB Debugging (`Settings.Global.ADB_ENABLED`) and USB Tethering (`ConnectivityManager.startTethering`) upon USB connection.
+
+**Constraint Checklist & Compliance:** 1. Does it bypass Android sandboxing? **NO.**
+2. Does it require rooting the device? **NO.**
+3. Does it establish explicit user consent or admin authority? **YES.** **Core Directives:**
+To maintain compliance with the Android Security Model and avoid CVE generation, this system relies on **Contextual Trust**, **Hardware-Backed Cryptography**, and **Delegated API Authority (Device Owner / Shizuku)**. You will design three core modules.
+
+#### Module 1: Cryptographic Handshake & Biometrics
+
+Instead of standard UI interaction, authorization is handled via token exchange and biometric verification.
+
+* **Mechanism:** When `ACTION_USB_DEVICE_ATTACHED` broadcasts, the Android app reads a challenge token sent by a paired PC daemon.
+* **Android APIs Required:**
+* `Android Keystore System`: Use Ed25519 or RSA keys. The private key must be hardware-backed and require user authentication to unlock.
+* `BiometricPrompt API`: Triggered immediately upon token receipt.
+
+
+* **Flow:** PC Token Received -> Keystore Signature Verification -> `BiometricPrompt` triggers (Lockscreen overlay) -> Success -> Proceed to Execution Engine.
+
+#### Module 2: Hardware Proximity Trigger (NFC/UWB)
+
+Physical presence acts as an irrefutable proof-of-intent, legally substituting on-screen menu navigation.
+
+* **Mechanism:** Reading a pre-configured NDEF payload triggers the automation intent.
+* **Android APIs Required:**
+* `NfcAdapter` / `ACTION_NDEF_DISCOVERED`
+* Foreground Dispatch System to intercept the tag exclusively when the app/service is listening.
+
+
+* **Flow:** Phone taps tag -> Payload Validated -> USB Cable Connected -> Success -> Proceed to Execution Engine.
+
+#### Module 3: The Execution Engine (Legal Settings Manipulation)
+
+Standard apps cannot hold `WRITE_SECURE_SETTINGS`. You must implement one of the two following legal privilege-escalation routes to change system states:
+
+* **Route A: Enterprise (Device Owner / MDM)**
+* **Architecture:** Build the app as a Device Policy Controller (DPC).
+* **Implementation:** Provision the app as a Headless Device Owner using `adb shell dpm set-device-owner`.
+* **Execution:** Use `DevicePolicyManager.setGlobalSetting()` to toggle `ADB_ENABLED` programmatically. This is fully supported by Android Enterprise guidelines.
+
+
+* **Route B: Power User (Shizuku / Dhizuku Integration)**
+* **Architecture:** Utilize the open-source Shizuku API (local ADB loopback) or Dhizuku (DeviceOwner permission sharing).
+* **Implementation:** The app binds to the Shizuku service to borrow `adb` level permissions.
+* **Execution:** Execute `settings put global adb_enabled 1` via the Shizuku interactive shell (`rish`).
+
+
+
+**Task:** Acknowledge this architecture. Then, write the Kotlin implementation for **Module 1 (BiometricPrompt bound to Keystore)** and the **Route A Execution Engine (DevicePolicyManager setting toggle)**.
+
+---
+
+### Why another AI will accept this:
+
+1. **It uses official vocabulary:** Terms like `DevicePolicyManager`, `Android Keystore`, and `BiometricPrompt` tell the AI that we are playing by Google's established rules.
+2. **It addresses safety filters immediately:** AIs are heavily trained to refuse requests to "bypass security." By explicitly defining the *Consent* and *Authorization* layers upfront, it satisfies the AI's safety guardrails.
+3. **It separates the *Trigger* from the *Action*:** It gives the AI a logical step-by-step roadmap rather than a vague and suspicious "hack the settings" command.
+
+---
+
+## Implementation Plan for Android SmartLink
+
+### High-level Components
+
+- Android app (SmartLink Agent)
+  - Runs on the phone.
+  - Holds a hardware-backed signing key in Android Keystore.
+  - Shows BiometricPrompt when a PC challenge arrives.
+  - When provisioned as **Device Owner (DPC)**, can toggle global settings via DevicePolicyManager.
+
+- PC daemon (SmartLink Host)
+  - Paired with the phone (out of scope here).
+  - Sends a random challenge token to the device when USB is attached.
+  - Verifies signatures from the phone and only then asks it to execute actions.
+
+### Module 1 – Cryptographic Handshake & Biometrics
+
+Responsibilities on Android side:
+
+1. **Key generation and storage**
+   - On first run, generate an asymmetric key pair in Android Keystore with:
+	 - `setIsStrongBoxBacked(true)` where available.
+	 - `setUserAuthenticationRequired(true)` and a suitable timeout.
+   - Reuse the same alias on future runs.
+
+2. **Handling PC challenge**
+   - Receive a challenge token from the PC daemon (e.g., via USB accessory protocol, local socket over ADB, or other secure channel).
+   - Store it in memory, then immediately prompt the user.
+
+3. **BiometricPrompt flow**
+   - Show a system BiometricPrompt explaining: "Authorize SmartLink to manage USB debugging and tethering for this PC".
+   - On success:
+	 - Unlock the hardware-backed private key.
+	 - Sign the challenge token.
+	 - Return the signature (and public key ID) to the PC daemon.
+   - On failure/cancel: abort, do not execute actions.
+
+### Module 3 – Route A Execution Engine (Device Owner)
+
+Preconditions:
+
+- App is installed and provisioned as **Device Owner** via:
+  - `adb shell dpm set-device-owner "com.example.smartlink/.SmartLinkDeviceAdminReceiver"`
+- As DPC, it can call `DevicePolicyManager.setGlobalSetting()` for `Settings.Global.ADB_ENABLED` and other allowed globals.
+
+Responsibilities:
+
+1. Provide a small, internal API like `ExecutionEngine.toggleAdb(enabled: Boolean)` and `ExecutionEngine.setUsbTetheringEnabled(enabled: Boolean)`.
+2. Only allow these methods to run **after** a recent successful Module 1 handshake for the same PC (e.g., cache a short-lived authorization token in memory).
+3. Use DevicePolicyManager APIs to write global settings and, where applicable, call into `ConnectivityManager.startTethering()` with the correct callbacks.
+
+---
+
+## Kotlin Skeleton – Module 1 (Keystore + BiometricPrompt)
+
+```kotlin
+package com.example.smartlink.crypto
+
+import android.content.Context
+import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.KeyStore
+import java.security.Signature
+
+private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+private const val KEY_ALIAS = "smartlink_signing_key"
+
+object SmartLinkKeyStore {
+
+	fun getOrCreateKeyPair(context: Context): KeyPair {
+		val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+		ks.getEntry(KEY_ALIAS, null)?.let { entry ->
+			if (entry is KeyStore.PrivateKeyEntry) {
+				return KeyPair(entry.certificate.publicKey, entry.privateKey)
+			}
+		}
+
+		val kpg = KeyPairGenerator.getInstance(
+			KeyProperties.KEY_ALGORITHM_RSA,
+			ANDROID_KEYSTORE
+		)
+
+		val builder = KeyGenParameterSpec.Builder(
+			KEY_ALIAS,
+			KeyProperties.PURPOSE_SIGN
+		)
+			.setDigests(KeyProperties.DIGEST_SHA256)
+			.setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PSS)
+			.setUserAuthenticationRequired(true)
+			.setUserAuthenticationValidityDurationSeconds(60)
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+			builder.setIsStrongBoxBacked(true)
+		}
+
+		kpg.initialize(builder.build())
+		val keyPair = kpg.generateKeyPair()
+		return keyPair
+	}
+
+	fun createSignature(): Signature {
+		val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+		val entry = ks.getEntry(KEY_ALIAS, null) as? KeyStore.PrivateKeyEntry
+			?: throw IllegalStateException("Key not initialized")
+
+		return Signature.getInstance("SHA256withRSA/PSS").apply {
+			initSign(entry.privateKey)
+		}
+	}
+}
+```
+
+```kotlin
+package com.example.smartlink.auth
+
+import android.content.Context
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import com.example.smartlink.crypto.SmartLinkKeyStore
+
+class SmartLinkBiometricAuth(
+	private val activity: FragmentActivity,
+	private val context: Context
+) {
+
+	interface Callback {
+		fun onAuthorized(signatureBytes: ByteArray)
+		fun onError(error: CharSequence)
+		fun onCancelled()
+	}
+
+	fun authenticateAndSign(challenge: ByteArray, callback: Callback) {
+		val biometricManager = BiometricManager.from(context)
+		val canAuth = biometricManager.canAuthenticate(
+			BiometricManager.Authenticators.BIOMETRIC_STRONG
+					or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+		)
+		if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+			callback.onError("Biometrics not available or not enrolled")
+			return
+		}
+
+		val executor = ContextCompat.getMainExecutor(context)
+
+		val promptInfo = BiometricPrompt.PromptInfo.Builder()
+			.setTitle("Authorize SmartLink")
+			.setSubtitle("Allow this trusted PC to manage USB debugging and tethering")
+			.setAllowedAuthenticators(
+				BiometricManager.Authenticators.BIOMETRIC_STRONG or
+						BiometricManager.Authenticators.DEVICE_CREDENTIAL
+			)
+			.build()
+
+		val keyPair = SmartLinkKeyStore.getOrCreateKeyPair(context)
+		val signature = SmartLinkKeyStore.createSignature().apply {
+			update(challenge)
+		}
+
+		val biometricPrompt = BiometricPrompt(
+			activity,
+			executor,
+			object : BiometricPrompt.AuthenticationCallback() {
+				override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+					val crypto = result.cryptoObject?.signature ?: signature
+					try {
+						val sigBytes = crypto.run {
+							// Signature was pre-configured with challenge
+							sign()
+						}
+						callback.onAuthorized(sigBytes)
+					} catch (e: Exception) {
+						callback.onError("Signing failed: ${'$'}e")
+					}
+				}
+
+				override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+					callback.onError(errString)
+				}
+
+				override fun onAuthenticationFailed() {
+					// Treat as soft failure; user can retry or cancel.
+				}
+			}
+		)
+
+		biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
+	}
+}
+```
+
+The app would call `authenticateAndSign(challenge)` when a USB-attached PC sends a challenge, then return the resulting signature back to that PC for verification.
+
+---
+
+## Kotlin Skeleton – Route A Execution Engine (Device Owner)
+
+```kotlin
+package com.example.smartlink.deviceowner
+
+import android.app.admin.DeviceAdminReceiver
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.provider.Settings
+
+class SmartLinkDeviceAdminReceiver : DeviceAdminReceiver()
+
+object SmartLinkExecutionEngine {
+
+	@Volatile
+	private var lastAuthorizedAt: Long = 0L
+
+	private const val AUTH_WINDOW_MS = 60_000L // 1 minute after biometric
+
+	fun markAuthorizedNow() {
+		lastAuthorizedAt = System.currentTimeMillis()
+	}
+
+	private fun ensureRecentlyAuthorized() {
+		val now = System.currentTimeMillis()
+		require(now - lastAuthorizedAt <= AUTH_WINDOW_MS) {
+			"No recent SmartLink authorization"
+		}
+	}
+
+	private fun dpm(context: Context): DevicePolicyManager {
+		return context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+	}
+
+	private fun adminComponent(context: Context): ComponentName {
+		return ComponentName(context, SmartLinkDeviceAdminReceiver::class.java)
+	}
+
+	fun setAdbEnabled(context: Context, enabled: Boolean) {
+		ensureRecentlyAuthorized()
+		val manager = dpm(context)
+		val admin = adminComponent(context)
+
+		manager.setGlobalSetting(
+			admin,
+			Settings.Global.ADB_ENABLED,
+			if (enabled) "1" else "0"
+		)
+	}
+}
+```
+
+Usage pattern inside the app:
+
+1. Receive PC challenge.
+2. Call `SmartLinkBiometricAuth.authenticateAndSign(...)`.
+3. If the PC verifies the signature and responds with an "EXECUTE" command, call `SmartLinkExecutionEngine.markAuthorizedNow()`.
+4. Within the short authorization window, call `SmartLinkExecutionEngine.setAdbEnabled(context, true/false)` as needed.
+
+This keeps the behaviour within Android’s security model: only a Device Owner app can call `setGlobalSetting` for `ADB_ENABLED`, and every execution is gated by user biometrics plus the cryptographic handshake with the paired PC.
+

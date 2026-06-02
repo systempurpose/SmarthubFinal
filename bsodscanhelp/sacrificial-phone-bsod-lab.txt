@@ -1,0 +1,240 @@
+SmartHub BSOD (USB-only) – Sacrificial Phone Lab Plan
+Last updated: 2026-03-22
+
+Purpose
+- Use ONE “sacrificial” Android phone to safely reproduce common BSOD/blank-screen / no-ADB scenarios.
+- Validate SmartHub’s USB-only BSOD diagnostic (Diagnose BSOD / Diagnose without debugging) is:
+  - consistent
+  - explainable
+  - conservative (low confidence when evidence is weak)
+
+IMPORTANT SAFETY / ETHICS
+- Do NOT do anything that can permanently brick the phone (flashing unknown firmware, shorting pins, overheating the battery, liquid exposure, etc.).
+- The goal is controlled, reversible scenarios.
+- Keep a known-good USB data cable available so you can separate “phone fault” from “PC/cable fault”.
+
+What you need
+- Windows PC with SmartHub installed/running.
+- 2 USB cables:
+  1) Known-good data cable (baseline)
+  2) Optional “bad” cable or flaky USB hub (to reproduce USB instability)
+- Optional: a second PC/USB port (helps isolate Windows driver issues).
+
+Before you start (baseline preparation)
+1) Charge phone to 50%+
+2) Disable “USB debugging” (for USB-only tests)
+3) Set USB mode to File transfer (MTP) when prompted
+4) Run SmartHub:
+   - Open “Diagnose BSOD (USB-only)” (or “Diagnose without debugging”)
+   - Run with deep sampling (examples): samples=30, delayMs=1500
+5) Save the result output (screenshot or copy the JSON result if you are testing the backend endpoint).
+
+Recommended recording template (copy/paste per run)
+- Date/time:
+- Scenario name:
+- Cable/port used:
+- Phone state (screen/boot mode):
+- SmartHub Part 1 result:
+- Confidence:
+- Key evidence lines (ADB/FB/MTP/Transport/Unstable):
+- Technician-confirmed ground truth (after you verify):
+
+Scenarios (safe + repeatable)
+
+Scenario 1 — Normal consumer phone (USB debugging OFF)
+Goal
+- Verify USB-only limitation behavior: MTP visible, no ADB.
+How to reproduce
+- Keep USB debugging OFF.
+- Boot to Android home screen.
+- Connect USB and accept File transfer.
+Expected signals
+- ADB: none
+- Fastboot: none
+- MTP: yes
+Expected Part 1
+- Hardware Malfunction (low/medium) OR ambiguous
+Notes
+- The tool must not claim a definite hardware failure here.
+
+Scenario 2 — “MTP only” while screen is intentionally dark (simulates blank screen complaint)
+Goal
+- Simulate a user reporting “screen is black” while Android is alive.
+How to reproduce (safe)
+- Boot normally.
+- Reduce brightness to minimum and turn off Always-On Display.
+- Lock the phone (screen off).
+- Connect USB and ensure Windows still shows the device storage (MTP).
+Expected signals
+- ADB: none (debugging OFF)
+- Fastboot: none
+- MTP: yes
+Expected Part 1
+- Hardware Malfunction (low/medium) OR ambiguous (depending on USB visibility stability)
+Notes
+- This is not true display hardware failure, but it validates the “device alive but user can’t see screen” workflow.
+
+Scenario 3 — Bootloader / Fastboot only (Android not booted)
+Goal
+- Validate System Errors classification in pre-boot mode.
+How to reproduce (safe)
+- Power off.
+- Enter fastboot/bootloader mode (button combo varies by OEM; common: Power + Volume Down).
+- Connect USB.
+Expected signals
+- ADB: none
+- Fastboot: yes (stable)
+- MTP: no
+Expected Part 1
+- System Errors (medium)
+Recovery
+- Long-press Power to reboot normally.
+
+Scenario 4 — Recovery mode (Android not booted)
+Goal
+- Validate System Errors classification when in recovery-like state.
+How to reproduce (safe)
+- Power off.
+- Enter Recovery (commonly Power + Volume Up).
+- Connect USB.
+Expected signals
+- ADB: usually none (unless recovery exposes it)
+- Fastboot: no
+- MTP: usually no
+Expected Part 1
+- System Errors (low/medium)
+Technician-confirmable evidence
+- If recovery shows mount/update verification errors, record it as stronger ground truth.
+
+Scenario 5 — USB instability (bad cable / hub / loose port simulation)
+Goal
+- Validate “USB unstable” mapping and the “fix cable/port first” guidance.
+How to reproduce (safe)
+- Use a flaky USB hub or a known-problem cable.
+- Alternatively, use a front-panel port that is known to be loose.
+- Do NOT bend pins or force connectors.
+Expected signals
+- Transport: status not OK sometimes OR devices repeatedly appear/disappear
+- Unstable: yes (anyChange=true)
+Expected Part 1
+- Hardware Malfunction (medium)
+Notes
+- The detailed explanation should emphasize PC/cable/port as first action.
+
+Scenario 6 — Insufficient storage (user storage nearly full)
+Goal
+- Create a real “low storage” condition and see if SmartHub stays conservative (USB-only cannot read free space).
+How to reproduce (safe)
+- Boot normally.
+- Fill storage by copying large files via MTP until the phone warns about low storage.
+- Keep USB debugging OFF.
+Expected signals
+- ADB: none
+- MTP: yes
+Expected Part 1
+- Usually still Hardware Malfunction or ambiguous (USB-only limitation)
+Technician-confirmed ground truth
+- Confirm low storage via Settings → Storage screenshot.
+Notes
+- This scenario is mainly for validating the tool DOES NOT over-claim “Insufficient Storage” with high confidence.
+
+Scenario 6B — Qualcomm EDL (9008) / MTK Preloader (OBSERVE-ONLY)
+Goal
+- Validate “System Errors (high)” classification when the phone is already in a low-level mode.
+How to reproduce (safe)
+- Do NOT force EDL/Preloader with test-points, shorting, or special cables.
+- Only use this scenario if the phone naturally appears in Windows as:
+  - Qualcomm QDLoader 9008 / EDL, or
+  - MTK Preloader / BROM / VCOM
+Expected signals
+- ADB: none
+- Fastboot: none
+- MTP: none
+- Transport: a low-level mode device is visible
+Expected Part 1
+- System Errors (high)
+Notes
+- This is a strong signal that Android is not booted; recovery requires OEM service workflows.
+
+Scenario 7 — Application conflict (Safe Mode improves)
+Goal
+- Validate that Safe Mode confirmation can raise “Application Conflicts” confidence.
+What kind of “BSOD” is this?
+- This is the “3rd-party apps” bucket: the phone boots but becomes unstable (freezes, black screen after unlock, launcher crashes, reboot loop triggered after login), and the issue improves in Safe Mode or after uninstalling a recent app.
+- In USB-only mode, SmartHub must stay conservative unless you provide technician-confirmed evidence (e.g., “Safe Mode improves”).
+- Note on “blue screen”: Android usually does NOT have a real Windows-style BSOD. For lab training, we use a SAFE simulated blue screen (full-screen blue overlay) so you can validate workflow and technician responses without crashing the OS.
+How to reproduce (safe)
+- Boot normally.
+- Install one “heavy” 3rd-party app (adware-like behavior is NOT required; use any app that can cause UI lag).
+- Reboot normally and observe symptoms (lag, freezes, etc.).
+- Boot into Safe Mode (OEM-specific) and confirm improvement.
+Suggested safe app choices (examples)
+- A large social/video app, a 3D game, a video editor, or a “phone cleaner” style utility from the official Play Store.
+- Avoid malware/adware APKs. You do not need anything malicious to reproduce “app conflict” symptoms.
+- Optional (repeatable lab app): build/install the included `SmartHub Lab Stressor` APK from this repo and use its “Start stress” button to create lag/freezes.
+  - This lab app also supports a “Simulate blue screen” visual overlay.
+  - For the overlay to persist across power cycles, Android may ask you to allow “Display over other apps” for Lab Stressor.
+How to install it on the sacrificial phone
+Option A (recommended) — Install from Google Play Store
+1) Connect phone to Wi‑Fi
+2) Open Play Store → install your chosen heavy app
+3) Reboot normally
+4) For USB-only diagnostics, keep USB debugging OFF during SmartHub runs
+
+Option B (controlled lab) — Install via ADB, then turn debugging OFF again
+1) Temporarily enable USB debugging and trust the PC
+2) On the PC: adb install -r <path-to-apk>
+3) Disable USB debugging again (so the USB-only diagnostic remains realistic)
+4) Reboot normally and observe symptoms
+
+Lab Stressor build/install notes (repo APK)
+- Build (from `android-app` folder): `gradle :labstressor:assembleDebug`
+- APK output: `android-app/labstressor/build/outputs/apk/debug/labstressor-debug.apk`
+- Install: `adb install -r android-app/labstressor/build/outputs/apk/debug/labstressor-debug.apk`
+Expected signals
+- USB-only signals may look similar to normal (MTP yes)
+- Technician input: “Safe Mode improves” checked
+Expected Part 1
+- Application Conflicts (medium) when Safe Mode is confirmed
+Fast identification checklist (technician)
+- Does Safe Mode make the problem go away or become noticeably better?
+- Did the issue start right after installing/updating an app?
+- Does uninstalling the last 1–3 apps fix it?
+- If the phone is ADB-visible in a separate non-USB-only run: check for repeated app/launcher crash loops in logs.
+Recovery
+- Uninstall the app and retest.
+
+Realme (ColorOS) Safe Mode – common entry method (may vary by model)
+1) Hold Power to open the power menu.
+2) Press and hold (long-press) “Power off”.
+3) When prompted, tap “Reboot to Safe mode”.
+4) To exit Safe Mode: restart the phone normally.
+
+Scenario 8 — Overheating warning (only if safely reproducible)
+Goal
+- If the phone displays a clear “too hot/overheating” message, validate the overheating bucket.
+How to reproduce (safe)
+- Prefer natural/benign reproduction:
+  - Run camera/4K recording or a benchmark for a few minutes while charging.
+- Stop immediately if the device becomes uncomfortably hot.
+Expected signals
+- USB-only may not directly detect heat
+- Best evidence is camera-based OCR if the warning appears on screen
+Expected Part 1
+- Overheating (still often low confidence unless camera evidence is strong)
+
+How to run the backend endpoint (optional, for developers)
+- GET http://localhost:3333/connection-check?deep=1&samples=30&delayMs=1500
+- Optional: run camera evidence in parallel:
+  GET http://localhost:3333/screen-visual-check?samples=30&delayMs=500
+
+Pass/Fail expectations
+- PASS if SmartHub:
+  - correctly distinguishes fastboot-only vs MTP-only vs unstable USB
+  - keeps confidence conservative when evidence is weak
+  - gives “next step” guidance that matches the scenario
+- FAIL if SmartHub:
+  - claims a definite root cause with weak USB-only signals
+  - does not recommend cable/port check when USB is unstable
+
+If you want, tell me the exact phone model you’ll sacrifice (Samsung/Xiaomi/etc.), and I can add the correct button combos for Fastboot/Recovery/Safe Mode to this file.

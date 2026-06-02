@@ -1,0 +1,2 @@
+D:\SmartHubv5\Bsod tools\bin\UsbEvidenceHelper.pdb
+D:\SmartHubv5\Bsod tools\bin\UsbEvidenceHelper.exe

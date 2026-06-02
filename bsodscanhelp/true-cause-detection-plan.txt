@@ -1,0 +1,155 @@
+SmartHub — “True Cause” BSOD/Blank-Screen Detection Plan (Android)
+Date: 2026-03-17
+
+PURPOSE
+- You asked for “Diagnose BSOD phone must truly detect the cause of BSOD”.
+- This file defines what “true detection” can realistically mean for Android, and what evidence SmartHub must collect before it can claim a cause.
+
+IMPORTANT REALITY CHECK (ANDROID ≠ WINDOWS BSOD)
+- Android has no single, standard “BSOD” screen.
+- Many different failures look identical to a technician (“blue screen”, “black screen”, “stuck logo”, “no display”).
+- USB-only signals cannot always separate:
+  - OS/firmware corruption vs. storage failure vs. mainboard power faults
+  - display assembly failure vs. device boot failure
+
+Therefore:
+- SmartHub can be very useful for TRIAGE.
+- SmartHub can be “truly accurate” ONLY when it has confirmable evidence.
+
+DEFINITIONS (WHAT WE WILL CLAIM)
+1) Possible cause (estimate)
+- The system can suggest a ranked cause using USB-only + camera hints.
+- This is not guaranteed.
+- This is what the current product mostly does.
+
+2) Verified cause (true detection)
+- SmartHub may show “Verified cause” ONLY when the evidence is strong enough to be deterministically linked to a cause.
+- If the evidence does not meet the threshold, it must stay as “Possible cause”.
+
+CAUSE BUCKETS (TARGET OUTPUT)
+A) Display assembly failure (panel/backlight/flex)
+B) OS / firmware corruption (boot chain, partitions, failed OTA)
+C) Host USB driver/cable/port issue (PC-side)
+D) Power / mainboard / deep hardware failure
+E) Overheating / battery safety shutdown
+F) App/OS-level crash caused by apps (incompatible apps)
+G) Not a BSOD-style case (screen content normal)
+
+WHAT EVIDENCE IS REQUIRED TO MARK A CAUSE AS “VERIFIED”
+
+A) VERIFIED: Display assembly failure
+Minimum acceptable verification evidence (any one):
+- ADB is ONLINE (“device”) AND SmartHub screen/camera check indicates dark/blank/abnormal display, OR
+- Device is stable on MTP for a sustained window (e.g., 60s) and other signs show Android is running, AND
+- A known-good screen test is performed and fixes the symptom (technician confirmation).
+
+Notes:
+- Without ADB or a technician-performed known-good screen test, USB-only cannot *prove* the display is the issue.
+
+B) VERIFIED: OS / firmware corruption
+Minimum acceptable verification evidence (any one):
+- Fastboot mode detected AND fastboot variables/logs indicate verified-boot / slot / partition / boot failure patterns,
+  e.g., `fastboot getvar all` shows consistent failure states (device-specific), OR
+- Recovery mode output captured (on-screen message photo / technician note) indicating mount/verification errors, OR
+- OEM authorized flashing/recovery tool reports partition/verification failure.
+
+Notes:
+- USB-only “fastboot visible” is a strong hint but not enough to claim verified corruption.
+
+C) VERIFIED: Host USB driver/cable/port issue
+Minimum acceptable verification evidence:
+- Windows ProblemCode evidence indicating driver/enumeration failure (e.g., Code 10/43) AND
+- The same phone works normally on another known-good PC/cable, OR
+- The issue is resolved by changing cable/port/driver reinstall (technician confirmation).
+
+Notes:
+- SmartHub already collects some host evidence; “Verified” requires either strong Windows codes or cross-PC confirmation.
+
+D) VERIFIED: Power / mainboard / deep hardware failure
+Minimum acceptable verification evidence (any one):
+- Phone never enumerates on multiple known-good cables/ports/PCs AND battery is confirmed charged, OR
+- Device enumerates briefly/flaps repeatedly across multiple PCs AND fails to enter any stable mode,
+  PLUS technician confirmation after board-level inspection.
+
+Notes:
+- USB-only can suggest this, but “verified” needs cross-checks (other PC/cable) or technician repair confirmation.
+
+E) VERIFIED: Overheating / battery safety shutdown
+Minimum acceptable verification evidence:
+- ADB online and thermal/battery readings indicate overheating (OEM/Android properties vary), OR
+- Technician confirms strong overheating behavior and symptom disappears after cooling with repeatable reproduction.
+
+Notes:
+- USB-only cannot measure phone temperature.
+
+F) VERIFIED: Incompatible apps
+Minimum acceptable verification evidence:
+- Safe Mode boots and symptom disappears, OR
+- ADB online and logs show repeated crashes tied to a package AND disabling/uninstalling resolves it.
+
+Notes:
+- USB-only cannot read installed apps.
+
+G) VERIFIED: Not a BSOD-style case
+Minimum acceptable verification evidence:
+- Camera check detects NORMAL screen content with high stability and content-visible hint.
+
+PRODUCT RULES (TO MAKE “TRUE DETECTION” POSSIBLE)
+1) Never label “Verified” without the minimum evidence listed above.
+2) If evidence is insufficient, show “Possible cause (estimate)” + confidence + next action.
+3) Show “What evidence you used” so technicians can trust the result.
+4) Prefer deterministic checks over AI text:
+   - Mode detection (ADB/Fastboot/EDL/Preloader)
+   - Windows ProblemCode + driver/provider
+   - Stability sampling (flapping vs stable)
+   - Camera check stability + content visibility
+
+IMPLEMENTATION CHANGES NEEDED (SAFE + PRACTICAL)
+
+1) Add “evidence grade” to output
+- Each conclusion includes:
+  - `verdict`: possible | verified
+  - `verifiedBy`: list of evidence flags (e.g., camera_normal, fastboot_getvar, win_problemcode, safe_mode_confirmed)
+
+2) Add a technician confirmation hook (optional)
+- A minimal, non-invasive mechanism:
+  - Technician can mark a case as “Confirmed by repair step” (e.g., known-good screen test fixed it).
+- This is essential if you want “true cause” without ADB.
+
+3) Expand Fastboot evidence collection (when available)
+- If fastboot is detected, optionally run:
+  - `fastboot getvar all`
+- Store only diagnostic fields; do not bypass security.
+
+4) Expand host USB evidence (Windows)
+- Use native helpers (SetupAPI/ConfigMgr) to capture:
+  - ProblemCode, driver info, location path, interface GUIDs
+- This strengthens driver-vs-hardware separation.
+
+5) Strengthen camera check (optional, but best for “Not BSOD”)
+- Require stability threshold before using camera to confirm NORMAL.
+- If low stability or poor lighting, keep as possible.
+
+ACCURACY VALIDATION (HOW WE PROVE IT WORKS)
+- Build a labeled dataset:
+  - Each case must include final confirmed outcome (repair confirmation, safe mode confirmation, cross-PC confirmation, etc.)
+- Track metrics per bucket:
+  - Precision/recall for VERIFIED verdicts
+  - False-positive rate of “Verified” must be extremely low (goal: near 0)
+- Maintain a test matrix (see bsodscanhelp/test-matrix.md) and add “verification evidence” columns.
+
+WHAT SMART HUB SHOULD SAY IN THE UI
+- If verdict=possible:
+  - “Possible cause (estimate)”
+  - “Confidence: X%”
+  - “Next actions”
+- If verdict=verified:
+  - “Verified cause”
+  - “Verified by: <evidence>”
+
+BOTTOM LINE
+- YES: SmartHub can become truly reliable for “cause” ONLY by tightening claims and requiring confirmable evidence.
+- NO: USB-only signals alone cannot always truly detect the real cause in every phone.
+- The design goal should be:
+  - High-precision “Verified” when evidence exists
+  - Honest “Possible” when it doesn’t

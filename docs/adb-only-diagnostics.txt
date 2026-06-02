@@ -1,0 +1,146 @@
+SmartHubv5 — ADB-only Device Diagnostics (Read-only)
+
+Applies to:
+- Endpoint: GET /connection-check
+- Scope: ADB-only diagnostics (requires USB Debugging + authorized ADB).
+- Safety: read-only; no flashing, no reboot, no app installs.
+
+When to use this document
+- You can unlock/use the phone enough to enable USB Debugging.
+- The device shows as `adb state="device"` (authorized).
+- You want health signals (boot completion, battery/thermal, storage pressure, display power hints, stability).
+
+When NOT to rely on ADB-only
+- `adb` is `unauthorized` / `offline`, or USB debugging is OFF.
+- The device only appears in fastboot/EDL/preloader modes.
+- USB link is flapping (disconnects) and results are unstable.
+
+0) Quick Start
+
+A) Deep ADB signals (recommended)
+- `/connection-check?deep=1`
+
+B) Automatic check (still read-only)
+- `/connection-check?autoTest=1`
+
+C) Better ADB stability sampling (intermittent issues)
+- `/connection-check?deep=1&adbSamples=10&adbDelayMs=300`
+
+Note
+- `/connection-check` can also return host USB and fastboot fields. This document intentionally ignores those and focuses only on ADB-related output.
+
+1) Query Parameters (ADB-relevant)
+
+- `deep=1`
+  - Enables additional ADB read-only signals (`result.signals.adb`).
+- `autoTest=1`
+  - Returns `result.autoTest` (pass/warn/fail) and forces `deep=1`.
+
+ADB stability sampling (only meaningful when ADB state is `device`)
+- `adbSamples`: number of ADB “shell ping” samples (min 2, max 12; default 5)
+- `adbDelayMs`: delay between ADB samples (min 0, max 1200; default 250)
+
+2) What /connection-check Collects (ADB scope)
+
+A) ADB visibility + state
+- Runs: `adb devices -l`
+- Output: `result.adb.ok`, `result.adb.devices[]`
+- Key meaning:
+  - `state="device"`: OS is alive and authorized for ADB.
+  - `state="unauthorized"`: OS is alive but you must accept the RSA prompt on the phone.
+  - `state="offline"`: link/stack unstable; treat other ADB evidence as low confidence.
+
+B) Deep ADB signals (requires `deep=1` or `autoTest=1`)
+- Output: `result.signals.adb`
+- Typical fields:
+  - `bootCompleted` (from `sys.boot_completed`)
+  - `safeMode` (best-effort hint; OEM-dependent)
+  - `bootReason` (from `ro.boot.bootreason`)
+  - `verifiedBootState` (from `ro.boot.verifiedbootstate`)
+  - `vbmetaDeviceState` (from `ro.boot.vbmeta.device_state`)
+  - `battery` (parsed `dumpsys battery`: level, temperatureC, status, health)
+  - `dataPartitionUsePct` (from `df /data`)
+  - `logEvidence` (best-effort logcat pattern matches)
+  - `adbStability` (multi-sample ADB shell timing; see below)
+  - `display` (best-effort `dumpsys display` summary)
+
+C) ADB stability sampling (read-only)
+- Output: `result.signals.adb.adbStability`
+  - `samples`, `ok`, `failures`, `avgMs`, `minMs`, `maxMs`
+- Purpose:
+  - Quantifies how trustworthy ADB-derived signals are.
+  - Low stability often indicates cable/port issues, power instability, or a struggling device.
+
+D) Display power/screen hint (read-only)
+- Output: `result.signals.adb.display`
+  - `screenState`, `powerState`, `brightness`, `displayCount` (best-effort parsing)
+- Purpose:
+  - Helps distinguish “screen is asleep/off” vs “screen path fault” when the complaint is “black screen”.
+
+E) Safe Mode hint (best-effort)
+- Output: `result.signals.adb.safeMode`
+- Note:
+  - Detection is OEM-dependent; treat as a hint.
+  - Strongest evidence is still technician-confirmed behavior: “symptom improves in Safe Mode”.
+
+3) How to Interpret Common ADB-only Findings
+
+- `bootCompleted=false` with `state="device"`:
+  - The OS responds to ADB but may still be in early boot or stuck (watch for repeated restarts).
+
+- High `dataPartitionUsePct` (e.g., very full /data):
+  - Expect app crashes, slow UI, boot instability, and update failures.
+
+- High battery temperature / thermal log evidence:
+  - Overheating can cause throttling, random shutdowns, and charging instability.
+
+- `display` indicates OFF/DOZE while user reports “black screen”:
+  - Could be normal sleep; verify by waking the device, toggling brightness, and testing external indicators.
+
+- `adbStability` shows many failures or very high latency:
+  - Re-test with known-good cable and a direct port; consider power instability.
+
+4) Optional: AutoTest Output (still read-only)
+
+- Output: `result.autoTest`
+  - `verdict: pass | warn | fail`
+  - `confidence: low | medium | high`
+  - `reasons[]`, `nextActions[]`
+  - `checks.adb` (most relevant for ADB-only workflows)
+
+ADB-only interpretation guideline
+- Treat `checks.adb` + ADB state/stability as the primary signal.
+- If autoTest is `warn` due to USB/host checks, you can still proceed with ADB-only interpretation if ADB is stable and authorized.
+
+5) Field Map (ADB-only)
+
+Top-level
+- `adb`: `{ ok: boolean, devices: DeviceInfo[], error?: string }`
+- `signals` (deep only)
+  - `signals.adb`:
+    - `deviceId`, `state`
+    - `bootCompleted`, `bootReason`, `verifiedBootState`, `vbmetaDeviceState`
+    - `safeMode` (best-effort)
+    - `battery`, `dataPartitionUsePct`
+    - `logEvidence` (best-effort)
+    - `adbStability`
+    - `display`
+- `summary`: short explanation string
+- `autoTest` (autoTest=1 only): `{ ok, verdict, confidence, reasons[], nextActions[], checks }`
+
+6) Known Limitations
+
+- ADB requires USB Debugging enabled and authorized.
+- ADB state="device" proves the OS responds to debug commands; it does not prove the UI is usable.
+- Some OEM builds restrict log access; `logEvidence` is best-effort.
+- Safe Mode detection is best-effort and should not be treated as a guarantee.
+
+7) Troubleshooting (ADB)
+
+- If `adb.ok=false`:
+  - Ensure platform-tools are installed/available to the companion service.
+- If `state="unauthorized"`:
+  - Unlock phone, accept RSA prompt, reconnect, retry.
+- If `state="offline"` or stability is poor:
+  - Swap cable, avoid hubs, use a direct motherboard port, try another PC.
+  - Toggle USB mode (File transfer/MTP) and reconnect.

@@ -1,0 +1,883 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 4670 >>
+stream
+1 w
+0 G
+BT
+/F2 15 Tf
+56 778 Td
+(CHAPTER 2 EXTRA) Tj
+ET
+BT
+/F1 11 Tf
+56 761.20 Td
+(This document provides additional Chapter 2 content using the same structure as the provided) Tj
+ET
+BT
+/F1 11 Tf
+56 747.20 Td
+(template, but rewritten to fit the SmartHub v5 system \(an Android diagnostics workstation) Tj
+ET
+BT
+/F1 11 Tf
+56 733.20 Td
+(for repair shops\).) Tj
+ET
+BT
+/F2 12 Tf
+56 709.40 Td
+(Synthesis) Tj
+ET
+BT
+/F1 11 Tf
+56 694 Td
+(The review of related literature and studies suggests that day-to-day phone troubleshooting) Tj
+ET
+BT
+/F1 11 Tf
+56 680 Td
+(in small repair shops still depends heavily on manual checks, technician “gut feel,” and) Tj
+ET
+BT
+/F1 11 Tf
+56 666 Td
+(trial-and-error. When the steps are not standardized and evidence is not recorded, the same) Tj
+ET
+BT
+/F1 11 Tf
+56 652 Td
+(problem can be re-tested multiple times, service time becomes unpredictable, and it is) Tj
+ET
+BT
+/F1 11 Tf
+56 638 Td
+(harder to explain the diagnosis clearly to customers. Diagnostic platforms and workstation) Tj
+ET
+BT
+/F1 11 Tf
+56 624 Td
+(tools help reduce these issues by turning troubleshooting into a repeatable workflow:) Tj
+ET
+BT
+/F1 11 Tf
+56 610 Td
+(capture evidence in a consistent way, run checks in an ordered sequence, and summarize) Tj
+ET
+BT
+/F1 11 Tf
+56 596 Td
+(results in a format that can be reviewed and shared. In practice, systems like this work) Tj
+ET
+BT
+/F1 11 Tf
+56 582 Td
+(best when requirements are clearly defined, the interface is simple enough for busy) Tj
+ET
+BT
+/F1 11 Tf
+56 568 Td
+(technicians, and the backend is stable and easy to maintain. Iterative development \(such as) Tj
+ET
+BT
+/F1 11 Tf
+56 554 Td
+(Scrum\) also matters because Android devices change quickly across brands and OS versions, so) Tj
+ET
+BT
+/F1 11 Tf
+56 540 Td
+(the tool needs to improve based on real shop feedback. Local constraints—limited) Tj
+ET
+BT
+/F1 11 Tf
+56 526 Td
+(connectivity, privacy expectations, and cases where USB debugging is unavailable—shape the) Tj
+ET
+BT
+/F1 11 Tf
+56 512 Td
+(design as well. Offline storage and USB-only evidence collection make the system usable in) Tj
+ET
+BT
+/F1 11 Tf
+56 498 Td
+(common “no-debug” situations. Finally, usability testing and technician feedback provide a) Tj
+ET
+BT
+/F1 11 Tf
+56 484 Td
+(practical way to validate whether the system is helpful, reliable, and acceptable in real) Tj
+ET
+BT
+/F1 11 Tf
+56 470 Td
+(repair workflows. Overall, these findings support SmartHub v5 as an offline-first) Tj
+ET
+BT
+/F1 11 Tf
+56 456 Td
+(diagnostics workstation that helps technicians assess Android devices, generate) Tj
+ET
+BT
+/F1 11 Tf
+56 442 Td
+(evidence-based reports, and deliver more consistent service.) Tj
+ET
+BT
+/F1 11 Tf
+56 418.20 Td
+(From a practical shop perspective, what matters most is not just finding the “right answer,”) Tj
+ET
+BT
+/F1 11 Tf
+56 404.20 Td
+(but finding it in a way that is repeatable, explainable, and safe. Customers often ask why a) Tj
+ET
+BT
+/F1 11 Tf
+56 390.20 Td
+(phone is failing, whether their data is at risk, and what steps were taken before) Tj
+ET
+BT
+/F1 11 Tf
+56 376.20 Td
+(recommending a repair or replacement. A diagnostic system that can capture connection logs,) Tj
+ET
+BT
+/F1 11 Tf
+56 362.20 Td
+(device identifiers, and a clear summary of observations helps build trust and reduces) Tj
+ET
+BT
+/F1 11 Tf
+56 348.20 Td
+(misunderstandings. At the same time, diagnostic tools must respect constraints that) Tj
+ET
+BT
+/F1 11 Tf
+56 334.20 Td
+(technicians face every day: locked devices, disabled debugging, different driver states on) Tj
+ET
+BT
+/F1 11 Tf
+56 320.20 Td
+(Windows, and the need to work quickly. SmartHub v5 is positioned as a tool that supports) Tj
+ET
+BT
+/F1 11 Tf
+56 306.20 Td
+(these realities by offering both deeper ADB-based checks \(when allowed\) and careful USB-only) Tj
+ET
+BT
+/F1 11 Tf
+56 292.20 Td
+(evidence collection when the device cannot be fully accessed.) Tj
+ET
+BT
+/F1 11 Tf
+56 268.40 Td
+(Another common theme in the literature is that “good tooling” is not only about features,) Tj
+ET
+BT
+/F1 11 Tf
+56 254.40 Td
+(but also about usability and maintainability. A system that is hard to operate, too slow, or) Tj
+ET
+BT
+/F1 11 Tf
+56 240.40 Td
+(inconsistent in outputs will eventually be ignored, even if it is technically capable. For) Tj
+ET
+BT
+/F1 11 Tf
+56 226.40 Td
+(SmartHub v5, this means designing the UI so the next step is always obvious, the results are) Tj
+ET
+BT
+/F1 11 Tf
+56 212.40 Td
+(easy to interpret, and the overall workflow matches how technicians naturally think) Tj
+ET
+BT
+/F1 11 Tf
+56 198.40 Td
+(\(identify the device, confirm stability, collect evidence, and produce a report\).) Tj
+ET
+BT
+/F2 12 Tf
+56 174.60 Td
+(2.3 Technical Background) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R /Rotate 0 >>
+endobj
+5 0 obj
+<< /Length 4599 >>
+stream
+1 w
+0 G
+BT
+/F1 11 Tf
+56 778 Td
+(Advancements in mobile computing and device management tools have changed how Android) Tj
+ET
+BT
+/F1 11 Tf
+56 764 Td
+(diagnostics can be done. A modern diagnostic workstation can combine evidence from several) Tj
+ET
+BT
+/F1 11 Tf
+56 750 Td
+(sources—device identification, connection stability, USB/driver signals, and \(when allowed\)) Tj
+ET
+BT
+/F1 11 Tf
+56 736 Td
+(ADB command outputs—to build a clearer picture of a phone’s condition. In many traditional) Tj
+ET
+BT
+/F1 11 Tf
+56 722 Td
+(repair workflows, technicians still depend on experience and repetitive manual testing,) Tj
+ET
+BT
+/F1 11 Tf
+56 708 Td
+(which is often time-consuming and hard to document. A dedicated diagnostic platform) Tj
+ET
+BT
+/F1 11 Tf
+56 694 Td
+(addresses this gap by providing guided checks, repeatable procedures, and consolidated) Tj
+ET
+BT
+/F1 11 Tf
+56 680 Td
+(results.) Tj
+ET
+BT
+/F1 11 Tf
+56 656.20 Td
+(In Android diagnostics, the availability of evidence depends on permissions and device) Tj
+ET
+BT
+/F1 11 Tf
+56 642.20 Td
+(state. When USB debugging is enabled and the device is authorized, ADB can provide useful) Tj
+ET
+BT
+/F1 11 Tf
+56 628.20 Td
+(system information \(for example, device properties, logs, and package/system signals\).) Tj
+ET
+BT
+/F1 11 Tf
+56 614.20 Td
+(However, many real cases—especially in customer-facing repair settings—do not allow ADB) Tj
+ET
+BT
+/F1 11 Tf
+56 600.20 Td
+(access: the phone may be locked, the screen may be broken, the user may not have enabled) Tj
+ET
+BT
+/F1 11 Tf
+56 586.20 Td
+(developer options, or the device may be unstable and repeatedly disconnect. Because of this,) Tj
+ET
+BT
+/F1 11 Tf
+56 572.20 Td
+(a practical workstation tool must also support “no-debug” evidence pathways. Windows itself) Tj
+ET
+BT
+/F1 11 Tf
+56 558.20 Td
+(provides signals through USB enumeration and PnP events. While these signals are not as) Tj
+ET
+BT
+/F1 11 Tf
+56 544.20 Td
+(detailed as ADB, they can still be valuable for basic triage, identifying the connection) Tj
+ET
+BT
+/F1 11 Tf
+56 530.20 Td
+(pattern, and documenting what the technician observed.) Tj
+ET
+BT
+/F1 11 Tf
+56 506.40 Td
+(SmartHub v5 takes this mixed-evidence reality seriously. Instead of relying on one single) Tj
+ET
+BT
+/F1 11 Tf
+56 492.40 Td
+(diagnostic technique, it supports multiple modes and then consolidates results into a single) Tj
+ET
+BT
+/F1 11 Tf
+56 478.40 Td
+(report. This helps technicians avoid switching between many separate tools and reduces the) Tj
+ET
+BT
+/F1 11 Tf
+56 464.40 Td
+(risk of missing key details during the troubleshooting process.) Tj
+ET
+BT
+/F1 11 Tf
+56 440.60 Td
+(SmartHub v5 is designed as a local diagnostic workstation that supports both ADB-based) Tj
+ET
+BT
+/F1 11 Tf
+56 426.60 Td
+(diagnostics \(when USB debugging is available\) and USB-only/no-debug triage for devices with) Tj
+ET
+BT
+/F1 11 Tf
+56 412.60 Td
+(blue/blank/broken screens or restricted access. Through the system, technicians can run) Tj
+ET
+BT
+/F1 11 Tf
+56 398.60 Td
+(checks, capture evidence, and export results in a consistent format. By combining local) Tj
+ET
+BT
+/F1 11 Tf
+56 384.60 Td
+(tools with offline storage, SmartHub v5 aims to improve diagnostic speed, clarity of) Tj
+ET
+BT
+/F1 11 Tf
+56 370.60 Td
+(findings, and consistency of reporting in a repair-shop environment.) Tj
+ET
+BT
+/F2 12 Tf
+56 346.80 Td
+(Technicality of the Project) Tj
+ET
+BT
+/F1 11 Tf
+56 331.40 Td
+(SmartHub v5 is built around a technician-centered workflow. The application runs on a) Tj
+ET
+BT
+/F1 11 Tf
+56 317.40 Td
+(Windows workstation and provides a desktop UI that guides the technician through connection) Tj
+ET
+BT
+/F1 11 Tf
+56 303.40 Td
+(checks, diagnostic selection, evidence capture, and results generation. The architecture is) Tj
+ET
+BT
+/F1 11 Tf
+56 289.40 Td
+(intentionally local-only to reduce privacy risks and to keep the tool usable even when) Tj
+ET
+BT
+/F1 11 Tf
+56 275.40 Td
+(Internet access is unavailable.) Tj
+ET
+BT
+/F1 11 Tf
+56 251.60 Td
+(At a high level, SmartHub v5 can be viewed as three cooperating parts on the same) Tj
+ET
+BT
+/F1 11 Tf
+56 237.60 Td
+(workstation: \(1\) a desktop shell that hosts the UI, \(2\) a local service that runs the) Tj
+ET
+BT
+/F1 11 Tf
+56 223.60 Td
+(diagnostic logic and coordinates tool execution, and \(3\) local storage where outputs,) Tj
+ET
+BT
+/F1 11 Tf
+56 209.60 Td
+(history, and optional AI memory are saved. Keeping these parts separate improves) Tj
+ET
+BT
+/F1 11 Tf
+56 195.60 Td
+(maintainability: the UI can focus on guiding the user, while the backend can focus on) Tj
+ET
+BT
+/F1 11 Tf
+56 181.60 Td
+(executing checks safely and returning structured results.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R /Rotate 0 >>
+endobj
+7 0 obj
+<< /Length 5043 >>
+stream
+1 w
+0 G
+BT
+/F1 11 Tf
+56 778 Td
+(The diagnostic workflow starts by identifying connected devices and checking connection) Tj
+ET
+BT
+/F1 11 Tf
+56 764 Td
+(stability. From there, the technician chooses the most appropriate path based on the phone’s) Tj
+ET
+BT
+/F1 11 Tf
+56 750 Td
+(state and permissions: an ADB-based mode for deeper evidence collection, or a) Tj
+ET
+BT
+/F1 11 Tf
+56 736 Td
+(USB-only/no-debug mode that focuses on host-side USB/PnP signals and other safe, observable) Tj
+ET
+BT
+/F1 11 Tf
+56 722 Td
+(indicators. For devices with display issues, an optional camera-based visual check can help) Tj
+ET
+BT
+/F1 11 Tf
+56 708 Td
+(confirm on-screen behavior without requiring the device to be unlocked. The system then) Tj
+ET
+BT
+/F1 11 Tf
+56 694 Td
+(consolidates the evidence into a structured report that the technician can review and) Tj
+ET
+BT
+/F1 11 Tf
+56 680 Td
+(explain to the customer.) Tj
+ET
+BT
+/F1 11 Tf
+56 656.20 Td
+(In ADB mode, the system can run a curated set of commands and checks intended for) Tj
+ET
+BT
+/F1 11 Tf
+56 642.20 Td
+(diagnostics and evidence collection, then summarize what was found. In USB-only mode, the) Tj
+ET
+BT
+/F1 11 Tf
+56 628.20 Td
+(system focuses on what can be observed without bypassing security: connection patterns,) Tj
+ET
+BT
+/F1 11 Tf
+56 614.20 Td
+(device appearance to the host, and other host-side evidence. The key principle is safety and) Tj
+ET
+BT
+/F1 11 Tf
+56 600.20 Td
+(transparency—SmartHub v5 is designed to document what it can legitimately observe and to) Tj
+ET
+BT
+/F1 11 Tf
+56 586.20 Td
+(avoid steps that would require unauthorized access.) Tj
+ET
+BT
+/F1 11 Tf
+56 562.40 Td
+(To support consistency over time, SmartHub v5 can store diagnostic history and an optional) Tj
+ET
+BT
+/F1 11 Tf
+56 548.40 Td
+(offline AI “memory” of previous cases. This allows the system to suggest likely causes or) Tj
+ET
+BT
+/F1 11 Tf
+56 534.40 Td
+(next steps based on similar evidence patterns seen before. All stored data stays on the) Tj
+ET
+BT
+/F1 11 Tf
+56 520.40 Td
+(workstation \(JSON files and SQLite databases\), which supports offline use and simplifies) Tj
+ET
+BT
+/F1 11 Tf
+56 506.40 Td
+(deployment in small repair shops.) Tj
+ET
+BT
+/F1 11 Tf
+56 482.60 Td
+(In addition to helping technicians during a single session, stored history supports learning) Tj
+ET
+BT
+/F1 11 Tf
+56 468.60 Td
+(and quality control. Over time, the shop can review recurring issues \(for example,) Tj
+ET
+BT
+/F1 11 Tf
+56 454.60 Td
+(connection failures tied to specific cables, ports, or device families\) and improve their) Tj
+ET
+BT
+/F1 11 Tf
+56 440.60 Td
+(standard process. Even when the offline AI component is not used, a consistent history of) Tj
+ET
+BT
+/F1 11 Tf
+56 426.60 Td
+(runs makes it easier to compare “before and after” behaviors and to keep a record of what) Tj
+ET
+BT
+/F1 11 Tf
+56 412.60 Td
+(was done for each case.) Tj
+ET
+BT
+/F2 12 Tf
+56 388.80 Td
+(Details of the Technology to be Used) Tj
+ET
+BT
+/F1 11 Tf
+56 373.40 Td
+(SmartHub v5 uses a desktop-and-local-service architecture. The goal is to keep all) Tj
+ET
+BT
+/F1 11 Tf
+56 359.40 Td
+(processing on the technician workstation while still separating the user interface from the) Tj
+ET
+BT
+/F1 11 Tf
+56 345.40 Td
+(diagnostic logic. The Windows desktop shell hosts a local web-based UI, and a local backend) Tj
+ET
+BT
+/F1 11 Tf
+56 331.40 Td
+(service coordinates diagnostics, evidence collection, and storage.) Tj
+ET
+BT
+/F1 11 Tf
+56 307.60 Td
+(This design is practical for repair shops because it reduces deployment complexity: there is) Tj
+ET
+BT
+/F1 11 Tf
+56 293.60 Td
+(no separate cloud server to maintain, and the system remains usable even in) Tj
+ET
+BT
+/F1 11 Tf
+56 279.60 Td
+(limited-connectivity environments. It also improves privacy by keeping diagnostic evidence) Tj
+ET
+BT
+/F1 11 Tf
+56 265.60 Td
+(and customer-related device details on the local machine by default.) Tj
+ET
+BT
+/F1 11 Tf
+56 241.80 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 241.80 Td
+(WPF + WebView2: ) Tj
+ET
+BT
+/F1 11 Tf
+158.96 241.80 Td
+(Hosts the SmartHub desktop app and renders the local HTML/CSS/JS UI) Tj
+ET
+BT
+/F1 11 Tf
+72 227.80 Td
+(reliably on Windows. This provides a familiar desktop application experience while) Tj
+ET
+BT
+/F1 11 Tf
+72 213.80 Td
+(allowing fast UI iteration.) Tj
+ET
+BT
+/F1 11 Tf
+56 199.80 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 199.80 Td
+(HTML/CSS/JavaScript: ) Tj
+ET
+BT
+/F1 11 Tf
+187.56 199.80 Td
+(Implements the UI, guided diagnostic flows, and interactive display) Tj
+ET
+BT
+/F1 11 Tf
+72 185.80 Td
+(of results. The interface is designed to be readable and easy to follow during real) Tj
+ET
+BT
+/F1 11 Tf
+72 171.80 Td
+(repair work.) Tj
+ET
+BT
+/F1 11 Tf
+56 157.80 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 157.80 Td
+(Node.js + Express + TypeScript: ) Tj
+ET
+BT
+/F1 11 Tf
+250.48 157.80 Td
+(Runs the local backend service and REST endpoints \(e.g.,) Tj
+ET
+BT
+/F1 11 Tf
+72 143.80 Td
+(http://localhost:3333\) used by the UI to trigger checks and retrieve outputs. TypeScript) Tj
+ET
+BT
+/F1 11 Tf
+72 129.80 Td
+(improves maintainability by keeping data formats consistent across the app.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R /Rotate 0 >>
+endobj
+9 0 obj
+<< /Length 3062 >>
+stream
+1 w
+0 G
+BT
+/F1 11 Tf
+56 778 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 778 Td
+(Android platform-tools \(ADB/Fastboot\): ) Tj
+ET
+BT
+/F1 11 Tf
+290.52 778 Td
+(Provides command-line tools for collecting device) Tj
+ET
+BT
+/F1 11 Tf
+72 764 Td
+(information and evidence when USB debugging is enabled, plus limited supported) Tj
+ET
+BT
+/F1 11 Tf
+72 750 Td
+(operations in other modes. These tools are widely used and well-documented in Android) Tj
+ET
+BT
+/F1 11 Tf
+72 736 Td
+(servicing.) Tj
+ET
+BT
+/F1 11 Tf
+56 722 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 722 Td
+(Python 3 \(optional helpers\): ) Tj
+ET
+BT
+/F1 11 Tf
+233.32 722 Td
+(Enables offline-only utilities such as camera-based screen) Tj
+ET
+BT
+/F1 11 Tf
+72 708 Td
+(checking and offline AI suggestion logic for specific no-debug cases. Python is) Tj
+ET
+BT
+/F1 11 Tf
+72 694 Td
+(practical for quick experimentation on image and text evidence processing.) Tj
+ET
+BT
+/F1 11 Tf
+56 680 Td
+(\225 ) Tj
+ET
+BT
+/F2 11 Tf
+67.44 680 Td
+(SQLite + JSON \(local storage\): ) Tj
+ET
+BT
+/F1 11 Tf
+244.76 680 Td
+(Stores diagnostic history, configuration, run outputs,) Tj
+ET
+BT
+/F1 11 Tf
+72 666 Td
+(and offline AI memory \(e.g., memory.sqlite and adb_ai_memory.sqlite\) without requiring a) Tj
+ET
+BT
+/F1 11 Tf
+72 652 Td
+(cloud database. Local storage supports offline operation and reduces privacy exposure.) Tj
+ET
+BT
+/F1 11 Tf
+56 628.20 Td
+(The local storage strategy is intentionally simple: JSON works well for structured run) Tj
+ET
+BT
+/F1 11 Tf
+56 614.20 Td
+(summaries and exports, while SQLite is useful when the system needs indexing, searching, or) Tj
+ET
+BT
+/F1 11 Tf
+56 600.20 Td
+(“memory” behavior over many cases. This combination allows SmartHub v5 to remain lightweight) Tj
+ET
+BT
+/F1 11 Tf
+56 586.20 Td
+(while still supporting growth in the amount of stored diagnostic history.) Tj
+ET
+BT
+/F1 11 Tf
+56 562.40 Td
+(In terms of development methodology, SmartHub v5 follows the Scrum framework. Work is) Tj
+ET
+BT
+/F1 11 Tf
+56 548.40 Td
+(organized into sprints with planning, implementation, review, and retrospective cycles. This) Tj
+ET
+BT
+/F1 11 Tf
+56 534.40 Td
+(approach is practical for diagnostics because device behavior varies across brands and OS) Tj
+ET
+BT
+/F1 11 Tf
+56 520.40 Td
+(versions, and technician feedback can be turned into improvements to usability and reporting) Tj
+ET
+BT
+/F1 11 Tf
+56 506.40 Td
+(without long delays.) Tj
+ET
+BT
+/F1 11 Tf
+56 482.60 Td
+(In each sprint, the team can focus on a small set of improvements—such as refining) Tj
+ET
+BT
+/F1 11 Tf
+56 468.60 Td
+(connection checks, improving the clarity of a report section, or adding safer evidence) Tj
+ET
+BT
+/F1 11 Tf
+56 454.60 Td
+(capture for no-debug scenarios. Sprint reviews provide a checkpoint for validating that new) Tj
+ET
+BT
+/F1 11 Tf
+56 440.60 Td
+(behavior is correct and understandable, while retrospectives help identify what slowed the) Tj
+ET
+BT
+/F1 11 Tf
+56 426.60 Td
+(team down \(for example, unclear requirements, missing test devices, or confusing UI steps\)) Tj
+ET
+BT
+/F1 11 Tf
+56 412.60 Td
+(so that the next sprint can run more smoothly.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 11 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R /Rotate 0 >>
+endobj
+11 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+12 0 obj
+<< /Type /Catalog /Pages 11 0 R >>
+endobj
+13 0 obj
+<< /Title (chap2extra) >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000000164 00000 n 
+0000004885 00000 n 
+0000005032 00000 n 
+0000009682 00000 n 
+0000009829 00000 n 
+0000014923 00000 n 
+0000015070 00000 n 
+0000018183 00000 n 
+0000018331 00000 n 
+0000018408 00000 n 
+0000018459 00000 n 
+trailer
+<< /Size 14 /Root 12 0 R /Info 13 0 R >>
+startxref
+18501
+%%EOF

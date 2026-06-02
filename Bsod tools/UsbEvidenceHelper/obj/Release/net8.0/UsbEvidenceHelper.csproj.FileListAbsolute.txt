@@ -1,0 +1,14 @@
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\UsbEvidenceHelper.exe
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\UsbEvidenceHelper.deps.json
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\UsbEvidenceHelper.runtimeconfig.json
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\UsbEvidenceHelper.dll
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\UsbEvidenceHelper.pdb
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.GeneratedMSBuildEditorConfig.editorconfig
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.AssemblyInfoInputs.cache
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.AssemblyInfo.cs
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.csproj.CoreCompileInputs.cache
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.dll
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\refint\UsbEvidenceHelper.dll
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.pdb
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\UsbEvidenceHelper.genruntimeconfig.cache
+D:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\obj\Release\net8.0\ref\UsbEvidenceHelper.dll

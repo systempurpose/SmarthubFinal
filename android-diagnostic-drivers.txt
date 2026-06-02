@@ -1,0 +1,72 @@
+Android Diagnostic Drivers (Windows) — SmartHub notes
+
+Buttons shown in UI:
+- ADB driver
+- HTC driver
+- Huawei driver
+- LG driver
+- MediaTek (MTK) driver
+- Samsung driver
+- M360
+
+Are these drivers important for Android phone diagnostics?
+
+YES (for ADB-based diagnostics)
+1) ADB / Android USB driver
+   - Needed when Windows does NOT recognize the phone as an ADB device.
+   - Required for any feature that uses `adb` (device info, dumpsys, logcat, screenshots, etc.).
+
+2) OEM USB driver (HTC / Huawei / LG / Samsung)
+   - Needed if:
+     - Your phone brand is that OEM AND
+     - ADB does not work (device not detected, shows as “Unknown device”, “MTP only”, etc.).
+   - Installing the correct OEM driver often fixes:
+     - ADB interface missing
+     - Driver signature issues
+     - Wrong/old composite device driver
+
+SOMETIMES (depends on diagnostic mode)
+3) MediaTek (MTK) driver
+   - Only needed for deeper service/flash modes on MediaTek devices (e.g., Preloader / BootROM / SP Flash Tool).
+   - Not required for normal ADB diagnostics when the phone is already booted and `adb devices` works.
+
+NO (not for Android phone ADB diagnostics)
+4) M360
+   - Not a standard Android ADB/OEM driver name.
+   - If it is a vendor/service-tool driver, it is not required unless you are using that specific tool.
+
+Quick check (recommended)
+- If `adb devices` shows your device as `device`, you already have the needed driver.
+- If it shows nothing or `unauthorized`:
+  - For `unauthorized`: unlock phone and accept “Allow USB debugging”.
+  - For nothing/unknown: install ADB driver, then (if still failing) install the correct OEM driver.
+
+How to add these drivers to our app (SmartHub desktop)
+
+Important constraints (Windows)
+- Installing drivers requires Administrator privileges.
+- Windows strongly prefers WHQL/signed drivers. Unsigned driver installs may fail or require special boot settings.
+- OEM USB drivers are usually proprietary; you typically cannot legally bundle them inside your installer unless you have explicit redistribution rights.
+
+Recommended approach (safe + lowest maintenance)
+1) Provide "Download driver" buttons that open the OEM/official pages
+   - In the UI, each button opens the vendor’s official driver page in the browser.
+   - The app also shows step-by-step instructions (plug/unplug, accept prompts, then re-check ADB).
+   - Benefit: no licensing risk, always up-to-date, fewer support issues.
+
+2) Add an automatic "Driver status check" before starting ADB diagnostics
+   - If the phone is connected but ADB is not visible, show:
+     - "USB debugging not enabled" vs "Missing/incorrect ADB driver" hints
+     - The driver download links + troubleshooting steps
+
+Optional (only if you have redistribution rights)
+3) Bundle a driver package and install it silently (admin required)
+   - Ship drivers under a folder in your installer (example: `drivers/adb/` containing `.inf/.cat/.sys`).
+   - Install using Windows built-in tooling:
+     - `pnputil /add-driver <path-to-inf> /install`
+   - Your app can launch that command elevated (UAC prompt).
+   - Use this only for drivers you are allowed to redistribute and that are properly signed.
+
+What SmartHub should NOT do
+- Don’t "force install" random OEM/third-party drivers automatically without user confirmation.
+- Don’t treat MTK/Preloader drivers as required for normal ADB diagnostics; they are for special service modes.

@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.smarthub.labstressor-merged_res-31:/layout_activity_main.xml.flat",
+        "source": "com.smarthub.labstressor-main-33:/layout/activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.labstressor-merged_res-31:\\layout_activity_main.xml.flat",
+        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.labstressor-main-33:\\layout\\activity_main.xml"
+    }
+]

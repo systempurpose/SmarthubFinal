@@ -1,0 +1,162 @@
+Complete Guide to Running Diagnostics on Your Smartphone (SmartHub-friendly)
+
+This guide is written as original, practical guidance for technicians, IT managers, and regular users.
+It is not a replacement for OEM service manuals.
+
+1) Why run diagnostics?
+
+You run diagnostics to reduce uncertainty.
+- Before buying a used phone: confirm the device is functional and not restricted/locked.
+- Before selling a phone: produce evidence of condition to justify price.
+- For company fleets: catch failures early (battery wear, charging issues, storage pressure, overheating, port damage).
+- During repair triage: decide whether the issue is likely software, display-path, power/board, or “host USB” problems.
+
+A phone’s useful lifetime varies widely (usage, heat, charging habits, drops, liquid exposure). Diagnostics help you turn “it feels fine” into measurable checks.
+
+2) What is a “mobile diagnostic test”?
+
+A diagnostic test is a structured check of software + hardware signals, usually with:
+- On-device tests (speaker, mic, touch, sensors, camera)
+- System health readouts (battery health, thermal status, storage, crash logs)
+- Connectivity checks (Wi‑Fi, Bluetooth, cellular)
+- Identity/lock status checks (IMEI/ESN status, SIM lock, MDM/enterprise enrollment, cloud lock)
+
+Important: no single tool can prove everything. Combine:
+- what the phone reports,
+- what the host PC observes over USB,
+- and what a technician can physically verify.
+
+3) What problems do diagnostics commonly reveal?
+
+Frequently found issues:
+- Battery wear / charging instability (rapid drop, shutdowns, swelling risk)
+- Storage pressure (very full /data leading to crashes, boot instability, or slow UI)
+- Overheating (thermal throttling, random shutdowns)
+- Audio faults (speaker/mic, distorted output)
+- Display & touch issues (dead pixels, backlight failure, digitizer faults)
+- Camera faults (focus, sensor, black frames)
+- Connectivity problems (Wi‑Fi/Bluetooth issues)
+- Port/cable/driver problems (USB flapping, enumeration failures)
+- Software corruption after updates or flashing (boot loops)
+- Lock/restriction issues (MDM, SIM lock, activation/cloud lock; varies by platform)
+
+4) A practical diagnostic workflow (recommended)
+
+Step 0 — Confirm the symptom + history
+- What exactly happens? (black screen, blue screen, boot loop, freezes, random restarts)
+- When did it start? (after update, after installing apps, after a drop/water)
+- Does Safe Mode improve symptoms? (strong signal for third‑party app conflicts on Android)
+
+Step 1 — Fast “sign of life” checks
+- Does it charge? Does it vibrate? Do notification sounds occur?
+- Can you wake the screen with power key?
+- Any heat while idle (possible runaway app / thermal issue)?
+
+Step 2 — USB/host-side diagnostics (SmartHub)
+- Use SmartHub’s USB-only triage when USB debugging may be OFF or the screen is unusable.
+- Recommended endpoint:
+  - /connection-check?autoTest=1
+  - For intermittent issues:
+    /connection-check?autoTest=1&samples=30&delayMs=1500&adbSamples=10&adbDelayMs=300
+
+If ADB is authorized and stable
+- Prefer ADB-only read-only signals (boot completion, battery/thermal, /data pressure, stability) to avoid over-weighting host USB artifacts.
+- See: docs/adb-only-diagnostics.txt
+
+SmartHub will:
+- Check ADB visibility and state (device/unauthorized/offline)
+- Check fastboot visibility
+- Sample Windows USB device state over time to detect cable/port/driver flapping
+- Optionally capture deep read-only signals (boot completion, battery, /data usage, log evidence)
+- Return an auto-test verdict: pass/warn/fail with next actions
+
+Interpretation shortcuts:
+- ADB state="device" + screen black/blue often points to a display-path problem (panel/flex/backlight/GPU/display pipeline), not a “deep boot failure”.
+- Fastboot-only visibility suggests Android isn’t booting normally (system corruption, failed update, or storage issues).
+- USB flapping + driver evidence often means fix the PC/cable/port first.
+
+Step 3 — On-device functional tests (when screen is usable)
+Test the user-visible hardware first:
+- Display: brightness, backlight uniformity, dead pixels
+- Touch: edges, multi-touch
+- Audio: speaker + mic (record + playback)
+- Camera: front/back, focus, flash
+- Sensors: proximity, accelerometer/gyro, compass
+- Connectivity: Wi‑Fi/Bluetooth
+
+Step 4 — System health readouts
+- Battery: health/temperature; look for extreme temps or sudden drops
+- Storage: free space; if almost full, expect freezes/crashes
+- Thermal: repeated overheating implies charging, environment, or hardware issues
+- Logs: crashes during boot suggest update/corruption/crash-loop patterns
+
+Step 5 — Lock/restriction checks (especially for used devices)
+Before committing to purchase, confirm:
+- SIM lock / carrier lock status
+- MDM/enterprise enrollment restrictions (company-managed devices)
+- Cloud/activation lock status (platform-dependent)
+- IMEI/ESN blacklist status (country/operator dependent)
+
+Note: exact procedures depend on jurisdiction, carrier, and platform policies.
+
+5) Built-in diagnostic options by brand (high-level)
+
+Android OEM tools vary by model/region.
+
+Samsung (common pattern)
+- Some models expose a service test menu via the dialer.
+- Use it to test screen, sensors, speaker, etc.
+
+Motorola (common pattern)
+- Many models include a preinstalled support/help app with hardware tests.
+
+Google Pixel
+- Often relies on standard Android diagnostics + developer options (bug reports, some battery details).
+
+iPhone
+- No universal “secret” built-in full diagnostic app for end users.
+- You can still check Battery Health in Settings and run functional tests manually.
+
+6) Third-party diagnostic software (business/bulk use)
+
+When you need diagnostics at scale (dozens/hundreds of phones), look for tools that:
+- Cover both hardware and software checks
+- Produce consistent reports (repeatable results)
+- Support automation and bulk workflows
+- Integrate with your process (asset tags, enrollment, data wiping where permitted)
+
+Caution
+- Many “consumer cleaner” apps are not reliable for professional diagnostics.
+- Prefer tools that clearly explain what they test and how results are measured.
+
+7) SmartHub: best practices for accurate results
+
+- Always test with a known-good data cable and a direct USB port (avoid hubs).
+- If results are unstable, increase sampling and re-test.
+- Treat USB-only findings as conservative: use them to guide next steps, not as final proof.
+- Record technician-confirmed facts when possible (e.g., “Safe Mode improved”).
+
+8) When to escalate to repair/service
+
+Escalate when you see:
+- Repeated fastboot-only / low-level modes (EDL/preloader) and no normal boot
+- Strong signs of power instability (USB flapping with known-good cable/port)
+- Overheating under light load
+- Physical damage (drop/liquid) plus functional failures
+- Battery swelling or safety concerns
+
+9) Quick checklist (used phone purchase)
+
+Minimum checks:
+- Boot to OS, unlock, make a call (if possible), Wi‑Fi works
+- Battery health reasonable, no overheating
+- Storage not critically full
+- Touch + display OK (edges + brightness)
+- Cameras + speakers + mic OK
+- USB port stable (no disconnect flapping)
+- No activation/cloud lock; no MDM restrictions; IMEI/ESN not blacklisted
+
+Related SmartHub docs
+- ADB-only diagnostics (read-only): docs/adb-only-diagnostics.txt
+- Diagnose BSOD features and auto-test: docs/diagnose-bsod-features-and-autotest.txt
+- Common quick fixes: docs/common-android-problems-quick-fixes.txt

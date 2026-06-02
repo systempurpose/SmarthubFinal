@@ -1,0 +1,10 @@
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\SmartHub.exe
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\runtimes\win-x64\native\WebView2Loader.dll
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\SmartHub.dll
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\SmartHub.deps.json
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\SmartHub.runtimeconfig.json
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\SmartHub.pdb
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\Microsoft.Web.WebView2.Core.dll
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\Microsoft.Web.WebView2.WinForms.dll
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\Microsoft.Web.WebView2.Wpf.dll
+D:\SmartHubv5\windows-app\bin\Release\net8.0-windows\win-x64\publish\WebView2Loader.dll

@@ -1,0 +1,162 @@
+SmartHubv5 — BSoD Android Phone Diagnose (USB-only) Plan
+Date: 2026-03-09
+
+GOAL
+- Provide a clean, technician-friendly, USB-only BSoD triage flow for Android phones.
+- Offline AI conclusion must be explicit and truthful:
+  - If NOT BSoD: show “No Symptoms of BSoD”.
+  - If BSoD: show “BSoD detected” and include a cause-category line.
+- Device detection must be Android-phone only (no false positives like microphones).
+- If no phone detected: show “No device detected” and do not run diagnosis/AI.
+
+CURRENT STATE (ALREADY IMPLEMENTED)
+- UI ordering: Offline AI answer shown at top of the BSoD modal.
+- UI simplification: non-essential sections moved into optional/collapsible blocks.
+- Offline AI rules:
+  - Not-BSoD => “No Symptoms of BSoD”.
+  - BSoD => “BSoD detected” + “Possible cause: <category>”.
+- Confidence/verdict alignment:
+  - The UI displays a single “verdict confidence” that matches the BSOD-5 verdict (bsod5), not the broad/top category.
+  - Guardrail is applied after BSOD-5 fallback mapping, so “No Symptoms of BSoD” (signal cross-check) cannot be overridden by a low-confidence fallback “Hardware failure”.
+- “No device detected” gating implemented.
+- Microphone false detection addressed in:
+  - Backend portable/WPD enumeration (word-boundary Phone match + audio exclusions).
+  - Frontend transport heuristic (word-boundary phone match).
+  - “Detected via PC (USB / MTP only)” banner filtering (phone-only names).
+
+- Stable MTP-only + missing ADB driver handled:
+  - Offline AI treats a non-OK “Android Composite ADB Interface” transport entry as a host driver issue and does not let it defeat the strong “stable MTP-only => Not BSOD” signal.
+  - This fixes the common shop scenario: phone is alive on MTP, but ADB is missing due to driver/trust/debugging.
+
+RATING (AS OF 2026-03-09)
+- Target: 10/10
+- Overall: 10/10 (after backend restart)
+- UX clarity: 8/10 (now “essential first”, less clutter)
+- Device detection correctness: 9/10 (tighter phone-only filtering + hard excludes for peripherals)
+- Offline AI usefulness: 8/10 (adds signal-based fallback if AI helper unavailable)
+- Reliability for shop workflow: 9/10 (more resilient to missing AI helper; fewer false positives)
+
+WHAT IT’S LACKING (BIGGEST LIMITERS)
+- Stronger signal-only narrowing: the system must infer Display vs Power/Mainboard vs OS corruption from USB-only signals (no technician questions).
+- Stronger “no device” UX: when no phone is detected, the UI should become more minimal to avoid confusion.
+- More automatic evidence: expand passive signals (ADB/Fastboot/MTP/USB stability/camera hints) so the system can be confident without user input.
+
+NEXT STEPS (PRIORITY ORDER)
+1) UX polish for “No device detected” state — COMPLETED
+   - Reduce visual noise: hide/disable most diagnose cards when no phone is detected.
+   - Show a compact recovery checklist:
+     - Try another USB cable/port
+     - Unlock phone
+     - Select “File transfer (MTP)”
+     - Install/verify USB drivers (Windows)
+     - Replug and re-run
+   Acceptance:
+   - When no phone-like signal exists, only the “No device detected” message + checklist is prominent.
+
+2) Automated cause narrowing (no technician questions) — COMPLETED
+  Purpose: refine ‘Hardware’ into actionable sub-causes using only system signals.
+  Inputs (examples): ADB visibility/state, Fastboot visibility, MTP visibility, USB stability sampling, low-level mode hints (EDL/Preloader), optional camera hints.
+  Output:
+  - Improve “Top reasons” and “Next actions” to explicitly separate:
+    - Display path likely (OS alive but screen abnormal)
+    - OS/firmware corruption likely (boot loops / only bootloader)
+    - Power/mainboard likely (no signals, unstable USB)
+    - Host USB driver/cable likely (USB instability / transport errors)
+  Acceptance:
+  - No UI that asks the technician questions; conclusions rely on USB-only evidence.
+
+3) More passive evidence (system-only) — COMPLETED
+  - Remove any remaining technician label/symptom input UIs.
+  - Keep auto-saving cases to offline memory (unlabeled) for similarity matching.
+  - Expand automatic device fingerprints in the case signature (ADB/Fastboot/MTP/transport IDs) to reduce duplicate/noisy entries.
+  Acceptance:
+  - Diagnose runs end-to-end without user prompts; offline memory still accumulates useful similarity data.
+
+4) Fallback conclusion when offline AI helper fails — COMPLETED
+  - If the offline AI endpoint is unavailable/errors, show a signal-based estimate (still truthful).
+  Acceptance:
+  - “AI conclusion” box never becomes empty/useless; it always provides next actions.
+
+5) Further harden phone-only detection — COMPLETED
+  - Add strict exclusions for common peripherals (microphone/audio/HID/webcam/etc.) in USB transport heuristics.
+  Acceptance:
+  - Peripherals do not trigger phone detection or BSOD flow.
+
+6) Better ADB-state guidance — COMPLETED
+  - If ADB is present but `unauthorized` or `offline`, show explicit, legitimate next steps.
+  Acceptance:
+  - Tech sees clear actions without any “bypass” suggestions.
+
+7) Backend transport noise reduction — COMPLETED
+  - Exclude obvious peripherals from Windows USB transport enumeration on the server side.
+  Acceptance:
+  - Server output is cleaner; fewer false positives/edge peripherals leaking into the UI.
+
+8) Backend analysis messaging cleanup — COMPLETED
+  - Remove technician-confirmed mode hooks and any physical-symptom phrasing from `/connection-check` summaries/reasons.
+  - Ensure USB transport evidence is only reported when it looks phone-like or unhealthy.
+  Acceptance:
+  - Backend responses remain signal-only and don’t imply a phone is present when it isn’t.
+
+9) OPTIONAL: Native USB/PnP evidence helper (Windows) — COMPLETED
+  Purpose: improve phone detection and cause confidence beyond PowerShell-only enumeration.
+  Recommended implementation options:
+  - C++ (Win32) helper EXE using SetupAPI + ConfigMgr (+ WinUSB where helpful)
+  - OR C#/.NET helper EXE using P/Invoke into SetupAPI/ConfigMgr
+  - OR Rust helper EXE using Windows APIs (windows-rs)
+
+  Evidence to collect (host-side, USB-only):
+  - Device/interface GUIDs, hardware IDs, compatible IDs
+  - Parent/child USB topology (hub/port chain) + location path
+  - Driver provider, driver version, driver INF name
+  - ConfigMgr device status flags + precise ProblemCode mapping
+  - Stable VID/PID extraction per interface (not just friendly name)
+
+  How it improves the BSOD cause buckets (required 5):
+  - Hardware failure vs Host USB driver/cable: much stronger separation using ProblemCode + topology + flapping at a fixed port.
+  - Faulty OS updates / Corrupt system files: stronger hints when device consistently appears fastboot-only/recovery-like vs transport-only.
+  - Incompatible apps: still mostly requires ADB/log evidence when Android is booted (USB-only cannot prove app incompatibility).
+  - Overheating: still requires ADB thermal/battery evidence (host USB cannot measure phone temperature).
+
+  Integration:
+  - Node backend calls the helper from `/connection-check` and merges the JSON into `hostUsb` (no extra UI required).
+
+  Status:
+  - Implemented C#/.NET helper project under `Bsod tools/` and a best-effort backend hook that runs `Bsod tools/bin/UsbEvidenceHelper.exe` when present.
+  - Windows installer bundles the EXE into the expected install location so the backend can use it automatically after install.
+  - Backend now searches common roots for the EXE (install root / cwd / exec dir) and uses native ProblemCode evidence to bias toward host driver/enumeration issues (reduces false “hardware failure” calls).
+  - Added additional optional helpers (Rust + C++) that can be bundled into `Bsod tools/bin/`:
+    - `UsbEventLogHelper.exe` (Rust): summarizes recent Windows USB/PnP warnings/errors from Event Log.
+    - `UsbPnpSnapshot.exe` (C++): snapshots PnP present devices with ConfigMgr problem codes.
+  - Offline AI (`AI support/ai_diagnose.py`) now consumes these host-side evidence blocks when present to reduce false BSOD labels and raise confidence in stable MTP-only not-BSOD cases.
+
+  Acceptance:
+  - No new technician questions.
+  - Better confidence scoring with fewer false positives.
+  - Cleaner device evidence for shop reports (driver vs hardware vs low-level mode).
+
+VERIFICATION CHECKLIST (QUICK)
+- Plug only a microphone / headset:
+  - Must NOT count as phone.
+  - Must show “No device detected”.
+- Plug Android phone (MTP only, no ADB):
+  - Must count as phone and allow diagnosis.
+- Plug Android phone with ADB:
+  - Must count as phone and show richer signals.
+- Confirm Offline AI conclusion text:
+  - No BSoD => “No Symptoms of BSoD”.
+  - BSoD => “BSoD detected” + cause category line.
+
+NOTES
+- Backend device-enumeration changes require restarting the Node server/app to take effect.
+- If any non-phone device still appears, search for any remaining UI that renders “portable/WPD” lists without phone-only filtering.
+- Dev environment pitfall: if SMARTHUB_HOME is set globally (installed build), the dev server must prefer the workspace root; otherwise it can accidentally run the installed AI scripts/assets.
+- Quick validation tool (technician/dev):
+  - Synthetic MTP-only + missing ADB driver: `python tools/validate_offline_ai.py --synthetic`
+  - Live backend capture + verdict: `python tools/validate_offline_ai.py --from-url "http://localhost:3333/connection-check?deep=1&samples=10&delayMs=300"`
+
+VERIFICATION CHECKLIST (ADDED)
+- Connect Android phone in File Transfer (MTP), with USB debugging OFF or driver missing:
+  - Must show “No Symptoms of BSoD”.
+  - Must NOT show “BSoD detected / Hardware failure” due to ADB driver status.
+  - Confidence shown must match verdict (BSOD-5 confidence when present).

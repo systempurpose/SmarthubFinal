@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0</Version>
+    <AssemblyName>SmartHub</AssemblyName>
+    <AssemblyTitle>SmartHub Diagnostics ALPHA</AssemblyTitle>
+    <Product>SmartHub Diagnostics ALPHA</Product>
+    <Company>SmartHubTeams</Company>
+    <Authors>SmartHubTeams</Authors>
+    <Description>Offline Windows desktop companion for Android diagnostics (ADB/Fastboot/USB-only triage).</Description>
+        <!-- Application manifest for elevation settings -->
+        <ApplicationManifest>Properties\app.manifest.xml</ApplicationManifest>
+        <!-- Set the Windows application icon so shortcuts and taskbar use
+          the SmartHub logo after installation. -->
+        <ApplicationIcon>logo.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,161 @@
+SmartHub Latest System - Specific Features
+Generated: 2026-04-19
+
+1) Authentication and Account Features
+- Supabase configuration status endpoint.
+- User registration with display name, password validation, and profile sync.
+- User login with local offline session creation.
+- Forgot-password flow with redirect URL support.
+- Local session status verification and logout.
+- Offline reuse after successful online sign-in (session token stored locally).
+
+Key endpoints:
+- GET /auth/config
+- POST /auth/register
+- POST /auth/login
+- POST /auth/forgot-password
+- GET /auth/session/status
+- POST /auth/logout
+
+2) Online AI Features
+- Online AI enable/status check.
+- Persistent Online AI config stored on host disk.
+- AI suggestion endpoint for diagnostics.
+- Built-in web evidence lookup integration.
+- Citation-aware AI response payload (citations + web search metadata).
+
+Key endpoints:
+- GET /online-ai/status
+- GET /online-ai/config
+- POST /online-ai/config
+- POST /ai-online-suggest
+
+3) Offline AI Features
+- No-debug AI diagnosis suggestions.
+- No-debug AI memory save/remember feature.
+- No-debug AI metrics retrieval.
+- ADB AI conclusion generation.
+- ADB AI memory save/remember feature.
+
+Key endpoints:
+- POST /ai-no-debug-suggest
+- POST /ai-no-debug-remember
+- GET /ai-no-debug-metrics
+- POST /ai-adb-conclude
+- POST /ai-adb-conclude-remember
+
+4) USB/Connection and BSOD Diagnostic Features
+- Unified connection check (ADB, fastboot, host USB evidence).
+- USB-only and deep sampling modes.
+- MTP responsiveness probe support.
+- MTP heartbeat monitoring for freeze confirmation patterns.
+- Auto-test verdict support for technician triage.
+
+Key endpoint:
+- GET /connection-check
+
+5) Screen and Visual Diagnostic Features
+- Visual screen check (camera-assisted workflow).
+- Camera snapshot capture endpoint.
+- Screen test run endpoint.
+- Screen test image retrieval endpoint.
+- Display state query endpoint.
+- BSOD GUI launcher endpoint.
+
+Key endpoints:
+- GET /screen-visual-check
+- GET /screen-camera-snapshot
+- POST /screen-test/:id
+- GET /screen-test-image/:deviceId/:file
+- GET /display-state/:id
+- POST /launch-bsod-gui
+- GET /screenshot/:id
+
+6) Device Test and Action Features
+- Hardware test actions for blue-test workflow.
+- Max volume command.
+- Flash control command.
+- Vibrate command.
+- Sound test command.
+- Touch test command.
+- Wake command.
+- Sensor test endpoint.
+- Device health test endpoint.
+- ADB package uninstall action.
+
+Key endpoints:
+- POST /blue-test/volume-max
+- POST /blue-test/flash
+- POST /blue-test/vibrate
+- POST /blue-test/sound
+- POST /blue-test/touch
+- POST /blue-test/wake
+- POST /test/sensors
+- POST /test/health
+- POST /adb-uninstall
+
+7) App Analysis and Security Features
+- Installed app listing per device.
+- App usage inspection.
+- File scan endpoint.
+- Suspicious app detection endpoint.
+- Per-app risk assessment endpoint.
+- Deep APK risk scan integration in app-risk response.
+
+Key endpoints:
+- GET /apps/:id
+- GET /app-usage/:id
+- GET /file-scan/:id
+- GET /suspicious-apps/:id
+- GET /app-risk/:id/:pkg
+
+8) History, Collection, and Report Features
+- Cloud-backed per-user diagnostic history retrieval.
+- Cloud-backed per-user diagnostic history save.
+- On-device report retrieval.
+- Collect route for saved run data.
+- Deep scan summary retrieval route.
+
+Key endpoints:
+- GET /history/:id
+- POST /history/:id
+- GET /on-device-report/:id
+- GET /collect/:id
+- GET /deep-scan/:id
+
+9) SmartLink Features
+- Cryptographic SmartLink challenge issuance.
+- SmartLink signature verification.
+- SmartLink policy response (enableAdb, enableUsbTethering).
+- SmartLink Agent APK download endpoint.
+- SmartLink app install endpoint.
+
+Key endpoints:
+- POST /smartlink/challenge
+- POST /smartlink/verify
+- GET /smartlink/agent-apk
+- POST /install-smartlink-app
+
+10) Install and Operations Features
+- APK install route for connected device workflow.
+- Backend health/readiness check.
+- Controlled backend shutdown endpoint.
+- Read-only mode state query and toggle.
+- Backend read-only enforcement for mutating device actions.
+
+Key endpoints:
+- POST /install-app
+- GET /health
+- POST /shutdown
+- GET /read-only
+- POST /read-only
+
+11) Frontend Product Features (UI Layer)
+- Authentication UI with online/offline session handling.
+- Device details and diagnostics modal flows.
+- BSOD analysis UI with top reasons and confidence rendering.
+- Online AI summary rendering with citation display.
+- Diagnostic history browser and result modal.
+- Multi-language translation support.
+- Dynamic advice generation for diagnostic badges.
+- Read-only UI state integration.

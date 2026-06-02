@@ -1,0 +1,179 @@
+
+Blue/Blank/“Blue Screen of Death” Mobile Diagnostics Plan (USB-only, Developer Options OFF)
+Date: 2026-02-21
+
+Goal
+- Create a repeatable diagnostic workflow for repair shops to triage “blue screen / blank screen” phones using ONLY a USB cable connection to a PC.
+- Assume Developer Options + USB Debugging are OFF in most cases.
+- Output a clear “most likely cause” with confidence and the next best action (screen assembly vs board vs firmware vs power).
+
+Non-goals / Safety constraints
+- Do NOT bypass lockscreen, encryption, or Android security.
+- Do NOT attempt exploit/forensic extraction.
+- Do NOT claim we can enable Developer Options/USB debugging remotely.
+- Any actions must be consistent with stock Android/iOS security models.
+
+Core idea
+When ADB is unavailable, we treat the phone as a USB device and diagnose from:
+1) What the PC can see over USB (enumeration, device class, VID/PID hints, driver state).
+2) Whether the phone can enter and be detected in alternative boot modes (fastboot/bootloader, recovery, download mode) via physical buttons.
+3) Whether the phone is “alive” (charging negotiation, repeated re-enumeration/boot loops).
+4) Optional but implemented: a “visual check” module (host PC webcam) that estimates what the screen *appears* to show.
+	- This is the primary way to detect “Not BSOD” (screen content looks normal) without USB debugging.
+
+Signals we can collect (USB-only)
+Camera (optional, USB debugging not required)
+- Category: Normal / Blue / Dark (aggregated across samples)
+- Content-visible hint (contrast-based): helps detect “Not BSOD” when UI is visible
+- Hardware hints: crack/line artifacts, banding/dead rows, edge shadow/backlight
+Windows Host Signals
+- PnP device list changes on plug/unplug (Device Manager / Get-PnpDevice).
+- USB VID/PID and device class (MTP/PTP, ADB interface, modem, bootloader).
+- “Portable Device” presence (MTP) even when ADB is absent.
+- Driver errors / Code 10/43, repeated connect/disconnect cycles.
+- Power draw (optional if using a smart USB meter; not required).
+
+ADB/Fastboot Signals (best-effort)
+- ADB:
+	- Device listed as “device” (debugging ON + trusted)
+	- “unauthorized” (debugging ON but PC not trusted)
+	- no devices (debugging OFF or not booted)
+- Fastboot:
+	- Visible in fastboot mode
+	- Visible only sometimes (unstable connection / boot loop)
+
+Mode transition signals (requires button combos but still only USB cable)
+- Can the device be forced into:
+	- Bootloader/fastboot
+	- Recovery
+	- OEM download mode (varies by vendor)
+We do not automate these; we guide the technician.
+
+Classification model (triage outcomes)
+Category 0 — Not BSOD (screen content visible)
+Typical signals
+- Camera category = Normal with stable sampling and content-visible hint.
+Interpretation
+- The phone likely is not in a blue/blank-screen state; the reported problem may be intermittent or different (performance/app/battery).
+Recommended action
+- Reconfirm the customer symptom and run standard diagnostics rather than BSOD triage.
+We map signals to likely root-cause categories:
+
+Category A — Display assembly failure (panel/backlight/flex)
+Typical signals
+- Phone enumerates as MTP “portable device” (user storage visible) OR is otherwise stable on USB.
+- May receive calls/notifications/vibration (not USB-only, so treat as optional technician input).
+- If the phone can boot normally (MTP present, stable USB), but screen is blue/blank: very likely display assembly.
+Recommended action
+- Reseat display connector, inspect flex, try known-good screen.
+
+Category B — OS boots but locked down (normal consumer state)
+Typical signals
+- MTP present.
+- ADB absent.
+- Fastboot absent unless forced.
+Interpretation
+- This is “normal” for a new phone: dev options off. Blue screen likely display-related, but not proven.
+Recommended action
+- Proceed to hardware screen checks (known-good screen) or external display if supported.
+
+Category C — Bootloader-only / firmware/OS corruption
+Typical signals
+- Not stable as MTP.
+- Visible in fastboot/bootloader reliably, but not in normal boot.
+- Repeated reboots / re-enumeration.
+Recommended action
+- Attempt recovery boot, evaluate for firmware repair paths (OEM tools) and confirm before data-risk actions.
+
+Category D — Power / PMIC / board instability
+Typical signals
+- Repeated USB connect/disconnect.
+- No MTP/ADB/fastboot stability.
+- Sometimes enumerates briefly then disappears.
+Recommended action
+- Check battery/charging port/board-level diagnostics.
+
+Category E — USB port/cable/host issue (false negative)
+Typical signals
+- Nothing enumerates on multiple known-good phones OR only enumerates on another PC.
+Recommended action
+- Swap cable, port, PC; install drivers; verify platform-tools.
+
+Confidence scoring (simple, explainable)
+- Assign points to independent signals; require at least 2 agreeing signals for “High confidence”.
+Example
+- +3 MTP stable for >30s
+- +2 fastboot visible when forced
+- +2 ADB unauthorized (debugging on but not trusted)
+- +2 repeated enumerate cycles (boot loop / power)
+- -2 if host driver errors indicate PC-side issue
+
+Confidence labels
+- High: multiple independent signals agree
+- Medium: one strong signal + weak supporting
+- Low: ambiguous (recommend next physical step)
+
+Technician workflow (what the tool should guide)
+Step 1 — USB baseline
+- Plug phone in. Tool shows:
+	- “PC sees: MTP / ADB / Fastboot / Nothing”
+	- A short plain-English explanation.
+
+Step 2 — Cable/port sanity
+- If “Nothing”:
+	- Ask to try a known-good data cable and a different USB port.
+	- Re-check enumeration.
+
+Step 3 — Mode checks (button-driven)
+- If still ambiguous:
+	- Provide vendor-agnostic instructions: “Try bootloader/recovery key combo for your device family.”
+	- Tool re-checks fastboot devices.
+
+Step 4 — Output result + next action
+- Present:
+	- Likely category + confidence
+	- Top reasons (signals that drove the conclusion)
+	- Next best action list (screen test / reseat / known-good screen / board triage)
+
+Implementation plan (SmartHub-specific)
+Backend
+- Expand /connection-check to return richer USB data:
+	- For Windows: include VID/PID, device class, and error codes when available.
+	- Keep existing: adb devices, fastboot devices, portable/MTP devices.
+- Add a “stability window” measurement:
+	- sample enumeration 3–5 times over ~10 seconds to detect flapping.
+- Add a bsodAnalysis v2:
+	- incorporate stability, VID/PID hints (bootloader vs normal), and ADB unauthorized state.
+
+Frontend (UI)
+- A dedicated “Blue / blank screen triage” flow inside the existing no-debug modal:
+	- Shows 3 status cards: USB/MTP, ADB, fastboot
+	- Shows a “Likely cause” card with confidence
+	- Shows a short checklist of next physical steps
+
+Data retention
+- Store only:
+	- timestamped classification summary + reasons
+	- no personal user files
+
+Validation plan
+- Build a small device matrix:
+	- New consumer phone (dev options off)
+	- Same phone with debugging on but PC not trusted (adb unauthorized)
+	- Screen physically disconnected (should still show MTP sometimes)
+	- Bootloop device (USB flapping)
+	- Bootloader-only device (fastboot stable)
+- For each, record:
+	- tool classification
+	- actual root cause confirmed by repair steps
+	- tune scoring rules to reduce false “high confidence” claims
+
+Known limitations (must be explicit in UI)
+- Without ADB/debugging, we cannot:
+	- take screenshots
+	- read logs
+	- confirm what Android is rendering
+- With USB-only signals, we can often separate:
+	- “boots normally but display likely bad” vs “doesn’t boot / firmware / power”
+	but we cannot always prove “panel vs OS” without hardware tests (known-good screen, external display).
+

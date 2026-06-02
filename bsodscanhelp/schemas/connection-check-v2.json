@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarthub.local/schemas/connection-check-v2.json",
+  "title": "SmartHub /connection-check response (v2)",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "adb": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ok": { "type": "boolean" },
+        "devices": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "error": { "type": "string" }
+      }
+    },
+    "fastboot": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ok": { "type": "boolean" },
+        "devices": { "type": "array", "items": { "type": "string" } },
+        "error": { "type": "string" }
+      }
+    },
+    "hostUsb": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "platform": { "type": "string" },
+        "portableDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "type": "string" },
+              "class": { "type": "string" },
+              "instanceId": { "type": "string" },
+              "problemCode": { "type": "number" },
+              "vid": { "type": "string" },
+              "pid": { "type": "string" }
+            }
+          }
+        },
+        "transportDevices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "type": "string" },
+              "class": { "type": "string" },
+              "instanceId": { "type": "string" },
+              "problemCode": { "type": "number" },
+              "vid": { "type": "string" },
+              "pid": { "type": "string" }
+            }
+          }
+        },
+        "sample": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "count": { "type": "number" },
+            "delayMs": { "type": "number" },
+            "anyChange": { "type": "boolean" }
+          }
+        },
+        "error": { "type": "string" }
+      }
+    },
+    "summary": { "type": "string" },
+    "bsodAnalysis": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "category": { "type": "string" },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "part1": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "System Errors",
+                "Application Conflicts",
+                "Hardware Malfunction",
+                "Overheating",
+                "Insufficient Storage"
+              ]
+            },
+            "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+            "reasons": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["category", "confidence", "reasons"]
+        }
+      }
+    }
+  }
+}

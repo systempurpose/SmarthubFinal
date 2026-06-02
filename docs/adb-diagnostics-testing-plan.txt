@@ -1,0 +1,166 @@
+SmartHubv5 — Testing Plan for ADB Diagnostics (/connection-check)
+
+Question this answers
+- “Is it possible to add a test for every part in this application in diagnostic with ADB?”
+
+Short answer
+- You can add automated tests for almost all ADB-diagnostics logic (parsing, classification, autoTest verdicts, and API outputs).
+- You cannot fully automate “every part” purely in software because some behavior depends on:
+  - real phones (OEM differences, Android versions, permissions),
+  - real USB cables/ports and Windows driver state,
+  - timing / intermittency (flapping USB, unstable ADB).
+
+Best result in practice
+- Layered tests:
+  1) deterministic unit tests for logic,
+  2) mocked integration tests for the HTTP route,
+  3) optional hardware-in-the-loop (HIL) tests on a small lab device set.
+
+
+1) What is testable 100% offline (recommended first)
+
+A) “Pure” parsing and normalization logic
+Examples of ADB-derived inputs we already parse:
+- `adb devices -l` → device list + state
+- `getprop sys.boot_completed` → boot completed boolean
+- `dumpsys battery` → battery level/temp/status/health
+- `df /data` → percent used
+- `dumpsys display` → `screenState`, `powerState`, `brightness`, `displayCount` (best-effort)
+
+How to test
+- For each parser, create fixtures (sample command outputs) and assert:
+  - correct field extraction
+  - “unknown / missing” behavior (should return `undefined` rather than wrong values)
+  - resilience (extra whitespace, missing keys, OEM variations)
+
+B) Decision logic (verdicts, confidence, reasons)
+Key examples:
+- `autoTest=1` verdict selection (`pass|warn|fail`) based on:
+  - ADB visible/state
+  - boot completed
+  - ADB stability percent
+  - fastboot visibility
+  - host driver evidence
+  - USB stability
+- Confidence shaping when display hint is OFF/DOZE or ADB is unstable
+
+How to test
+- Table-driven tests: supply a minimal “signals” object, assert the expected:
+  - verdict
+  - confidence
+  - required reason phrases / next actions (avoid exact full-string matching if wording may evolve)
+
+C) Parameter validation / clamping
+Examples:
+- `adbSamples` clamped to 2..12
+- `adbDelayMs` clamped to 0..1200
+
+How to test
+- Input various query values and assert the clamped numeric result is used.
+
+
+2) What is testable with mocked integration tests (route-level)
+
+Target
+- `GET /connection-check` route (TypeScript/Express)
+
+Goal
+- Verify the JSON response shape and fields for common scenarios without requiring a phone.
+
+Strategy
+- Use an HTTP test client (e.g., supertest) to call the Express app.
+- Mock the underlying command executors that talk to the system:
+  - ADB runner
+  - fastboot runner
+  - Windows USB sampling / helpers
+
+What these tests should assert
+- status code is 200
+- top-level fields exist: `adb`, `fastboot`, `hostUsb`, `signals` (when deep), `autoTest` (when enabled), `summary`
+- `autoTest` exists and is consistent when `autoTest=1` is present
+- “deep” fields appear only when `deep=1` or `autoTest=1`
+
+Important note
+- If ADB/USB logic is currently inside the route file, it’s harder to mock cleanly.
+- For long-term testability, consider extracting helpers into modules like:
+  - `src/adbDiagnostics.ts` (collect signals)
+  - `src/adbParsers.ts` (parse dumpsys/df/getprop outputs)
+  - `src/autoTest.ts` (verdict logic)
+
+
+3) What is only reliably testable with real devices (HIL)
+
+Examples
+- ADB flakiness due to cable/port/power
+- OEM-specific `getprop` keys or `dumpsys` formats
+- Logcat access restrictions
+
+Recommended approach
+- Maintain a small lab set (2–5 phones):
+  - at least one Samsung, one Pixel/stock-like, one older Android version
+- Run HIL tests as “non-blocking” or separate pipeline (they can be flaky).
+
+HIL test cases (minimal)
+- ADB authorized (`device`) + boot completed
+- ADB unauthorized (verify the API reports it correctly)
+- ADB offline (verify warnings + reduced confidence)
+- display hint OFF/DOZE (verify confidence lowering + suggested actions)
+
+
+4) A practical test matrix for ADB-only diagnostics
+
+Core ADB states
+- `state=device` (authorized)
+- `state=unauthorized`
+- `state=offline`
+- no devices
+
+Deep signals
+- `bootCompleted=true|false|unknown`
+- `adbStability`: 100%, 80%, 59% (boundary), missing
+- `dataPartitionUsePct`: normal (40), high (90+), missing
+- `battery.temperatureC`: normal, high, missing
+- `display.screenState`: ON, OFF/DOZE, missing
+
+Expected outcomes
+- `autoTest.pass` only when ADB is good and stable and no major contradictions
+- `autoTest.fail` when fastboot visible but ADB not visible
+- `autoTest.warn` for instability, driver evidence, or ambiguous conditions
+
+
+5) Tooling suggestions (if you want to implement tests)
+
+This repo currently has no test runner configured in package.json.
+
+Common options
+- Vitest (fast, modern) + Supertest (HTTP)
+- Jest (classic) + Supertest
+
+Minimum packages (example)
+- `vitest`
+- `supertest`
+- `@types/supertest`
+
+Suggested scripts (example)
+- `test`: run unit + route tests
+- `test:watch`: dev loop
+
+
+6) Definition of “done” (what “tests for every part” should mean here)
+
+Realistic definition
+- 90–95%+ automated coverage for:
+  - parsers
+  - verdict/confidence logic
+  - route output contracts
+  - UI rendering of results (optional)
+
+Plus
+- a small HIL suite that validates the end-to-end flow on real phones
+
+
+Next step (if you want me to implement it)
+- I can scaffold a minimal Vitest + Supertest setup and add:
+  - parser fixture tests (dumpsys/df/getprop/display)
+  - route tests for `/connection-check?autoTest=1` with mocked ADB/USB runners
+  - a JSON “golden fixture” contract test for stable output fields

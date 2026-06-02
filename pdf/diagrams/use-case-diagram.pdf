@@ -1,0 +1,271 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2635 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — Use Case Diagram \(Simplified\)) Tj
+ET
+220 120 420 420 re
+S
+BT
+/F1 10 Tf
+230 522 Td
+(System: SmartHub Diagnostics \(Desktop UI + Node/Express Backend\)) Tj
+ET
+40 450 160 80 re
+S
+BT
+/F1 10 Tf
+52 500 Td
+(Actor:) Tj
+ET
+BT
+/F1 12 Tf
+52 480 Td
+(Technician) Tj
+ET
+250 440 360 44 re
+S
+BT
+/F1 11 Tf
+262 456 Td
+(Discover Connected Devices) Tj
+ET
+250 375 360 44 re
+S
+BT
+/F1 11 Tf
+262 391 Td
+(Run Full Diagnostics \(ADB\)) Tj
+ET
+250 310 360 44 re
+S
+BT
+/F1 11 Tf
+262 326 Td
+(Diagnose BSOD \(USB-only\)) Tj
+ET
+250 245 360 44 re
+S
+BT
+/F1 11 Tf
+262 261 Td
+(Security Scan \(ADB\)) Tj
+ET
+250 180 360 44 re
+S
+BT
+/F1 11 Tf
+262 196 Td
+(Install Mobile App) Tj
+ET
+250 135 360 44 re
+S
+BT
+/F1 11 Tf
+262 151 Td
+(View / Export Results) Tj
+ET
+200 470 m
+250 462 l
+S
+250 462 m
+240.76 467.53 l
+S
+250 462 m
+239.49 459.63 l
+S
+200 480 m
+250 397 l
+S
+250 397 m
+248.27 407.63 l
+S
+250 397 m
+241.41 403.50 l
+S
+200 490 m
+250 332 l
+S
+250 332 m
+250.80 342.74 l
+S
+250 332 m
+243.17 340.33 l
+S
+200 500 m
+250 267 l
+S
+250 267 m
+251.81 277.62 l
+S
+250 267 m
+243.99 275.94 l
+S
+200 510 m
+250 202 l
+S
+250 202 m
+252.35 212.51 l
+S
+250 202 m
+244.45 211.23 l
+S
+670 465 160 42 re
+S
+BT
+/F1 8.80 Tf
+680 493 Td
+(Android Phone) Tj
+ET
+670 405 160 42 re
+S
+BT
+/F1 8.80 Tf
+680 433 Td
+(Windows Host OS) Tj
+ET
+BT
+/F1 8.80 Tf
+680 422 Td
+(\(USB/PnP/MTP\)) Tj
+ET
+670 345 160 42 re
+S
+BT
+/F1 8.80 Tf
+680 373 Td
+(ADB / Fastboot Tools) Tj
+ET
+670 285 160 42 re
+S
+BT
+/F1 8.80 Tf
+680 313 Td
+(Camera Checker) Tj
+ET
+670 225 160 42 re
+S
+BT
+/F1 8.80 Tf
+680 253 Td
+(Offline AI Helper) Tj
+ET
+BT
+/F1 8.80 Tf
+680 242 Td
+(\(Python\)) Tj
+ET
+670 486 m
+610 397 l
+S
+610 397 m
+618.91 403.06 l
+S
+610 397 m
+612.27 407.53 l
+S
+670 426 m
+610 462 l
+S
+610 462 m
+616.52 453.43 l
+S
+610 462 m
+620.63 460.29 l
+S
+670 366 m
+610 397 l
+S
+610 397 m
+617.05 388.86 l
+S
+610 397 m
+620.72 395.96 l
+S
+670 306 m
+610 332 l
+S
+610 332 m
+617.59 324.35 l
+S
+610 332 m
+620.77 331.69 l
+S
+670 246 m
+610 332 l
+S
+610 332 m
+612.44 321.51 l
+S
+610 332 m
+619 326.09 l
+S
+40 20 802 80 re
+S
+BT
+/F1 10 Tf
+50 82 Td
+(How to read \(flow\)) Tj
+ET
+BT
+/F1 9 Tf
+50 66 Td
+(Technician starts a use case inside the SmartHub system boundary.) Tj
+ET
+BT
+/F1 9 Tf
+50 55 Td
+(Boxes on the right are external systems used by SmartHub \(phone, Windows USB/PnP, ADB/Fastboot tools, camera checker,) Tj
+ET
+BT
+/F1 9 Tf
+50 44 Td
+(and offline AI helper\).) Tj
+ET
+BT
+/F1 9 Tf
+50 33 Td
+(Arrows show interactions: Technician -> SmartHub use cases; SmartHub -> external systems when needed.) Tj
+ET
+BT
+/F1 9 Tf
+50 22 Td
+(USB-only BSOD flow works without USB debugging \(skipAdb/usbOnly\); camera + offline AI are optional helpers.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub Use Case Diagram) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000002775 00000 n 
+0000002911 00000 n 
+0000002968 00000 n 
+0000003017 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+3073
+%%EOF

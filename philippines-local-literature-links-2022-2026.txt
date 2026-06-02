@@ -1,0 +1,85 @@
+Philippines-local literature links (Archīum Ateneo)
+Topic focus: Android/mobile diagnostic & monitoring applications/systems
+Target window: 2022–2026 (collected 2026-04-05)
+Current coverage in this list: 2022–2025 (no clearly in-scope 2026-dated item captured yet)
+Note: All items below are hosted/indexed by Archīum Ateneo and include an in-range publication date on the item page and/or repository listing.
+
+1) Lightweight Networks for COVID-19 Detection from Chest X-Ray Images inside a Low-Tier Android Device — Date: 01/2022
+http://archium.ateneo.edu/discs-faculty-pubs/357
+Reason: Local Archīum Ateneo (PH) research; directly aligns with on-device Android diagnostics (ML-based health detection running on a phone), relevant to SmartHub’s diagnostic app + edge-inference patterns.
+
+2) Extending Smartphone-Based Hand Gesture Recognition for Augmented Reality Applications with Two-Finger-Pinch and Thumb-Orientation Gestures — Date: 01/2022
+http://archium.ateneo.edu/discs-faculty-pubs/356
+Reason: Local Archīum Ateneo (PH) work; shows smartphone sensor/input processing and on-device recognition—useful as local reference for phone-side data capture, signal processing, and real-time classification used in diagnostics/monitoring apps.
+
+3) The development and pilot evaluation of a mental health mobile app in the Philippines — Date: 01/2022
+http://archium.ateneo.edu/psychology-faculty-pubs/398
+Reason: Local PH-focused mobile health app study; connects to SmartHub by documenting mobile-app design and evaluation for health monitoring/support (requirements, usability, adoption, outcome measurement).
+
+4) Comparative Analysis of ML Algorithms for Predictive Prenatal Monitoring — Date: 01/2022
+http://archium.ateneo.edu/ecce-faculty-pubs/132
+Reason: Local Archīum Ateneo (PH) publication; directly about monitoring + prediction using ML, relevant to SmartHub’s goal of interpreting diagnostic/monitoring signals and scoring or flagging anomalies.
+
+5) Participant Use of Digital Diaries in Qualitative Research: A Strong Structuration Analysis — Date: 01/2022
+http://archium.ateneo.edu/dev-stud-faculty-pubs/123
+Reason: Local repository publication; supports SmartHub’s “history/logging” aspect by providing local literature on digital self-reporting/diary data capture, compliance, and participant behavior—important for diagnostic symptom logs and incident timelines.
+
+6) A Pilot Evaluation of Katatagan Online: Benefits and Challenges of an Online Resilience Program in the Philippines during the COVID-19 Pandemic — Date: 05/2022
+http://archium.ateneo.edu/socialtransformations/vol10/iss1/5
+Reason: Local PH online intervention evaluation; connects to SmartHub via practical evidence on remote delivery, engagement barriers, and measuring outcomes—useful for designing diagnostic/monitoring workflows that work in real-world PH contexts.
+
+7) Development of Android-Based Pulmonary Monitoring System for Automated Lung Auscultation Using Long Short-Term Memory (LSTM) Network with Post-Processing from Edge Impulse — Date: 01/2023
+http://archium.ateneo.edu/ecce-faculty-pubs/150
+Reason: Local Archīum Ateneo (PH) work and explicitly Android-based; directly matches SmartHub’s scope: phone app as monitoring platform, sensor input integration, ML classification, and remote/centralized data storage for diagnosis support.
+
+8) A Mixed Cloud-and-Embedded-based Approach with Machine Learning Towards the Development of a Fall Monitoring System — Date: 01/2023
+http://archium.ateneo.edu/ecce-faculty-pubs/154
+Reason: Local repository publication; focuses on monitoring + ML with cloud/edge split—strongly relevant to SmartHub’s architecture (on-device capture + server-side analysis/reporting for diagnostics/monitoring).
+
+9) A Digital Twin Approach of A-vent Wireless Sensor for Real-Time and Predictive Monitoring of Patient Ventilator Asynchrony — Date: 01/2023
+http://archium.ateneo.edu/ecce-faculty-pubs/153
+Reason: Local Archīum Ateneo (PH) monitoring research; connects to SmartHub through real-time telemetry + predictive analytics patterns, similar to continuously monitoring a device/subject and generating diagnostic alerts/reports.
+
+10) LoRa-Based Sensors and Monitoring of Growth Parameters with NearCloud Data Storage for Black Rice Hydroponics — Date: 01/2023
+http://archium.ateneo.edu/chemistry-faculty-pubs/210
+Reason: Local repository monitoring/telemetry system; relevant to SmartHub by providing local reference for sensor-to-cloud pipelines (data acquisition, storage, dashboards), which maps to phone diagnostic data collection and remote monitoring.
+
+11) Usability of Developed Smartphone-Based Acoustics Experiments Using Phyphox — Date: 05/2023
+http://archium.ateneo.edu/theses-dissertations/929
+Reason: Local Archīum Ateneo thesis; smartphone-based instrumentation and usability findings are relevant to SmartHub’s phone-side diagnostics UI/UX and reliable use of phone sensors for measurement and testing.
+
+12) Patient Satisfaction with Telemedicine in the Philippines During the COVID-19 Pandemic: A Mixed Methods Study — Date: 12/2023
+http://archium.ateneo.edu/asmph-pubs/125
+Reason: Local PH telemedicine evidence; connects to SmartHub because diagnostic/monitoring apps typically support remote care—this provides local context on acceptance, expectations, and service quality factors.
+
+13) Waveform Tracker Alarm for Automatic Patient-Ventilator Asynchrony (PVA) and Mechanical State Recognition for Mechanical Ventilators Using Embedded Deep Learning — Date: 01/2024
+http://archium.ateneo.edu/ecce-faculty-pubs/160
+Reason: Local Archīum Ateneo (PH) work; directly about automated detection + alarms using embedded ML—relevant to SmartHub’s “detect issue → alert → report” diagnostic workflow, even if the monitored target differs.
+
+14) A Building Block Approach to Implement a Telehealth Clinic and Improve Primary Care Access in the Philippines: A Large-Scale Pilot Project — Date: 03/2024
+http://archium.ateneo.edu/asmph-pubs/149
+Reason: Local PH implementation literature; connects to SmartHub by describing operationalization of telehealth at scale (processes, constraints, integration), useful for framing deployment of diagnostic/monitoring solutions in PH settings.
+
+15) Feasibility and Validity of Using Deep Learning to Reconstruct 12-Lead ECG from Three-Lead Signals — Date: 05/2024
+http://archium.ateneo.edu/discs-faculty-pubs/408
+Reason: Local Archīum Ateneo (PH) diagnostics-adjacent work; supports SmartHub’s analytics layer by showing validation of ML transformations from limited signals—conceptually similar to inferring device/health state from partial diagnostics data.
+
+16) Perspectives on Telemedicine across Urban, Rural and Remote Areas in the Philippines During the COVID-19 Pandemic — Date: 08/2024
+http://archium.ateneo.edu/asmph-pubs/173
+Reason: Local PH telemedicine perspectives; relevant to SmartHub because diagnostic/monitoring apps must account for connectivity, access gaps, and differing user contexts across urban/rural/remote areas.
+
+17) Paper-Recorded ECG Digitization Method with Automatic Reference Voltage Selection for Telemonitoring and Diagnosis — Date: 09/2024
+http://archium.ateneo.edu/discs-faculty-pubs/422
+Reason: Local Archīum Ateneo (PH) telemonitoring/diagnosis work; connects to SmartHub via “convert raw records → structured digital signals → remote monitoring/diagnosis,” similar to transforming device logs/screenshots into actionable diagnostics.
+
+18) Digital Information Content Platform for Sustainable Education and Disaster Resilience with Telecommunications Network-Assisted Remote Monitoring and Management — Date: 10/2024
+http://archium.ateneo.edu/ecce-faculty-pubs/183
+Reason: Local repository remote monitoring/management platform; relevant to SmartHub’s server/reporting side (remote management, monitoring dashboards, operational resilience), even if applied to a different domain.
+
+19) Co-innovations and Deployments of Smart Low-Cost Phototherapy Light System — Date: 01/2025
+http://archium.ateneo.edu/ecce-faculty-pubs/187
+Reason: Local Archīum Ateneo (PH) deployment-focused monitoring system; connects to SmartHub through real-world monitoring features (threshold alarms, safety checks, telemetry) and practical deployment constraints—useful local reference for building dependable diagnostic/monitoring systems.
+
+20) Classification of Microcontroller Integrated Circuit on the Pocket of JEDEC Tray Using Convolutional Neural Network in Embedded Machine Learning System — Date: 02/2025
+http://archium.ateneo.edu/ecce-faculty-pubs/189
+Reason: Local Archīum Ateneo (PH) edge/embedded ML inspection; connects to SmartHub via automated inspection/diagnosis patterns (classification, quality/defect detection, edge deployment constraints) that are transferable to device diagnostics.

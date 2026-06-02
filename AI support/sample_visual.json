@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "analysis": {
+    "category": "Strong blue / cyan display",
+    "confidence": "medium",
+    "reasons": ["Blue channel is strongly dominant."],
+    "avg_bgr": [200, 120, 80],
+    "avg_brightness": 0.48,
+    "overheat_hint": false,
+    "malware_hint": false,
+    "screen_crack_hint": false,
+    "banding_hint": false,
+    "edge_shadow_hint": false,
+    "uniformity_score": 0.12,
+    "ocr_text_sample": "",
+    "sample": {"count": 30, "delay_ms": 500, "stability": 0.83}
+  }
+}

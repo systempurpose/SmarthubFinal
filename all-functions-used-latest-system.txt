@@ -1,0 +1,598 @@
+Latest System Function Inventory
+Generated: 2026-04-19
+Total: 590
+C#: 52
+PY: 164
+TS/JS: 374
+
+Function List:
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:70 HasArg
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:73 GetArgValue
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:85 TryGetVid
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:93 TryGetPid
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:101 TryParseVidFromPnpId
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:104 TryParsePidFromPnpId
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:107 GetStringProperty
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:122 GetMultiSzProperty
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:140 TryGetInstanceId
+[C#] Bsod tools\UsbEvidenceHelper\Program.cs:170 Main
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:128 CreatePortableDeviceManager
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:134 CreatePortableDevice
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:140 CreatePortableDeviceValues
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:149 TryGetDeviceFriendlyName
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:152 TryGetDeviceManufacturer
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:155 TryGetDeviceDescription
+[C#] Bsod tools\UsbEvidenceHelper\Wpd\WpdInterop.cs:160 TryGetString
+[C#] early_windowsapp\App.xaml.cs:10 OnStartup
+[C#] early_windowsapp\App.xaml.cs:63 IsRunningAsAdministrator
+[C#] early_windowsapp\MainWindow.xaml.cs:30 OnLoaded
+[C#] early_windowsapp\MainWindow.xaml.cs:82 EnsureBackendRunningAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:178 InitializeWebViewAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:261 CoreWebView2OnWebMessageReceived
+[C#] early_windowsapp\MainWindow.xaml.cs:347 EnsureBackendRunningAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:356 TryGetBackendInfoPath
+[C#] early_windowsapp\MainWindow.xaml.cs:389 StopExistingBackendAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:481 IsBackendHealthyAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:494 WaitForBackendReadyAsync
+[C#] early_windowsapp\MainWindow.xaml.cs:527 OnClosed
+[C#] early_windowsapp\MainWindow.xaml.cs:553 TryStopMobileDiagnosticsApp
+[C#] early_windowsapp\MainWindow.xaml.cs:589 FindBundledAdb
+[C#] early_windowsapp\MainWindow.xaml.cs:604 StartBackendIfNeeded
+[C#] early_windowsapp\MainWindow.xaml.cs:801 FindNodeExe
+[C#] early_windowsapp\MainWindow.xaml.cs:851 FindRepoRoot
+[C#] windows-app\App.xaml.cs:10 OnStartup
+[C#] windows-app\App.xaml.cs:63 IsRunningAsAdministrator
+[C#] windows-app\MainWindow.xaml.cs:30 OnLoaded
+[C#] windows-app\MainWindow.xaml.cs:82 EnsureBackendRunningAsync
+[C#] windows-app\MainWindow.xaml.cs:178 InitializeWebViewAsync
+[C#] windows-app\MainWindow.xaml.cs:261 CoreWebView2OnWebMessageReceived
+[C#] windows-app\MainWindow.xaml.cs:347 EnsureBackendRunningAsync
+[C#] windows-app\MainWindow.xaml.cs:356 TryGetBackendInfoPath
+[C#] windows-app\MainWindow.xaml.cs:389 StopExistingBackendAsync
+[C#] windows-app\MainWindow.xaml.cs:481 IsBackendHealthyAsync
+[C#] windows-app\MainWindow.xaml.cs:494 WaitForBackendReadyAsync
+[C#] windows-app\MainWindow.xaml.cs:527 OnClosed
+[C#] windows-app\MainWindow.xaml.cs:553 TryStopMobileDiagnosticsApp
+[C#] windows-app\MainWindow.xaml.cs:589 FindBundledAdb
+[C#] windows-app\MainWindow.xaml.cs:604 StartBackendIfNeeded
+[C#] windows-app\MainWindow.xaml.cs:858 ReadJsonString
+[C#] windows-app\MainWindow.xaml.cs:875 FindNodeExe
+[C#] windows-app\MainWindow.xaml.cs:925 FindRepoRoot
+[PY] AI support\ai_adb_conclude.py:24 _get
+[PY] AI support\ai_adb_conclude.py:33 _as_bool
+[PY] AI support\ai_adb_conclude.py:41 _as_number
+[PY] AI support\ai_adb_conclude.py:53 _scale_confidence_adb
+[PY] AI support\ai_adb_conclude.py:84 _default_memory_db_path
+[PY] AI support\ai_adb_conclude.py:99 _open_db
+[PY] AI support\ai_adb_conclude.py:123 _feature_tokens
+[PY] AI support\ai_adb_conclude.py:255 _hash_features
+[PY] AI support\ai_adb_conclude.py:260 _reported_problem_focus
+[PY] AI support\ai_adb_conclude.py:331 _human_join
+[PY] AI support\ai_adb_conclude.py:342 _push_cause
+[PY] AI support\ai_adb_conclude.py:350 _pick_likely_cause
+[PY] AI support\ai_adb_conclude.py:503 _jaccard
+[PY] AI support\ai_adb_conclude.py:511 _load_similar_cases
+[PY] AI support\ai_adb_conclude.py:541 _append_case
+[PY] AI support\ai_adb_conclude.py:597 _knowledge_actions
+[PY] AI support\ai_adb_conclude.py:976 build_conclusion
+[PY] AI support\ai_adb_conclude.py:1081 main
+[PY] AI support\ai_diagnose.py:57 _normalize_outcome_label
+[PY] AI support\ai_diagnose.py:81 _parse_outcome_label
+[PY] AI support\ai_diagnose.py:105 _split_outcome_parts
+[PY] AI support\ai_diagnose.py:119 _parse_outcome_labels
+[PY] AI support\ai_diagnose.py:162 _default_memory_db_path
+[PY] AI support\ai_diagnose.py:180 _case_fingerprint
+[PY] AI support\ai_diagnose.py:200 _safe_get
+[PY] AI support\ai_diagnose.py:209 _as_list
+[PY] AI support\ai_diagnose.py:215 _lower
+[PY] AI support\ai_diagnose.py:219 _softmax
+[PY] AI support\ai_diagnose.py:227 _softmax_temp
+[PY] AI support\ai_diagnose.py:237 _calibrate_top_probability
+[PY] AI support\ai_diagnose.py:280 _tokenize
+[PY] AI support\ai_diagnose.py:297 _jaccard
+[PY] AI support\ai_diagnose.py:307 _token_weight
+[PY] AI support\ai_diagnose.py:334 _weighted_jaccard
+[PY] AI support\ai_diagnose.py:346 _tfidf_idf
+[PY] AI support\ai_diagnose.py:366 _tfidf_vector
+[PY] AI support\ai_diagnose.py:387 _tfidf_cosine
+[PY] AI support\ai_diagnose.py:404 _bucket_int
+[PY] AI support\ai_diagnose.py:420 _bucket_float_0_1
+[PY] AI support\ai_diagnose.py:436 _string_similarity
+[PY] AI support\ai_diagnose.py:447 _extract_device_hints
+[PY] AI support\ai_diagnose.py:482 _is_adb_driver_transport
+[PY] AI support\ai_diagnose.py:502 _is_phone_like_portable_device
+[PY] AI support\ai_diagnose.py:518 _is_phone_like_transport_device
+[PY] AI support\ai_diagnose.py:543 _phone_like_host_usb_lists
+[PY] AI support\ai_diagnose.py:563 _host_problem_code_summary
+[PY] AI support\ai_diagnose.py:601 _native_usb_driver_issue_summary
+[PY] AI support\ai_diagnose.py:677 _eventlog_usb_issue_summary
+[PY] AI support\ai_diagnose.py:747 _pnp_snapshot_issue_summary
+[PY] AI support\ai_diagnose.py:821 _extract_feature_tokens
+[PY] AI support\ai_diagnose.py:1016 _open_memory_db
+[PY] AI support\ai_diagnose.py:1078 _memory_save_case
+[PY] AI support\ai_diagnose.py:1159 _memory_list_cases
+[PY] AI support\ai_diagnose.py:1216 _memory_get_case
+[PY] AI support\ai_diagnose.py:1271 _memory_stats
+[PY] AI support\ai_diagnose.py:1354 _memory_find_similar
+[PY] AI support\ai_diagnose.py:1472 _memory_metrics
+[PY] AI support\ai_diagnose.py:1566 _is_verified_report
+[PY] AI support\ai_diagnose.py:1606 _extract_verified_by_flags
+[PY] AI support\ai_diagnose.py:1623 _parse_pred_key
+[PY] AI support\ai_diagnose.py:1640 _count_verified_labeling
+[PY] AI support\ai_diagnose.py:1671 _verified_breakdown
+[PY] AI support\ai_diagnose.py:1743 compute_kind
+[PY] AI support\ai_diagnose.py:1744 wilson_upper_bound
+[PY] AI support\ai_diagnose.py:1907 _phase4_gate
+[PY] AI support\ai_diagnose.py:1950 _overall_rating_from_kind
+[PY] AI support\ai_diagnose.py:2063 _memory_set_case_outcome
+[PY] AI support\ai_diagnose.py:2078 _merge_outcome_labels
+[PY] AI support\ai_diagnose.py:2105 _memory_merge_case_outcome
+[PY] AI support\ai_diagnose.py:2127 _memory_label_queue
+[PY] AI support\ai_diagnose.py:2207 _detect_low_level
+[PY] AI support\ai_diagnose.py:2255 _extract_signals
+[PY] AI support\ai_diagnose.py:2303 _softmax_4
+[PY] AI support\ai_diagnose.py:2310 _classify_specific_cause
+[PY] AI support\ai_diagnose.py:2330 add
+[PY] AI support\ai_diagnose.py:2482 _classify_common_phone_causes
+[PY] AI support\ai_diagnose.py:2497 add
+[PY] AI support\ai_diagnose.py:2659 _classify_bsod5_cause
+[PY] AI support\ai_diagnose.py:2683 add
+[PY] AI support\ai_diagnose.py:2964 diagnose
+[PY] AI support\ai_diagnose.py:3056 add
+[PY] AI support\ai_diagnose.py:3774 add_action
+[PY] AI support\ai_diagnose.py:3894 add_used
+[PY] AI support\ai_diagnose.py:3899 add_missing
+[PY] AI support\ai_diagnose.py:4035 _load_json
+[PY] AI support\ai_diagnose.py:4042 _http_get_json
+[PY] AI support\ai_diagnose.py:4061 main
+[PY] AI support\ai_diagnose.py:4246 wilson_lower_bound
+[PY] AI support\ai_diagnose.py:4258 cap_from_kind
+[PY] bsod-diagnostic\bsod_diag.py:6 _run
+[PY] bsod-diagnostic\bsod_diag.py:25 detect_adb
+[PY] bsod-diagnostic\bsod_diag.py:39 detect_fastboot
+[PY] bsod-diagnostic\bsod_diag.py:55 classify_bsod
+[PY] bsod-diagnostic\bsod_diag.py:124 main
+[PY] bsod-diagnostic\bsod_gui.py:8 run_diagnostic
+[PY] bsod-diagnostic\bsod_gui.py:33 main
+[PY] bsod-diagnostic\phone_screen_diag.py:30 _wants_json_mode
+[PY] bsod-diagnostic\phone_screen_diag.py:88 _clamp
+[PY] bsod-diagnostic\phone_screen_diag.py:92 _confidence_from_strength
+[PY] bsod-diagnostic\phone_screen_diag.py:100 analyse_frame
+[PY] bsod-diagnostic\phone_screen_diag.py:292 _open_camera
+[PY] bsod-diagnostic\phone_screen_diag.py:300 _capture_frame
+[PY] bsod-diagnostic\phone_screen_diag.py:309 run_json_once
+[PY] bsod-diagnostic\phone_screen_diag.py:332 run_json_samples
+[PY] bsod-diagnostic\phone_screen_diag.py:449 _parse_arg_value
+[PY] bsod-diagnostic\phone_screen_diag.py:456 main
+[PY] pf\generate_conceptual_mapping_pdf.py:13 _box
+[PY] pf\generate_conceptual_mapping_pdf.py:51 _arrow
+[PY] pf\generate_conceptual_mapping_pdf.py:77 _connector
+[PY] pf\generate_conceptual_mapping_pdf.py:83 _ellipse_node
+[PY] pf\generate_conceptual_mapping_pdf.py:120 _cloud_node
+[PY] pf\generate_conceptual_mapping_pdf.py:163 _legend
+[PY] pf\generate_conceptual_mapping_pdf.py:212 build_pdf
+[PY] pf\generate_conceptual_mapping_pdf.py:244 polar
+[PY] pf\generate_conceptual_mapping_pdf.py:248 fits
+[PY] pf\generate_conceptual_mapping_pdf.py:258 overlaps_any
+[PY] pf\generate_conceptual_mapping_pdf.py:268 remember
+[PY] pf\generate_conceptual_mapping_pdf.py:271 place_at
+[PY] pf\generate_conceptual_mapping_pdf.py:458 main
+[PY] security-tools\apk_security_scan.py:77 run_aapt
+[PY] security-tools\apk_security_scan.py:88 parse_badging
+[PY] security-tools\apk_security_scan.py:105 parse_permissions
+[PY] security-tools\apk_security_scan.py:127 classify_permissions
+[PY] security-tools\apk_security_scan.py:150 scan_apk
+[PY] security-tools\apk_security_scan.py:173 main
+[PY] tools\generate_conceptual_mapping_docx.py:9 build_docx
+[PY] tools\generate_conceptual_mapping_docx.py:147 main
+[PY] tools\generate_conceptual_mapping_pdf.py:13 _box
+[PY] tools\generate_conceptual_mapping_pdf.py:51 _arrow
+[PY] tools\generate_conceptual_mapping_pdf.py:77 _connector
+[PY] tools\generate_conceptual_mapping_pdf.py:83 _ellipse_node
+[PY] tools\generate_conceptual_mapping_pdf.py:120 _cloud_node
+[PY] tools\generate_conceptual_mapping_pdf.py:163 _legend
+[PY] tools\generate_conceptual_mapping_pdf.py:212 build_pdf
+[PY] tools\generate_conceptual_mapping_pdf.py:245 polar
+[PY] tools\generate_conceptual_mapping_pdf.py:249 fits
+[PY] tools\generate_conceptual_mapping_pdf.py:259 overlaps_any
+[PY] tools\generate_conceptual_mapping_pdf.py:269 remember
+[PY] tools\generate_conceptual_mapping_pdf.py:272 place_at
+[PY] tools\generate_conceptual_mapping_pdf.py:484 draw_wrapped_bullet
+[PY] tools\generate_conceptual_mapping_pdf.py:561 main
+[PY] tools\generate_data_dictionary_docx.py:21 shade_cell
+[PY] tools\generate_data_dictionary_docx.py:30 set_cell_text
+[PY] tools\generate_data_dictionary_docx.py:44 add_section
+[PY] tools\generate_data_dictionary_docx.py:77 erd_sections
+[PY] tools\generate_data_dictionary_docx.py:161 generate_document
+[PY] tools\generate_data_dictionary_docx.py:201 main
+[PY] tools\generate_gane_sarson_dfd_docx.py:9 add_bullets
+[PY] tools\generate_gane_sarson_dfd_docx.py:14 add_arrows_table
+[PY] tools\generate_gane_sarson_dfd_docx.py:32 add_level_section
+[PY] tools\generate_gane_sarson_dfd_docx.py:55 build_doc
+[PY] tools\generate_gane_sarson_dfd_docx.py:173 main
+[PY] tools\inspect_docx_tables.py:8 _clean
+[PY] tools\inspect_docx_tables.py:12 main
+[PY] tools\update_chapter3_data_dictionary_descriptions.py:15 iter_block_items
+[PY] tools\update_chapter3_data_dictionary_descriptions.py:24 insert_paragraph_after
+[PY] tools\update_chapter3_data_dictionary_descriptions.py:33 is_effectively_empty_paragraph
+[PY] tools\update_chapter3_data_dictionary_descriptions.py:37 ensure_description_after_heading
+[PY] tools\update_chapter3_data_dictionary_descriptions.py:88 main
+[PY] tools\validate_offline_ai.py:27 _load_json
+[PY] tools\validate_offline_ai.py:37 _synthetic_connection
+[PY] tools\validate_offline_ai.py:53 _get_conf
+[PY] tools\validate_offline_ai.py:65 main
+[PY] tools\validate_offline_ai.py:141 pct
+[TS/JS] js\advice.js:184 attachAdviceButton
+[TS/JS] js\advice.js:230 generateDynamicAdvice
+[TS/JS] js\advice.js:377 showAdviceTooltip
+[TS/JS] js\advice.js:477 monitorDiagnosticResults
+[TS/JS] js\advice.js:510 processAdviceForBadge
+[TS/JS] js\auth.js:18 resolveReadyOnce
+[TS/JS] js\auth.js:26 readStoredToken
+[TS/JS] js\auth.js:34 readStoredUser
+[TS/JS] js\auth.js:46 storeSession
+[TS/JS] js\auth.js:60 clearSession
+[TS/JS] js\auth.js:70 isBackendUrl
+[TS/JS] js\auth.js:75 wrapFetchWithAuthHeader
+[TS/JS] js\auth.js:123 safeJson
+[TS/JS] js\auth.js:131 formatDate
+[TS/JS] js\auth.js:141 setAuthStatus
+[TS/JS] js\auth.js:149 verifySavedSession
+[TS/JS] js\auth.js:212 requestLogin
+[TS/JS] js\auth.js:230 requestRegister
+[TS/JS] js\auth.js:248 requestForgotPassword
+[TS/JS] js\auth.js:266 showAuthenticatedUi
+[TS/JS] js\auth.js:294 showUnauthenticatedUi
+[TS/JS] js\auth.js:309 logoutAndReload
+[TS/JS] js\auth.js:327 bootAuthUi
+[TS/JS] js\auth.js:365 setMode
+[TS/JS] js\auth.js:392 setBusy
+[TS/JS] js\auth.js:402 tryRestoreSavedSession
+[TS/JS] js\devices.js:1 openDeviceDetailsModal
+[TS/JS] js\devices.js:19 getDeviceHeadingFromEl
+[TS/JS] js\devices.js:25 readTextContent
+[TS/JS] js\devices.js:32 setBadge
+[TS/JS] js\devices.js:200 isLikelyDeviceDisconnectedError
+[TS/JS] js\devices.js:213 recordSecurityScanFailure
+[TS/JS] js\devices.js:287 i18n
+[TS/JS] js\devices.js:296 refresh
+[TS/JS] js\devices.js:393 escapeHtml
+[TS/JS] js\devices.js:402 pickPrimaryPortableDevice
+[TS/JS] js\devices.js:412 filterPhonePortableDevices
+[TS/JS] js\devices.js:809 inferCategory
+[TS/JS] js\devices.js:852 applyBadge
+[TS/JS] js\devices.js:909 describe
+[TS/JS] js\devices.js:932 parseGetprop
+[TS/JS] js\devices.js:1079 setSpecValue
+[TS/JS] js\devices.js:1086 hideSpecRowIfUnknown
+[TS/JS] js\devices.js:1203 cpuFromCpuInfo
+[TS/JS] js\devices.js:1207 find
+[TS/JS] js\devices.js:1337 applyBadge
+[TS/JS] js\devices.js:1371 inferCategory
+[TS/JS] js\diagnostics.js:77 readSmartHubOnlineAiStatus
+[TS/JS] js\diagnostics.js:91 renderSmartHubAiTitle
+[TS/JS] js\diagnostics.js:99 renderAdbAiConclusion
+[TS/JS] js\diagnostics.js:242 ensureDiagStepsContainer
+[TS/JS] js\diagnostics.js:268 setDiagStatus
+[TS/JS] js\diagnostics.js:281 updateDiagStagesFromSummary
+[TS/JS] js\diagnostics.js:302 isFullDiagnosticInProgress
+[TS/JS] js\diagnostics.js:771 setLiveCheckStatus
+[TS/JS] js\diagnostics.js:790 renderOrUpdateLiveChecksInModal
+[TS/JS] js\diagnostics.js:842 updateLiveDiagnosticModal
+[TS/JS] js\diagnostics.js:861 registerPendingDiagnosticResult
+[TS/JS] js\diagnostics.js:1272 openDiagnosticModal
+[TS/JS] js\diagnostics.js:1612 showModalStepDetail
+[TS/JS] js\diagnostics.js:1619 presenceLabel
+[TS/JS] js\diagnostics.js:1625 valueOrNA
+[TS/JS] js\diagnostics.js:2104 renderAppList
+[TS/JS] js\diagnostics.js:2402 runSequentialDiagnosticsForDevice
+[TS/JS] js\diagnostics.js:2463 runFileScanForDevice
+[TS/JS] js\history.js:15 escapeHtml
+[TS/JS] js\history.js:24 normalizeHistoryType
+[TS/JS] js\history.js:35 getHistoryTypeForRun
+[TS/JS] js\history.js:59 getHistoryTypeLabel
+[TS/JS] js\history.js:63 rememberBsodHistoryKey
+[TS/JS] js\history.js:81 getRememberedBsodHistoryKeys
+[TS/JS] js\history.js:95 getDeviceLabelFromEl
+[TS/JS] js\history.js:130 isGenericPhoneLabel
+[TS/JS] js\history.js:136 looksLikeDeviceSerial
+[TS/JS] js\history.js:145 normalizePhoneName
+[TS/JS] js\history.js:158 readPhoneNameMap
+[TS/JS] js\history.js:171 rememberPhoneNameByDeviceId
+[TS/JS] js\history.js:185 getStoredPhoneNameByDeviceId
+[TS/JS] js\history.js:194 getConnectedPhoneNameByDeviceId
+[TS/JS] js\history.js:224 getRunPhoneDisplayName
+[TS/JS] js\history.js:267 fetchHistory
+[TS/JS] js\history.js:286 formatHistoryIssueSummary
+[TS/JS] js\history.js:296 splitRecommendedActions
+[TS/JS] js\history.js:305 parseBsodReportText
+[TS/JS] js\history.js:368 normalizeConfidence
+[TS/JS] js\history.js:376 normalizeOnlineAiUsed
+[TS/JS] js\history.js:386 toTitleCaseWord
+[TS/JS] js\history.js:392 dedupeLines
+[TS/JS] js\history.js:405 normalizeBsodVerdictFromText
+[TS/JS] js\history.js:414 inferPhoneDetectedLabel
+[TS/JS] js\history.js:450 inferBsodVerdict
+[TS/JS] js\history.js:517 buildBsodHistoryViewModel
+[TS/JS] js\history.js:590 renderBsodHistoryCardHtml
+[TS/JS] js\history.js:646 openBsodHistoryResultModal
+[TS/JS] js\history.js:685 openHistoryResult
+[TS/JS] js\history.js:706 buildHistoryFilterRow
+[TS/JS] js\history.js:716 renderHistoryList
+[TS/JS] js\history.js:771 collectHistoryDeviceKeysFromUi
+[TS/JS] js\history.js:800 fetchMergedHistoryForModal
+[TS/JS] js\history.js:825 renderHistoryBrowserList
+[TS/JS] js\history.js:881 renderHistoryBrowserModal
+[TS/JS] js\history.js:909 openGlobalHistoryModal
+[TS/JS] js\i18n.js:311 getCurrentLang
+[TS/JS] js\i18n.js:321 format
+[TS/JS] js\i18n.js:330 t
+[TS/JS] js\i18n.js:337 applyTranslations
+[TS/JS] js\i18n.js:368 setCurrentLang
+[TS/JS] js\ui.js:4 i18nApi
+[TS/JS] js\ui.js:20 openQuickNoDebugModal
+[TS/JS] js\ui.js:29 pushUpdate
+[TS/JS] js\ui.js:218 classifyStatus
+[TS/JS] js\ui.js:534 openBsodDiagnoseModal
+[TS/JS] js\ui.js:598 setBsodSaveStatus
+[TS/JS] js\ui.js:608 rememberBsodHistoryKey
+[TS/JS] js\ui.js:632 setSummaryBadge
+[TS/JS] js\ui.js:642 updateTwoLineBadges
+[TS/JS] js\ui.js:683 setLoading
+[TS/JS] js\ui.js:688 setStatus
+[TS/JS] js\ui.js:699 buildConnectionWithTechConfirm
+[TS/JS] js\ui.js:713 renderHostEvidenceCard
+[TS/JS] js\ui.js:957 escapeHtml
+[TS/JS] js\ui.js:970 setNoDeviceUiMode
+[TS/JS] js\ui.js:979 renderNextSteps
+[TS/JS] js\ui.js:992 renderTopReasons
+[TS/JS] js\ui.js:998 normalizeBsodReason
+[TS/JS] js\ui.js:1119 inferBsodPart1FromSignals
+[TS/JS] js\ui.js:1311 inferSignalDiagnosis
+[TS/JS] js\ui.js:1413 mapBsod5KeyToLabel
+[TS/JS] js\ui.js:1575 renderAiConclusion
+[TS/JS] js\ui.js:1586 tMaybe
+[TS/JS] js\ui.js:1591 readSmartHubOnlineAiStatus
+[TS/JS] js\ui.js:1603 renderSmartHubAiTitle
+[TS/JS] js\ui.js:1610 renderBsodHighlightRow
+[TS/JS] js\ui.js:1646 mapCause
+[TS/JS] js\ui.js:1658 mapBsod5KeyToLabel
+[TS/JS] js\ui.js:1674 renderSimilarCases
+[TS/JS] js\ui.js:1696 renderOnlineAiSummary
+[TS/JS] js\ui.js:1830 renderFallback
+[TS/JS] js\ui.js:1979 fmtAgeShort
+[TS/JS] js\ui.js:2115 getNeeded
+[TS/JS] js\ui.js:2144 mapCommonLabel
+[TS/JS] js\ui.js:2296 mapEvidenceKey
+[TS/JS] js\ui.js:2306 mapBsod5ToCauseGroup
+[TS/JS] js\ui.js:2643 fmt
+[TS/JS] js\ui.js:2853 fmt
+[TS/JS] js\ui.js:3113 autoRememberAiCase
+[TS/JS] js\ui.js:3174 runCameraCheck
+[TS/JS] js\ui.js:3354 runChecks
+[TS/JS] js\ui.js:5136 bindBlueTestButton
+[TS/JS] js\ui.js:5178 openTestDeviceModal
+[TS/JS] js\ui.js:5298 runGlobalSecurityScan
+[TS/JS] js\ui.js:5596 refreshOnlineAiStatusHint
+[TS/JS] js\ui.js:5651 applyReadOnlyUiState
+[TS/JS] js\ui.js:5703 getStoredReadOnlyPreference
+[TS/JS] js\ui.js:5711 storeReadOnlyPreference
+[TS/JS] js\ui.js:5719 fetchReadOnlyFromServer
+[TS/JS] js\ui.js:5734 setReadOnlyOnServer
+[TS/JS] js\ui.js:6270 downloadApkFallback
+[TS/JS] src\adb.ts:17 sleep
+[TS/JS] src\adb.ts:21 waitForCooldown
+[TS/JS] src\adb.ts:29 startCooldown
+[TS/JS] src\adb.ts:35 extractDeviceId
+[TS/JS] src\adb.ts:45 isDisallowedNonUsbAdbTarget
+[TS/JS] src\adb.ts:54 assertUsbOnlyTarget
+[TS/JS] src\adb.ts:72 isTransientAdbError
+[TS/JS] src\adb.ts:87 isWriteClosedError
+[TS/JS] src\adb.ts:92 bestEffortAdbReconnect
+[TS/JS] src\adb.ts:108 isAdbSafetyEnabled
+[TS/JS] src\adb.ts:115 describeBlockedAdb
+[TS/JS] src\adb.ts:120 assertAdbCommandSafe
+[TS/JS] src\adb.ts:175 execAdbWithRetry
+[TS/JS] src\adb.ts:208 execAdbWithRetryOptions
+[TS/JS] src\adb.ts:247 tryFindAndroidSdkAdb
+[TS/JS] src\adb.ts:273 adbWithOptions
+[TS/JS] src\adb.ts:327 adb
+[TS/JS] src\adb.ts:342 adbWithLimits
+[TS/JS] src\adb.ts:353 listDevices
+[TS/JS] src\adb.ts:437 screencap
+[TS/JS] src\adb.ts:474 parseSnapshotSections
+[TS/JS] src\adb.ts:499 diagnosticSnapshot
+[TS/JS] src\adb.ts:567 basicSnapshot
+[TS/JS] src\adb.ts:599 dumpsysDisplay
+[TS/JS] src\adb.ts:603 surfaceFlinger
+[TS/JS] src\adb.ts:607 logcatErrors
+[TS/JS] src\adb.ts:611 logcatWarnings
+[TS/JS] src\adb.ts:617 deviceProps
+[TS/JS] src\adb.ts:621 battery
+[TS/JS] src\adb.ts:625 storage
+[TS/JS] src\adb.ts:629 memoryInfo
+[TS/JS] src\adb.ts:640 listApps
+[TS/JS] src\adb.ts:662 packagePermissions
+[TS/JS] src\adb.ts:674 getInstallerMap
+[TS/JS] src\adb.ts:691 sensors
+[TS/JS] src\adb.ts:695 cameraInfo
+[TS/JS] src\adb.ts:699 connectivityInfo
+[TS/JS] src\adb.ts:703 hardwareFeatures
+[TS/JS] src\adb.ts:707 pull
+[TS/JS] src\adbDiagnostics.ts:13 getMobileAppState
+[TS/JS] src\adbDiagnostics.ts:48 notifyMobileDiagnostic
+[TS/JS] src\adbDiagnostics.ts:59 beginMobileDiagnostic
+[TS/JS] src\adbDiagnostics.ts:67 endMobileDiagnostic
+[TS/JS] src\adbDiagnostics.ts:77 pickPrimaryDeviceId
+[TS/JS] src\bsodTransportProfiles.ts:101 summarizeTransportProfile
+[TS/JS] src\heuristics.ts:13 analyzeBattery
+[TS/JS] src\heuristics.ts:52 parseBatteryBool
+[TS/JS] src\heuristics.ts:61 parseBatteryInt
+[TS/JS] src\heuristics.ts:68 parseBatteryStatusToken
+[TS/JS] src\heuristics.ts:76 isChargingFromDump
+[TS/JS] src\heuristics.ts:87 analyzeBatteryConnection
+[TS/JS] src\heuristics.ts:140 analyzeBatteryConnectionSeries
+[TS/JS] src\heuristics.ts:258 analyzeStorage
+[TS/JS] src\heuristics.ts:318 analyzeOsPatchLevel
+[TS/JS] src\heuristics.ts:359 analyzeMemoryHealth
+[TS/JS] src\heuristics.ts:395 analyzeLogs
+[TS/JS] src\heuristics.ts:448 uniqueSample
+[TS/JS] src\heuristics.ts:462 analyzeUsbInstability
+[TS/JS] src\heuristics.ts:544 thermalStatusName
+[TS/JS] src\heuristics.ts:565 analyzeThermalThrottling
+[TS/JS] src\heuristics.ts:610 analyzeRadioModemStability
+[TS/JS] src\heuristics.ts:695 sampleLines
+[TS/JS] src\heuristics.ts:709 inferShutdownCause
+[TS/JS] src\heuristics.ts:823 assessAppRisk
+[TS/JS] src\heuristics.ts:843 classifyAppRisk
+[TS/JS] src\heuristics.ts:852 scoreAppRisk
+[TS/JS] src\heuristics.ts:978 isHighRiskByPermissions
+[TS/JS] src\heuristics.ts:987 isFromLegitStore
+[TS/JS] src\heuristics.ts:1033 detectSuspiciousApps
+[TS/JS] src\heuristics.ts:1222 analyzeApps
+[TS/JS] src\historyStore.ts:5 loadHistoryFromDisk
+[TS/JS] src\historyStore.ts:16 saveHistoryToDisk
+[TS/JS] src\lib\historyStore.ts:117 loadHistoryFromDisk
+[TS/JS] src\lib\historyStore.ts:128 saveHistoryToDisk
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:50 tableCandidates
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:59 isMissingTableError
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:68 isDeviceForeignKeyError
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:77 isOwnerForeignKeyError
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:86 isRunForeignKeyError
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:94 inferDeviceLabel
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:117 ensureDeviceReference
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:184 ensureOwnerReference
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:231 ensureRunReference
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:314 envString
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:322 readObjectString
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:332 loadSupabaseConfigFromLocalFile
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:417 getDiagnosticsCloudConfig
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:466 getDiagnosticsCloudClient
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:486 toJsonSafe
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:494 parseJsonIfString
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:505 toEpochMs
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:528 isRetryableSupabaseError
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:545 sleep
+[TS/JS] src\lib\supabaseDiagnosticsStore.ts:549 saveDiagnosticRunToCloud
+[TS/JS] src\onDeviceReport.ts:6 loadOnDeviceReport
+[TS/JS] src\pythonResolver.ts:36 isLikelyBrokenWindowsPythonPath
+[TS/JS] src\pythonResolver.ts:45 probePythonVersion
+[TS/JS] src\pythonResolver.ts:67 resolvePythonCommand
+[TS/JS] src\routes\aiRoutes.ts:12 resolveAiSupportScriptPath
+[TS/JS] src\routes\aiRoutes.ts:65 isAiOutcomeKey
+[TS/JS] src\routes\aiRoutes.ts:69 isAiExtendedOutcome
+[TS/JS] src\routes\aiRoutes.ts:85 runAiDiagnoseScript
+[TS/JS] src\routes\aiRoutes.ts:170 runAiAdbConcludeScript
+[TS/JS] src\routes\aiRoutes.ts:214 normalizeNoDebugAiReport
+[TS/JS] src\routes\aiRoutes.ts:217 firstText
+[TS/JS] src\routes\aiRoutes.ts:360 registerAiRoutes
+[TS/JS] src\routes\authRoutes.ts:32 envString
+[TS/JS] src\routes\authRoutes.ts:40 readObjectString
+[TS/JS] src\routes\authRoutes.ts:50 loadSupabaseConfigFromLocalFile
+[TS/JS] src\routes\authRoutes.ts:148 getSupabaseConfig
+[TS/JS] src\routes\authRoutes.ts:204 getOfflineDays
+[TS/JS] src\routes\authRoutes.ts:211 getSupabaseClient
+[TS/JS] src\routes\authRoutes.ts:229 readBearerToken
+[TS/JS] src\routes\authRoutes.ts:235 toPublicUser
+[TS/JS] src\routes\authRoutes.ts:243 pickDisplayName
+[TS/JS] src\routes\authRoutes.ts:257 createLocalSessionForUser
+[TS/JS] src\routes\authRoutes.ts:274 isMissingTableError
+[TS/JS] src\routes\authRoutes.ts:283 isMissingColumnError
+[TS/JS] src\routes\authRoutes.ts:294 syncAppUserProfile
+[TS/JS] src\routes\authRoutes.ts:369 loadLocalAuthSession
+[TS/JS] src\routes\authRoutes.ts:401 saveLocalAuthSession
+[TS/JS] src\routes\authRoutes.ts:406 clearLocalAuthSession
+[TS/JS] src\routes\authRoutes.ts:414 verifyLocalToken
+[TS/JS] src\routes\authRoutes.ts:427 registerAuthRoutes
+[TS/JS] src\routes\authRoutes.ts:762 createAuthMiddleware
+[TS/JS] src\routes\blueTestRoutes.ts:5 sanitizeDeviceId
+[TS/JS] src\routes\blueTestRoutes.ts:15 resolveTargetDeviceId
+[TS/JS] src\routes\blueTestRoutes.ts:21 setMediaVolumeToMax
+[TS/JS] src\routes\blueTestRoutes.ts:48 tryVibrateViaCmd
+[TS/JS] src\routes\blueTestRoutes.ts:71 registerBlueTestRoutes
+[TS/JS] src\routes\collectRoutes.ts:33 loadOnDeviceReport
+[TS/JS] src\routes\collectRoutes.ts:70 buildCollectDeviceLabel
+[TS/JS] src\routes\collectRoutes.ts:87 countFindingsBySeverity
+[TS/JS] src\routes\collectRoutes.ts:100 buildCollectTextReport
+[TS/JS] src\routes\collectRoutes.ts:118 autoSaveCollectResultToHistory
+[TS/JS] src\routes\collectRoutes.ts:161 registerCollectRoutes
+[TS/JS] src\routes\connectionCheckRoutes.ts:89 sanitizeHistoryKeyPart
+[TS/JS] src\routes\connectionCheckRoutes.ts:97 toStringArray
+[TS/JS] src\routes\connectionCheckRoutes.ts:102 normalizeQueryForHistory
+[TS/JS] src\routes\connectionCheckRoutes.ts:115 confidenceToCounts
+[TS/JS] src\routes\connectionCheckRoutes.ts:122 resolveBsodHistoryIdentity
+[TS/JS] src\routes\connectionCheckRoutes.ts:180 autoSaveBsodHistoryRun
+[TS/JS] src\routes\connectionCheckRoutes.ts:255 extractFirstHResultHex
+[TS/JS] src\routes\connectionCheckRoutes.ts:261 isHostWpdUnsupportedError
+[TS/JS] src\routes\connectionCheckRoutes.ts:284 clampNumber
+[TS/JS] src\routes\connectionCheckRoutes.ts:322 median
+[TS/JS] src\routes\connectionCheckRoutes.ts:330 sleep
+[TS/JS] src\routes\connectionCheckRoutes.ts:334 parseVidPidFromInstanceId
+[TS/JS] src\routes\connectionCheckRoutes.ts:349 isSuspectMtpHResult
+[TS/JS] src\routes\connectionCheckRoutes.ts:368 resolveBsodToolExePath
+[TS/JS] src\routes\connectionCheckRoutes.ts:385 resolveUsbEvidenceHelperExePath
+[TS/JS] src\routes\connectionCheckRoutes.ts:429 getWindowsUsbSnapshot
+[TS/JS] src\routes\connectionCheckRoutes.ts:501 sampleWindowsUsb
+[TS/JS] src\routes\connectionCheckRoutes.ts:530 runWpdMtpProbe
+[TS/JS] src\routes\connectionCheckRoutes.ts:599 runWpdMtpPing
+[TS/JS] src\routes\connectionCheckRoutes.ts:665 runShellMtpProbe
+[TS/JS] src\routes\connectionCheckRoutes.ts:737 listFastbootDevices
+[TS/JS] src\routes\connectionCheckRoutes.ts:753 registerConnectionCheckRoutes
+[TS/JS] src\routes\connectionCheckRoutes.ts:912 snapshotStillEnumerated
+[TS/JS] src\routes\deepScanRoutes.ts:11 normalizeFindings
+[TS/JS] src\routes\deepScanRoutes.ts:25 summarizeCauses
+[TS/JS] src\routes\deepScanRoutes.ts:45 registerDeepScanRoutes
+[TS/JS] src\routes\deviceRoutes.ts:5 registerDeviceRoutes
+[TS/JS] src\routes\installRoutes.ts:7 registerInstallRoutes
+[TS/JS] src\routes\onDeviceReportRoutes.ts:4 registerOnDeviceReportRoutes
+[TS/JS] src\routes\onlineAiRoutes.ts:36 envString
+[TS/JS] src\routes\onlineAiRoutes.ts:44 readObjectString
+[TS/JS] src\routes\onlineAiRoutes.ts:54 loadOnlineAiConfigFromLocalFile
+[TS/JS] src\routes\onlineAiRoutes.ts:110 loadOnlineAiDiskConfig
+[TS/JS] src\routes\onlineAiRoutes.ts:126 saveOnlineAiDiskConfig
+[TS/JS] src\routes\onlineAiRoutes.ts:135 getOnlineAiConfig
+[TS/JS] src\routes\onlineAiRoutes.ts:187 getMergedOnlineAiConfig
+[TS/JS] src\routes\onlineAiRoutes.ts:209 isInternetLikelyRequiredError
+[TS/JS] src\routes\onlineAiRoutes.ts:221 normalizeText
+[TS/JS] src\routes\onlineAiRoutes.ts:228 extractErrorCodes
+[TS/JS] src\routes\onlineAiRoutes.ts:240 uniqueText
+[TS/JS] src\routes\onlineAiRoutes.ts:255 collectFeatureSignals
+[TS/JS] src\routes\onlineAiRoutes.ts:323 buildWebSearchQueries
+[TS/JS] src\routes\onlineAiRoutes.ts:348 hostFromUrl
+[TS/JS] src\routes\onlineAiRoutes.ts:356 pushCitation
+[TS/JS] src\routes\onlineAiRoutes.ts:382 collectDuckTopics
+[TS/JS] src\routes\onlineAiRoutes.ts:409 fetchDuckDuckGoEvidence
+[TS/JS] src\routes\onlineAiRoutes.ts:468 lookupWebEvidence
+[TS/JS] src\routes\onlineAiRoutes.ts:503 appendCitationFooter
+[TS/JS] src\routes\onlineAiRoutes.ts:514 buildPromptFromFeatures
+[TS/JS] src\routes\onlineAiRoutes.ts:552 callOnlineAiApi
+[TS/JS] src\routes\onlineAiRoutes.ts:610 registerOnlineAiRoutes
+[TS/JS] src\routes\screenRoutes.ts:14 registerScreenRoutes
+[TS/JS] src\server.ts:81 envBool
+[TS/JS] src\server.ts:91 isAllowedOrigin
+[TS/JS] src\server.ts:102 isLoopbackAddress
+[TS/JS] src\server.ts:161 isReadOnlyEnabled
+[TS/JS] src\server.ts:244 duMap
+[TS/JS] src\server.ts:267 findCodeBytes
+[TS/JS] src\server.ts:400 runDeepApkScan
+[TS/JS] src\server.ts:1046 cleanupProcessInfo
+[TS/JS] src\serverConfig.ts:18 looksLikeSourceCheckout
+[TS/JS] src\serverConfig.ts:50 ensureServerDataDirs
+[TS/JS] src\serverContext.ts:34 loadSmartLinkConfig
+[TS/JS] src\serverContext.ts:47 findSmartLinkPairing
+[TS/JS] src\serverContext.ts:63 createSmartLinkChallengeId
+[TS/JS] src\serverContext.ts:67 verifySmartLinkSignature
+[TS/JS] src\serverContext.ts:113 isLikelyBrokenWindowsPythonPath
+[TS/JS] src\serverContext.ts:122 probePythonVersion
+[TS/JS] src\serverContext.ts:144 resolvePythonCommand
+[TS/JS] src\serverContext.ts:235 safeDeviceKey
+[TS/JS] src\serverContext.ts:239 ensureBaseDirs
+[TS/JS] src\serverContext.ts:264 getMobileAppState
+[TS/JS] src\serverContext.ts:299 notifyMobileDiagnostic
+[TS/JS] src\serverContext.ts:310 beginMobileDiagnostic
+[TS/JS] src\serverContext.ts:318 endMobileDiagnostic
+[TS/JS] src\serverContext.ts:328 pickPrimaryDeviceId
+[TS/JS] src\serverContext.ts:339 tmpDirPath
+[TS/JS] src\utils.ts:1 safeDeviceKey
+[TS/JS] src\utils.ts:5 isSafeLocalFilename
+[TS/JS] src\utils.ts:19 parseGetpropOutput

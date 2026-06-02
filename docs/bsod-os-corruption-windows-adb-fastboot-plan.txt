@@ -1,0 +1,37 @@
+BSOD OS Corruption Detection — Windows (ADB/Fastboot over USB)
+SmartHub Plan + Implementation Notes
+Last updated: 2026-04-29
+
+Purpose
+- Implement a BSOD-only diagnostic module that infers Android OS corruption/instability using:
+  - ADB (read-only commands)
+  - Fastboot (bootloader variables)
+- No root required.
+- Works even when Android OS is partially broken (if ADB or fastboot mode is reachable).
+
+Where this is implemented in SmartHub
+- Backend: BSOD `/connection-check` endpoint
+- Code module: `src/bsod/osCorruptionWindows/*`
+- Output field: `osCorruption` is attached to the `/connection-check` JSON response and included in BSOD autosave payload.
+
+Core Signals (weights)
+- Unexplained reboot (uptime < 5 min, needs previous sample): +20
+- Kernel panic evidence in pstore (`/sys/fs/pstore/console-ramoops*`): +60
+- Recovery log indicates crash/panic/watchdog (`/cache/recovery/last_log`): +40
+- Bootloop suspected (>= 3 reboots within 5 minutes): +45
+- Bootloader unlocked (fastboot getvar): +20
+- Logcat panic/watchdog/system_server keywords: +35
+
+Thresholds
+- Score >= 60: High confidence OS corruption / crash evidence
+- Score >= 40: Likely OS instability (software issue likely)
+- Score < 40: No strong signs of OS corruption
+
+Important design rules
+- Additive only: must NOT change existing BSOD verdict logic (classification stays separate).
+- Read-only ADB usage: no `adb reboot`, no state changes.
+- Be honest: absence of evidence != proof of no corruption.
+
+Notes
+- Bootloop detection is probabilistic because the host only sees USB/ADB transitions.
+- pstore and recovery logs vary by OEM; collectors must be best-effort.

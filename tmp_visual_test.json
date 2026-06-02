@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "analysis": {
+    "category": "Dark",
+    "confidence": "medium",
+    "reasons": ["Synthetic test case"],
+    "avg_bgr": [5, 5, 5],
+    "avg_brightness": 0.05,
+    "overheat_hint": false,
+    "malware_hint": false,
+    "screen_crack_hint": true,
+    "banding_hint": true,
+    "edge_shadow_hint": true,
+    "systemui_dialog_hint": true,
+    "anr_dialog_hint": true,
+    "uniformity_score": 0.2,
+    "ocr_text_sample": "System UI isn't responding\nApp isn't responding",
+    "sample": {"count": 30, "delay_ms": 500, "stability": 1.0}
+  }
+}

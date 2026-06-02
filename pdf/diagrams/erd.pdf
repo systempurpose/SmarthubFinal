@@ -1,0 +1,662 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 6599 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — ERD \(Crow's Foot Notation\)) Tj
+ET
+BT
+/F1 10 Tf
+40 545 Td
+(Storage: JSON/files \(runs, screenshots, USB evidence\) + SQLite \(offline AI memory\).) Tj
+ET
+40 355 240 170 re
+S
+40 491 m
+280 491 l
+S
+92 355 m
+92 491 l
+S
+BT
+/F1 12 Tf
+138 503 Td
+(Technician) Tj
+ET
+40 473 m
+280 473 l
+S
+BT
+/F1 10 Tf
+50 479 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+102 480 Td
+(technician_id INT) Tj
+ET
+40 455 m
+280 455 l
+S
+BT
+/F1 9 Tf
+102 462 Td
+(username VARCHAR\(50\) UNIQUE) Tj
+ET
+40 437 m
+280 437 l
+S
+BT
+/F1 9 Tf
+102 444 Td
+(password_hash VARCHAR\(255\)) Tj
+ET
+40 419 m
+280 419 l
+S
+BT
+/F1 9 Tf
+102 426 Td
+(name VARCHAR\(80\)) Tj
+ET
+40 401 m
+280 401 l
+S
+BT
+/F1 9 Tf
+102 408 Td
+(Stored: SQLite \(recommended\)) Tj
+ET
+310 355 260 170 re
+S
+310 491 m
+570 491 l
+S
+362 355 m
+362 491 l
+S
+BT
+/F1 12 Tf
+411.40 503 Td
+(DiagnosticRun) Tj
+ET
+310 473 m
+570 473 l
+S
+BT
+/F1 10 Tf
+320 479 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+372 480 Td
+(run_id VARCHAR\(40\)) Tj
+ET
+310 455 m
+570 455 l
+S
+BT
+/F1 10 Tf
+320 461 Td
+(FK) Tj
+ET
+BT
+/F1 9 Tf
+372 462 Td
+(technician_id INT \(logical\)) Tj
+ET
+310 437 m
+570 437 l
+S
+BT
+/F1 9 Tf
+372 444 Td
+(created_at INT \(epoch ms\)) Tj
+ET
+310 419 m
+570 419 l
+S
+BT
+/F1 9 Tf
+372 426 Td
+(mode VARCHAR\(16\)) Tj
+ET
+310 401 m
+570 401 l
+S
+BT
+/F1 9 Tf
+372 408 Td
+(device_primary VARCHAR\(120\)) Tj
+ET
+310 383 m
+570 383 l
+S
+BT
+/F1 9 Tf
+372 390 Td
+(device_info VARCHAR\(4000\) \(JSON\)) Tj
+ET
+310 365 m
+570 365 l
+S
+BT
+/F1 9 Tf
+372 372 Td
+(result_summary VARCHAR\(1500\)) Tj
+ET
+600 355 240 170 re
+S
+600 491 m
+840 491 l
+S
+652 355 m
+652 491 l
+S
+BT
+/F1 12 Tf
+698 503 Td
+(Screenshot) Tj
+ET
+600 473 m
+840 473 l
+S
+BT
+/F1 10 Tf
+610 479 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+662 480 Td
+(screenshot_id VARCHAR\(40\)) Tj
+ET
+600 455 m
+840 455 l
+S
+BT
+/F1 10 Tf
+610 461 Td
+(FK) Tj
+ET
+BT
+/F1 9 Tf
+662 462 Td
+(run_id VARCHAR\(40\) \(logical\)) Tj
+ET
+600 437 m
+840 437 l
+S
+BT
+/F1 9 Tf
+662 444 Td
+(file_path VARCHAR\(260\)) Tj
+ET
+600 419 m
+840 419 l
+S
+BT
+/F1 9 Tf
+662 426 Td
+(taken_at INT \(epoch ms\)) Tj
+ET
+600 401 m
+840 401 l
+S
+BT
+/F1 9 Tf
+662 408 Td
+(Stored: screenshots/*.png) Tj
+ET
+40 140 240 195 re
+S
+40 301 m
+280 301 l
+S
+92 140 m
+92 301 l
+S
+BT
+/F1 12 Tf
+122.60 313 Td
+(BsodUsbOnlyReport) Tj
+ET
+40 283 m
+280 283 l
+S
+BT
+/F1 10 Tf
+50 289 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+102 290 Td
+(report_id VARCHAR\(40\)) Tj
+ET
+40 265 m
+280 265 l
+S
+BT
+/F1 10 Tf
+50 271 Td
+(FK) Tj
+ET
+BT
+/F1 9 Tf
+102 272 Td
+(run_id VARCHAR\(40\) \(logical\)) Tj
+ET
+40 247 m
+280 247 l
+S
+BT
+/F1 9 Tf
+102 254 Td
+(bsod_category VARCHAR\(40\)) Tj
+ET
+40 229 m
+280 229 l
+S
+BT
+/F1 9 Tf
+102 236 Td
+(confidence VARCHAR\(10\)) Tj
+ET
+40 211 m
+280 211 l
+S
+BT
+/F1 9 Tf
+102 218 Td
+(primary_reason VARCHAR\(800\)) Tj
+ET
+40 193 m
+280 193 l
+S
+BT
+/F1 9 Tf
+102 200 Td
+(usb_signals_json VARCHAR\(4000\)) Tj
+ET
+BT
+/F1 9 Tf
+102 190 Td
+(\(JSON\)) Tj
+ET
+40 175 m
+280 175 l
+S
+BT
+/F1 9 Tf
+102 182 Td
+(host_evidence VARCHAR\(2000\)) Tj
+ET
+BT
+/F1 9 Tf
+102 172 Td
+(\(paths\)) Tj
+ET
+40 157 m
+280 157 l
+S
+BT
+/F1 9 Tf
+102 164 Td
+(Stored: history.json +) Tj
+ET
+BT
+/F1 9 Tf
+102 154 Td
+(usb-evidence/*) Tj
+ET
+310 140 260 195 re
+S
+310 301 m
+570 301 l
+S
+362 140 m
+362 301 l
+S
+BT
+/F1 12 Tf
+402.60 313 Td
+(Offline AI: cases) Tj
+ET
+310 283 m
+570 283 l
+S
+BT
+/F1 10 Tf
+320 289 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+372 290 Td
+(id INTEGER) Tj
+ET
+310 265 m
+570 265 l
+S
+BT
+/F1 9 Tf
+372 272 Td
+(created_at INTEGER) Tj
+ET
+310 247 m
+570 247 l
+S
+BT
+/F1 9 Tf
+372 254 Td
+(last_seen INTEGER) Tj
+ET
+310 229 m
+570 229 l
+S
+BT
+/F1 9 Tf
+372 236 Td
+(seen_count INTEGER) Tj
+ET
+310 211 m
+570 211 l
+S
+BT
+/F1 9 Tf
+372 218 Td
+(source VARCHAR\(32\)) Tj
+ET
+310 193 m
+570 193 l
+S
+BT
+/F1 9 Tf
+372 200 Td
+(device_primary VARCHAR\(120\)) Tj
+ET
+310 175 m
+570 175 l
+S
+BT
+/F1 9 Tf
+372 182 Td
+(fingerprint VARCHAR\(128\)) Tj
+ET
+310 157 m
+570 157 l
+S
+BT
+/F1 9 Tf
+372 164 Td
+(device_hints_json VARCHAR\(4000\)) Tj
+ET
+600 140 240 195 re
+S
+600 301 m
+840 301 l
+S
+652 140 m
+652 301 l
+S
+BT
+/F1 12 Tf
+682.60 313 Td
+(ADB AI: adb_cases) Tj
+ET
+600 283 m
+840 283 l
+S
+BT
+/F1 10 Tf
+610 289 Td
+(PK) Tj
+ET
+BT
+/F1 9 Tf
+662 290 Td
+(id INTEGER) Tj
+ET
+600 265 m
+840 265 l
+S
+BT
+/F1 9 Tf
+662 272 Td
+(created_at INTEGER) Tj
+ET
+600 247 m
+840 247 l
+S
+BT
+/F1 9 Tf
+662 254 Td
+(feature_hash VARCHAR\(128\)) Tj
+ET
+600 229 m
+840 229 l
+S
+BT
+/F1 9 Tf
+662 236 Td
+(features_json VARCHAR\(8000\)) Tj
+ET
+600 211 m
+840 211 l
+S
+BT
+/F1 9 Tf
+662 218 Td
+(label VARCHAR\(120\)) Tj
+ET
+600 193 m
+840 193 l
+S
+BT
+/F1 9 Tf
+662 200 Td
+(confidence REAL) Tj
+ET
+600 175 m
+840 175 l
+S
+BT
+/F1 9 Tf
+662 182 Td
+(failing_json VARCHAR\(4000\)) Tj
+ET
+600 157 m
+840 157 l
+S
+BT
+/F1 9 Tf
+662 164 Td
+(actions_json VARCHAR\(4000\)) Tj
+ET
+293 482 m
+295 482 l
+295 464 l
+297 464 l
+S
+318.50 489 m
+318.50 475 l
+S
+311.50 489 m
+311.50 475 l
+S
+289 464 m
+289 466.21 287.21 468 285 468 c
+282.79 468 281 466.21 281 464 c
+281 461.79 282.79 460 285 460 c
+287.21 460 289 461.79 289 464 c
+S
+269 464 m
+281 456 l
+S
+269 464 m
+281 464 l
+S
+269 464 m
+281 472 l
+S
+583 482 m
+585 482 l
+585 464 l
+587 464 l
+S
+608.50 489 m
+608.50 475 l
+S
+601.50 489 m
+601.50 475 l
+S
+579 464 m
+579 466.21 577.21 468 575 468 c
+572.79 468 571 466.21 571 464 c
+571 461.79 572.79 460 575 460 c
+577.21 460 579 461.79 579 464 c
+S
+559 464 m
+571 456 l
+S
+559 464 m
+571 464 l
+S
+559 464 m
+571 472 l
+S
+375 347 m
+375 345 l
+160 345 l
+160 343 l
+S
+382 321.50 m
+368 321.50 l
+S
+382 328.50 m
+368 328.50 l
+S
+164 355 m
+164 357.21 162.21 359 160 359 c
+157.79 359 156 357.21 156 355 c
+156 352.79 157.79 351 160 351 c
+162.21 351 164 352.79 164 355 c
+S
+153 368.50 m
+167 368.50 l
+S
+153 361.50 m
+167 361.50 l
+S
+440 347 m
+440 345 l
+440 345 l
+440 343 l
+S
+447 321.50 m
+433 321.50 l
+S
+447 328.50 m
+433 328.50 l
+S
+444 355 m
+444 357.21 442.21 359 440 359 c
+437.79 359 436 357.21 436 355 c
+436 352.79 437.79 351 440 351 c
+442.21 351 444 352.79 444 355 c
+S
+433 368.50 m
+447 368.50 l
+S
+433 361.50 m
+447 361.50 l
+S
+505 347 m
+505 345 l
+720 345 l
+720 343 l
+S
+512 321.50 m
+498 321.50 l
+S
+512 328.50 m
+498 328.50 l
+S
+724 355 m
+724 357.21 722.21 359 720 359 c
+717.79 359 716 357.21 716 355 c
+716 352.79 717.79 351 720 351 c
+722.21 351 724 352.79 724 355 c
+S
+713 368.50 m
+727 368.50 l
+S
+713 361.50 m
+727 361.50 l
+S
+40 20 802 110 re
+S
+BT
+/F1 10 Tf
+50 112 Td
+(How to read \(relationships\)) Tj
+ET
+BT
+/F1 9 Tf
+50 96 Td
+(This ERD uses Crow's Foot notation to show relationships between entities used by SmartHub diagnostics.) Tj
+ET
+BT
+/F1 9 Tf
+50 85 Td
+(Symbols: o = optional \(0\), | = one \(1\), crowfoot = many \(*\). Example: Technician |——o< DiagnosticRun means one) Tj
+ET
+BT
+/F1 9 Tf
+50 74 Td
+(technician can have zero or many runs.) Tj
+ET
+BT
+/F1 9 Tf
+50 63 Td
+(Data type/length notes: SQLite does not enforce VARCHAR lengths; lengths here are recommended for documentation.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub ERD) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000006739 00000 n 
+0000006875 00000 n 
+0000006932 00000 n 
+0000006981 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+7024
+%%EOF

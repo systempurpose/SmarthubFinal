@@ -1,0 +1,22 @@
+{
+  "adb": {"ok": true, "devices": []},
+  "fastboot": {"ok": true, "devices": []},
+  "hostUsb": {
+    "platform": "win32",
+    "portableDevices": [
+      {"name": "Galaxy J1 mini prime", "status": "ERROR", "class": "Portable"}
+    ],
+    "transportDevices": [
+      {"name": "SAMSUNG Android ADB Interface", "status": "OK", "vid": "04E8", "pid": "6860", "class": "USB"},
+      {"name": "Samsung Download Mode", "status": "OK", "vid": "04E8", "pid": "6860", "class": "USB"}
+    ],
+    "sample": {"count": 30, "delayMs": 1500, "anyChange": false, "changeCount": 0, "stability": 1.0}
+  },
+  "bsodAnalysis": {
+    "category": "Host USB driver / MTP enumeration issue",
+    "confidence": "medium",
+    "reasons": [
+      "Windows detects the phone as MTP/Portable, but one or more entries are not healthy in Device Manager."
+    ]
+  }
+}

@@ -1,0 +1,185 @@
+SmartHub Diagnostics — Data Dictionary
+Date: 2026-04-17
+
+What did we use in the database?
+- Supabase Postgres (optional cloud persistence) for per-user diagnostic history.
+  - table: `diagnostic_runs`
+- SQLite (Python stdlib `sqlite3`) for Offline AI memory storage.
+  - No-debug AI memory: `memory.sqlite` (table: cases)
+  - ADB AI memory: `adb_ai_memory.sqlite` (table: adb_cases)
+- JSON files (Node backend) for application persistence (not a relational database):
+  - `history.json`
+  - `auth-local-session.json`
+  - `online-ai-config.json`
+  - `smartlink-config.json`
+- Local setup file in repository root (developer/installed config source):
+  - `supabase.local.json`
+
+Storage locations (host)
+- `dataRoot` (Windows): `%APPDATA%\SmartHubDiagnostics` (or `%LOCALAPPDATA%\SmartHubDiagnostics`)
+- History: `dataRoot\history.json`
+- Local auth session: `dataRoot\auth-local-session.json`
+- Online AI config: `dataRoot\online-ai-config.json`
+- SmartLink config: `dataRoot\smartlink-config.json`
+- Offline AI memory DBs:
+  - `dataRoot\AI\memory.sqlite` (used by /ai-no-debug-suggest)
+  - `dataRoot\AI\adb_ai_memory.sqlite` (used by /ai-adb-conclude)
+- Screenshots: stored under the app install root `screenshot\...` (served via backend routes)
+
+====================================================================
+A) JSON Persistence (Node/Express backend)
+
+A1) history.json
+- Type: JSON object (map)
+- Key: deviceKey (string) — typically deviceId-safe key used by the backend
+- Value: array of SavedRun
+
+SavedRun fields
+- id (number): unique run id (monotonic per device list)
+- deviceId (string): ADB device id used during run
+- deviceLabel (string, optional): display label
+- timestamp (number): epoch ms
+- counts (object, optional): { high?: number, medium?: number, low?: number }
+- diagStages (object, optional): map stageKey → StageSummary
+  - StageSummary.ok (boolean)
+  - StageSummary.label (string)
+  - StageSummary.details (string, optional)
+- diagDetails (object, optional): structured details per category
+  - battery?: BatteryStageDetails
+  - display?: DisplayStageDetails
+  - touch?: TouchStageDetails
+  - sensors?: SensorsStageDetails
+  - camera?: CameraStageDetails
+  - connectivity?: ConnectivityStageDetails
+  - hardware?: HardwareStageDetails
+  - system?: SystemStageDetails
+  - os?: OsStageDetails
+- textReport (string, optional): technician-readable report text
+- screenTestImage (string, optional): relative path/url to saved PNG
+
+A2) online-ai-config.json
+- Type: JSON object
+- Purpose: store Online AI endpoint settings (per host machine)
+- Fields:
+  - url (string, optional)
+  - apiKey (string, optional)  // stored on disk; backend GET endpoints do not return the raw key
+  - model (string, optional)
+
+A3) auth-local-session.json
+- Type: JSON object
+- Purpose: offline sign-in session cache for SmartHub desktop auth
+- Fields:
+  - token (string)  // local offline bearer token
+  - userId (string)
+  - email (string)
+  - displayName (string)
+  - issuedAt (number, epoch ms)
+  - expiresAt (number, epoch ms)
+  - lastOnlineLoginAt (number, epoch ms)
+
+A4) smartlink-config.json
+- Type: JSON object
+- Purpose: store SmartLink pairing public keys used to verify signatures
+- Shape:
+  {
+    "pairings": [
+      {
+        "id": "default" | string,
+        "publicKeyPem": string,
+        "defaultEnableAdb": boolean (optional),
+        "defaultEnableUsbTethering": boolean (optional)
+      }
+    ]
+  }
+
+A5) supabase.local.json (repo root config source)
+- Type: JSON object
+- Purpose: local environment/config source used by backend fallback readers
+- Common fields used by current backend:
+  - SMARTHUB_SUPABASE_URL
+  - SMARTHUB_SUPABASE_ANON_KEY
+  - SMARTHUB_SUPABASE_SERVICE_ROLE_KEY
+  - SMARTHUB_SUPABASE_EMAIL_REDIRECT_URL
+  - SMARTHUB_SUPABASE_DIAGNOSTIC_TABLE
+  - SMARTHUB_AI_API_URL
+  - SMARTHUB_AI_API_KEY
+  - SMARTHUB_AI_MODEL
+
+====================================================================
+B) SQLite Persistence (Offline AI memory)
+
+B1) memory.sqlite (No-debug / USB-only AI memory)
+- Engine: SQLite
+- Access: Python `sqlite3`
+
+Table: cases
+- id (INTEGER, PK, AUTOINCREMENT)
+- created_at (INTEGER, NOT NULL)  // epoch seconds
+- last_seen (INTEGER, NULL)       // epoch seconds
+- seen_count (INTEGER, NULL)      // de-dup repeat count
+- source (TEXT, NOT NULL)         // classifier source tag
+- device_primary (TEXT, NULL)     // primary device name (best-effort)
+- fingerprint (TEXT, NULL)        // stable fingerprint for de-dup
+- device_hints_json (TEXT, NOT NULL)
+  - JSON object of extracted hints (e.g., primary_name, usb hints)
+- feature_tokens_json (TEXT, NOT NULL)
+  - JSON array of feature tokens used for similarity
+- report_json (TEXT, NOT NULL)
+  - JSON object: full AI output (top/ranked/actions/memory stats)
+- note (TEXT, NULL)
+- outcome (TEXT, NULL)
+  - technician-labeled outcome (used for metrics/calibration)
+
+Indexes
+- cases_fingerprint_idx (fingerprint)
+- cases_outcome_idx (outcome)
+
+B2) adb_ai_memory.sqlite (ADB conclusion memory)
+- Engine: SQLite
+- Access: Python `sqlite3`
+
+Table: adb_cases
+- id (INTEGER, PK, AUTOINCREMENT)
+- created_at (INTEGER, NOT NULL)  // epoch seconds
+- feature_hash (TEXT, NOT NULL)
+- features_json (TEXT, NOT NULL)
+- label (TEXT, NULL)
+- confidence (REAL, NULL)
+- failing_json (TEXT, NULL)
+- actions_json (TEXT, NULL)
+- outcome (TEXT, NULL)
+- resolution (TEXT, NULL)
+- note (TEXT, NULL)
+
+Indexes
+- idx_adb_cases_hash (feature_hash)
+- idx_adb_cases_time (created_at)
+
+====================================================================
+D) Supabase Cloud Persistence (Optional per-user mirror)
+
+D1) diagnostic_runs (Postgres on Supabase)
+- Type: relational table (jsonb payload column)
+- Purpose: per-user diagnostic history mirror for cloud sync/retrieval
+- Columns:
+  - id (bigint, identity, PK)
+  - owner_user_id (uuid, NOT NULL)
+  - diagnostic_type (text, NOT NULL)
+  - device_id (text, NOT NULL)
+  - run_id (bigint, NOT NULL)
+  - run_timestamp (bigint, NOT NULL)
+  - payload (jsonb, NOT NULL)
+  - created_at (timestamptz, NOT NULL, default now())
+
+Indexes
+- diagnostic_runs_owner_device_ts_idx (owner_user_id, diagnostic_type, device_id, run_timestamp desc)
+- diagnostic_runs_run_id_idx (run_id)
+
+Owner scoping rule used by backend
+- All read/write calls are filtered by authenticated local user id (`owner_user_id`) so users only see their own runs.
+
+====================================================================
+E) Notes for documentation / PDF
+- If your professor expects a single “database ERD”, use the SQLite memory DB as the database, because that is the only relational DB in this system.
+- For the rest of SmartHub, describe persistence as “file-based JSON storage” (history/config) under `dataRoot`.
+- If cloud storage is enabled, add `diagnostic_runs` (Supabase Postgres) as the optional shared/persistent store with per-user ownership.

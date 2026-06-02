@@ -1,0 +1,606 @@
+SmartHub Diagnostics – Session Memory
+Last updated: 2026-05-04
+
+Overview
+- Desktop companion app for Android diagnostics with a Node.js + TypeScript (Express) backend, a simple HTML/JS frontend, optional Windows/Python helper tools, and a small on‑device Android app that works only when the phone is connected to the desktop via USB/ADB.
+- Uses ADB, fastboot, and local Python tools (for APK security scan) to run offline checks.
+- Supports cloud persistence via Supabase for diagnostic history/autosave (authenticated user scope).
+- Target users: phone repair technicians; focus on truthful diagnostics with offline-first collection and optional cloud-backed history.
+
+Recent major changes (2026-05-04)
+- USB-only BSOD diagnose flow hardening (no USB debugging required):
+	- Local-only / “Built-in” classification posture and UI wording; removed end-user “Inconclusive” outcomes in the USB-only BSOD flow.
+	- Freeze heuristics improved for MTP-unresponsive / ADB-alive scenarios so real freeze evidence is not overwritten by weaker states.
+	- Samsung Download / Odin mode recognition: transport-level Windows USB names (e.g. “SAMSUNG Mobile USB CDC Composite Device”) are surfaced in UI and classified as OS/firmware repair state.
+	- Frontend + backend mapping aligns Download/Odin to BSOD-5 `faulty_os_updates` (not `hardware_failure`).
+- Transport-only visibility in main UI:
+	- When ADB is empty, the Devices page can still show low-level connection modes (Download/Odin, Fastboot) based on host USB transport devices.
+- Protect/lock BSOD diagnostic source files to avoid accidental edits:
+	- VS Code read-only guard: .vscode/settings.json uses `files.readonlyInclude` for key BSOD diagnostic files.
+	- Windows read-only attribute scripts: Bsod tools/protect-bsod-diagnostics.ps1 and Bsod tools/unprotect-bsod-diagnostics.ps1.
+	- Docs: AI support/README.md updated with protect/unprotect commands.
+
+Recent major changes (2026-04-18)
+- Supabase-only history/autosave path (local history fallback removed in active save flows):
+	- History endpoints and autosave flows were updated to require authenticated cloud save instead of writing local history JSON fallbacks.
+	- Updated paths include:
+		- src/server.ts (history endpoints)
+		- src/routes/collectRoutes.ts (collect autosave)
+		- src/routes/connectionCheckRoutes.ts (BSOD autosave)
+- Supabase save reliability hardening (schema mismatch tolerant):
+	- src/lib/supabaseDiagnosticsStore.ts now retries and falls back across candidate tables when configured table is missing from schema cache.
+	- Save/fetch now attempts configured table first, then diagnostic_runs, then runs.
+	- Missing-table/schema-cache errors are detected and handled to avoid hard failures during migration.
+- Frontend save/fetch reliability improvements:
+	- Save-to-history and history fetch now attach explicit bearer auth headers.
+	- Backend error messages are surfaced in UI to make Supabase permission/schema issues immediately visible.
+- Diagnostics modal UX improvements:
+	- Card clicks now open a dedicated detail modal instead of inline expansion.
+	- Diagnostic Step Detail modal styling was refreshed with stronger visual hierarchy and card-based detail rows.
+	- SmartHub AI title now shows an explicit online/offline status chip:
+		- Green indicator when online AI is active.
+		- Red indicator when offline/unavailable.
+	- Online AI status snapshot is shared from js/ui.js so diagnostics blocks can render consistent status.
+- Terminology/notification updates:
+	- User-facing wording was aligned to "SmartHub AI support" in key UI labels.
+	- Diagnostic completion popup/message flow was suppressed per current UX direction.
+
+Recent major changes (2026-04-12)
+- USB-only BSOD triage: strict handling for host COM/WPD errors
+	- When the MTP probe fails due to host COM/WPD errors (e.g. 0x80004002 E_NOINTERFACE), the app outputs a strict host-only message:
+		“MTP probe failed due to a host COM interface error. Cannot assess the phone’s state. Please reinstall Windows Portable Devices drivers or test on another PC. If you can visually see the phone is normal, ignore this result.”
+	- Removed misleading fallbacks (e.g. “Software glitches”) in this state; the result is always “Inconclusive – host issue”.
+	- Manual technician confirmation (“UI frozen”) is the only allowed way to record a freeze when the probe is unavailable.
+	- Webcam OCR hints (ANR/System UI text) are ignored for verdicts when the MTP probe is unavailable to avoid false positives.
+	- Shell-based MTP probe fallback was strengthened (opens the device via Shell.Application) and WPD host-unsupported detection is cached so future checks avoid repeated COM failures.
+
+Recent major changes (2026-04-02)
+- USB-only / no-ADB reliability upgrades (BSOD diagnose flow):
+	- /connection-check now supports explicit skip flags (skipAdb/noAdb/usbOnly and skipFastboot) so USB-only workflows can avoid platform-tools calls entirely.
+	- Windows host-side presence is treated as “device detected” when Portable/WPD and/or transport-level USB devices are present (even if ADB is empty).
+	- ADB log evidence extraction was expanded to include explicit ANR and SystemUI/UI-loop signals (e.g. "ANR in", "FATAL", SystemUI/com.android.systemui), used when ADB is available.
+	- UI shows richer Offline AI failure details (includes HTTP status + parsed/trimmed error body) instead of a generic “HTTP 500”.
+	- Offline AI helper printing is hardened for Windows console encodings (forces UTF-8 with replacement) so Unicode output cannot crash the helper.
+	- UI cache-busting query params were added/updated for core scripts (e.g. ui.js/devices.js/i18n.js) to prevent stale runtime JS after updates.
+
+Recent major changes (2026-02-21)
+- Backend maintainability refactor:
+	- Split the formerly-large server file into route modules under src/routes/.
+	- Added a shared server context (src/serverContext.ts) and a shared history store (src/lib/historyStore.ts).
+	- Goal: keep files ~<1000 lines and reduce cross-cutting duplication.
+- SmartLink no-ADB install workflow:
+	- Added GET /smartlink/agent-apk so technicians can download the SmartLink Agent APK from the PC and copy it to the phone via MTP.
+	- UI “Install SmartLink app” now falls back to downloading the APK + showing manual MTP install steps when ADB is not available.
+	- Added a technician plan doc: InstallDroidApp(nodebug)/plan.txt.
+- SmartLink Agent Android build unblocked:
+	- android-smartlink/ originally had no Gradle project files; minimal Gradle scaffolding was added so it can build an APK.
+	- Debug APK output: android-smartlink/app/build/outputs/apk/debug/app-debug.apk.
+	- CLI build requirements/constraints:
+		- Java 17.
+		- Gradle 8.x (AGP 8.1.x compatibility; Gradle 9.x breaks).
+		- Android SDK path configured via android-smartlink/local.properties (sdk.dir=...).
+
+Recent major changes (2026-02-22)
+- No-debug BSOD triage improvements:
+	- /connection-check now emits an additional bsodAnalysis.part1 classification with Part 1 categories:
+		- System Errors, Application Conflicts, Hardware Malfunction, Overheating, Insufficient Storage.
+	- UI now prefers bsodAnalysis.part1 for the no-debug BSOD card and the quick no-debug “root cause” list.
+	- /connection-check also accepts technician hints via query params (e.g. techSafeMode=1) to safely gate confidence upgrades.
+- “Test device now” improvements (real hardware activation):
+	- Added POST /blue-test/volume-max to automatically set STREAM_MUSIC to maximum.
+	- Speaker test now auto-raises media volume before playing the tone.
+	- Vibration test now tries to trigger vibration directly via ADB (cmd vibrator_manager) before falling back to the mobile app test harness.
+- Deep Scan feature:
+	- Added GET /deep-scan/:id to provide a lightweight health overview.
+	- Raw dump payloads are opt-in via ?raw=1 to keep responses small by default.
+- Documentation bundle:
+	- Added a consolidated BSOD/no-ADB documentation folder: bsodscanhelp/ and packaged it as bsodscanhelp.zip.
+- Backend startup robustness:
+	- Backend server now handles common port bind errors (EADDRINUSE/EACCES) with a clear message instead of an unhandled crash.
+
+- USB-only BSOD helper UX (no USB debugging required):
+	- Added a dedicated "Diagnose BSOD (USB-only)" modal that runs deeper host-side sampling and makes results explainable.
+	- Added a sanity checklist, "Top reasons" explainability block, and a Re-check button.
+	- Added an optional camera-based check card and auto-runs the camera check on open/re-check (best-effort, does not block USB sampling).
+	- Added a technician confirmation checkbox: "Safe Mode improves the issue".
+		- When checked, the UI passes techSafeMode=1 to /connection-check.
+		- Backend gates "Application Conflicts" confidence so it stays low unless Safe Mode improvement is confirmed.
+
+- BSOD documentation expansion (bsodscanhelp/):
+	- Added explicit procedures for OS corruption / system errors and 3rd‑party app conflict checks (USB-only vs ADB available).
+	- Updated scoring rules, test matrix scenarios, and UI copy to match the Safe Mode gating.
+
+- Windows desktop shell branding:
+	- Renamed WPF publish output from WindowsShell.exe to SmartHub.exe and updated installer shortcuts/run targets.
+	- Updated window titles and dialog captions to "SmartHub Diagnostics".
+	- Note: UAC/SmartScreen "Unknown publisher" cannot be changed by metadata alone; it requires Authenticode code signing.
+
+Recent major changes (2026-03-02)
+- Live diagnostics UX (“antivirus style” modal updates):
+	- Full diagnostics now open the Diagnostics modal immediately and show a live checklist as checks complete (instead of only showing results at the end).
+	- The live checklist updates incrementally as /collect, /apps and /file-scan results arrive.
+	- Added a small window hook so other scripts can refresh the modal without tight coupling (window.updateLiveDiagnosticModal(deviceId)).
+
+- BSOD accuracy upgrade (evidence-based):
+	- /connection-check?deep=1 now collects and returns additional evidence under signals:
+		- signals.fastboot: fastboot getvar all (parsed vars map) when a device is in bootloader.
+		- signals.adb: boot props + battery (level/temp/health) + /data usage when ADB is reachable.
+		- signals.adb.logEvidence: best-effort, time-bounded ADB logcat evidence extraction (read-only) to strengthen software-cause classification.
+	- bsodAnalysis now includes a short, UI-friendly primaryReason label (and bsodAnalysis.part1.primaryReason) which the BSOD modal prefers over generic categories.
+	- BSOD modal now renders an Evidence section when ADB log evidence is available.
+
+Recent major changes (2026-03-03)
+- BSOD symptom hint + offline AI conclusion:
+	- The BSOD (USB-only) modal now asks the technician what they think the symptom is (choice + optional notes) before/while running checks.
+	- After /connection-check completes, the UI calls POST /ai-no-debug-suggest (offline Python model) and renders an “AI conclusion (offline)” block with a top conclusion + suggested next steps.
+	- The AI model (AI support/ai_diagnose.py) now incorporates connection.userSymptom to weight hypotheses (e.g. boot loop vs no power vs blank screen).
+	- The AI conclusion is best-effort and never blocks the main USB-only check; it fails gracefully if Python/helper tools are unavailable.
+
+- Offline AI intelligence upgrade (evidence-aware):
+	- The offline model now consumes richer /connection-check deep evidence (connection.signals.*), including:
+		- ADB boot/bootreason, battery temperature/level, /data usage
+		- ADB logcat keyword evidence (failed updates, fs corruption, crash loop, watchdog, thermal)
+		- Fastboot getvar hints (snapshot/update/slot state when available)
+	- Improved scoring rules and added confidence calibration to reduce overconfident outputs when evidence is limited.
+
+- No-debug BSOD accuracy upgrade: detect “Not BSOD”
+	- The camera helper (bsod-diagnostic/phone_screen_diag.py) now emits contrast_std + content_visible_hint.
+	- The BSOD modal uses these signals to explicitly label when the screen appears normal (Not BSOD) and guides technicians to run standard diagnostics.
+	- The offline AI model adds a not_bsod hypothesis and will surface it when the webcam indicates normal, content-visible screen.
+
+Recent major changes (2026-03-04)
+- Device specs UX cleanup (ADB variability-safe):
+	- When core device identity fields cannot be read reliably from ADB on locked-down/OEM builds, the UI now hides those spec rows instead of showing repeated "Unknown" values.
+	- Hidden when unknown/empty: Platform OS, Platform Chipset, Misc Model, Misc Board, Misc Manufacturer, Misc Device code.
+	- Applied consistently in both UI entry points (js/devices.js and legacy ui.js).
+- Full-width diagnostic running UI:
+	- The device Details panel now renders as a single-column, full-width layout while diagnostics are running.
+	- Logs panel keeps a 2-column layout (log + screenshot) where applicable.
+- BSOD USB presence indicator:
+	- The BSOD (USB-only) modal now shows a clear "USB cable detection" status so technicians can quickly tell whether the phone is enumerating over USB even when ADB is unavailable.
+
+Recent major changes (2026-03-08)
+- Offline AI memory + metrics: de-duplication + better measurability
+	- Added a stable case fingerprint (hash of normalized feature tokens + source + device primary) to avoid memory DB bloat from repeated auto-saves of the same case.
+	- Memory DB schema now supports:
+		- cases.fingerprint (TEXT)
+		- cases.seen_count (INTEGER) and cases.last_seen (INTEGER)
+	- Save behavior now de-dupes by fingerprint:
+		- Repeated saves update last_seen and increment seen_count.
+		- If a new labeled outcome arrives for a previously-unlabeled fingerprint, the existing row is upgraded with the outcome.
+	- Memory stats returned in normal AI suggest output (payload.memory.stats) now include:
+		- distinct_cases, repeat_saves, unlabeled_oldest_age_sec
+
+- Offline AI metrics: distinct-case accuracy (fingerprint-deduped)
+	- /ai-no-debug-metrics (Python helper mode: ai_diagnose.py --metrics) now also emits:
+		- distinct: { available, raw_rows, distinct_rows, note }
+		- metrics_by_kind_distinct: { broad, bsod5, common5 }
+	- Goal: prevent repeats from inflating accuracy and make progress measurable even with auto-remember enabled.
+
+- Offline AI similarity + explanations + calibration readiness (USB-only)
+	- Similar-case retrieval now blends TF-IDF cosine similarity with weighted Jaccard overlap (plus device-name boost).
+	- Feature token extraction expanded with bucketed numeric tokens (USB stability/change counts, device counts, driver warning counts).
+	- observedSignals expanded to include intermittency sampling (e.g. MTP intermittent x/N, transport intermittent x/N) and driver/wpd warning hints.
+	- Confidence calibration remains gated by labeled volume; output now includes calibration.status showing per-kind usable/required/needed counts.
+	- Calibration cap math was made more conservative (Wilson lower bound style cap when enough labels exist).
+
+- UI (BSOD diagnose modal) – better visibility into learning progress
+	- The AI panel now shows richer memory stats inline:
+		- Memory total / distinct / labeled / unlabeled
+		- repeats count (if any)
+		- oldest unlabeled age (short format)
+	- Accuracy display now shows underlying counts for each kind:
+		- labeled X / usable Y
+		- also shows a “Distinct:” accuracy line (fingerprint-deduped) when available.
+	- UI still shows calibration readiness (“needs more labeled cases…”) until enough usable labeled cases exist.
+	- Metrics UI continues to optionally display “Top confusion” once wrong-prediction pairs exist.
+
+Recent major changes (2026-03-22)
+- ADB diagnostics – confidence UX normalization:
+	- ADB-based “Offline AI conclusion” (AI support/ai_adb_conclude.py) now maps confidence to 80–100% for the ADB path.
+	- Internal heuristic strength is still preserved via scaling; only the display range is enforced.
+- ADB diagnostics – detect intermittent battery/power line (broken/loose connector / unstable power path):
+	- diagnosticSnapshot now captures three `dumpsys battery` samples (batteryDump + batteryDump2 + batteryDump3) ~1s apart.
+	- Battery connection heuristic was upgraded to use a 3-sample time-series check when batteryDump3 is available (stricter, higher-signal detection for loose connector / unstable power path).
+		- Flags strong indicators like battery "present" flips, charging-state flips, 0/negative voltage, and unusually fast voltage/level/temp jumps.
+	- /collect now also pulls WARN-level logcat (`*:W`) and extracts a strict, score-based set of power/battery warning hints into diagDetails.battery:
+		- powerLogSuspected, powerLogScore, powerLogHints
+	- /collect response includes batteryDump2, batteryDump3, and warnLogs for debugging/inspection.
+	- Shutdown inference UX: when boot reason is watchdog/unknown but battery/power instability is suspected, /collect now explicitly adds a “power instability suspected” hint to the OS/shutdown summary (so loose connector / PMIC issues don’t look like “no cause detected”).
+
+- ADB diagnostics – expanded “other possible problems” detection (ADB-only, strict evidence):
+	- New heuristics added to flag:
+		- USB/ADB disconnect instability (repeated disconnect/reset/offline patterns)
+		- Thermal throttling/overheat evidence (dumpsys thermalservice + logs)
+		- Radio/modem crash-loop evidence (baseband/RIL/subsystem restart patterns)
+	- /collect wires these findings into existing stages:
+		- Battery stage is marked attention when thermal throttling evidence is present.
+		- Connectivity stage is marked attention when USB instability and/or modem instability is present.
+		- System stage now also considers memory pressure findings.
+
+Important limitation (Android security model)
+- “Auto install / silent install” is not possible using only MTP file copy.
+- Without ADB (or Device Owner / MDM privileges), the install step still requires user interaction on the phone (tap the APK and confirm).
+
+Heuristics summary (src/heuristics.ts)
+- analyzeBattery(batteryDump):
+	- Extracts current battery level and temperature from dumpsys battery.
+	- Emits low-severity snapshot findings used for reporting; threshold-based severity (overheating, low level, health and cycle-count interpretation) is implemented in the /collect pipeline (src/routes/collectRoutes.ts).
+
+- analyzeBatteryConnection(batteryDump, batteryDump2):
+	- Compares two battery samples collected ~1s apart to detect unstable/potentially-intermittent battery/power readings.
+	- Flags strong indicators like battery present flip, charging-state flip, and unusually large voltage jumps.
+	- Used by /collect to set diagDetails.battery.connectionSuspected and raise the battery stage attention state.
+
+- analyzeBatteryConnectionSeries([batteryDump, batteryDump2, batteryDump3]):
+	- Series-based (3-sample) battery/power instability detector with stricter thresholds to reduce false positives.
+	- Used by /collect when batteryDump3 is available; falls back to analyzeBatteryConnection otherwise.
+- analyzeStorage(df):
+	- Scans df -h style output and flags user-writable partitions nearing full as "storage-pressure-*" findings (medium/high).
+	- /collect uses these findings to mark the System stage attention when storage is near full.
+
+- analyzeMemoryHealth(procMeminfo):
+	- Uses /proc/meminfo to detect memory pressure ("memory-tight" / "memory-low") and to emit a snapshot when OK.
+	- /collect uses this to include memory pressure in the System stage.
+- analyzeLogs(logcat):
+	- Detects recent crash/ANR patterns and display pipeline errors (SurfaceFlinger / GPU / HWC) from logcat.
+	- Deeper filesystem/integrity and OS health heuristics (fs errors, dm-verity, core-service crashes) are implemented in the /collect pipeline (OS / filesystem stage) rather than in this module.
+
+- analyzeUsbInstability({ logs, warnLogs, kernelLogs }):
+	- Scores repeated USB/ADB disconnect/reset evidence in logs (strict thresholds to reduce false positives).
+	- /collect surfaces this as an attention hint in the Connectivity stage.
+
+- analyzeThermalThrottling(thermalDump, logs?, warnLogs?):
+	- Uses dumpsys thermalservice (Thermal Status) plus log evidence to detect throttling/overheat conditions.
+	- /collect surfaces this as an attention hint in the Battery stage.
+
+- analyzeRadioModemStability({ logs, warnLogs, crashLogs, kernelLogs }):
+	- Detects modem/baseband/radio crash-loop patterns (RIL/IMS/subsystem restart hints).
+	- /collect surfaces this as an attention hint in the Connectivity stage.
+
+- analyzeApps(apps, permsByPkg):
+	- Walks installed apps and their requested permissions to emit high/medium severity findings for apps that request risky or sensitive permissions.
+	- Used by /apps/:id as an additional, permission-only signal alongside deep APK scan results.
+
+App security heuristics (also in src/heuristics.ts)
+- assessAppRisk(perms), classifyAppRisk(perms), scoreAppRisk(perms, path?):
+	- Classify apps into safe / moderate / risky based on requested permissions, with explicit lists for high-impact permissions (DEVICE_ADMIN, SYSTEM_ALERT_WINDOW, BIND_ACCESSIBILITY_SERVICE, SMS/Call, etc.).
+	- scoreAppRisk adds a 0–100 risk score, giving higher weight to risky permissions and slightly discounting apps that live under system/product partitions versus /data.
+- detectSuspiciousApps(apps, permsByPkg, installerMap?):
+	- Uses package-name patterns (cleaner/booster/optimizer, mod/crack/hack, known ad SDKs, fake system updates, etc.), permission combinations (overlay + internet + background), accessibility/admin rights, and installer source to flag adware/malware-style apps.
+	- Incorporates a small allowlist of trusted prefixes (com.google., com.android., major OEMs and browsers) and a map of known fake/modified popular apps.
+
+Key Backend Files
+
+- src/server.ts
+	- Express entrypoint and route registration.
+	- After refactor, most endpoints live in src/routes/* and src/server.ts wires them together.
+	- Notable endpoints still owned here include SmartLink host endpoints such as GET /smartlink/agent-apk.
+
+- src/serverContext.ts
+	- Shared server state and helpers used by route modules (paths, dataRoot resolution, python resolver, SmartLink state, etc.).
+
+- src/lib/historyStore.ts
+	- Shared history types and load/save helpers used by history endpoints.
+
+- src/routes/collectRoutes.ts
+	- /collect pipeline and related collection endpoints.
+
+- src/routes/screenTestRoutes.ts
+	- Screen test capture endpoints (POST /screen-test/:id, GET /screen-test-image/...).
+
+- src/routes/noDebugRoutes.ts
+	- No-debug / host-side triage endpoints (connection checks, camera-based checks, etc.).
+
+- src/routes/blueTestRoutes.ts
+	- Quick reaction tests (flash/vibrate/sound/touch/wake) and simple sensor/health tests.
+
+- src/routes/installRoutes.ts
+	- Install and helper endpoints used by the UI install flows.
+
+Key Windows Desktop Shell Files
+
+- windows-app/WindowsShell.csproj
+	- WPF + WebView2 shell project.
+	- AssemblyName is set to SmartHub so the published executable is SmartHub.exe.
+	- Assembly metadata (Company/Authors) is SmartHubTeams.
+
+- windows-app/SmartHubInstaller.iss
+	- Inno Setup installer definition.
+	- AppPublisher is SmartHubTeams.
+	- Shortcuts and post-install run target SmartHub.exe.
+
+- windows-app/MainWindow.xaml + windows-app/MainWindow.xaml.cs
+	- Shell window chrome and host behaviors.
+	- Window title and message box captions are "SmartHub Diagnostics".
+
+- Endpoints (overall API surface)
+		- GET /device – list devices via `adb devices -l`, enrich with model/brand from getprop.
+		- GET /mobile-app-state/:id – checks via ADB whether the SmartHub Android app package (com.smarthub.diagnostics) is installed and currently running on the handset; the frontend uses this to block full diagnostics until the on-device app is present and open.
+		- GET /connection-check – runs `adb devices -l`, `fastboot devices` and (on Windows) a PowerShell `Get-PnpDevice` query for MTP/portable devices. Returns:
+			- adb: { ok, devices[], error? }
+			- fastboot: { ok, devices[], error? }
+			- hostUsb: { platform, portableDevices[], transportDevices[], sample?, error? } – host-side view of phones that show up in Windows (Portable/MTP or transport-level USB) even when ADB is empty.
+			- summary: human-readable connection status that explains what the PC can see (ADB, fastboot, MTP, or nothing).
+			- signals (deep=1 only): extra evidence used to improve explainability and accuracy.
+				- signals.fastboot: [{ deviceId, vars?, error? }]
+				- signals.adb: { deviceId, state, bootCompleted?, bootReason?, verifiedBootState?, vbmetaDeviceState?, battery?, dataPartitionUsePct?, logEvidence? }
+			- bsodAnalysis: { category, primaryReason?, confidence, reasons[], part1? } → heuristic cause for blue/blank screen based on ADB/fastboot/host USB visibility and (when available) evidence signals.
+				- part1: { category, primaryReason?, confidence, reasons[] } where category is one of: System Errors / Application Conflicts / Hardware Malfunction / Overheating / Insufficient Storage.
+		- POST /launch-bsod-gui – launches external BSOD desktop helper (`bsod-diagnostic/bsod_gui.py`) via Python.
+		- GET /collect/:id – main diagnostic pipeline per device:
+			- Collects dumps: getprop, dumpsys battery (two samples: batteryDump + batteryDump2), df -h, /proc/meminfo, dumpsys display, logcat (error buffers) + logcat WARN (warnLogs), plus best-effort sensor/camera/connectivity/features dumps.
+			- Uses heuristics from src/heuristics.ts (analyzeBattery, analyzeStorage, analyzeLogs) to build findings.
+				- Extracts OS/build info (Android version, fingerprint, tags → custom/test build, verified boot state, bootloader lock).
+			- Display metrics: resolution from dumpsys display; estimates diagonal inches + area cm² using DPI from dumpsys or density props (ro.sf.lcd_density / ro.display.lcd_density).
+				- Battery metrics: level, temp, health, capacity (capacity or charge_counter /1000 or /sys/class/power_supply/battery/charge_full_design), cycle_count (from dumpsys or /sys/.../cycle_count), simple charging efficiency label, and an inferred battery technology from dumpsys or /sys.
+					- Extra power-path fields (best-effort): present, voltageMv, currentNowRaw, status, isCharging.
+					- Intermittency signals: connectionSuspected (from batteryDump vs batteryDump2) and strict log evidence (powerLogSuspected/powerLogScore/powerLogHints from WARN/ERROR logs).
+				- Connectivity metrics: combines dumpsys connectivity + pm list features for Wi-Fi, Bluetooth, NFC, GPS, mobile.
+				- Sensors, camera, hardware, system, OS stages all summarized into diagStages + diagDetails – including RAM estimate from /proc/meminfo, feature-based hardware presence, and OS/filesystem integrity hints (EXT4/F2FS errors, dm-verity warnings, core-service crashes).
+			- Touch / ghost touch stage:
+				- TouchStageDetails: { hasTouchDriverErrors?, hasInputAnomalies?, isChargingDuringLogs? }.
+				- Scans logcat for touch driver/controller errors (touchpanel/fts/synaptics/goodix/elan/atmel, InputReader failures) and input anomalies (InputDispatcher unresponsive, pointer cancel spam, “touch event rate too high”).
+				- Uses battery dumps to detect if device was charging during logs.
+				- diagStages.touch = { ok, label "Touch / ghost touch", details joined from reasons }.
+				- Returns a full payload used by js/diagnostics.js: propsDump, battery/storage/memory/display dumps, logs, findings array, and structured diagStages + diagDetails.
+		- GET /screenshot/:id – raw screencap PNG (uses binary screencap from src/adb.ts).
+		- POST /screen-test/:id – guided screen test capture:
+			- Calls screencap(id) to get PNG buffer.
+			- Saves to windows-app/bin/Release/net8.0-windows/win-x64/publish/screenshot/<safeDeviceId>/<timestamp>.png.
+			- Returns { ok, imagePath: /screen-test-image/<safeId>/<file>, imageUrl }.
+		- GET /screen-test-image/:deviceId/:file – serves PNG from the above screenshot folder.
+		- GET /display-state/:id – returns raw dumpsys display + SurfaceFlinger for advanced display debugging.
+		- GET /on-device-report/:id – fetches JSON diagnostics written by the SmartHub Mobile Diagnostics Android app (if present) for combined desktop + on‑device analysis.
+		- GET /deep-scan/:id – lightweight health overview for the connected device; returns small results by default and supports raw payloads via ?raw=1.
+		- GET /screen-visual-check – optional host-side visual check of the phone screen using the PC webcam and `bsod-diagnostic/phone_screen_diag.py`; no USB debugging required, returns JSON analysis (category + hints like cracks/banding/overheat).
+		- GET /screen-camera-snapshot – same helper as /screen-visual-check but also saves the sharpest frame under the Windows app screenshot folder and returns { ok, imagePath, imageUrl, analysis } so the UI can show a "screenshot" even when adb screencap is not available.
+		- Both endpoints resolve a Python executable via a small defaultPythonExe helper that prioritises: (1) `SMART_HUB_PYTHON_EXE` when set (typically by the Windows shell/installer), (2) a local `.venv` under the app install root (SMARTHUB_HOME or process cwd), and finally (3) `python`/`python3` on PATH. This makes camera-based checks work both when launched from the Windows shell and when running the backend directly via `npm run dev`, as long as Python 3.8+ with opencv-python and numpy is installed in one of those locations.
+			- GET /file-scan/:id – heuristic user-storage scan:
+				- Walks `/sdcard` or `/storage/emulated/0` (limited depth) and counts total files.
+				- Flags paths by extension/keywords (.apk, .dex, .jar, .exe, hack/crack/mod/keygen/etc) and returns counts + up to 50 sample paths.
+			- GET /app-usage/:id – app size/usage view:
+				- Lists apps and correlates them with du -k -s output for `/data/app`, `/data/user/0` (or `/data/data` fallback).
+				- Returns codeBytes/dataBytes/totalBytes per app and a note when /data is not readable (non-rooted or locked-down builds).
+			- GET /apps/:id – full security scan per device:
+				- Enumerates installed apps, collects dumpsys package permissions and log/battery context for a touchSummary.
+				- Uses detectSuspiciousApps + installer/source map to pick a bounded set of “interesting” packages (suspiciousApps) and only runs runDeepApkScan for that subset, keeping total scan time predictable even on phones with many apps.
+				- Combines permission-based heuristics (scoreAppRisk) with deep scan results to produce riskByPkg + riskScoreByPkg.
+				- Also returns installer-derived suspiciousApps list (via detectSuspiciousApps) for UI advice/warnings.
+			- GET /suspicious-apps/:id – fast suspicious-apps endpoint:
+				- Uses installerMap + quick name patterns to pick "interesting" apps, then fetches permissions only for those.
+				- Returns a lightweight suspiciousApps list in ~5–15 seconds, used to update the UI immediately while /apps/:id runs deeper analysis.
+			- GET /history/:id and POST /history/:id – per-device history storage:
+				- History is stored under dataRoot (either %APPDATA%/SmartHubDiagnostics or .smarthub-data).
+				- SavedRun includes: id, deviceId, deviceLabel, timestamp, counts (high/med/low), diagStages, diagDetails, textReport, optional screenTestImage.
+			- GET /app-risk/:id/:pkg – on-demand single‑app risk view:
+				- Computes permission-based risk and optionally runs deep APK scan for that package, returning combined detail.
+		- POST /blue-test/flash, /blue-test/vibrate, /blue-test/sound, /blue-test/volume-max, /blue-test/touch, /blue-test/wake – quick ADB-based reaction tests for blue/blank-screen triage.
+			- volume-max: sets media volume to max for clearer speaker testing.
+			- vibrate: attempts direct ADB vibration first; falls back to mobile app test harness.
+			- sound: auto-raises volume before launching the mobile app speaker test.
+		- POST /test/sensors – sensor presence quick test; parses dumpsys sensorservice for accelerometer/proximity/light/gyro and returns a textual message for guided live checks.
+		- POST /test/health – quick battery + memory snapshot; reads dumpsys battery and /proc/meminfo and summarizes level, temp, health, voltage and approximate RAM total/free.
+		- History endpoints (not fully repeated here but important):
+			- Uses dataRoot under %APPDATA%/SmartHubDiagnostics or .smarthub-data.
+			- SavedRun includes: id, deviceId, deviceLabel, timestamp, counts (high/med/low), diagStages, diagDetails, textReport, screenTestImage.
+		- SmartLink Agent APK (no-ADB helper):
+			- GET /smartlink/agent-apk – serves the built android-smartlink debug APK as an attachment (application/vnd.android.package-archive).
+			- Used by the UI when ADB install is not possible.
+			- Depends on the APK being present at android-smartlink/app/build/outputs/apk/debug/app-debug.apk.
+			- Note for packaging: if shipping as an installer, consider bundling a known APK build under the installed app folder and serving that, rather than relying on a dev-tree build output.
+
+- src/adb.ts
+	- Central ADB helpers.
+	- `adb(...args)` – wrapper using execFileAsync(ADB, args, maxBuffer 25MB).
+		- `listDevices()` – parses `adb devices -l` to DeviceInfo with connection type (usb/tcpip/emulator) and a structured DeviceConnection helper (host/port/usbPath).
+	- `adbWithLimits(args, limits)` – wrapper that allows smaller timeouts/buffer limits for best-effort evidence collection (ex: small logcat snapshots).
+	- `diagnosticSnapshot(deviceId)` – batched ADB snapshot used by /collect; includes three `dumpsys battery` samples (batteryDump + batteryDump2 + batteryDump3) for intermittency detection.
+	- `screencap(deviceId)` – IMPORTANT FIX:
+		- Uses execFile with `{ encoding: 'buffer' }` so stdout is a binary PNG Buffer.
+		- This fixed earlier issue where screenshots were corrupt when treated as strings.
+	- Other helpers: dumpsysDisplay, surfaceFlinger, logcatErrors, logcatWarnings, deviceProps, battery, storage, memoryInfo, listApps, packagePermissions, sensors, cameraInfo, connectivityInfo, hardwareFeatures.
+
+Frontend Files
+- html/ui.html
+	- Shell layout: header with title, subtitle, and header-actions.
+	- Header buttons now:
+		- Refresh devices (id="refresh").
+		- Screen not showing? (id="no-debug-btn").
+		- Diagnose BSOD (USB-only) (id="bsod-scan-btn").
+		- Open BSOD desktop tool (id="bsod-gui-btn").
+		- NOTE: Previous button "Blue / boot screen?" (id="bsod-btn") has been removed at user request.
+	- Main controls:
+		- "Start Diagnostic Now" (id="action-start") → iterates all devices and calls runSequentialDiagnosticsForDevice.
+		- "Diagnose without debugging" (id="action-no-debug") → opens a quick host-only triage modal that uses /connection-check and /screen-visual-check to classify likely causes without needing USB debugging.
+		- "Test device now" (id="action-test") → opens a quick-test modal that sends ADB-based reaction tests (flash, vibrate, wake, sensor and health checks) to the first visible device.
+		- Devices list container (id="devices").
+	- Diagnostics modal (id="diag-modal") – shows summary, steps list, detail pane, and text report.
+	- Security modal (id="security-modal") – per-app and file security scan results.
+	- No-debug modal (id="no-debug-modal") – for screen/boot/no-debug triage:
+		- Shows ADB visibility, fastboot/bootloader visibility, PC storage visibility (MTP) and a "Possible blue/blank screen cause" card powered by bsodAnalysis from /connection-check.
+		- Below cards, a guidance block explains how to enable Developer options + USB debugging using an OTG mouse when screen/digitizer is bad (cannot auto-enable due to Android security).
+	- Quick no-debug modal (id="no-debug-quick-modal") – host-only quick path that stages MTP/ADB/fastboot checks, then shows:
+		- A "Likely blue / blank screen cause" card using /connection-check + bsodAnalysis and a scoring model that only marks causes as "likely" when multiple independent signals agree (connection, host checks, camera analysis).
+		- A separate "Automatic camera-based screen checks" card that shows ✓/✕ for cracks/line artifacts, horizontal banding/dead rows and uneven backlight/edge shadow based purely on webcam analysis.
+		- A minimum run time (~3.8 seconds) so quick no-debug never feels instant; the spinner remains visible while connection + camera helpers run.
+	- BSOD diagnose modal (id="bsod-diagnose-modal") – deeper USB-only BSOD helper:
+		- Shows a sanity checklist and a technician confirmation checkbox (id="bsod-tech-safe-mode").
+		- Runs /connection-check with deep sampling and renders Part 1 category + confidence.
+		- Includes optional camera check card (id="bsod-camera") and a Re-check button.
+	- Test-device modal (id="test-device-modal") – UI wrapper for the reaction tests (/blue-test/* and /test/*) with per-test descriptions and status lines.
+	- Mobile-app required modal (id="mobile-app-required-modal") – shown when the desktop tries to start a full diagnostic but the SmartHub Diagnostics Android app is not installed or not currently open on the phone; explains that Developer options / USB debugging alone are not sufficient and guides the technician to have the user open the Android app before retrying.
+	- BSOD launch modal (id="bsod-launch-modal") – message if external BSOD tool cannot be launched.
+
+- css/ui.css
+	- Switched from a dark navy theme to a light, clinic-style palette using CSS variables (light background, dark text, clear green/amber/red status colors).
+	- Updated primary and secondary buttons for better contrast (blue gradient primary with light text; light surface buttons with dark text and hover shadows).
+	- Lightened device cards, no-debug cards, quick-check items, and history entries to match the new palette while keeping logs on a dark background for readability.
+	- Updated summary cards (System Status / Security / Devices) and their badges to use light card backgrounds and clearly readable safe/warn/danger badges.
+	- Unified circular loading animation for diagnostics steps and quick-check icons, and added styles for root-cause notes and the separate camera-check quick item.
+	- Details tab layout: full-width single-column; Logs tab remains 2-column.
+
+- js/diagnostics.js
+	- Defines DIAGNOSTIC_SEQUENCE for modal steps:
+		- battery, display, touch, sensors, camera, connectivity, hardware, system, os, security.
+	- Live checklist in modal (antivirus-style):
+		- Full diagnostics open the modal immediately with a “running” checklist UI.
+		- Modal refresh is driven by window.updateLiveDiagnosticModal(deviceId) so other scripts can update the in-progress view.
+	- New touch step:
+		- key: "touch", title: "Touch / Ghost touch", description about log-based detection, icon 👆.
+	- openDiagnosticModal(record) – renders steps based on diagStages and attaches click handlers.
+	- showModalStepDetail(stepKey, record):
+		- battery: health and capacity details, cycle count, charging efficiency.
+		- display: resolution, screen diagonal, area, and screen test capture block.
+			- Screen test capture:
+				- Button calls POST /screen-test/:deviceId.
+				- Shows temporary "Capturing…" status, then <img> preview.
+				- Stores record.screenTestImage so it can be saved to history.
+		- touch (new):
+			- Uses diagDetails.touch to show:
+				- Touch driver errors in logs (present/not present/not reported).
+				- Ghost-touch style anomalies (present/not present/not reported).
+				- Whether device was charging during logs.
+			- Includes explanatory text:
+				- Ghost touch common causes: digitizer, flex, liquid, bad charger.
+				- This logic only sees driver/input hints, not physical glass.
+				- Interpretation tips: issues only while charging vs also on battery.
+		- security:
+			- Uses diagDetails.security.suspiciousApps (built from backend heuristics) to show a compact breakdown based only on suspicious apps: counts for high/medium/low-risk apps plus lists grouped as "Suspicious apps (all levels)", "High-risk apps", "Medium-risk apps" and "Low-risk apps".
+			- Safe/low-interest apps are not dumped into the modal to avoid overwhelming technicians with long lists.
+		- connectivity, hardware, system, os – each has its own detail block.
+	- registerPendingDiagnosticResult merges app and file security scan results into diagStages + diagDetails when available, and also folds in touchSummary so the "Touch / ghost touch" step exits "Running" with an OK or Attention state plus details. When all stages (including Apps & Security) are ready, it also clears fullDiagInProgress for the device and applies the final Security summary tile state (badge + text + suspicious counts) in one place so the grid view reflects the completed scan.
+	- Result timing:
+		- The diagnostic modal opens immediately for a full run and shows incremental progress while endpoints return.
+		- While a full diagnostic is running, the per-device Security summary card is kept in a neutral "Waiting for Apps & Security scan…" state so partial results do not flash incorrect risk labels.
+		- After a diagnostic run completes, registerPendingDiagnosticResult updates the Security summary card once with final counts and risk label, then sends a WebView message (type "diagnosticCompleted") to the Windows shell with diagStages and counts so the desktop app can notify the technician (different message for all‑OK vs Attention needed).
+	- runSequentialDiagnosticsForDevice:
+		- Sets all steps to "running" state.
+		- Clicks collect + apps buttons on the device card.
+		- Triggers runFileScanForDevice for file heuristics.
+
+- js/devices.js
+	- Renders device cards, tabs, Apps & Security button wiring, and spec-style hardware summaries per device.
+	- For Apps & Security button:
+		- First calls /suspicious-apps/:id for a fast pass that uses installer/source + name patterns to flag obviously suspicious apps and immediately updates the Security card badge.
+		- Then calls /apps/:id for full analysis (permissions + selective deep APK scans only on suspicious apps) and also triggers /file-scan/:id to fold file heuristics into the security summary.
+		- Caches a compact securityScanByDevice entry so that when /collect completes, registerPendingDiagnosticResult can merge app/file security and touchSummary into diagStages + diagDetails and the main modal.
+	- Offline/back-end handling:
+		- When /device fails with a network/connection error, the UI now shows a neutral "Loading, please wait…" / "Refresh devices" banner instead of a long "Offline mode" warning, and when running inside the Windows shell it still sends an "ensureBackend" message so the host can auto‑start the Node backend and then retries device discovery.
+	- Diagnostic gating and Security timing:
+		- Per-device collect buttons and the global "Start Diagnostic Now" flow both call /mobile-app-state/:id before starting; if the SmartHub Diagnostics Android app is not installed or not reported as running, they show the mobile-app-required modal (or a fallback meta message) instead of launching diagnostics.
+		- Uses securityScanInProgress and fullDiagInProgress flags so that fast suspicious-app scans and standalone Apps & Security runs can still update the Security summary card immediately, but full sequential diagnostics keep the Security card in a neutral waiting state until final results are available.
+	- Spec cards UX:
+		- Hides identity-related spec rows when values are unknown/empty (prevents repeated "Unknown" clutter on locked-down devices).
+
+- js/ui.js
+	- openNoDebugModal():
+		- Calls GET /connection-check.
+		- Populates ADB card (count, sample device label, or error), fastboot card, and a PC storage (MTP) card based on hostUsb.portableDevices.
+		- bsod card (no-debug-bsod-status/detail) from data.bsodAnalysis:
+			- Prefers bsodAnalysis.part1 when available (Part 1 category list).
+			- Sets status to category and colors by confidence (ok/warn/neutral).
+			- Joins reasons[] for detailed explanation.
+		- On error, shows generic connection error messages.
+	- openQuickNoDebugModal():
+		- Calls GET /connection-check and (best-effort) GET /screen-visual-check, then enforces a minimum runtime (~3.8 seconds) so the no-debug diagnostic never feels instant.
+		- Stages quick checks for MTP visibility, ADB visibility, fastboot-only mode and a "Likely blue / blank screen cause" card driven by connection state, bsodAnalysis and camera hints.
+			- Root cause list is aligned to Part 1 categories (System Errors, Application Conflicts, Hardware Malfunction, Overheating, Insufficient Storage) and still incorporates legacy wording for robustness.
+		- Renders a technician root-cause checklist only for high-confidence causes (multiple agreeing signals) plus a guided physical inspection checklist for display/connector/power faults.
+		- Outputs camera-based crack/banding/backlight results into a separate "Automatic camera-based screen checks" quick-check card, distinct from the root-cause list.
+	- openTestDeviceModal():
+		- Opens the "Test device now" modal and binds buttons to /blue-test/flash, /blue-test/vibrate, /blue-test/sound, /blue-test/volume-max, /blue-test/touch, /blue-test/wake, /test/sensors and /test/health via bindBlueTestButton.
+		- Flash, sound and touch tests are executed on the phone by TestRunnerActivity in the SmartHub mobile app (one shared test screen) when available.
+		- sound auto-raises media volume first; vibrate may be triggered directly via ADB on supported devices.
+		- wake sends a power-key event; sensors and health remain desktop-only snapshots.
+		- Used as a quick ADB-based confirmation that the board, vibrator, flash, speaker, touch-screen and sensors respond even when the main display may be faulty.
+	- runGlobalSecurityScan():
+		- Orchestrates a full app+permission+file heuristic scan (using /apps/:id and /file-scan/:id) and shows the dedicated security modal with a text summary and per-app breakdown.
+	- DOMContentLoaded handler:
+		- Wires buttons: refresh, Start Diagnostic Now, Diagnose without debugging, Test device now, Screen not showing?, Diagnose BSOD (USB-only), Open BSOD desktop tool (launch-bsod-gui).
+		- Closes all modals on appropriate button clicks, including the main no-debug modal, quick no-debug modal, test-device modal, BSOD launch modal, security modal and app-usage modal.
+	- SmartLink install (no-ADB fallback):
+		- If no ADB device is detected (via /connection-check) or ADB install fails, downloads the APK from GET /smartlink/agent-apk.
+		- Shows manual instructions: copy APK to phone internal storage via MTP, then tap to install.
+	- openBsodDiagnoseModal():
+		- Opens the USB-only BSOD helper modal and runs /connection-check with deep sampling (samples + delayMs).
+		- If "Safe Mode improves" is checked, appends techSafeMode=1 so backend can gate confidence safely.
+		- Auto-runs the camera helper (/screen-visual-check) in parallel as best-effort evidence.
+		- Prefers bsodAnalysis.primaryReason (and part1.primaryReason) for short, technician-friendly labels.
+		- Shows an Evidence block when ADB log evidence was captured (signals.adb.logEvidence).
+
+- ui.js (legacy UI script)
+	- Mirrors the device spec-card rendering behaviors used by js/devices.js, including hiding identity-related spec rows when values are unknown/empty.
+
+Security / Apps Changes
+- Deep APK scan:
+	- Shared helper runDeepApkScan(deviceId, pkg) added in server (not reprinted here) to:
+		- Run `adb -s id shell pm path pkg` → find APK on device.
+		- `adb -s id pull` to a temporary file under the OS temp directory (no long‑lived apk-cache on disk); the temp APK is deleted immediately after scanning.
+		- Call `python security-tools/apk_security_scan.py <apk>` which uses aapt to extract metadata and risk.
+		- Parse JSON and return deep risk info.
+	- /apps/:id selectively applies runDeepApkScan only to a bounded subset of suspicious apps, building deepScanByPkg without scanning every package.
+	- /apps/:id merges deep risk with permission-based risk (assessAppRisk + classifyAppRisk + scoreAppRisk):
+		- Picks worst severity between heuristic and deep scan.
+		- Enforces minimum scores for deep risky/moderate results.
+	- /app-risk/:id/:pkg uses the same helper for single-app detail.
+	- On startup, the server deletes any legacy apk-cache folder under the SmartHub data root so old cached APKs no longer consume SSD space.
+	- Net effect: deep APK scanning remains available for high‑risk apps, but disk usage is bounded and total scan time stays reasonable even on devices with hundreds of benign apps.
+
+Diagnostics Evolution (high level)
+- Connectivity:
+	- Now infers hasMobile/hasGps using both dumpsys connectivity and pm list features (android.hardware.telephony, android.hardware.location.gps).
+- Display:
+	- Added physical size estimation using DPI from dumpsys display or LCD density props.
+- Battery:
+	- Added capacity estimation from dumpsys battery or charge_counter or sysfs design capacity.
+	- Added cycleCount from dumpsys or /sys/class/power_supply/battery/cycle_count.
+- Touch / ghost touch:
+	- New diag stage and UI section as described above.
+- Screen test capture:
+	- New pipeline from device screencap → PNG buffer → write to Windows app screenshot folder → served via /screen-test-image.
+	- Stored per SavedRun as screenTestImage and shown in Display detail.
+
+- On‑device mobile app integration:
+	- SmartHub Mobile Diagnostics Android app (android-app/) runs entirely on the phone but relies on a USB/ADB connection to the desktop.
+	- MainActivity keeps the phone UI simple: connection/USB status bar + timestamp, and quietly writes smarthub_diagnostics.json that the desktop backend reads via /on-device-report/:id and also attaches as onDeviceReport to /collect results.
+	- Main screen shows an indeterminate loading spinner only while the desktop is actively running diagnostics (desktop-controlled), keeping it hidden during idle USB connection.
+	- A short "Diagnostic Now" label sits above the spinner to make it clear what the animation represents when active.
+	- TestRunnerActivity is a dedicated, single-screen test harness started from the desktop via /blue-test/* endpoints; it performs flashlight, vibration, speaker and touch-screen tests based on an intent extra but never shows final results (only guidance and, for touch, a simple "touches detected" counter).
+	- The desktop UI is the primary place where technicians review accurate, full diagnostics and record outcomes; the phone UI is secondary and mainly confirms that the device is connected and shows instructions while tests run.
+
+- Blue/blank screen triage & quick tests:
+	- Added host-side MTP + transport-level USB checks and bsodAnalysis integration in /connection-check, plus optional camera-based /screen-visual-check to classify likely causes even when USB debugging is off.
+	- bsodAnalysis.part1 maps results to Part 1 categories (System Errors / Application Conflicts / Hardware Malfunction / Overheating / Insufficient Storage).
+	- Quick no-debug modal ("Diagnose without debugging") surfaces staged MTP/ADB/fastboot status and a root-cause checklist driven by connection state + camera analysis.
+	- "Test device now" modal sends quick ADB-based reaction tests (/blue-test/* and /test/*), including auto max media volume for clearer speaker tests.
+
+BSOD / no-debug documentation bundle
+- bsodscanhelp/ contains consolidated docs (schema, scoring, test matrix, UI copy) for the no-ADB BSOD workflow.
+- bsodscanhelp.zip is a shareable archive of that folder.
+
+UX Changes
+- Removed separate "Blue / boot screen?" header button.
+- Re-used "Screen not showing?" (no-debug modal) for both no-display and blue/boot issues.
+- Inside no-debug modal, added:
+	- Blue/blank cause card powered by bsodAnalysis.
+	- Instructions block for enabling Developer options/USB debugging using OTG mouse (cannot be automated due to Android security model).
+- When no devices are returned from /device, both the legacy UI (ui.js) and the newer js/devices.js path now show expanded "No devices detected" guidance:
+	- Mentions using a data-capable USB cable (not a charge-only "universal" charger).
+	- Explains that if the phone appears in Windows File Explorer but not in SmartHub, you must enable Developer options and USB debugging on the phone and accept the RSA trust prompt.
+
+SmartLink no-ADB deployment notes
+- Technician procedure and rationale: InstallDroidApp(nodebug)/plan.txt.
+- Typical workflow when USB debugging is OFF:
+	- PC downloads APK (GET /smartlink/agent-apk) or uses a locally built artifact.
+	- Copy via Windows File Explorer to phone storage (MTP).
+	- User installs by opening the APK (requires enabling “install unknown apps” for the file manager if prompted).
+
+Notes for Future AI / Devs
+- Respect existing style and naming; keep new diagnostics stages consistent with diagStages/diagDetails pattern.
+- When adding new heuristics, prefer using existing ADB helpers in src/adb.ts rather than ad-hoc exec calls.
+- Keep USB-only evidence collection read-only and time-bounded (avoid hanging or triggering USB/ADB instability).
+- Any new binary data (images, logs) must be handled as Buffer, not string, to avoid corruption.
+- For additional "no touch" workflows, extend no-debug modal and /connection-check rather than creating new top-level buttons.
+- Backend binds to port 3333 by default; EADDRINUSE typically indicates the SmartHub desktop shell (or another node instance) is already running.
+

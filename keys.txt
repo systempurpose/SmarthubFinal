@@ -1,0 +1,11 @@
+SmartHub Windows App – Keyboard Shortcuts
+
+These shortcuts work in the Windows app (WebView UI).
+
+- Ctrl+R       Refresh devices
+- Ctrl+Enter   Start Diagnostic Now
+- Ctrl+B       Diagnose for BSOD only
+- Ctrl+I       Install mobile app
+- Ctrl+L       Toggle Read-only mode
+- Ctrl+G       How to enable Developer options
+- Esc          Close the top-most open modal

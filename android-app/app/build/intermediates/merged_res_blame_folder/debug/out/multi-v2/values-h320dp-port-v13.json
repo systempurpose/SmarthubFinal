@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-28:/values-h320dp-port-v13/values-h320dp-port-v13.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\51cda1f58a99dbdb0c04a43a3d77afc2\\transformed\\material-1.11.0\\res\\values-h320dp-port-v13\\values-h320dp-port-v13.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "63",
+                        "endOffsets": "114"
+                    }
+                }
+            ]
+        }
+    ]
+}

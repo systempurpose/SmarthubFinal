@@ -1,0 +1,245 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2176 >>
+stream
+1.20 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — Network Diagram \(Simplified\)) Tj
+ET
+BT
+/F1 10 Tf
+40 545 Td
+(No Internet required. UI and server communicate via localhost \(loopback\).) Tj
+ET
+40 320 185 80 re
+S
+BT
+/F1 11 Tf
+50 382 Td
+(Technician / Shop) Tj
+ET
+BT
+/F1 11 Tf
+50 370 Td
+(Staff) Tj
+ET
+275 305 230 100 re
+S
+BT
+/F1 11 Tf
+285 383 Td
+(SmartHub Desktop App \(WPF +) Tj
+ET
+BT
+/F1 11 Tf
+285 370 Td
+(WebView2\)) Tj
+ET
+330 465 140 60 re
+S
+BT
+/F1 11 Tf
+340 507 Td
+(Localhost) Tj
+ET
+BT
+/F1 11 Tf
+340 495 Td
+(127.0.0.1) Tj
+ET
+545 320 175 80 re
+S
+BT
+/F1 10.60 Tf
+555 384 Td
+(Local Server) Tj
+ET
+BT
+/F1 10.60 Tf
+555 372.20 Td
+(\(Node/Express\)) Tj
+ET
+BT
+/F1 10.60 Tf
+555 360.40 Td
+(:3333) Tj
+ET
+745 328 85 64 re
+S
+757 328 m
+757 392 l
+S
+BT
+/F1 9.60 Tf
+755 378 Td
+(SQLite +) Tj
+ET
+BT
+/F1 9.60 Tf
+755 367 Td
+(JSON) Tj
+ET
+275 195 230 70 re
+S
+BT
+/F1 11 Tf
+285 247 Td
+(Android Phone \(USB) Tj
+ET
+BT
+/F1 11 Tf
+285 235 Td
+(connection\)) Tj
+ET
+225 370 m
+275 365 l
+S
+275 365 m
+265.45 369.98 l
+S
+275 365 m
+264.65 362.01 l
+S
+275 345 m
+225 350 l
+S
+225 350 m
+234.55 345.02 l
+S
+225 350 m
+235.35 352.99 l
+S
+388 465 m
+378 405 l
+S
+378 405 m
+383.59 414.21 l
+S
+378 405 m
+375.70 415.52 l
+S
+402 405 m
+412 465 l
+S
+412 465 m
+406.41 455.79 l
+S
+412 465 m
+414.30 454.48 l
+S
+470 505 m
+545 410 l
+S
+545 410 m
+541.94 420.33 l
+S
+545 410 m
+535.66 415.37 l
+S
+545 390 m
+470 485 l
+S
+470 485 m
+473.06 474.67 l
+S
+470 485 m
+479.34 479.63 l
+S
+720 370 m
+745 370 l
+S
+745 370 m
+735 374 l
+S
+745 370 m
+735 366 l
+S
+745 350 m
+720 350 l
+S
+720 350 m
+730 346 l
+S
+720 350 m
+730 354 l
+S
+376 305 m
+376 265 l
+S
+376 265 m
+380 275 l
+S
+376 265 m
+372 275 l
+S
+404 265 m
+404 305 l
+S
+404 305 m
+400 295 l
+S
+404 305 m
+408 295 l
+S
+BT
+/F1 10 Tf
+376 275 Td
+(USB) Tj
+ET
+40 20 802 105 re
+S
+BT
+/F1 10 Tf
+50 107 Td
+(Notes) Tj
+ET
+BT
+/F1 9 Tf
+50 91 Td
+(The “Localhost” cloud represents loopback communication inside the same Windows machine.) Tj
+ET
+BT
+/F1 9 Tf
+50 80 Td
+(The local server provides the API used by the UI. Data is stored locally using JSON files and SQLite databases.) Tj
+ET
+BT
+/F1 9 Tf
+50 69 Td
+(The Android phone is connected via USB for diagnostics \(ADB when enabled\) and for USB-only evidence collection.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub Network Diagram) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000002316 00000 n 
+0000002452 00000 n 
+0000002509 00000 n 
+0000002558 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+2613
+%%EOF

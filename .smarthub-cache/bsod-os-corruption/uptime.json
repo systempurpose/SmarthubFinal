@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "devices": {
+    "3201327b39de944a": {
+      "lastUptimeSec": 192,
+      "lastSeenMs": 1777962353985,
+      "rebootEventsMs": [
+        1777962353970,
+        1777962353973
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/sh_background"
+    android:fillViewport="true"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/sh_card"
+        android:padding="18dp">
+
+        <TextView
+            android:id="@+id/test_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SmartHub device test"
+            android:textStyle="bold"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/test_instructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="A technician is running a test from the SmartHub desktop app. Follow their instructions and watch what the phone does."
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:paddingBottom="24dp" />
+
+        <TextView
+            android:id="@+id/test_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="All results are recorded on the SmartHub desktop tool. This screen is only for guidance while the test runs."
+            android:textAppearance="?attr/textAppearanceBody2" />
+
+    </LinearLayout>
+
+</ScrollView>

@@ -1,0 +1,181 @@
+SmartHub Diagnostics - Data Flow Diagram (DFD)
+Date: 2026-04-17
+
+Method Used
+- This DFD uses Gane and Sarson notation.
+- External Entity = source/sink outside the system boundary.
+- Process = transformation of input data into output data.
+- Data Store = persistent data repository.
+- Data Flow = labeled arrow that transfers information.
+
+What database is used?
+- SQLite (Python sqlite3) for Offline AI memory databases.
+- JSON file storage under dataRoot for history and configuration.
+
+====================================================================
+DFD Level 0 (Context Diagram)
+
+State (In this level)
+- In this level, SmartHub Diagnostics is shown as one process only (P0).
+- The focus is system boundary and data exchange with external entities.
+
+Define (According to ... with citation)
+- According to Gane and Sarson, the context diagram (Level 0) represents the whole system as a single process and shows only external interfaces and major data flows (Gane & Sarson, 1979).
+
+Justify (Moreover, ...)
+- Moreover, Level 0 is correct for this system because stakeholders first need a high-level view of who interacts with SmartHub before seeing internal decomposition.
+
+[External Entities]
+E1 Technician
+E2 Android Phone
+E3 Windows Host OS (USB/PnP/MTP)
+E4 ADB/Fastboot Tools
+E5 Camera Checker
+E6 Offline AI Helper (Python)
+E7 File System Storage (dataRoot + screenshots)
+
+[System]
+P0 SmartHub Diagnostics (Windows UI + Node/Express backend)
+
+[Main Data Flows]
+- E1 -> P0: Start diagnostics, select actions, provide symptom hints, label outcomes
+- P0 -> E1: Device list, diagnostics results, BSOD triage results, recommendations
+- P0 <-> E2 (via E4 ADB/Fastboot): device properties, dumps, logcat, tests, screenshots
+- P0 <-> E3: USB/PnP/MTP device presence and driver status
+- P0 <-> E5: camera frames for visual screen checks
+- P0 <-> E6: send JSON features, receive offline AI conclusions and actions
+- P0 <-> E7: read/write history, config, AI memory DB, screenshots
+
+====================================================================
+DFD Level 1 (Major Processes)
+
+State (In this level)
+- In this level, P0 is decomposed into major functional processes P1 to P7.
+- Data stores are shown to indicate where persistent information is written and read.
+
+Define (According to ... with citation)
+- According to Gane and Sarson, Level 1 diagrams decompose the parent process into major sub-processes while preserving balanced inputs and outputs from the parent level (Gane & Sarson, 1979).
+
+Justify (Moreover, ...)
+- Moreover, Level 1 is needed in this system because SmartHub has distinct diagnostic domains (connection check, full ADB diagnostics, USB-only BSOD, camera check, security scan, AI support, and history/config).
+
+Processes
+P1 Device Discovery and Connection Check
+- Inputs:
+  - ADB device list (from E4) when enabled
+  - Fastboot devices (from E4) when enabled
+  - Windows PnP/MTP evidence (from E3)
+- Outputs:
+  - connection status summary
+  - hostUsb evidence and sampling timeline
+  - optional signals (adb/fastboot deep evidence)
+
+P2 Full Diagnostics (ADB Path)
+- Inputs:
+  - selected deviceId (E1)
+  - ADB dumps/logs/sensors (E4 <-> E2)
+- Outputs:
+  - diagStages, diagDetails, findings
+  - optional ADB Offline AI conclusion (P6)
+  - saves run to history (D1)
+
+P3 USB-only BSOD / Blank Screen Diagnose (No-ADB Path)
+- Inputs:
+  - connection sampling (P1 with skipAdb/usbOnly)
+  - technician confirmations (safe mode improves, works other PC, etc.)
+  - optional camera visual analysis (P4)
+  - offline AI suggestion (P6)
+- Outputs:
+  - BSOD category, confidence, reasons
+  - next steps and explainability
+
+P4 Camera Visual Check
+- Inputs:
+  - camera frames (E5)
+- Outputs:
+  - visual classification (normal/blue/dark/etc.)
+  - hints: cracks/banding/backlight, content_visible_hint, stability
+
+P5 Security Scan (ADB Path)
+- Inputs:
+  - package list + permissions + APK paths (E4 <-> E2)
+  - file scan results (E4 <-> E2)
+- Outputs:
+  - suspicious apps list, risk scores, optional deep APK scan results
+
+P6 Offline AI Suggest (Python Helpers)
+- Inputs:
+  - features JSON (connection + visual + optional ADB evidence)
+  - previously stored memory cases (D4/D5)
+- Outputs:
+  - top conclusion, ranked hypotheses, actions
+  - memory stats and similar past cases
+  - optional auto-remember (store new case)
+
+P7 History and Configuration Management
+- Inputs:
+  - save run (from P2)
+  - read config / save config (Online AI / SmartLink)
+- Outputs:
+  - history listing, saved runs
+  - config status
+
+--------------------------------------------------------------------
+Data Stores (where data is persisted)
+D1 history.json (JSON) - stores technician diagnostic runs (SavedRun)
+D2 online-ai-config.json (JSON) - optional online AI config (url/model/apiKey)
+D3 smartlink-config.json (JSON) - SmartLink pairing public keys
+D4 memory.sqlite (SQLite) - no-debug AI memory cases
+D5 adb_ai_memory.sqlite (SQLite) - ADB AI memory cases
+D6 screenshots/ (files) - screen-test images and camera snapshots
+
+====================================================================
+DFD Level 2 (Detailed Decomposition of P3 USB-only BSOD Diagnose)
+
+State (In this level)
+- In this level, P3 is decomposed into sub-processes P3.1 to P3.5 to show the complete USB-only diagnostic flow.
+
+Define (According to ... with citation)
+- According to Gane and Sarson, Level 2 expands a selected Level 1 process into lower-level sub-processes to describe detailed transformations while maintaining data-flow balance with the parent process (Gane & Sarson, 1979).
+
+Justify (Moreover, ...)
+- Moreover, Level 2 is essential for this system because USB-only BSOD analysis has strict evidence and safety gating, so each step must be explicit for academic and technical validation.
+
+Sub-processes of P3
+P3.1 Detect USB-connected device
+- Input: start request, host USB enumeration
+- Output: device presence decision
+
+P3.2 Collect USB/BSOD evidence (logs)
+- Input: Windows USB/PnP/MTP evidence, host signals
+- Output: evidence bundle, host-side status
+
+P3.3 Camera visual check (optional)
+- Input: camera frames
+- Output: visual hints (screen color/state, instability clues)
+
+P3.4 Generate offline AI suggestion (optional)
+- Input: evidence features + stored memory
+- Output: ranked hypotheses, recommended actions
+
+P3.5 Build and save diagnostic result
+- Input: outputs from P3.2/P3.3/P3.4 + technician confirmations
+- Output: technician-facing result summary and saved run
+
+Data Stores and External Entities used by Level 2
+- External entities: E1 Technician, E3 Windows Host OS, E5 Camera Checker, E6 Offline AI Helper
+- Data stores: D1 history.json, D4 memory.sqlite, D7 usb-evidence files
+
+--------------------------------------------------------------------
+Notes for PDF drawing
+- Draw each level on a separate page: Level 0, Level 1, Level 2.
+- Use Gane and Sarson style symbols consistently:
+  - external entity: rectangle
+  - process: rounded/structured process box
+  - data store: open-ended store
+  - data flow: labeled arrow
+- Add narrative blocks on every page: State, Define (with citation), Justify (Moreover).
+
+--------------------------------------------------------------------
+References
+- Gane, C., & Sarson, T. (1979). Structured Systems Analysis: Tools and Techniques. Prentice-Hall.

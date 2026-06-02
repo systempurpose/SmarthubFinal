@@ -1,0 +1,245 @@
+SmartHubv5 — Diagnose BSOD: Features + Auto-Test
+
+Applies to:
+- Endpoint: GET /connection-check
+- Purpose: USB-only + (optional) deep signals to classify “BSOD-like” phone complaints safely (read-only).
+
+Status:
+- This document is intended to be “complete” for current output fields.
+- If you add new fields to `/connection-check`, update Section 6 (Field Map).
+
+0) Quick Start (Technician)
+
+A) One-click automatic check (recommended)
+- `/connection-check?autoTest=1`
+
+B) More stable sampling (recommended for intermittent issues)
+- `/connection-check?autoTest=1&samples=30&delayMs=1500&adbSamples=10&adbDelayMs=300`
+
+C) Deep evidence without autoTest verdict
+- `/connection-check?deep=1`
+
+D) USB-only (fastest, most conservative)
+- `/connection-check`
+
+Note: `autoTest=1` forces `deep=1`.
+
+1) Query Parameters
+
+General
+- `deep`:
+  - `deep=1` enables additional ADB/fastboot evidence collection.
+  - default: off.
+- `autoTest`:
+  - `autoTest=1` returns `result.autoTest` verdict and forces `deep=1`.
+
+Windows USB sampling (deep mode recommended)
+- `samples`: number of host USB samples (min 3, max 60; default 10 when deep)
+- `delayMs`: delay between samples (min 250, max 2000; default 1200 when deep)
+
+ADB stability sampling (deep + ADB state="device")
+- `adbSamples`: number of ADB “shell ping” samples (min 2, max 12; default 5)
+- `adbDelayMs`: delay between ADB samples (min 0, max 1200; default 250)
+
+2) What Diagnose BSOD Collects
+
+A) ADB visibility (platform-tools)
+- Runs: adb devices -l
+- Output: result.adb.ok, result.adb.devices[], and per-device fields like id/state/model/product/device/usb/transport_id.
+- Meaning:
+  - ADB state="device" strongly suggests Android OS is alive.
+  - ADB state="unauthorized" or "offline" is “alive but not fully diagnosable” from USB-only.
+
+B) Fastboot visibility (platform-tools)
+- Runs: fastboot devices
+- Output: result.fastboot.ok, result.fastboot.devices[]
+- Meaning:
+  - fastboot-only visibility means Android is not booted; treat as boot/firmware/system instability until proven otherwise.
+
+C) Windows host-side USB evidence (Windows only)
+- Uses PowerShell Get-PnpDevice to find:
+  - Portable/WPD/MTP entries (phone seen as storage device)
+  - Transport-level USB entries (ADB/fastboot/EDL/preloader/unknown/driver issues)
+- Sampling (deep mode): multiple samples over time to detect flapping
+  - Query params: samples (3–60), delayMs (250–2000)
+  - Output: result.hostUsb.sample { anyChange, changeCount, stability, timeline, ... }
+- Deep enrichment (deep mode): driver provider/version + location paths for final devices
+
+D) Optional Bsod tools helper evidence (Windows only; best-effort)
+- UsbEvidenceHelper.exe (native evidence)
+- UsbEventLogHelper.exe (recent Event Log USB/PnP warnings/errors)
+- UsbPnpSnapshot.exe (PnP snapshot + problem codes)
+- Output:
+  - result.hostUsb.nativeUsbEvidence
+  - result.hostUsb.usbEventLogEvidence
+  - result.hostUsb.pnpSnapshotEvidence
+
+E) Transport Profile (Windows)
+- Summarizes likely phone transport state from transport devices.
+- Examples: Qualcomm EDL/9008, MTK preloader/BROM, Samsung download mode, unknown/unstable.
+- Output: result.hostUsb.transportProfile
+
+F) Host USB Verdict (Windows)
+- A single host-side verdict with confidence and reasons.
+- Output: result.hostUsb.hostVerdict { key, label, confidence, reasons, helperAgreement, transportProfileKey }
+
+3) Deep Signals (deep=1 or autoTest=1)
+
+When deep is enabled, the endpoint collects additional read-only signals.
+
+A) Fastboot getvar all (if in fastboot)
+- Output: result.signals.fastboot[].vars
+- Used to infer possible failed A/B update snapshot state (best-effort).
+
+B) ADB system properties + health
+- Output: result.signals.adb includes:
+  - bootCompleted (sys.boot_completed)
+  - safeMode (best-effort hint; see below)
+  - bootReason (ro.boot.bootreason)
+  - verifiedBootState (ro.boot.verifiedbootstate)
+  - vbmetaDeviceState (ro.boot.vbmeta.device_state)
+  - adbStability (new)
+  - display (new)
+  - battery (parsed dumpsys battery: level, temperatureC, status, health)
+  - dataPartitionUsePct (df /data)
+
+C) ADB log evidence (best-effort)
+- Output: result.signals.adb.logEvidence
+- Matches patterns for:
+  - failed updates
+  - filesystem/verity/mount corruption
+  - crash-loop / watchdog
+  - thermal signals
+
+D) NEW: ADB stability sampling (read-only)
+- Output: result.signals.adb.adbStability
+  - samples, ok, failures, avgMs/minMs/maxMs
+- Purpose:
+  - Quantifies whether ADB evidence is reliable (a flapping cable/port or unstable device reduces trust).
+- Query params:
+  - adbSamples (2–12; default 5)
+  - adbDelayMs (0–1200; default 250)
+
+E) NEW: Display state hint (read-only)
+- Output: result.signals.adb.display
+  - screenState / powerState / brightness / displayCount (best-effort parsing)
+- Purpose:
+  - Distinguish “screen is asleep/off” from “black screen fault” cases.
+
+F) NEW: Safe Mode hint (best-effort)
+- Output: result.signals.adb.safeMode (boolean)
+- Purpose:
+  - If Safe Mode is active and symptoms improve, that supports “Application Conflicts” vs hardware.
+
+Safe Mode note:
+- Safe Mode detection is best-effort and OEM-dependent.
+- The strongest "Application Conflicts" evidence is still technician-confirmed behavior: “Symptom improves in Safe Mode”.
+
+4) Classification Output
+
+A) Summary
+- Output: result.summary
+- Human-readable quick explanation for the detected state.
+
+B) BSOD analysis (broad)
+- Output: result.bsodAnalysis
+  - category, primaryReason, confidence, reasons
+
+C) BSOD analysis (part1)
+- Output: result.bsodAnalysis.part1
+  - category in: System Errors | Application Conflicts | Hardware Malfunction | Overheating | Insufficient Storage
+  - primaryReason, confidence, reasons
+
+Important labeling change:
+- The previous label “No USB-only symptoms of BSoD” was renamed to:
+  - “No deep boot failure evidence (USB-only)”
+  This better reflects what USB-only can/cannot prove.
+
+5) NEW Feature: Automatic Device Test
+
+Goal:
+- Provide a single “pass/warn/fail” verdict for technicians, using only read-only checks.
+
+Enable:
+- Add query param: autoTest=1
+- autoTest forces deep behavior (equivalent to deep=1).
+
+Output:
+- result.autoTest:
+  - ok (boolean)
+  - verdict: pass | warn | fail
+  - confidence: low | medium | high
+  - reasons[]
+  - nextActions[]
+  - checks.usb / checks.adb / checks.fastboot / checks.displayHint
+
+General logic:
+- PASS:
+  - ADB state="device", boot completed, ADB stable, USB stable, and no host driver evidence.
+- FAIL (common case):
+  - fastboot visible but ADB not visible (Android not booted).
+- WARN:
+  - USB flapping, ADB instability, host driver evidence, or “alive but locked/non-debuggable” state.
+
+How to interpret `autoTest`:
+- `pass` means: “Signals are stable enough to trust deeper diagnosis.” It does NOT guarantee the phone has no problem.
+- `warn` means: “Evidence is present but unreliable or ambiguous.” Follow `nextActions` first.
+- `fail` means: “A major prerequisite for diagnosis is missing (e.g., only fastboot visible, or nothing enumerates).”
+
+Recommended technician run:
+- Fast:
+  - /connection-check?autoTest=1
+- More stable sampling:
+  - /connection-check?autoTest=1&samples=30&delayMs=1500&adbSamples=10&adbDelayMs=300
+
+Notes / Safety
+- All checks are read-only (no flashing, no reboots, no destructive ADB commands).
+- USB-only results are conservative by design; confidence is lowered when signals are unstable.
+
+6) Field Map (JSON Output)
+
+Top-level fields
+- `adb`:
+  - `{ ok: boolean, devices: DeviceInfo[], error?: string }`
+- `fastboot`:
+  - `{ ok: boolean, devices: string[], error?: string }`
+- `hostUsb` (Windows only; may be omitted or contain `error` if PowerShell/helpers fail)
+  - `portableDevices[]`: MTP/WPD/Portable evidence (sign of life)
+  - `transportDevices[]`: USB transport identities (ADB/fastboot/EDL/preloader/unknown, etc)
+  - `sample`: host sampling metrics/timeline (deep)
+  - `transportProfile`: summarized transport identity
+  - `hostVerdict`: host USB verdict
+  - `nativeUsbEvidence` / `usbEventLogEvidence` / `pnpSnapshotEvidence`: optional helper evidence
+- `signals` (deep only)
+  - `signals.fastboot[]`: `{ deviceId, vars?, error? }`
+  - `signals.adb`:
+    - `deviceId`, `state`
+    - `bootCompleted`, `bootReason`, `verifiedBootState`, `vbmetaDeviceState`
+    - `safeMode` (best-effort)
+    - `battery`, `dataPartitionUsePct`
+    - `logEvidence` (best-effort pattern matches)
+    - `adbStability` (new)
+    - `display` (new)
+- `summary`: short explanation string
+- `bsodAnalysis`: `{ category, primaryReason, confidence, reasons[], part1 }`
+- `autoTest` (autoTest=1 only): `{ ok, verdict, confidence, reasons[], nextActions[], checks }`
+
+7) Known Limitations (Important)
+
+- USB-only cannot prove the display is working.
+  - ADB online can mean “OS alive but screen black”.
+- ADB state="device" does not prove the UI is usable.
+  - It only proves the OS responds to debugging commands.
+- ADB logs are best-effort and OEM-dependent.
+  - Some devices restrict log buffers or redact signals.
+- Safe Mode detection is best-effort.
+  - Treat it as a hint, not a guaranteed truth.
+
+8) Troubleshooting
+
+- If `adb.ok=false` or `fastboot.ok=false`:
+  - Check that platform-tools are installed and available to the companion service.
+- If `hostUsb.error` exists:
+  - Run the companion with sufficient permissions to query PnP devices.
+- If USB sampling shows flapping:
+  - Swap cable, avoid hubs, use a rear motherboard port, try another PC.

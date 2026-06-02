@@ -1,0 +1,558 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2270 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD \(Text Only\) — Level 0 \(Context\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+BT
+/F1 10 Tf
+40 530 Td
+(State \(In this level\): SmartHub is one process \(P0\) with external entities and top-level data flows.) Tj
+ET
+BT
+/F1 10 Tf
+40 516 Td
+(Define \(According to\): Context DFD shows the entire system as one process and only external interfaces \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 10 Tf
+40 502 Td
+(Justify \(Moreover\): This gives a clear and bounded overview before decomposition.) Tj
+ET
+BT
+/F1 10 Tf
+40 488 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 474 Td
+(Process:) Tj
+ET
+BT
+/F1 10 Tf
+40 460 Td
+(P0 SmartHub Diagnostics \(UI + Node/Express Backend\)) Tj
+ET
+BT
+/F1 10 Tf
+40 446 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 432 Td
+(External Entities:) Tj
+ET
+BT
+/F1 10 Tf
+40 418 Td
+(- E1 Technician) Tj
+ET
+BT
+/F1 10 Tf
+40 404 Td
+(- E2 Android Phone) Tj
+ET
+BT
+/F1 10 Tf
+40 390 Td
+(- E3 Windows Host OS \(USB/PnP/MTP evidence\)) Tj
+ET
+BT
+/F1 10 Tf
+40 376 Td
+(- E4 ADB / Fastboot Tools) Tj
+ET
+BT
+/F1 10 Tf
+40 362 Td
+(- E5 Camera Checker \(optional visual check\)) Tj
+ET
+BT
+/F1 10 Tf
+40 348 Td
+(- E6 Offline AI Helper \(Python\)) Tj
+ET
+BT
+/F1 10 Tf
+40 334 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 320 Td
+(Data Store:) Tj
+ET
+BT
+/F1 10 Tf
+40 306 Td
+(- D1 Storage \(JSON + SQLite\)) Tj
+ET
+BT
+/F1 10 Tf
+40 292 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 278 Td
+(Main Data Flows:) Tj
+ET
+BT
+/F1 10 Tf
+40 264 Td
+(- E1 -> P0: request / start) Tj
+ET
+BT
+/F1 10 Tf
+40 250 Td
+(- P0 -> E1: results / report) Tj
+ET
+BT
+/F1 10 Tf
+40 236 Td
+(- E2 -> P0: device signals) Tj
+ET
+BT
+/F1 10 Tf
+40 222 Td
+(- E3 -> P0: USB/PnP evidence) Tj
+ET
+BT
+/F1 10 Tf
+40 208 Td
+(- E4 -> P0: adb/fastboot output) Tj
+ET
+BT
+/F1 10 Tf
+40 194 Td
+(- P0 -> E5: capture request \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 180 Td
+(- P0 -> E6: suggest request; E6 -> P0: AI conclusion \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 166 Td
+(- P0 -> D1: write results; D1 -> P0: read history/config) Tj
+ET
+40 20 802 90 re
+S
+BT
+/F1 10 Tf
+50 92 Td
+(How to read \(flow\)) Tj
+ET
+BT
+/F1 9 Tf
+50 76 Td
+(Level 0 shows SmartHub as one process and lists external interfaces in Gane and Sarson style.) Tj
+ET
+BT
+/F1 9 Tf
+50 65 Td
+(This page is text-only; the diagram PDF shows the same elements graphically.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Length 2202 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD \(Text Only\) — Level 1 \(Major Processes\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+BT
+/F1 10 Tf
+40 530 Td
+(State \(In this level\): P0 is decomposed into major processes and linked stores.) Tj
+ET
+BT
+/F1 10 Tf
+40 516 Td
+(Define \(According to\): Level 1 decomposition must keep parent-level flow balance \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 10 Tf
+40 502 Td
+(Justify \(Moreover\): SmartHub needs this level to separate and clarify major diagnostic functions.) Tj
+ET
+BT
+/F1 10 Tf
+40 488 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 474 Td
+(Processes \(decomposition of P0\):) Tj
+ET
+BT
+/F1 10 Tf
+40 460 Td
+(- P1 Connection Check) Tj
+ET
+BT
+/F1 10 Tf
+40 446 Td
+(- P2 Full Diagnostics \(ADB\)) Tj
+ET
+BT
+/F1 10 Tf
+40 432 Td
+(- P3 BSOD Diagnose \(USB-only\)) Tj
+ET
+BT
+/F1 10 Tf
+40 418 Td
+(- P4 Camera Visual Check) Tj
+ET
+BT
+/F1 10 Tf
+40 404 Td
+(- P5 Security Scan \(ADB\)) Tj
+ET
+BT
+/F1 10 Tf
+40 390 Td
+(- P6 Offline AI Suggest) Tj
+ET
+BT
+/F1 10 Tf
+40 376 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 362 Td
+(Data Stores:) Tj
+ET
+BT
+/F1 10 Tf
+40 348 Td
+(- D1 history.json \(run summaries / history\)) Tj
+ET
+BT
+/F1 10 Tf
+40 334 Td
+(- D4 memory.sqlite \(cases\) — offline AI memory) Tj
+ET
+BT
+/F1 10 Tf
+40 320 Td
+(- D5 adb_ai_memory.sqlite \(adb_cases\) — ADB AI memory) Tj
+ET
+BT
+/F1 10 Tf
+40 306 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 292 Td
+(Key Data Flows:) Tj
+ET
+BT
+/F1 10 Tf
+40 278 Td
+(- P1 -> D1: save check result) Tj
+ET
+BT
+/F1 10 Tf
+40 264 Td
+(- P2 -> D1: save run) Tj
+ET
+BT
+/F1 10 Tf
+40 250 Td
+(- P3 -> D1: save BSOD report) Tj
+ET
+BT
+/F1 10 Tf
+40 236 Td
+(- P3 -> D4: write offline AI case \(optional helper\)) Tj
+ET
+BT
+/F1 10 Tf
+40 222 Td
+(- P5 -> D1: save security report) Tj
+ET
+BT
+/F1 10 Tf
+40 208 Td
+(- P6 <-> D4: read similar cases / write offline AI case) Tj
+ET
+BT
+/F1 10 Tf
+40 194 Td
+(- P6 <-> D5: read ADB memory / write ADB AI case) Tj
+ET
+40 20 802 90 re
+S
+BT
+/F1 10 Tf
+50 92 Td
+(How to read \(flow\)) Tj
+ET
+BT
+/F1 9 Tf
+50 76 Td
+(Level 1 breaks P0 into major processes and shows which stores they read/write.) Tj
+ET
+BT
+/F1 9 Tf
+50 65 Td
+(Only primary stores are listed here; the graphical DFD shows the same relationships as arrows.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R /Rotate 0 >>
+endobj
+6 0 obj
+<< /Length 2658 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD \(Text Only\) — Level 2 \(P3 BSOD Diagnose — USB-only\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+BT
+/F1 10 Tf
+40 530 Td
+(State \(In this level\): P3 is decomposed into sub-processes P3.1-P3.5.) Tj
+ET
+BT
+/F1 10 Tf
+40 516 Td
+(Define \(According to\): Level 2 expands one selected Level 1 process for detailed transformation flow \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 10 Tf
+40 502 Td
+(Justify \(Moreover\): This level is needed to make the USB-only BSOD decision path auditable and clear.) Tj
+ET
+BT
+/F1 10 Tf
+40 488 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 474 Td
+(Decomposed Process:) Tj
+ET
+BT
+/F1 10 Tf
+40 460 Td
+(P3 BSOD Diagnose \(USB-only\) decomposes into:) Tj
+ET
+BT
+/F1 10 Tf
+40 446 Td
+(- P3.1 Detect USB-connected device) Tj
+ET
+BT
+/F1 10 Tf
+40 432 Td
+(- P3.2 Collect USB/BSOD evidence \(logs\)) Tj
+ET
+BT
+/F1 10 Tf
+40 418 Td
+(- P3.3 Camera visual check \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 404 Td
+(- P3.4 Generate offline AI suggestion \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 390 Td
+(- P3.5 Build + save diagnostic result) Tj
+ET
+BT
+/F1 10 Tf
+40 376 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 362 Td
+(External Entities used by P3:) Tj
+ET
+BT
+/F1 10 Tf
+40 348 Td
+(- E1 Technician) Tj
+ET
+BT
+/F1 10 Tf
+40 334 Td
+(- E3 Windows Host OS \(USB/PnP/MTP evidence\)) Tj
+ET
+BT
+/F1 10 Tf
+40 320 Td
+(- E5 Camera Checker \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 306 Td
+(- E6 Offline AI Helper \(Python, optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 292 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 278 Td
+(Data Stores used by P3:) Tj
+ET
+BT
+/F1 10 Tf
+40 264 Td
+(- D1 history.json \(save run summary\)) Tj
+ET
+BT
+/F1 10 Tf
+40 250 Td
+(- D4 memory.sqlite \(cases\) — save offline AI memory) Tj
+ET
+BT
+/F1 10 Tf
+40 236 Td
+(- D7 usb-evidence files \(save host logs/evidence\)) Tj
+ET
+BT
+/F1 10 Tf
+40 222 Td
+() Tj
+ET
+BT
+/F1 10 Tf
+40 208 Td
+(Key Data Flows:) Tj
+ET
+BT
+/F1 10 Tf
+40 194 Td
+(- E1 -> P3.1: start USB-only BSOD) Tj
+ET
+BT
+/F1 10 Tf
+40 180 Td
+(- E3 -> P3.1/P3.2: USB enumerate + logs) Tj
+ET
+BT
+/F1 10 Tf
+40 166 Td
+(- E5 -> P3.3: camera frames \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 152 Td
+(- P3.2 -> D7: save USB evidence) Tj
+ET
+BT
+/F1 10 Tf
+40 138 Td
+(- P3.4 -> D4: save AI memory \(optional\)) Tj
+ET
+BT
+/F1 10 Tf
+40 124 Td
+(- P3.5 -> D1: save run summary) Tj
+ET
+BT
+/F1 10 Tf
+40 110 Td
+(- P3.5 -> E1: result summary) Tj
+ET
+40 20 802 90 re
+S
+BT
+/F1 10 Tf
+50 92 Td
+(How to read \(flow\)) Tj
+ET
+BT
+/F1 9 Tf
+50 76 Td
+(Level 2 decomposes one Level 1 process \(P3\) into its sub-steps and shows the main stores used by those steps.) Tj
+ET
+BT
+/F1 9 Tf
+50 65 Td
+(USB-only means this path can work even when ADB debugging is not available.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R /Rotate 0 >>
+endobj
+8 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 8 0 R >>
+endobj
+10 0 obj
+<< /Title (SmartHub DFD Text Only \(Level 0-2\)) >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000002410 00000 n 
+0000002546 00000 n 
+0000004799 00000 n 
+0000004935 00000 n 
+0000007644 00000 n 
+0000007780 00000 n 
+0000007849 00000 n 
+0000007898 00000 n 
+trailer
+<< /Size 11 /Root 9 0 R /Info 10 0 R >>
+startxref
+7966
+%%EOF

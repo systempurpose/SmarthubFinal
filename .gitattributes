@@ -1,0 +1,2 @@
+3rdpartyApp/*.msi filter=lfs diff=lfs merge=lfs -text
+3rdpartyApp/*.zip filter=lfs diff=lfs merge=lfs -text

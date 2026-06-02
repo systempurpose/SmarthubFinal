@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="lab_blue">#0057FF</color>
+    <color name="lab_blue_text">#FFFFFF</color>
+    <string name="app_name">SmartHub Lab Stressor</string>
+    <string name="blue_body">This is a SAFE simulation for training/diagnostics. It is not an Android system crash.</string>
+    <string name="blue_exit_hint">To recover: press Back (stops and exits).</string>
+    <string name="blue_title">Simulated Blue Screen</string>
+    <string name="btn_blue_off">Disable blue screen</string>
+    <string name="expected_bsod">Expected symptom: simulated blue screen + lag/freeze within ~5–20 seconds (device dependent).</string>
+    <string name="status_idle">Status: idle</string>
+    <string name="status_running">Status: running</string>
+    <string name="timer_initial">Timer: 00:00</string>
+    <string name="title">SmartHub Lab Stressor</string>
+    <string name="version_placeholder">Version: (loading…)</string>
+    <string name="warning">WARNING: This app intentionally increases CPU load to make the phone lag/freeze for diagnostics. Press Back to stop and exit. Uninstall when finished.</string>
+    <string name="working">Working… generating simulated BSOD symptoms</string>
+</resources>

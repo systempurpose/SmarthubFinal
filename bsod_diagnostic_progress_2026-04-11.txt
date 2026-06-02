@@ -1,0 +1,77 @@
+SmartHubv5 — BSOD Diagnostic Fix Progress Log
+Date: 2026-04-11
+
+Goal
+- Stop false-positive “BSOD/UI freeze” reports on normal phones.
+- Enforce “USB-only honesty”: no Windows USB enumeration => INCONCLUSIVE.
+- Treat webcam OCR as supporting evidence only.
+
+Progress (chronological)
+
+[Done] Host COM/WPD error no longer implies phone freeze
+- Observed: deep MTP probing can fail on some PCs with COM/WPD errors (e.g., 0x80004002 E_NOINTERFACE).
+- Implemented: when the MTP probe is unavailable due to host COM/WPD errors (hostUnsupported=true), the app outputs a strict host-only message:
+	“MTP probe failed due to a host COM interface error. Cannot assess the phone’s state. Please reinstall Windows Portable Devices drivers or test on another PC. If you can visually see the phone is normal, ignore this result.”
+- Implemented: in hostUnsupported mode, no phone-state verdict is emitted unless the technician checks “UI frozen”.
+- Implemented: webcam hints are ignored for verdicts when hostUnsupported (avoid false positives).
+
+[Done] Added lightweight MTP heartbeat tool (mtp-ping)
+- Implemented new UsbEvidenceHelper mode: mtp-ping (fast open + small root enumeration).
+- Backend switched heartbeat attempts from deep probe to mtp-ping.
+
+[Done] Camera/OCR hint reliability tightened
+- Implemented: when camera frames are “dark/unclear”, OCR dialog hints are suppressed unless supported by content/contrast.
+- Updated cache-buster so WebView2 loads the new ui.js.
+
+[Done] Strict freeze rule (deep timeout required)
+- Backend now refuses to output BSOD/UI-freeze unless there is real timeout evidence.
+- Non-timeout WPD HRESULT failures (e.g., 0x80004005 / 0x802Axxxx) are treated as warnings/instability, not freeze proof.
+
+[Done] Heartbeat monitoring (15–30s) + sustained unresponsiveness
+- Heartbeat now runs in a time window (default 15s; clamp 15–30s) with 2.0s interval and ~2s timeout.
+- Freeze confirmation requires sustained timeouts (>=3 consecutive) while device remains enumerated.
+
+[Done] Baseline response timing (warning only)
+- Heartbeat computes a baseline from early successful pings and flags “slow” responses when > baseline + 2000ms.
+- Slow responses are warnings; they do not trigger UI-freeze/BSOD by themselves.
+
+[Done] Webcam hints are supporting evidence only
+- UI cross-check no longer allows OCR dialog text to trigger “UI freeze” by itself.
+- Webcam dialog hints now require deep-timeout/confirmed unresponsiveness OR technician confirmation.
+- Special case: when MTP probe is unavailable (hostUnsupported), webcam hints are ignored entirely and the result stays host-inconclusive unless the technician confirms “UI frozen”.
+
+[Done] Camera false-positive feedback loop
+- Added a persisted “Mark dialog hint as false positive” control (localStorage).
+- When enabled, OCR dialog hints are suppressed on this PC until reset.
+
+[Done] UX: hostUnsupported is explicit + confirmation wiring
+- UI now shows a strict host message (cannot assess phone state) with guidance to try another PC/reinstall Windows Portable Devices drivers, and “ignore if phone is normal”.
+- UI passes technician “UI frozen” confirmation into `/connection-check` via `uiFrozen=1`.
+- Backend returns `INCONCLUSIVE_MTP_PROBE_HOST` unless the technician confirms UI frozen.
+
+[Done] Shell-based MTP probe fallback (avoid repeated E_NOINTERFACE)
+- Implemented: when WPD/COM is unsupported, backend uses a Shell.Application-based probe that attempts to open the MTP device and enumerate a small set of child items.
+- Implemented: backend caches WPD hostUnsupported detection and skips WPD probing in future runs of the same server process (prefers Shell probe).
+
+[Done] WPD “0 devices” mismatch treated as MTP unresponsive (hint)
+- If Windows enumerates a portable/MTP device but the WPD probe reports `deviceCount=0`, the UI now shows this as “MTP unresponsive”.
+- This mismatch is now considered a freeze-style unresponsive signal (but final BSOD/UI-freeze still requires deep-timeout / sustained heartbeat timeouts / technician confirmation).
+
+[Done] Webcam UI-crash detection exposed for override logic
+- Camera check now returns a raw `uiCrashDetected` signal (System UI / ANR dialog detection) even when the reliability gate suppresses `dialogHint`.
+- Cross-check inference uses this to raise confidence when paired with MTP unresponsive evidence.
+
+[Done] Override: UI-crash text beats USB instability
+- Updated signal inference so: `mtpPresent && mtpUnresponsive && uiCrashDetected` => software UI-freeze classification even when USB sampling shows instability.
+- Updated the ambiguous case so: `mtpPresent && mtpUnresponsive && !uiCrashDetected` => inconclusive unless technician confirms.
+
+[Done] Unified BSOD UI-freeze wording
+- Backend and UI now use the explicit message:
+	“BSOD – UI freeze detected. The device is partially alive (MTP), but the UI is unresponsive. Likely caused by a third-party app. Recovery: Safe Mode.”
+
+Next
+- Validate on a normal PC + normal phone that the “0 devices” mismatch does not occur (or does not falsely trigger UI-freeze).
+- Validate on a frozen phone scenario that either deep-timeout or sustained heartbeat timeouts (plus optional UI crash dialog) produces the new BSOD UI-freeze message.
+
+Notes
+- This is a progress log; it should be updated as each item is implemented and validated.

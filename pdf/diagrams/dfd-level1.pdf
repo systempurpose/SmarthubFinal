@@ -1,0 +1,337 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3252 >>
+stream
+1 w
+0 G
+BT
+/F1 14 Tf
+40 565 Td
+(SmartHub Diagnostics — DFD Level 1 \(Major Processes\)) Tj
+ET
+BT
+/F1 10 Tf
+40 548 Td
+(Method: Gane and Sarson DFD notation) Tj
+ET
+60 500 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 530 Td
+(P1 Connection Check) Tj
+ET
+60 430 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 460 Td
+(P2 Full Diagnostics \(ADB\)) Tj
+ET
+60 360 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 390 Td
+(P3 BSOD Diagnose \(USB-only\)) Tj
+ET
+60 290 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 320 Td
+(P4 Camera Visual Check) Tj
+ET
+60 220 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 250 Td
+(P5 Security Scan \(ADB\)) Tj
+ET
+60 150 280 46 re
+S
+BT
+/F1 10.20 Tf
+70 180 Td
+(P6 Offline AI Suggest) Tj
+ET
+560 465 255 45 re
+S
+572 465 m
+572 510 l
+S
+BT
+/F1 9.40 Tf
+570 496 Td
+(D1 history.json) Tj
+ET
+560 305 255 45 re
+S
+572 305 m
+572 350 l
+S
+BT
+/F1 9.40 Tf
+570 336 Td
+(D4 memory.sqlite \(cases\)) Tj
+ET
+560 225 255 45 re
+S
+572 225 m
+572 270 l
+S
+BT
+/F1 9.40 Tf
+570 256 Td
+(D5 adb_ai_memory.sqlite) Tj
+ET
+BT
+/F1 9.40 Tf
+570 245 Td
+(\(adb_cases\)) Tj
+ET
+342 533 m
+420 533 l
+S
+420 533 m
+420 495.50 l
+S
+420 495.50 m
+558 495.50 l
+S
+558 495.50 m
+548 499.50 l
+S
+558 495.50 m
+548 491.50 l
+S
+BT
+/F1 8.80 Tf
+381 545 Td
+(save check result) Tj
+ET
+342 465 m
+436 465 l
+S
+436 465 m
+436 477.50 l
+S
+436 477.50 m
+558 477.50 l
+S
+558 477.50 m
+548 481.50 l
+S
+558 477.50 m
+548 473.50 l
+S
+BT
+/F1 8.80 Tf
+389 477 Td
+(save run) Tj
+ET
+342 393 m
+452 393 l
+S
+452 393 m
+452 485.50 l
+S
+452 485.50 m
+558 485.50 l
+S
+558 485.50 m
+548 489.50 l
+S
+558 485.50 m
+548 481.50 l
+S
+BT
+/F1 8.80 Tf
+397 405 Td
+(save BSOD report) Tj
+ET
+342 383 m
+420 383 l
+S
+420 383 m
+420 337.50 l
+S
+420 337.50 m
+558 337.50 l
+S
+558 337.50 m
+548 341.50 l
+S
+558 337.50 m
+548 333.50 l
+S
+BT
+/F1 8.80 Tf
+381 395 Td
+(write offline AI case) Tj
+ET
+342 243 m
+404 243 l
+S
+404 243 m
+404 499.50 l
+S
+404 499.50 m
+558 499.50 l
+S
+558 499.50 m
+548 503.50 l
+S
+558 499.50 m
+548 495.50 l
+S
+BT
+/F1 8.80 Tf
+373 231 Td
+(save security report) Tj
+ET
+342 183 m
+436 183 l
+S
+436 183 m
+436 327.50 l
+S
+436 327.50 m
+558 327.50 l
+S
+558 327.50 m
+548 331.50 l
+S
+558 327.50 m
+548 323.50 l
+S
+BT
+/F1 8.80 Tf
+389 195 Td
+(write offline AI case) Tj
+ET
+558 317.50 m
+484 317.50 l
+S
+484 317.50 m
+484 173 l
+S
+484 173 m
+342 173 l
+S
+342 173 m
+352 169 l
+S
+342 173 m
+352 177 l
+S
+BT
+/F1 8.80 Tf
+521 305.50 Td
+(read similar cases) Tj
+ET
+342 163 m
+420 163 l
+S
+420 163 m
+420 257.50 l
+S
+420 257.50 m
+558 257.50 l
+S
+558 257.50 m
+548 261.50 l
+S
+558 257.50 m
+548 253.50 l
+S
+BT
+/F1 8.80 Tf
+381 175 Td
+(write ADB AI case) Tj
+ET
+558 257.50 m
+468 257.50 l
+S
+468 257.50 m
+468 163 l
+S
+468 163 m
+342 163 l
+S
+342 163 m
+352 159 l
+S
+342 163 m
+352 167 l
+S
+BT
+/F1 8.80 Tf
+513 245.50 Td
+(read ADB memory) Tj
+ET
+40 20 802 90 re
+S
+BT
+/F1 10 Tf
+50 92 Td
+(State / Define / Justify) Tj
+ET
+BT
+/F1 9 Tf
+50 76 Td
+(State \(In this level\): P0 is decomposed into major SmartHub processes \(P1-P6\) and connected to persistent stores.) Tj
+ET
+BT
+/F1 9 Tf
+50 65 Td
+(Define \(According to\): In Gane and Sarson leveling, the parent process is decomposed while preserving balanced) Tj
+ET
+BT
+/F1 9 Tf
+50 54 Td
+(input/output flows \(Gane & Sarson, 1979\).) Tj
+ET
+BT
+/F1 9 Tf
+50 43 Td
+(Justify \(Moreover\): This level is needed to separate core functions such as connection check, ADB diagnostics,) Tj
+ET
+BT
+/F1 9 Tf
+50 32 Td
+(USB-only BSOD flow, and offline AI support.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R /Rotate 0 >>
+endobj
+4 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+5 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+6 0 obj
+<< /Title (SmartHub DFD Level 1) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000019 00000 n 
+0000000089 00000 n 
+0000003392 00000 n 
+0000003528 00000 n 
+0000003585 00000 n 
+0000003634 00000 n 
+trailer
+<< /Size 7 /Root 5 0 R /Info 6 0 R >>
+startxref
+3685
+%%EOF

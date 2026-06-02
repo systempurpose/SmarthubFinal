@@ -1,0 +1,10 @@
+{
+  "files.readonlyFromPermissions": true,
+  "files.readonlyInclude": [
+    "AI support/ai_diagnose.py",
+    "js/ui.js",
+    "bsod-diagnostic/bsod_diag.py",
+    "bsod-diagnostic/bsod_gui.py",
+    "bsod-diagnostic/phone_screen_diag.py"
+  ]
+}

@@ -1,0 +1,13 @@
+SmartHub Diagnostics — General System Objectives
+Date: 2026-04-15
+
+1) Provide a technician-friendly diagnostic tool that helps identify and understand common Android phone issues using clear, evidence-based results.
+
+2) Support online-capable operation so diagnostics, guidance, updates, and data sharing can be delivered through connected services when available, while maintaining reliable local operation when connectivity is limited.
+
+3) Improve repair decision-making by organizing device signals, test outputs, and history into actionable next steps while maintaining truthful, conservative conclusions when evidence is limited.
+
+Summary Version (Short)
+- Evidence-based technician diagnostics.
+- Online-capable system with reliable local operation.
+- Actionable guidance with conservative, truthful conclusions.

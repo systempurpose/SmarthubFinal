@@ -1,0 +1,2 @@
+d:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\win-x64\publish\UsbEvidenceHelper.pdb
+d:\SmartHubv14\SmartHubv5\Bsod tools\UsbEvidenceHelper\bin\Release\net8.0\win-x64\publish\UsbEvidenceHelper.exe

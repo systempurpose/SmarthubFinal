@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reset Password - SmartHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-shape bg-shape-a" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape-b" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape-c" aria-hidden="true"></div>
+
+  <main class="stage">
+    <section class="panel reveal-up">
+      <header class="nav-bar">
+        <a class="logo" href="../">Smart<span>Hub</span> Portal</a>
+      </header>
+
+      <section class="hero-grid" style="grid-template-columns:1fr; margin-top: 16px;">
+        <article class="hero-copy reveal-up delay-1">
+          <p class="status" id="resetStatus" style="margin-top:0;">Preparing password reset flow...</p>
+
+          <h1>Reset <span>Password</span></h1>
+          <h2>create your new account password</h2>
+
+          <p>
+            This page is the Supabase password recovery redirect container.
+            Enter your new password below to complete reset.
+          </p>
+
+          <form id="resetForm" class="auth-form" novalidate>
+            <input
+              id="newPassword"
+              class="auth-input"
+              type="password"
+              autocomplete="new-password"
+              placeholder="New password (min 8 characters)"
+              required
+              minlength="8"
+            />
+            <input
+              id="confirmPassword"
+              class="auth-input"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Confirm new password"
+              required
+              minlength="8"
+            />
+            <button id="resetSubmitBtn" class="btn primary" type="submit">Update Password</button>
+            <p class="auth-help">After successful reset, you will be redirected to the password changed page.</p>
+          </form>
+
+          <div class="cta-row">
+            <a class="btn secondary" href="../">Back to Website</a>
+          </div>
+        </article>
+      </section>
+
+      <footer class="foot">
+        <p>Password reset redirect endpoint is active.</p>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const statusEl = document.getElementById('resetStatus');
+      const formEl = document.getElementById('resetForm');
+      const submitBtn = document.getElementById('resetSubmitBtn');
+      const newPasswordEl = document.getElementById('newPassword');
+      const confirmPasswordEl = document.getElementById('confirmPassword');
+
+      const query = new URLSearchParams(window.location.search || '');
+      const hash = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+
+      const supabaseUrl = String(query.get('supabase_url') || '').trim();
+      const supabaseAnonKey = String(query.get('supabase_anon_key') || '').trim();
+      const accessToken = String(hash.get('access_token') || query.get('access_token') || '').trim();
+      const recoveryType = String(hash.get('type') || query.get('type') || '').trim().toLowerCase();
+
+      let passwordChangedRedirect = String(query.get('password_changed_redirect') || '').trim();
+      if (!passwordChangedRedirect) {
+        try {
+          passwordChangedRedirect = new URL('../password-changed/', window.location.href).toString();
+        } catch {
+          passwordChangedRedirect = '../password-changed/';
+        }
+      }
+
+      function setStatus(text, kind) {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.style.color = kind === 'error' ? '#9f1239' : kind === 'ok' ? '#14532d' : '#5a4b53';
+      }
+
+      function setBusy(isBusy) {
+        if (!submitBtn) return;
+        submitBtn.disabled = isBusy;
+        submitBtn.textContent = isBusy ? 'Updating password...' : 'Update Password';
+      }
+
+      const canReset = !!(supabaseUrl && supabaseAnonKey && accessToken);
+      if (!canReset) {
+        setStatus('This link is missing recovery data. Request a new password reset email from SmartHub app.', 'error');
+        if (formEl) formEl.style.display = 'none';
+        return;
+      }
+
+      if (recoveryType && recoveryType !== 'recovery') {
+        setStatus('Recovery token type is not valid for password reset. Request a new reset email.', 'error');
+        if (formEl) formEl.style.display = 'none';
+        return;
+      }
+
+      setStatus('Recovery token detected. Enter a new password to continue.', 'ok');
+
+      if (formEl) {
+        formEl.addEventListener('submit', async function (event) {
+          event.preventDefault();
+
+          const password = String(newPasswordEl && newPasswordEl.value ? newPasswordEl.value : '');
+          const passwordConfirm = String(confirmPasswordEl && confirmPasswordEl.value ? confirmPasswordEl.value : '');
+
+          if (password.length < 8) {
+            setStatus('Password must be at least 8 characters.', 'error');
+            return;
+          }
+
+          if (password !== passwordConfirm) {
+            setStatus('Password confirmation does not match.', 'error');
+            return;
+          }
+
+          setBusy(true);
+          setStatus('Updating your password in Supabase...', 'info');
+
+          try {
+            const apiBase = String(supabaseUrl).replace(/\/+$/, '');
+            const response = await fetch(`${apiBase}/auth/v1/user`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: supabaseAnonKey,
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ password }),
+            });
+
+            let body = null;
+            try {
+              body = await response.json();
+            } catch {
+              body = null;
+            }
+
+            if (!response.ok) {
+              const msg = body && body.msg ? String(body.msg) : `Supabase error (HTTP ${response.status})`;
+              throw new Error(msg);
+            }
+
+            setStatus('Password updated successfully. Redirecting...', 'ok');
+
+            const nextUrl = new URL(passwordChangedRedirect, window.location.href);
+            nextUrl.searchParams.set('from', 'reset-password');
+            window.location.href = nextUrl.toString();
+          } catch (error) {
+            const message = error && error.message ? String(error.message) : 'Password update failed.';
+            setStatus(message, 'error');
+          } finally {
+            setBusy(false);
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

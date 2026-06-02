@@ -1,0 +1,100 @@
+Here is a focused list of diagnosable/fixable items that a dedicated diagnostic app can handle, but built‑in dialer codes cannot:
+
+Status legend (SmartHub Desktop + ADB):
+- ✅ Implemented now
+- 🕒 Planned / not implemented yet
+- ⚠ Not supported / intentionally blocked in current SmartHub mode
+
+Strict AI rule:
+- Only say "No problems detected" when the scan has no failing stages and no suspicious app/security signals.
+- If evidence is mixed or incomplete, say "possible issue" or "no single clear cause yet" instead of guessing.
+
+Rule: If an item is not marked ✅ or ⚠, treat it as 🕒 for now.
+
+📡 Wi‑Fi & Networking
+Detect captive portal / no‑internet validation ✅
+Open captive portal login page (best-effort) ✅
+
+Renew DHCP / reconnect Wi‑Fi (best‑effort by toggling Wi‑Fi) ✅
+
+Flush DNS cache ⚠ (PC/host feature removed; Android-only now)
+
+Reset Winsock / TCP/IP stack ⚠ (PC/host feature removed; Android-only now)
+
+Switch Wi‑Fi bands (2.4 GHz ↔ 5 GHz) (best-effort) ✅
+
+Measure packet loss & jitter (ping-based) ✅
+Identify channel congestion & suggest better channel ✅
+Forget current Wi‑Fi network (then reconnect manually on phone) ✅
+Detect ARP spoofing / rogue access points (best-effort) ✅
+
+📶 Bluetooth
+Reset Bluetooth adapter (toggle OFF/ON) ✅
+Clear Bluetooth cache (best-effort; may remove pairings) ✅
+Identify devices that refuse to pair (diagnose compatibility) ✅
+Force‑stop Bluetooth system service ✅
+Detect MAC randomization conflicts (best-effort) ✅
+Show connected device battery level (if supported) ✅
+Run signal strength scan for BT devices (best-effort) ✅
+
+📱 App Behavior Analysis
+Monitor background battery drain per app (best-effort) ✅
+Detect excessive wake locks (best-effort) ✅
+Identify apps that crash frequently (from system logs) ✅
+Flag apps that disable Wi‑Fi / Bluetooth automatically (permission-based best-effort) ✅
+Show apps that modify system settings without permission (permission-based best-effort) ✅
+Detect location access in background (permission-based best-effort) ✅
+List apps that run at boot and slow startup (permission-based best-effort) ✅
+
+🔋 Battery & Power
+Calibrate battery (full discharge/charge cycle instructions) 🕒
+Show precise wear level (manufacturer data via health API) 🕒
+Detect apps causing deep sleep failures 🕒
+Identify fast‑charge protocol mismatches 🕒
+Log temperature and voltage over time 🕒
+
+🧠 Hardware Diagnostics (Beyond Dialer)
+Test vibration motor strength & pattern 🕒
+Run speaker & microphone loopback (echo test) 🕒
+Flashlight intensity & strobe 🕒
+Proximity sensor latency 🕒
+Gyroscope & accelerometer calibration check 🕒
+GPS fix speed & accuracy (cold/warm start) 🕒
+Barometer / pressure sensor (if present) 🕒
+Fingerprint sensor failure rate 🕒
+
+🛡️ Security & Privacy
+Check if bootloader is unlocked 🕒
+Detect root / Magisk (without SafetyNet) 🕒
+Find apps with overprivileged permissions (e.g., admin, accessibility) 🕒
+Scan for known vulnerable libraries in installed apps 🕒
+List disabled security features (e.g., Play Protect) 🕒
+
+🔁 System & Performance
+Clear app cache for all apps at once ⚠ (would require app-level destructive actions; blocked by current ADB safety guardrails)
+Free up RAM by stopping unnecessary services 🕒
+Defragment internal storage (on older Android versions) 🕒
+Monitor CPU throttling due to heat 🕒
+Show real‑time CPU core usage 🕒
+
+🧪 Connectivity & Hybrid
+USB connection stability sampling (detect flapping/unstable port/cable) ✅
+MTP / file transfer enumeration ✅
+Fastboot detection (for bricked devices) ✅
+ADB over TCP toggle & test ⚠ (adb tcpip is blocked by default for safety)
+
+📡 Mobile Data & Location
+Reset mobile data (toggle OFF/ON) ✅
+Reset GPS/Location (toggle location enabled) ✅
+
+✅ Why Dialer Codes Cannot Do These
+Dialer tests are static, manufacturer‑specific, and provide no fixes.
+
+They cannot modify system settings, clear caches, or interact with running apps.
+
+They lack permission to access battery statistics, app behavior logs, or perform network stack resets.
+
+No app analysis, Bluetooth management, or security scanning.
+
+A proper diagnostic app, even running on the device with standard permissions (or via ADB on a PC), can actively repair, reconfigure, and report – turning diagnosis into action.
+

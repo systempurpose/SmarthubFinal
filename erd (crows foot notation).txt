@@ -1,0 +1,115 @@
+SmartHub Diagnostics — ERD (Crow’s Foot Notation)
+Date: 2026-04-02
+
+What database is used?
+- Offline AI “memory” uses SQLite (Python stdlib `sqlite3`).
+  - No-debug AI memory DB: `memory.sqlite`
+  - ADB AI memory DB: `adb_ai_memory.sqlite`
+- The Node/Express backend does NOT use a relational DB for core app state; it persists JSON files (history/config) under `dataRoot`.
+
+Scope of this ERD
+- This ERD models the SQLite databases used by the Offline AI helpers.
+- JSON-file persistence (history/config) is documented in the Data Dictionary, not in the ERD.
+
+--------------------------------------------------------------------
+Database 1: No-debug Offline AI Memory (SQLite) — `memory.sqlite`
+
+Entity: cases
+- Purpose: store past no-debug / USB-only BSOD diagnoses for similarity + metrics + calibration.
+
+Table: cases
+PK
+- id (INTEGER, PK, AUTOINCREMENT)
+
+Attributes
+- created_at (INTEGER, NOT NULL)  // epoch seconds
+- last_seen (INTEGER, NULL)       // epoch seconds
+- seen_count (INTEGER, NULL)      // count of repeats (fingerprint de-dup)
+- source (TEXT, NOT NULL)         // e.g. "usb-only", "no-debug"
+- device_primary (TEXT, NULL)     // best-effort primary device name
+- fingerprint (TEXT, NULL)        // stable hash used for de-dup
+- device_hints_json (TEXT, NOT NULL)
+- feature_tokens_json (TEXT, NOT NULL)
+- report_json (TEXT, NOT NULL)
+- note (TEXT, NULL)
+- outcome (TEXT, NULL)            // human-labeled outcome when available
+
+Indexes
+- cases_fingerprint_idx on (fingerprint)
+- cases_outcome_idx on (outcome)
+
+Crow’s Foot relationships
+- There is 1 table in this DB.
+- Logical relationship (conceptual):
+  - One “Case” contains many “FeatureTokens” (stored as JSON array in `feature_tokens_json`).
+  - One “Case” contains one “Report” (stored as JSON object in `report_json`).
+
+Since FeatureTokens and Report are embedded JSON (not normalized tables), the physical ERD is:
+
+  cases
+  ┌───────────────────────────────────────────────────────────┐
+  │ PK id                                                     │
+  │    created_at                                             │
+  │    last_seen                                              │
+  │    seen_count                                             │
+  │    source                                                 │
+  │    device_primary                                         │
+  │    fingerprint                                            │
+  │    device_hints_json                                      │
+  │    feature_tokens_json                                    │
+  │    report_json                                            │
+  │    note                                                   │
+  │    outcome                                                │
+  └───────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------
+Database 2: ADB Offline AI Conclusion Memory (SQLite) — `adb_ai_memory.sqlite`
+
+Entity: adb_cases
+- Purpose: store past ADB-based conclusion outputs (labels/outcomes) for similarity + metrics.
+
+Table: adb_cases
+PK
+- id (INTEGER, PK, AUTOINCREMENT)
+
+Attributes
+- created_at (INTEGER, NOT NULL)   // epoch seconds
+- feature_hash (TEXT, NOT NULL)    // stable signature for grouping similar ADB runs
+- features_json (TEXT, NOT NULL)   // extracted tokens/features JSON
+- label (TEXT, NULL)               // predicted label/category
+- confidence (REAL, NULL)          // model confidence
+- failing_json (TEXT, NULL)        // which stages failed
+- actions_json (TEXT, NULL)        // suggested actions
+- outcome (TEXT, NULL)             // human-labeled outcome
+- resolution (TEXT, NULL)          // optional resolution notes
+- note (TEXT, NULL)                // freeform note
+
+Indexes
+- idx_adb_cases_hash on (feature_hash)
+- idx_adb_cases_time on (created_at)
+
+Crow’s Foot relationships
+- 1 adb_case contains many “features” (embedded JSON in features_json)
+- 1 adb_case contains many “actions” (embedded JSON in actions_json)
+
+Physical ERD:
+
+  adb_cases
+  ┌───────────────────────────────────────────────────────────┐
+  │ PK id                                                     │
+  │    created_at                                             │
+  │    feature_hash                                           │
+  │    features_json                                          │
+  │    label                                                  │
+  │    confidence                                             │
+  │    failing_json                                           │
+  │    actions_json                                           │
+  │    outcome                                                │
+  │    resolution                                             │
+  │    note                                                   │
+  └───────────────────────────────────────────────────────────┘
+
+--------------------------------------------------------------------
+Notes / Assumptions
+- The AI memory stores structured data as JSON TEXT columns for stability and low-maintenance migrations.
+- If you need a strictly “Crow’s Foot” normalized ERD for academic submission, we can optionally normalize JSON fields into child tables (CaseTokens, CaseEvidence, CaseActions) — but that would NOT match the current implementation.

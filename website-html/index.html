@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartHub Portal | Download Windows App</title>
+  <meta
+    name="description"
+    content="SmartHub Portal for Windows diagnostics. Download the app, track releases, and launch technician-friendly repair workflows."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-shape bg-shape-a" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape-b" aria-hidden="true"></div>
+  <div class="bg-shape bg-shape-c" aria-hidden="true"></div>
+
+  <main class="stage" id="home">
+    <section class="panel reveal-up">
+      <header class="nav-bar">
+        <a class="logo" href="#home">Smart<span>Hub</span> Portal</a>
+
+        <nav class="nav-links" aria-label="Main navigation">
+          <a href="#home">Home</a>
+          <a href="#about">About</a>
+          <a href="#contact">Contact</a>
+        </nav>
+
+        <div class="nav-icons" aria-hidden="true">
+          <span class="dot"></span>
+          <span class="grid-icon"></span>
+        </div>
+      </header>
+
+      <section class="hero-grid" id="about">
+        <article class="hero-copy reveal-up delay-1">
+          <div class="search-line" aria-hidden="true">
+            <span class="search-icon"></span>
+            <span class="search-rule"></span>
+          </div>
+
+          <h1>Smart<span>Hub</span></h1>
+          <h2>always keeps your diagnostics fast, clear, and reliable</h2>
+          <p>
+            SmartHub Diagnostics helps technicians run connection checks, capture evidence,
+            and resolve Android service issues with confidence.
+          </p>
+
+          <div class="cta-row">
+            <button id="downloadBtn" class="btn primary" type="button">Download Windows App</button>
+            <a class="btn secondary" href="#contact">Watch Overview</a>
+          </div>
+
+          <p id="downloadStatus" class="status">Preparing release information...</p>
+
+          <div class="mini-metrics" aria-label="Release metrics">
+            <div class="metric-pill">
+              <span>Version</span>
+              <strong id="metricVersion">Checking...</strong>
+            </div>
+            <div class="metric-pill">
+              <span>GitHub Downloads</span>
+              <strong id="metricGithubDownloads">--</strong>
+            </div>
+            <div class="metric-pill">
+              <span>Tracked Clicks</span>
+              <strong id="metricTrackedClicks">--</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="hero-visual reveal-up delay-2" aria-label="SmartHub visual preview">
+          <div class="orbit orbit-a"></div>
+          <div class="orbit orbit-b"></div>
+          <div class="orbit orbit-c"></div>
+
+          <div class="preview-frame">
+            <div class="preview-top-accent"></div>
+            <div class="preview-card">
+              <p class="preview-label">Live SmartHub Snapshot</p>
+              <h3>Repair Bench Session</h3>
+
+              <ul>
+                <li><span>Connection Check</span><b>Stable</b></li>
+                <li><span>USB Evidence</span><b>Healthy</b></li>
+                <li><span>AI Guidance</span><b>Ready</b></li>
+              </ul>
+
+              <div class="wave"></div>
+              <p class="published">Last release: <strong id="metricPublishedAt">Checking...</strong></p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="foot" id="contact">
+        <p>Windows download opens the latest SmartHub app output asset automatically.</p>
+        <p class="site-url">Website URL: <code id="siteUrl">Loading...</code></p>
+      </footer>
+    </section>
+  </main>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
