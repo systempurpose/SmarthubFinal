@@ -31,25 +31,30 @@ router.get('/battery', async (req, res) => {
 
 router.get('/storage', async (req, res) => {
     try {
-        // Use df -h for human-readable, but we want consistent parsing
         const output = await adbShell('df /data');
         const lines = output.split('\n');
-        // Find the line containing "/data"
         const dataLine = lines.find(l => l.includes('/data'));
         if (dataLine) {
-            // Example: /data              58.3G    45.2G    13.1G  78% /data
+            // Split on whitespace, but some versions have multiple spaces
             const parts = dataLine.trim().split(/\s+/);
-            // Typically: filesystem, size, used, available, use%, mounted
+            // Expected: /data, size, used, avail, use%, mount
             if (parts.length >= 4) {
-                const total = parts[1];
-                const used = parts[2];
-                const free = parts[3];
+                let total = parts[1];
+                let used = parts[2];
+                let free = parts[3];
+                // If values are in bytes (no unit), convert to GB
+                if (/^\d+$/.test(total)) {
+                    const toGB = (val: string) => `${(parseInt(val) / 1024 / 1024 / 1024).toFixed(1)} GB`;
+                    total = toGB(total);
+                    used = toGB(used);
+                    free = toGB(free);
+                }
                 res.json({ total, used, free, raw: dataLine });
             } else {
-                res.json({ error: 'Unexpected df output', raw: output });
+                res.json({ total: '?', used: '?', free: '?', raw: output });
             }
         } else {
-            res.json({ error: 'Could not find /data partition', raw: output });
+            res.json({ total: '?', used: '?', free: '?', raw: output });
         }
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -59,30 +64,21 @@ router.get('/storage', async (req, res) => {
 router.get('/ram', async (req, res) => {
     try {
         const output = await adbShell('dumpsys meminfo');
-        // Look for "Total RAM" and "Free RAM"
         const totalMatch = output.match(/Total RAM:\s*([\d,]+)\s*kB/i);
         const freeMatch = output.match(/Free RAM:\s*([\d,]+)\s*kB/i);
-        const total = totalMatch ? parseInt(totalMatch[1].replace(/,/g, '')) : null;
-        const free = freeMatch ? parseInt(freeMatch[1].replace(/,/g, '')) : null;
-        const used = total && free ? total - free : null;
-        res.json({
-            total: total ? `${(total / 1024 / 1024).toFixed(1)} GB` : null,
-            free: free ? `${(free / 1024 / 1024).toFixed(1)} GB` : null,
-            used: used ? `${(used / 1024 / 1024).toFixed(1)} GB` : null,
-        });
+        if (totalMatch && freeMatch) {
+            const totalKB = parseInt(totalMatch[1].replace(/,/g, ''));
+            const freeKB = parseInt(freeMatch[1].replace(/,/g, ''));
+            const usedKB = totalKB - freeKB;
+            const toGB = (kb: number) => `${(kb / 1024 / 1024).toFixed(1)} GB`;
+            res.json({ total: toGB(totalKB), used: toGB(usedKB), free: toGB(freeKB) });
+        } else {
+            res.json({ total: '?', used: '?', free: '?', raw: output.substring(0, 500) });
+        }
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
 });
 
-router.get('/sensors', async (req, res) => {
-    try {
-        const output = await adbShell('dumpsys sensorservice');
-        const sensorMatches = output.match(/0x[0-9a-f]+:[^\n]+/g) || [];
-        res.json({ sensors: sensorMatches.slice(0, 20), raw: output.substring(0, 2000) });
-    } catch (err: any) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 export default router;

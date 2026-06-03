@@ -12,6 +12,8 @@ function sanitizeDeviceId(raw: unknown): string | undefined {
   return trimmed;
 }
 
+
+
 async function resolveTargetDeviceId(req: Request): Promise<string | undefined> {
   const q = sanitizeDeviceId((req.query as any)?.id);
   const b = sanitizeDeviceId((req.body as any)?.id) || sanitizeDeviceId((req.body as any)?.deviceId);
@@ -71,6 +73,26 @@ async function tryVibrateViaCmd(deviceId: string): Promise<boolean> {
 export function registerBlueTestRoutes(app: Express): void {
   // Simple interactive tests for blue/blank-screen triage. These require at
   // least one device visible to ADB (USB debugging + trust prompt enabled).
+  app.get('/blue-test/run/:id', async (req: Request, res: Response) => {
+    const deviceId = req.params.id;
+    if (!deviceId) {
+        return res.status(400).json({ ok: false, error: 'Missing device ID' });
+    }
+    try {
+        const batteryInfo = await battery(deviceId);
+        const memoryInfoData = await memoryInfo(deviceId);
+        const sensorList = await sensors(deviceId);
+        res.json({
+            status: "completed",
+            message: "BSOD diagnostic completed",
+            battery: batteryInfo,
+            memory: memoryInfoData,
+            sensors: sensorList
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
   app.post('/blue-test/volume-max', async (req: Request, res: Response) => {
     const id = await resolveTargetDeviceId(req);

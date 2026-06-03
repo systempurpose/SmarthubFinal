@@ -109,25 +109,7 @@ async function renderHardwareTests() {
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
 }
-async function renderBsodDiagnosis() {
-    if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
-        return;
-    }
-    try {
-        // Call the backend's BSOD test endpoint – adjust the path as needed.
-        // Based on your server.ts, you have registerBlueTestRoutes(app), which likely provides /api/blue-test/run.
-        const result = await apiCall(`/blue-test/run/${currentDeviceId}`);
-        document.getElementById('pageContent').innerHTML = `
-            <div class="card">
-                <h3>BSOD / Black Screen Analysis</h3>
-                <pre>${JSON.stringify(result, null, 2)}</pre>
-            </div>
-        `;
-    } catch (err) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
-    }
-}
+
 // ==================== REPAIRS PAGE ====================
 async function renderRepairs() {
     const container = document.getElementById('pageContent');
@@ -171,11 +153,14 @@ async function renderRepairs() {
 // ==================== OTHER PAGES (Placeholders) ====================
 async function renderDeviceInfo() {
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        const info = await apiCall(`/device/info/${currentDeviceId}`);
+        // Device routes are mounted without /api
+        const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const info = await res.json();
         document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(info, null, 2)}</pre></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
@@ -184,11 +169,14 @@ async function renderDeviceInfo() {
 
 async function renderNetwork() {
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        const net = await apiCall(`/network/status/${currentDeviceId}`);
+        // wifi routes are mounted without /api
+        const res = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const net = await res.json();
         document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(net, null, 2)}</pre></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Network check failed: ${err.message}</div>`;
@@ -197,17 +185,45 @@ async function renderNetwork() {
 
 async function renderAIDiagnosis() {
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        const ai = await apiCall(`/ai/quick-diagnose/${currentDeviceId}`);
-        document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${ai.suggestion || 'Run diagnostics first.'}</p></div>`;
+        // ai-no-debug-suggest is POST, mounted without /api
+        const response = await fetch(`${BACKEND_URL}/ai-no-debug-suggest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connection: { deviceId: currentDeviceId } })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const suggestion = data.humanSummary || data.top?.label || 'Run a full diagnostic for personalized insights.';
+        document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${suggestion}</p></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">AI diagnosis unavailable: ${err.message}</div>`;
     }
 }
 
+async function renderBsodDiagnosis() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
+        return;
+    }
+    try {
+        // blue-test routes are mounted without /api
+        const res = await fetch(`${BACKEND_URL}/blue-test/run/${currentDeviceId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json();
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card">
+                <h3>BSOD / Black Screen Analysis</h3>
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
+    }
+}
 // ==================== USB DEBUGGING WIZARD ====================
 const modal = document.getElementById('wizardModal');
 const closeModal = document.querySelector('.close-button');
