@@ -13,6 +13,17 @@ async function apiCall(endpoint, options = {}) {
     return res.json();
 }
 
+// Helper to escape HTML special characters
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
 // ==================== CONNECTION STATUS ====================
 async function updateConnectionStatus() {
     const statusSpan = document.querySelector('#connectionStatus span');
@@ -105,7 +116,6 @@ async function renderHardwareTests() {
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
     document.getElementById('testSensors')?.addEventListener('click', async () => {
-        // Note: sensors endpoint may need deviceId; update hardwareRoutes.ts to support it
         const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
@@ -155,7 +165,7 @@ async function renderRepairs() {
     });
 }
 
-// ==================== DEVICE INFO ====================
+// ==================== DEVICE INFO (FORMATTED TABLE) ====================
 async function renderDeviceInfo() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
@@ -164,14 +174,40 @@ async function renderDeviceInfo() {
     try {
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const info = await res.json();
-        document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(info, null, 2)}</pre></div>`;
+        const rawText = await res.text();  // deviceProps returns plain text with [key]: [value] lines
+        const lines = rawText.split(/\r?\n/);
+        let tableHtml = '<table class="device-info-table">';
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            // Match format: [key]: [value]
+            const match = line.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
+            if (match) {
+                const key = match[1];
+                const value = match[2];
+                tableHtml += `
+                    <tr>
+                        <td class="key">${escapeHtml(key)}</td>
+                        <td class="value">${escapeHtml(value)}</td>
+                    </tr>
+                `;
+            } else {
+                // Fallback for lines that don't match the pattern (show as is)
+                tableHtml += `<tr><td colspan="2">${escapeHtml(line)}</td></tr>`;
+            }
+        }
+        tableHtml += '</table>';
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card">
+                <h3>Device Properties</h3>
+                ${tableHtml}
+            </div>
+        `;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
     }
 }
 
-// ==================== NETWORK CHECK ====================
+// ==================== NETWORK CHECK (STRUCTURED CARD) ====================
 async function renderNetwork() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
@@ -180,8 +216,23 @@ async function renderNetwork() {
     try {
         const res = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const net = await res.json();
-        document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(net, null, 2)}</pre></div>`;
+        const data = await res.json();
+        // Build a friendly summary
+        let html = '<div class="card"><h3>Network Status</h3>';
+        if (data.wifi && data.wifi.ssid) {
+            html += `<p><strong>WiFi SSID:</strong> ${escapeHtml(data.wifi.ssid)}</p>`;
+            html += `<p><strong>Signal Strength:</strong> ${data.wifi.rssi !== undefined ? data.wifi.rssi + ' dBm' : 'N/A'}</p>`;
+            if (data.wifi.ipAddress) html += `<p><strong>IP Address:</strong> ${escapeHtml(data.wifi.ipAddress)}</p>`;
+        } else {
+            html += '<p>No WiFi information available.</p>';
+        }
+        if (data.cellular) {
+            html += `<p><strong>Cellular Operator:</strong> ${escapeHtml(data.cellular.operator || 'N/A')}</p>`;
+            html += `<p><strong>Signal Level:</strong> ${data.cellular.signalStrength || 'N/A'}</p>`;
+        }
+        html += `<details><summary>Full JSON Response</summary><pre>${JSON.stringify(data, null, 2)}</pre></details>`;
+        html += '</div>';
+        document.getElementById('pageContent').innerHTML = html;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Network check failed: ${err.message}</div>`;
     }
@@ -202,7 +253,7 @@ async function renderAIDiagnosis() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const suggestion = data.humanSummary || data.top?.label || 'Run a full diagnostic for personalized insights.';
-        document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${suggestion}</p></div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${escapeHtml(suggestion)}</p></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">AI diagnosis unavailable: ${err.message}</div>`;
     }

@@ -228,3 +228,49 @@ body {
         padding: 16px;
     }
 }
+
+/* ========== DEVICE INFO TABLE STYLES ========== */
+.device-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 13px;
+    margin-top: 12px;
+}
+.device-info-table tr {
+    border-bottom: 1px solid #e0e0e0;
+}
+.device-info-table td {
+    padding: 8px 12px;
+    vertical-align: top;
+}
+.device-info-table .key {
+    width: 35%;
+    font-weight: 600;
+    background-color: #f5f5f5;
+    color: #1f1f1f;
+}
+.device-info-table .value {
+    width: 65%;
+    color: #2c2c2c;
+    word-break: break-word;
+}
+
+/* Network summary details */
+details {
+    margin-top: 16px;
+    font-size: 12px;
+}
+summary {
+    cursor: pointer;
+    color: #0078d4;
+    font-weight: 500;
+    margin: 8px 0;
+}
+pre {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 12px;
+}
