@@ -19,7 +19,17 @@ async function updateConnectionStatus() {
     const statusSpan = document.querySelector('#connectionStatus span');
     if (!statusSpan) return;
     try {
-        const data = await apiCall('/devices');
+        // First try /api/devices
+        let data = await apiCall('/devices');
+        if (!data.devices || data.devices.length === 0) {
+            // Fallback: try /api/device/list (if your backend provides it)
+            try {
+                const listData = await apiCall('/device/list');
+                if (listData.devices && listData.devices.length) {
+                    data = { devices: listData.devices.map(d => d.id) };
+                }
+            } catch (e2) { /* ignore */ }
+        }
         if (data.devices && data.devices.length) {
             currentDeviceId = data.devices[0];
             statusSpan.innerText = `Connected: ${currentDeviceId}`;
@@ -34,7 +44,6 @@ async function updateConnectionStatus() {
         statusSpan.style.color = '#d83b01';
     }
 }
-
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
@@ -100,7 +109,25 @@ async function renderHardwareTests() {
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
 }
-
+async function renderBsodDiagnosis() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
+    try {
+        // Call the backend's BSOD test endpoint – adjust the path as needed.
+        // Based on your server.ts, you have registerBlueTestRoutes(app), which likely provides /api/blue-test/run.
+        const result = await apiCall(`/blue-test/run/${currentDeviceId}`);
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card">
+                <h3>BSOD / Black Screen Analysis</h3>
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
+    }
+}
 // ==================== REPAIRS PAGE ====================
 async function renderRepairs() {
     const container = document.getElementById('pageContent');
@@ -143,8 +170,12 @@ async function renderRepairs() {
 
 // ==================== OTHER PAGES (Placeholders) ====================
 async function renderDeviceInfo() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
     try {
-        const info = await apiCall('/device/info');
+        const info = await apiCall(`/device/info/${currentDeviceId}`);
         document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(info, null, 2)}</pre></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
@@ -152,8 +183,12 @@ async function renderDeviceInfo() {
 }
 
 async function renderNetwork() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
     try {
-        const net = await apiCall('/network/status');
+        const net = await apiCall(`/network/status/${currentDeviceId}`);
         document.getElementById('pageContent').innerHTML = `<div class="card"><pre>${JSON.stringify(net, null, 2)}</pre></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Network check failed: ${err.message}</div>`;
@@ -161,8 +196,12 @@ async function renderNetwork() {
 }
 
 async function renderAIDiagnosis() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
     try {
-        const ai = await apiCall('/ai/quick-diagnose');
+        const ai = await apiCall(`/ai/quick-diagnose/${currentDeviceId}`);
         document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${ai.suggestion || 'Run diagnostics first.'}</p></div>`;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">AI diagnosis unavailable: ${err.message}</div>`;
@@ -248,6 +287,7 @@ function initNavigation() {
             else if (page === 'network') await renderNetwork();
             else if (page === 'ai-diagnosis') await renderAIDiagnosis();
             else if (page === 'repairs') await renderRepairs();
+            else if (page === 'bsod') await renderBsodDiagnosis();
             else await renderDashboard();
         });
     });
@@ -260,3 +300,4 @@ function initNavigation() {
     setInterval(updateConnectionStatus, 5000);
     await renderDashboard();
 })();
+
