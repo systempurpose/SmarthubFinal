@@ -174,39 +174,163 @@ async function renderDeviceInfo() {
     try {
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const rawText = await res.text();  // deviceProps returns plain text with [key]: [value] lines
+        let rawText = await res.text();
+
+        // Unwrap JSON string if needed
+        try {
+            const parsedJson = JSON.parse(rawText);
+            if (typeof parsedJson === 'string') rawText = parsedJson;
+        } catch (e) { /* not JSON, use as is */ }
+
         const lines = rawText.split(/\r?\n/);
-        let tableHtml = '<table class="device-info-table">';
+        const props = {};
         for (const line of lines) {
-            if (!line.trim()) continue;
-            // Match format: [key]: [value]
-            const match = line.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
-            if (match) {
-                const key = match[1];
-                const value = match[2];
-                tableHtml += `
-                    <tr>
-                        <td class="key">${escapeHtml(key)}</td>
-                        <td class="value">${escapeHtml(value)}</td>
-                    </tr>
-                `;
-            } else {
-                // Fallback for lines that don't match the pattern (show as is)
-                tableHtml += `<tr><td colspan="2">${escapeHtml(line)}</td></tr>`;
-            }
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const match = trimmed.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
+            if (match) props[match[1]] = match[2];
         }
-        tableHtml += '</table>';
-        document.getElementById('pageContent').innerHTML = `
-            <div class="card">
-                <h3>Device Properties</h3>
-                ${tableHtml}
+
+        if (Object.keys(props).length === 0) {
+            document.getElementById('pageContent').innerHTML = `
+                <div class="card">
+                    <h3>Device Properties</h3>
+                    <p>No properties could be parsed.</p>
+                    <details><summary>Debug: raw response</summary><pre>${escapeHtml(rawText.substring(0, 1000))}</pre></details>
+                </div>
+            `;
+            return;
+        }
+
+        // Helper to get property with fallback
+        const get = (key, fallback = '?') => props[key] || fallback;
+
+        // -------- Build Summary Cards ----------
+        const cards = [];
+
+        // 1. Device Overview (already existing)
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-info-circle"></i> Device Overview</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Model</span><span class="item-value">${escapeHtml(get('ro.product.model', 'Unknown'))}</span></div>
+                    <div class="card-item"><span class="item-label">Manufacturer</span><span class="item-value">${escapeHtml(get('ro.product.manufacturer', 'Unknown'))}</span></div>
+                    <div class="card-item"><span class="item-label">Android</span><span class="item-value">${escapeHtml(get('ro.build.version.release'))} (SDK ${escapeHtml(get('ro.build.version.sdk'))})</span></div>
+                    <div class="card-item"><span class="item-label">Security Patch</span><span class="item-value">${escapeHtml(get('ro.build.version.security_patch'))}</span></div>
+                    <div class="card-item"><span class="item-label">Board / CPU</span><span class="item-value">${escapeHtml(get('ro.product.board'))} / ${escapeHtml(get('ro.product.cpu.abi'))}</span></div>
+                    <div class="card-item"><span class="item-label">Serial</span><span class="item-value">${escapeHtml(get('ro.serialno'))}</span></div>
+                    <div class="card-item"><span class="item-label">Display</span><span class="item-value">${escapeHtml(get('sys.logical.width', '?'))} x ${escapeHtml(get('sys.logical.height', '?'))}</span></div>
+                </div>
+            </div>
+        `);
+
+        // 2. Bluetooth Status
+        const bluetoothEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
+        const bluetoothProfiles = [
+            'a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device',
+            'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'
+        ].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bluetoothEnabled ? '✅ Yes' : '❌ No'}</span></div>
+                    <div class="card-item"><span class="item-label">Active Profiles</span><span class="item-value">${bluetoothProfiles} / 12</span></div>
+                    <div class="card-item"><span class="item-label">Adapter State</span><span class="item-value">${escapeHtml(get('cache_key.bluetooth.bluetooth_adapter_get_state', 'N/A'))}</span></div>
+                </div>
+            </div>
+        `);
+
+        // 3. Network & Telephony
+        const operator = get('gsm.operator.alpha', 'Unknown');
+        const networkType = get('gsm.network.type', 'Unknown');
+        const simState = get('gsm.sim.state', 'Unknown');
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-network-wired"></i> Network & SIM</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Operator</span><span class="item-value">${escapeHtml(operator)}</span></div>
+                    <div class="card-item"><span class="item-label">Network Type</span><span class="item-value">${escapeHtml(networkType)}</span></div>
+                    <div class="card-item"><span class="item-label">SIM State</span><span class="item-value">${escapeHtml(simState)}</span></div>
+                    <div class="card-item"><span class="item-label">VoLTE / VoWiFi</span><span class="item-value">${get('gsm.sys.volte.state') === '1' ? 'VoLTE On' : 'VoLTE Off'} / ${get('gsm.sys.vowifi.state') === '1' ? 'VoWiFi On' : 'VoWiFi Off'}</span></div>
+                </div>
+            </div>
+        `);
+
+        // 4. System & Build
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-code-branch"></i> System & Build</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Fingerprint</span><span class="item-value" style="font-family: monospace;">${escapeHtml(get('ro.build.fingerprint', 'N/A').substring(0, 60))}...</span></div>
+                    <div class="card-item"><span class="item-label">Build Date</span><span class="item-value">${escapeHtml(get('ro.build.date', 'N/A'))}</span></div>
+                    <div class="card-item"><span class="item-label">Bootloader</span><span class="item-value">${escapeHtml(get('ro.bootloader', 'locked'))}</span></div>
+                    <div class="card-item"><span class="item-label">Encryption</span><span class="item-value">${get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted'}</span></div>
+                </div>
+            </div>
+        `);
+
+        // 5. Hardware & Sensors
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-microchip"></i> Hardware</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">SoC</span><span class="item-value">${escapeHtml(get('ro.soc.model', 'N/A'))} (${escapeHtml(get('ro.board.platform', 'N/A'))})</span></div>
+                    <div class="card-item"><span class="item-label">GPU</span><span class="item-value">${escapeHtml(get('ro.hardware.egl', 'N/A'))}</span></div>
+                    <div class="card-item"><span class="item-label">RAM</span><span class="item-value">${escapeHtml(get('ro.boot.ddrsize', 'N/A'))}</span></div>
+                    <div class="card-item"><span class="item-label">Display Density</span><span class="item-value">${escapeHtml(get('ro.sf.lcd_density', 'N/A'))} dpi</span></div>
+                </div>
+            </div>
+        `);
+
+        // 6. Features (gestures, game mode, etc.)
+        const gestures = get('ro.os_gesture_support') === '1' ? '✅' : '❌';
+        const gameMode = get('ro.os_gamemode_support') === '1' ? '✅' : '❌';
+        const faceUnlock = get('ro.faceid.support') === '1' ? '✅' : '❌';
+        cards.push(`
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-star"></i> Special Features</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Gesture Support</span><span class="item-value">${gestures}</span></div>
+                    <div class="card-item"><span class="item-label">Game Mode</span><span class="item-value">${gameMode}</span></div>
+                    <div class="card-item"><span class="item-label">Face Unlock</span><span class="item-value">${faceUnlock}</span></div>
+                    <div class="card-item"><span class="item-label">Fingerprint Sensor</span><span class="item-value">${get('ro.fingerprint_support') === '1' ? '✅' : '❌'}</span></div>
+                </div>
+            </div>
+        `);
+
+        // Collapsible raw properties (hidden by default)
+        const tableRows = [];
+        for (const [k, v] of Object.entries(props)) {
+            tableRows.push(`<tr><td class="key">${escapeHtml(k)}</td><td class="value">${escapeHtml(v)}</td></tr>`);
+        }
+        const rawHtml = `
+            <button id="toggleRawBtn" class="btn-secondary" style="margin-top: 16px;">Show all raw properties (${Object.keys(props).length} entries)</button>
+            <div id="rawPropertiesPanel" style="display: none; margin-top: 16px;">
+                <div class="table-container">
+                    <table class="device-info-table"><tbody>${tableRows.join('')}</tbody></table>
+                </div>
             </div>
         `;
+
+        const finalHtml = `<div class="cards-container">${cards.join('')}</div>${rawHtml}`;
+        document.getElementById('pageContent').innerHTML = finalHtml;
+
+        // Toggle for raw properties
+        const toggleBtn = document.getElementById('toggleRawBtn');
+        const panel = document.getElementById('rawPropertiesPanel');
+        if (toggleBtn && panel) {
+            let expanded = false;
+            toggleBtn.addEventListener('click', () => {
+                expanded = !expanded;
+                panel.style.display = expanded ? 'block' : 'none';
+                toggleBtn.textContent = expanded ? 'Hide all raw properties' : `Show all raw properties (${Object.keys(props).length} entries)`;
+            });
+        }
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
     }
 }
-
 // ==================== NETWORK CHECK (STRUCTURED CARD) ====================
 async function renderNetwork() {
     if (!currentDeviceId) {
@@ -217,7 +341,6 @@ async function renderNetwork() {
         const res = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        // Build a friendly summary
         let html = '<div class="card"><h3>Network Status</h3>';
         if (data.wifi && data.wifi.ssid) {
             html += `<p><strong>WiFi SSID:</strong> ${escapeHtml(data.wifi.ssid)}</p>`;

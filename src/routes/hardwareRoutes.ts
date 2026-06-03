@@ -5,7 +5,6 @@ import util from 'util';
 const execPromise = util.promisify(exec);
 const router = Router();
 
-// Helper: get device ID from query, or fallback to first connected device
 async function getDeviceId(req: any): Promise<string> {
     const deviceId = req.query.deviceId as string;
     if (deviceId) return deviceId;
@@ -15,10 +14,34 @@ async function getDeviceId(req: any): Promise<string> {
     return lines[0].split('\t')[0];
 }
 
-// Helper: run adb shell command on a specific device
 async function adbShellOnDevice(deviceId: string, command: string): Promise<string> {
     const { stdout } = await execPromise(`adb -s ${deviceId} shell ${command}`);
     return stdout;
+}
+
+function parseSizeToHuman(sizeStr: string): string {
+    // Already has unit? e.g., "58.3G"
+    const unitMatch = sizeStr.match(/^([\d.]+)\s*([GMK]B?)$/i);
+    if (unitMatch) {
+        let num = parseFloat(unitMatch[1]);
+        let unit = unitMatch[2].toUpperCase();
+        if (unit === 'G' || unit === 'GB') return `${num.toFixed(1)} GB`;
+        if (unit === 'M' || unit === 'MB') return `${num.toFixed(1)} MB`;
+        if (unit === 'K' || unit === 'KB') return `${(num / 1024).toFixed(1)} GB`;
+        return sizeStr;
+    }
+    // Numeric value (bytes)
+    const bytes = parseFloat(sizeStr.replace(/,/g, ''));
+    if (!isNaN(bytes)) {
+        const gb = bytes / (1024 * 1024 * 1024);
+        if (gb >= 1) return `${gb.toFixed(1)} GB`;
+        const mb = bytes / (1024 * 1024);
+        if (mb >= 1) return `${mb.toFixed(1)} MB`;
+        const kb = bytes / 1024;
+        if (kb >= 1) return `${kb.toFixed(1)} KB`;
+        return `${bytes} B`;
+    }
+    return sizeStr;
 }
 
 router.get('/battery', async (req, res) => {
@@ -27,61 +50,91 @@ router.get('/battery', async (req, res) => {
         const output = await adbShellOnDevice(deviceId, 'dumpsys battery');
         const levelMatch = output.match(/level: (\d+)/);
         const healthMatch = output.match(/health: (\d+)/);
-        const healthMap: Record<string, string> = {
-            '2': 'good', '3': 'overheat', '4': 'dead',
-            '5': 'over voltage', '6': 'failure', '7': 'cold'
-        };
+        const healthMap: Record<string, string> = { '2': 'good', '3': 'overheat', '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold' };
         res.json({
             level: levelMatch ? parseInt(levelMatch[1]) : null,
             health: healthMap[healthMatch?.[1] || ''] || 'unknown',
-            raw: output.trim()
         });
     } catch (err: any) {
-        res.status(500).json({ error: 'ADB failed', details: err.message });
+        res.status(500).json({ error: err.message });
     }
 });
 
 router.get('/storage', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
-        const output = await adbShellOnDevice(deviceId, 'df /data');
+        // Get all mounts with human-readable sizes
+        const output = await adbShellOnDevice(deviceId, 'df -h');
         const lines = output.split('\n');
-        const dataLine = lines.find(l => l.includes('/data'));
-        if (!dataLine) {
+        
+        let bestLine = '';
+        let bestSize = 0;
+        let fallbackLine = '';
+        let fallbackSize = 0;
+        
+        for (const line of lines) {
+            // Skip header line
+            if (line.trim().startsWith('Filesystem')) continue;
+            const parts = line.trim().split(/\s+/);
+            if (parts.length < 6) continue; // need at least: fs, size, used, avail, use%, mount
+            const sizeRaw = parts[1];
+            const mount = parts[parts.length - 1];
+            
+            // Skip system, root, tmpfs, etc.
+            if (mount === '/' || mount === '/system' || mount === '/vendor' || mount === '/cache' ||
+                mount.startsWith('/dev/') || mount.startsWith('/sys/') || mount.startsWith('/proc/')) {
+                continue;
+            }
+            
+            // Parse size to bytes for comparison
+            let sizeBytes = 0;
+            const numMatch = sizeRaw.match(/^([\d.]+)/);
+            if (numMatch) {
+                const num = parseFloat(numMatch[1]);
+                if (sizeRaw.includes('G')) sizeBytes = num * 1024 * 1024 * 1024;
+                else if (sizeRaw.includes('M')) sizeBytes = num * 1024 * 1024;
+                else if (sizeRaw.includes('K')) sizeBytes = num * 1024;
+                else sizeBytes = num;
+            }
+            
+            // Prefer typical user storage mounts
+            if (mount === '/data' || mount === '/storage/emulated' || mount === '/storage/emulated/0' ||
+                mount === '/sdcard' || mount === '/mnt/sdcard' || mount.includes('emulated')) {
+                if (sizeBytes > bestSize) {
+                    bestSize = sizeBytes;
+                    bestLine = line;
+                }
+            } else {
+                // Keep fallback (largest among non-system)
+                if (sizeBytes > fallbackSize) {
+                    fallbackSize = sizeBytes;
+                    fallbackLine = line;
+                }
+            }
+        }
+        
+        const selectedLine = bestLine || fallbackLine;
+        if (!selectedLine) {
+            console.error('[storage] No suitable partition found. Raw output:\n', output);
             res.json({ total: '?', used: '?', free: '?', raw: output });
             return;
         }
-        // Example: /data              58.3G    45.2G    13.1G  78% /data
-        // Or: /data 12345678 8765432 3580246 80% /data
-        const parts = dataLine.trim().split(/\s+/);
+        
+        const parts = selectedLine.trim().split(/\s+/);
         if (parts.length < 4) {
             res.json({ total: '?', used: '?', free: '?', raw: output });
             return;
         }
-        let total = parts[1];
-        let used = parts[2];
-        let free = parts[3];
-
-        // If values are numeric (bytes), convert to human-readable
-        if (/^\d+$/.test(total)) {
-            const toHuman = (bytes: number) => {
-                const gb = bytes / (1024 * 1024 * 1024);
-                if (gb >= 1) return `${gb.toFixed(1)} GB`;
-                const mb = bytes / (1024 * 1024);
-                if (mb >= 1) return `${mb.toFixed(1)} MB`;
-                return `${(bytes / 1024).toFixed(1)} KB`;
-            };
-            total = toHuman(parseInt(total));
-            used = toHuman(parseInt(used));
-            free = toHuman(parseInt(free));
-        } else {
-            // Already human-readable like "58.3G"
-            total = total.toUpperCase();
-            used = used.toUpperCase();
-            free = free.toUpperCase();
-        }
-        res.json({ total, used, free, raw: dataLine });
+        
+        const total = parseSizeToHuman(parts[1]);
+        const used = parseSizeToHuman(parts[2]);
+        const free = parseSizeToHuman(parts[3]);
+        
+        console.log(`[storage] Selected: ${selectedLine}`);
+        console.log(`[storage] Parsed: total=${total}, used=${used}, free=${free}`);
+        res.json({ total, used, free, raw: selectedLine });
     } catch (err: any) {
+        console.error('[storage] Error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -99,11 +152,10 @@ router.get('/ram', async (req, res) => {
             const toHuman = (kb: number) => {
                 const gb = kb / (1024 * 1024);
                 if (gb >= 1) return `${gb.toFixed(1)} GB`;
-                return `${(kb / 1024).toFixed(1)} MB`;
+                return `${(kb / 1024).toFixed(0)} MB`;
             };
             res.json({ total: toHuman(totalKB), used: toHuman(usedKB), free: toHuman(freeKB) });
         } else {
-            // Fallback: try to read MemTotal from /proc/meminfo
             const meminfo = await adbShellOnDevice(deviceId, 'cat /proc/meminfo');
             const memTotalMatch = meminfo.match(/MemTotal:\s*(\d+)\s*kB/i);
             const memFreeMatch = meminfo.match(/MemFree:\s*(\d+)\s*kB/i);
@@ -111,8 +163,7 @@ router.get('/ram', async (req, res) => {
                 const totalKB = parseInt(memTotalMatch[1]);
                 const freeKB = parseInt(memFreeMatch[1]);
                 const usedKB = totalKB - freeKB;
-                const toHuman = (kb: number) => `${(kb / 1024).toFixed(0)} MB`;
-                res.json({ total: toHuman(totalKB), used: toHuman(usedKB), free: toHuman(freeKB) });
+                res.json({ total: `${(totalKB / 1024).toFixed(0)} MB`, used: `${(usedKB / 1024).toFixed(0)} MB`, free: `${(freeKB / 1024).toFixed(0)} MB` });
             } else {
                 res.json({ total: '?', used: '?', free: '?', raw: output.substring(0, 500) });
             }
