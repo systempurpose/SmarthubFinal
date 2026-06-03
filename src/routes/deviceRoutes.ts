@@ -6,7 +6,7 @@ export function registerDeviceRoutes(app: Express): void {
   app.get('/device', async (_req: Request, res: Response) => {
     let devices = [] as Awaited<ReturnType<typeof listDevices>>;
     let error: string | undefined;
-    
+
     app.get('/api/devices', async (req, res) => {
     try {
         const devices = await listDevices();
@@ -14,6 +14,16 @@ export function registerDeviceRoutes(app: Express): void {
     } catch (err) {
         res.status(500).json({ error: String(err) });
     }
+});
+    app.get('/api/device/info/:id', async (req, res) => {
+  try {
+    const deviceId = req.params.id;
+    const propsDump = await deviceProps(deviceId);
+    const props = parseGetpropOutput(propsDump);
+    res.json(props);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
     try {
       devices = await listDevices();

@@ -4,7 +4,9 @@ import cors from 'cors';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import networkRoutes from './routes/networkRoutes';
 import crypto from 'node:crypto';
+
 import {
   listDevices,
   screencap,
@@ -146,6 +148,7 @@ app.use(
   }),
 );
 
+app.use('/api/network', networkRoutes);
 // Extra guard: block non-local Origins on mutating requests.
 app.use((req: Request, res: Response, next) => {
   if (allowRemote) return next();
@@ -1043,6 +1046,41 @@ app.get('/history/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: e.message ?? 'Unknown error' });
   }
 });
+
+// Add a simple endpoint to get the list of connected devices
+app.get('/api/devices', async (_req, res) => {
+  try {
+    const devices = await listDevices();
+    res.json({ devices });
+  } catch (err) {
+    console.error('Failed to list devices:', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ----- FALLBACK ROUTES FOR DEVICE INFO AND NETWORK -----
+// These ensure /device/:id and /wifi/status/:id work even if the
+// registered route files have different paths.
+app.get('/device/:id', async (req, res) => {
+  const deviceId = req.params.id;
+  try {
+    const props = await deviceProps(deviceId);
+    res.json(props);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/wifi/status/:id', async (req, res) => {
+  const deviceId = req.params.id;
+  try {
+    const info = await connectivityInfo(deviceId);
+    res.json(info);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// -----------------------------------------------------
 
 app.post('/history/:id', async (req: Request, res: Response) => {
   const id = req.params.id;

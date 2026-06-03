@@ -3,7 +3,6 @@ let currentDeviceId = null;
 let wizardStep = 0;
 
 // ==================== API HELPER ====================
-// ==================== API HELPER ====================
 const BACKEND_URL = 'http://127.0.0.1:3333';
 async function apiCall(endpoint, options = {}) {
     const res = await fetch(`${BACKEND_URL}/api${endpoint}`, {
@@ -19,19 +18,10 @@ async function updateConnectionStatus() {
     const statusSpan = document.querySelector('#connectionStatus span');
     if (!statusSpan) return;
     try {
-        // First try /api/devices
-        let data = await apiCall('/devices');
-        if (!data.devices || data.devices.length === 0) {
-            // Fallback: try /api/device/list (if your backend provides it)
-            try {
-                const listData = await apiCall('/device/list');
-                if (listData.devices && listData.devices.length) {
-                    data = { devices: listData.devices.map(d => d.id) };
-                }
-            } catch (e2) { /* ignore */ }
-        }
+        const data = await apiCall('/devices');
         if (data.devices && data.devices.length) {
-            currentDeviceId = data.devices[0];
+            const firstDevice = data.devices[0];
+            currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || String(firstDevice));
             statusSpan.innerText = `Connected: ${currentDeviceId}`;
             statusSpan.style.color = '#107c10';
         } else {
@@ -44,6 +34,7 @@ async function updateConnectionStatus() {
         statusSpan.style.color = '#d83b01';
     }
 }
+
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
@@ -61,11 +52,16 @@ async function renderDashboard() {
         </div>
     `;
 
-    // Fetch health data from new hardware routes
+    if (!currentDeviceId) {
+        const healthDiv = document.getElementById('healthCards');
+        if (healthDiv) healthDiv.innerHTML = `<div class="status-card">No device connected</div>`;
+        return;
+    }
+
     try {
-        const battery = await apiCall('/hardware/battery');
-        const storage = await apiCall('/hardware/storage');
-        const ram = await apiCall('/hardware/ram');
+        const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
+        const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
+        const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`);
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
@@ -86,6 +82,10 @@ async function renderDashboard() {
 
 // ==================== HARDWARE TESTS PAGE ====================
 async function renderHardwareTests() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
     const container = document.getElementById('pageContent');
     container.innerHTML = `
         <h1>Hardware Tests</h1>
@@ -97,21 +97,26 @@ async function renderHardwareTests() {
         <div id="testResults" class="card"><pre>Click a button to run test</pre></div>
     `;
     document.getElementById('testBattery')?.addEventListener('click', async () => {
-        const res = await apiCall('/hardware/battery');
+        const res = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
     document.getElementById('testStorage')?.addEventListener('click', async () => {
-        const res = await apiCall('/hardware/storage');
+        const res = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
     document.getElementById('testSensors')?.addEventListener('click', async () => {
-        const res = await apiCall('/hardware/sensors');
+        // Note: sensors endpoint may need deviceId; update hardwareRoutes.ts to support it
+        const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
         document.getElementById('testResults').innerHTML = `<pre>${JSON.stringify(res, null, 2)}</pre>`;
     });
 }
 
 // ==================== REPAIRS PAGE ====================
 async function renderRepairs() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
     const container = document.getElementById('pageContent');
     container.innerHTML = `
         <h1>Repair Tools</h1>
@@ -150,14 +155,13 @@ async function renderRepairs() {
     });
 }
 
-// ==================== OTHER PAGES (Placeholders) ====================
+// ==================== DEVICE INFO ====================
 async function renderDeviceInfo() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        // Device routes are mounted without /api
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const info = await res.json();
@@ -167,13 +171,13 @@ async function renderDeviceInfo() {
     }
 }
 
+// ==================== NETWORK CHECK ====================
 async function renderNetwork() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        // wifi routes are mounted without /api
         const res = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const net = await res.json();
@@ -183,13 +187,13 @@ async function renderNetwork() {
     }
 }
 
+// ==================== AI DIAGNOSIS ====================
 async function renderAIDiagnosis() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        // ai-no-debug-suggest is POST, mounted without /api
         const response = await fetch(`${BACKEND_URL}/ai-no-debug-suggest`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -204,13 +208,13 @@ async function renderAIDiagnosis() {
     }
 }
 
+// ==================== BSOD DIAGNOSIS ====================
 async function renderBsodDiagnosis() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        // blue-test routes are mounted without /api
         const res = await fetch(`${BACKEND_URL}/blue-test/run/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
@@ -224,6 +228,7 @@ async function renderBsodDiagnosis() {
         document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
     }
 }
+
 // ==================== USB DEBUGGING WIZARD ====================
 const modal = document.getElementById('wizardModal');
 const closeModal = document.querySelector('.close-button');
@@ -316,4 +321,3 @@ function initNavigation() {
     setInterval(updateConnectionStatus, 5000);
     await renderDashboard();
 })();
-
