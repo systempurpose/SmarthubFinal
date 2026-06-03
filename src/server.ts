@@ -209,7 +209,7 @@ app.post('/shutdown', (_req: Request, res: Response) => {
 });
 
 registerAuthRoutes(app);
-app.use(createAuthMiddleware());
+// app.use(createAuthMiddleware());
 
 // Backend enforcement: block mutating device actions when Read-only mode is enabled.
 app.use((req: Request, res: Response, next) => {
