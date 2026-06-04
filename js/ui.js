@@ -357,32 +357,205 @@ async function renderDeviceInfo() {
     }
 }
 // ==================== NETWORK CHECK (STRUCTURED CARD) ====================
-async function renderNetwork() {
+
+// Helper to call a fix action (e.g., bluetooth_reset, mobile_data_reset)
+async function callFix(service, action) {
+    try {
+        const response = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        return result;
+    } catch (err) {
+        console.error(`Fix failed for ${service}:`, err);
+        throw err;
+    }
+}
+async function renderConnectionTroubleshoot() {
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
         return;
     }
+
+    // Show loading state
+    document.getElementById('pageContent').innerHTML = `<div class="card">Loading connection status...</div>`;
+
     try {
-        const res = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        let html = '<div class="card"><h3>Network Status</h3>';
-        if (data.wifi && data.wifi.ssid) {
-            html += `<p><strong>WiFi SSID:</strong> ${escapeHtml(data.wifi.ssid)}</p>`;
-            html += `<p><strong>Signal Strength:</strong> ${data.wifi.rssi !== undefined ? data.wifi.rssi + ' dBm' : 'N/A'}</p>`;
-            if (data.wifi.ipAddress) html += `<p><strong>IP Address:</strong> ${escapeHtml(data.wifi.ipAddress)}</p>`;
+        // Fetch WiFi status
+        const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
+        let wifiStatus = null;
+        if (wifiRes.ok) wifiStatus = await wifiRes.json();
+
+        // Fetch Bluetooth diagnosis
+        const btRes = await fetch(`${BACKEND_URL}/android-connectivity/diagnose/${currentDeviceId}?target=bluetooth`);
+        let btStatus = null;
+        if (btRes.ok) btStatus = await btRes.json();
+
+        // For mobile data, we can read from device properties or use a simple ADB command
+        // We'll use the existing `/device/${currentDeviceId}` to get gsm.data.setenabled
+        const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
+        let mobileDataEnabled = 'Unknown';
+        if (deviceRes.ok) {
+            let rawText = await deviceRes.text();
+            try {
+                const parsed = JSON.parse(rawText);
+                if (typeof parsed === 'string') rawText = parsed;
+            } catch (e) {}
+            const lines = rawText.split(/\r?\n/);
+            for (const line of lines) {
+                const match = line.match(/^\[gsm.data.setenabled\]:\s*\[(.*?)\]$/);
+                if (match) {
+                    mobileDataEnabled = match[1] === 'true' ? 'Enabled' : 'Disabled';
+                    break;
+                }
+            }
+        }
+
+        // Build WiFi card
+        let wifiHtml = '';
+        if (wifiStatus && wifiStatus.wifi) {
+            const w = wifiStatus.wifi;
+            wifiHtml = `
+                <div class="info-card">
+                    <div class="card-header"><i class="fas fa-wifi"></i> WiFi</div>
+                    <div class="card-grid">
+                        <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(w.ssid || 'Not connected')}</span></div>
+                        <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${w.rssi !== undefined ? w.rssi + ' dBm' : 'N/A'}</span></div>
+                        <div class="card-item"><span class="item-label">IP Address</span><span class="item-value">${escapeHtml(w.ipAddress || 'N/A')}</span></div>
+                        <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${w.linkSpeed ? w.linkSpeed + ' Mbps' : 'N/A'}</span></div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button>
+                        <button class="btn-secondary fix-wifi" data-action="wifi_forget">Forget current network (not implemented)</button>
+                    </div>
+                </div>
+            `;
         } else {
-            html += '<p>No WiFi information available.</p>';
+            wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;
         }
-        if (data.cellular) {
-            html += `<p><strong>Cellular Operator:</strong> ${escapeHtml(data.cellular.operator || 'N/A')}</p>`;
-            html += `<p><strong>Signal Level:</strong> ${data.cellular.signalStrength || 'N/A'}</p>`;
+
+        // Build Bluetooth card
+        let btHtml = '';
+        if (btStatus && btStatus.bluetooth) {
+            const bt = btStatus.bluetooth;
+            const enabled = bt.enabled ? '✅ Yes' : '❌ No';
+            const bondedCount = bt.summary?.bondedCount || 0;
+            const connectedCount = bt.summary?.connectedCount || 0;
+            btHtml = `
+                <div class="info-card">
+                    <div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div>
+                    <div class="card-grid">
+                        <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${enabled}</span></div>
+                        <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${bondedCount}</span></div>
+                        <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${connectedCount}</span></div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth (off/on)</button>
+                        <button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button>
+                        <button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache & Reset</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid"><div class="card-item">Unable to fetch Bluetooth status</div></div></div>`;
         }
-        html += `<details><summary>Full JSON Response</summary><pre>${JSON.stringify(data, null, 2)}</pre></details>`;
-        html += '</div>';
+
+        // Build Mobile Data card
+        let mobileHtml = `
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(mobileDataEnabled)}</span></div>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data (off/on)</button>
+                </div>
+            </div>
+        `;
+
+        // Combine everything
+        const html = `
+            <div class="cards-container">
+                ${wifiHtml}
+                ${btHtml}
+                ${mobileHtml}
+            </div>
+            <div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>
+        `;
         document.getElementById('pageContent').innerHTML = html;
+
+        // Attach event listeners for WiFi fixes (note: WiFi reset not yet implemented in backend; we'll add a simple toggle using svc wifi)
+        document.querySelectorAll('.fix-wifi').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.getAttribute('data-action');
+                if (action === 'wifi_reset') {
+                    try {
+                        // Simple WiFi toggle via ADB (not in existing routes)
+                        const res = await fetch(`${BACKEND_URL}/wifi/toggle`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deviceId: currentDeviceId, enable: false })
+                        });
+                        await res.json();
+                        await new Promise(r => setTimeout(r, 1000));
+                        await fetch(`${BACKEND_URL}/wifi/toggle`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deviceId: currentDeviceId, enable: true })
+                        });
+                        showFixResult('WiFi reset completed. Refresh status to see changes.');
+                    } catch (err) {
+                        showFixResult(`WiFi reset failed: ${err.message}`, true);
+                    }
+                } else {
+                    showFixResult('Action not yet implemented', true);
+                }
+            });
+        });
+
+        // Bluetooth fixes using existing endpoint
+        document.querySelectorAll('.fix-bluetooth').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.getAttribute('data-action');
+                try {
+                    const result = await callFix('bluetooth', action);
+                    showFixResult(`Bluetooth fix '${action}' completed. Steps: ${JSON.stringify(result.steps)}`);
+                    // Refresh Bluetooth status after 2 seconds
+                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                } catch (err) {
+                    showFixResult(`Bluetooth fix failed: ${err.message}`, true);
+                }
+            });
+        });
+
+        // Mobile data fix
+        document.querySelectorAll('.fix-mobile').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.getAttribute('data-action');
+                try {
+                    const result = await callFix('mobile', action);
+                    showFixResult(`Mobile data reset completed. Steps: ${JSON.stringify(result.steps)}`);
+                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                } catch (err) {
+                    showFixResult(`Mobile data reset failed: ${err.message}`, true);
+                }
+            });
+        });
+
+        function showFixResult(message, isError = false) {
+            const resultDiv = document.getElementById('fixResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `<div style="color: ${isError ? '#d32f2f' : '#2e7d32'};">${escapeHtml(message)}</div>`;
+            setTimeout(() => {
+                resultDiv.style.display = 'none';
+            }, 5000);
+        }
+
     } catch (err) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">Network check failed: ${err.message}</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">Error loading troubleshoot page: ${err.message}</div>`;
     }
 }
 
@@ -505,6 +678,7 @@ function initNavigation() {
             else if (page === 'device-info') await renderDeviceInfo();
             else if (page === 'hardware-tests') await renderHardwareTests();
             else if (page === 'network') await renderNetwork();
+            else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
             else if (page === 'ai-diagnosis') await renderAIDiagnosis();
             else if (page === 'repairs') await renderRepairs();
             else if (page === 'bsod') await renderBsodDiagnosis();

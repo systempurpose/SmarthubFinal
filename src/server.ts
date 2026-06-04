@@ -1154,6 +1154,18 @@ app.get('/wifi/status/:id', async (req, res) => {
     }
 });
 // -----------------------------------------------------
+app.post('/wifi/toggle', async (req, res) => {
+    const deviceId = req.body.deviceId;
+    const enable = req.body.enable === true;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const cmd = enable ? 'svc wifi enable' : 'svc wifi disable';
+        const output = await adb('-s', deviceId, 'shell', cmd);
+        res.json({ ok: true, output });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
 
 app.post('/history/:id', async (req: Request, res: Response) => {
   const id = req.params.id;
