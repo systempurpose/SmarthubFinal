@@ -266,40 +266,38 @@ async function renderHardwareTests() {
                 return { passed, message };
             }
         },
-        {
-            id: 'touch',
-            name: 'Touch Screen',
-            run: async () => {
-                // Launch the touch test activity (gives user a visual area to tap)
-                await launchAndroidTest('touch');
-                modalTitle.textContent = 'Touch Screen Test';
-                modalBody.innerHTML = `
-                    <div class="spinner"></div>
-                    <p>📱 The phone is now in touch test mode.</p>
-                    <p>Please tap the screen repeatedly for 10 seconds. Try to make at least 10 taps.</p>
-                    <p>Counting touches automatically...</p>
-                `;
-                modal.style.display = 'flex';
+       {
+    id: 'touch',
+    name: 'Touch Screen',
+    run: async () => {
+        await launchAndroidTest('touch');
+        await new Promise(r => setTimeout(r, 1000)); // let UI appear
 
-                let touchCount = 0;
-                // Use `timeout 10 getevent` to capture touch events for 10 seconds
-                const output = await runAdb('timeout 10 getevent -t 2>/dev/null');
-                const lines = output.split('\n');
-                for (const line of lines) {
-                    // Look for touch events (ABS_MT_POSITION, BTN_TOUCH, or ABS_MT_TRACKING_ID)
-                    if (line.includes('ABS_MT_POSITION') || line.includes('BTN_TOUCH') || 
-                        (line.includes('EV_ABS') && (line.includes('ABS_MT') || line.includes('BTN_TOUCH')))) {
-                        touchCount++;
-                    }
+        let touchCount = 0;
+        const startTime = Date.now();
+        const timeout = 10000; // 10 seconds
+
+        while (Date.now() - startTime < timeout && touchCount < 10) {
+            try {
+                // Run uiautomator dump and grep for the counter text
+                const dump = await runAdb('uiautomator dump /dev/tty 2>/dev/null | grep -o "Touches detected: [0-9]*" | head -1');
+                const match = dump.match(/\d+/);
+                if (match) {
+                    touchCount = parseInt(match[0]);
+                    if (touchCount >= 10) break;
                 }
-                await returnToMainApp();
-                closeModal();
-
-                const passed = touchCount >= 10;
-                const message = passed ? `${touchCount} touches detected` : `Only ${touchCount} touches detected (need 10)`;
-                return { passed, message };
+            } catch (e) {
+                // ignore errors during polling
             }
-        },
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        await returnToMainApp();
+        const passed = touchCount >= 10;
+        const message = passed ? `${touchCount} touches detected` : `Only ${touchCount} touches detected (need 10)`;
+        return { passed, message };
+    }
+},
         {
             id: 'vibration',
             name: 'Vibration',
