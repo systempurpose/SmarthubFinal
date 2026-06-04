@@ -200,6 +200,7 @@ async function renderHardwareTests() {
         await launchAndroidApp();
     }
 
+    // Test definitions
     const tests = [
         {
             id: 'battery',
@@ -266,38 +267,26 @@ async function renderHardwareTests() {
                 return { passed, message };
             }
         },
-       {
-    id: 'touch',
-    name: 'Touch Screen',
-    run: async () => {
-        await launchAndroidTest('touch');
-        await new Promise(r => setTimeout(r, 1000)); // let UI appear
-
-        let touchCount = 0;
-        const startTime = Date.now();
-        const timeout = 10000; // 10 seconds
-
-        while (Date.now() - startTime < timeout && touchCount < 10) {
-            try {
-                // Run uiautomator dump and grep for the counter text
-                const dump = await runAdb('uiautomator dump /dev/tty 2>/dev/null | grep -o "Touches detected: [0-9]*" | head -1');
-                const match = dump.match(/\d+/);
-                if (match) {
-                    touchCount = parseInt(match[0]);
-                    if (touchCount >= 10) break;
-                }
-            } catch (e) {
-                // ignore errors during polling
+        {
+            id: 'touch',
+            name: 'Touch Screen',
+            run: async () => {
+                await launchAndroidTest('touch');
+                modalTitle.textContent = 'Touch Screen Test';
+                modalBody.innerHTML = `
+                    <p>📱 The phone is now in touch test mode.</p>
+                    <p>Please tap the screen several times. Does the screen register your touches?</p>
+                    <p>(You will see a counter increase on the phone.)</p>
+                `;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation(30000);
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
+                return { passed, message };
             }
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        await returnToMainApp();
-        const passed = touchCount >= 10;
-        const message = passed ? `${touchCount} touches detected` : `Only ${touchCount} touches detected (need 10)`;
-        return { passed, message };
-    }
-},
+        },
         {
             id: 'vibration',
             name: 'Vibration',
@@ -373,7 +362,6 @@ async function renderHardwareTests() {
         cardsContainer.innerHTML = '';
         const results = {};
 
-        // Ensure Android app is open before starting
         await launchAndroidApp();
 
         for (const test of tests) {

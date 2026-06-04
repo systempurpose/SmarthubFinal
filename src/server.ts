@@ -1167,6 +1167,20 @@ app.post('/wifi/toggle', async (req, res) => {
     }
 });
 
+// Generic ADB shell command endpoint (use with caution)
+app.post('/adb-shell', async (req, res) => {
+    const { deviceId, command } = req.body;
+    if (!deviceId || !command) {
+        return res.status(400).json({ error: 'Missing deviceId or command' });
+    }
+    try {
+        const output = await adb('-s', deviceId, 'shell', command);
+        res.json({ output: output.trim() });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/history/:id', async (req: Request, res: Response) => {
   const id = req.params.id;
   const body = req.body || {};
