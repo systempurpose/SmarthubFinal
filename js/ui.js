@@ -172,16 +172,14 @@ async function renderDeviceInfo() {
         return;
     }
     try {
+        // 1. Fetch static device properties
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let rawText = await res.text();
-
-        // Unwrap JSON string if needed
         try {
             const parsedJson = JSON.parse(rawText);
             if (typeof parsedJson === 'string') rawText = parsedJson;
-        } catch (e) { /* not JSON, use as is */ }
-
+        } catch (e) { /* not JSON */ }
         const lines = rawText.split(/\r?\n/);
         const props = {};
         for (const line of lines) {
@@ -190,143 +188,170 @@ async function renderDeviceInfo() {
             const match = trimmed.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
             if (match) props[match[1]] = match[2];
         }
-
         if (Object.keys(props).length === 0) {
-            document.getElementById('pageContent').innerHTML = `
-                <div class="card">
-                    <h3>Device Properties</h3>
-                    <p>No properties could be parsed.</p>
-                    <details><summary>Debug: raw response</summary><pre>${escapeHtml(rawText.substring(0, 1000))}</pre></details>
-                </div>
-            `;
+            document.getElementById('pageContent').innerHTML = `<div class="card">No properties found.</div>`;
             return;
         }
 
-        // Helper to get property with fallback
-        const get = (key, fallback = '?') => props[key] || fallback;
-
-        // -------- Build Summary Cards ----------
-        const cards = [];
-
-        // 1. Device Overview (already existing)
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-info-circle"></i> Device Overview</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Model</span><span class="item-value">${escapeHtml(get('ro.product.model', 'Unknown'))}</span></div>
-                    <div class="card-item"><span class="item-label">Manufacturer</span><span class="item-value">${escapeHtml(get('ro.product.manufacturer', 'Unknown'))}</span></div>
-                    <div class="card-item"><span class="item-label">Android</span><span class="item-value">${escapeHtml(get('ro.build.version.release'))} (SDK ${escapeHtml(get('ro.build.version.sdk'))})</span></div>
-                    <div class="card-item"><span class="item-label">Security Patch</span><span class="item-value">${escapeHtml(get('ro.build.version.security_patch'))}</span></div>
-                    <div class="card-item"><span class="item-label">Board / CPU</span><span class="item-value">${escapeHtml(get('ro.product.board'))} / ${escapeHtml(get('ro.product.cpu.abi'))}</span></div>
-                    <div class="card-item"><span class="item-label">Serial</span><span class="item-value">${escapeHtml(get('ro.serialno'))}</span></div>
-                    <div class="card-item"><span class="item-label">Display</span><span class="item-value">${escapeHtml(get('sys.logical.width', '?'))} x ${escapeHtml(get('sys.logical.height', '?'))}</span></div>
-                </div>
-            </div>
-        `);
-
-        // 2. Bluetooth Status
-        const bluetoothEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
-        const bluetoothProfiles = [
-            'a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device',
-            'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'
-        ].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bluetoothEnabled ? '✅ Yes' : '❌ No'}</span></div>
-                    <div class="card-item"><span class="item-label">Active Profiles</span><span class="item-value">${bluetoothProfiles} / 12</span></div>
-                    <div class="card-item"><span class="item-label">Adapter State</span><span class="item-value">${escapeHtml(get('cache_key.bluetooth.bluetooth_adapter_get_state', 'N/A'))}</span></div>
-                </div>
-            </div>
-        `);
-
-        // 3. Network & Telephony
-        const operator = get('gsm.operator.alpha', 'Unknown');
-        const networkType = get('gsm.network.type', 'Unknown');
-        const simState = get('gsm.sim.state', 'Unknown');
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-network-wired"></i> Network & SIM</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Operator</span><span class="item-value">${escapeHtml(operator)}</span></div>
-                    <div class="card-item"><span class="item-label">Network Type</span><span class="item-value">${escapeHtml(networkType)}</span></div>
-                    <div class="card-item"><span class="item-label">SIM State</span><span class="item-value">${escapeHtml(simState)}</span></div>
-                    <div class="card-item"><span class="item-label">VoLTE / VoWiFi</span><span class="item-value">${get('gsm.sys.volte.state') === '1' ? 'VoLTE On' : 'VoLTE Off'} / ${get('gsm.sys.vowifi.state') === '1' ? 'VoWiFi On' : 'VoWiFi Off'}</span></div>
-                </div>
-            </div>
-        `);
-
-        // 4. System & Build
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-code-branch"></i> System & Build</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Fingerprint</span><span class="item-value" style="font-family: monospace;">${escapeHtml(get('ro.build.fingerprint', 'N/A').substring(0, 60))}...</span></div>
-                    <div class="card-item"><span class="item-label">Build Date</span><span class="item-value">${escapeHtml(get('ro.build.date', 'N/A'))}</span></div>
-                    <div class="card-item"><span class="item-label">Bootloader</span><span class="item-value">${escapeHtml(get('ro.bootloader', 'locked'))}</span></div>
-                    <div class="card-item"><span class="item-label">Encryption</span><span class="item-value">${get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted'}</span></div>
-                </div>
-            </div>
-        `);
-
-        // 5. Hardware & Sensors
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-microchip"></i> Hardware</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">SoC</span><span class="item-value">${escapeHtml(get('ro.soc.model', 'N/A'))} (${escapeHtml(get('ro.board.platform', 'N/A'))})</span></div>
-                    <div class="card-item"><span class="item-label">GPU</span><span class="item-value">${escapeHtml(get('ro.hardware.egl', 'N/A'))}</span></div>
-                    <div class="card-item"><span class="item-label">RAM</span><span class="item-value">${escapeHtml(get('ro.boot.ddrsize', 'N/A'))}</span></div>
-                    <div class="card-item"><span class="item-label">Display Density</span><span class="item-value">${escapeHtml(get('ro.sf.lcd_density', 'N/A'))} dpi</span></div>
-                </div>
-            </div>
-        `);
-
-        // 6. Features (gestures, game mode, etc.)
-        const gestures = get('ro.os_gesture_support') === '1' ? '✅' : '❌';
-        const gameMode = get('ro.os_gamemode_support') === '1' ? '✅' : '❌';
-        const faceUnlock = get('ro.faceid.support') === '1' ? '✅' : '❌';
-        cards.push(`
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-star"></i> Special Features</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Gesture Support</span><span class="item-value">${gestures}</span></div>
-                    <div class="card-item"><span class="item-label">Game Mode</span><span class="item-value">${gameMode}</span></div>
-                    <div class="card-item"><span class="item-label">Face Unlock</span><span class="item-value">${faceUnlock}</span></div>
-                    <div class="card-item"><span class="item-label">Fingerprint Sensor</span><span class="item-value">${get('ro.fingerprint_support') === '1' ? '✅' : '❌'}</span></div>
-                </div>
-            </div>
-        `);
-
-        // Collapsible raw properties (hidden by default)
-        const tableRows = [];
-        for (const [k, v] of Object.entries(props)) {
-            tableRows.push(`<tr><td class="key">${escapeHtml(k)}</td><td class="value">${escapeHtml(v)}</td></tr>`);
+        // 2. Fetch WiFi status dynamically
+        let wifiStatus = null;
+        try {
+            const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
+            if (wifiRes.ok) wifiStatus = await wifiRes.json();
+        } catch (err) {
+            console.warn('Could not fetch WiFi status:', err);
         }
-        const rawHtml = `
-            <button id="toggleRawBtn" class="btn-secondary" style="margin-top: 16px;">Show all raw properties (${Object.keys(props).length} entries)</button>
-            <div id="rawPropertiesPanel" style="display: none; margin-top: 16px;">
-                <div class="table-container">
-                    <table class="device-info-table"><tbody>${tableRows.join('')}</tbody></table>
+
+        // Helper to get property with fallback
+        const get = (key, fallback = '?') => (props[key] !== undefined ? props[key] : fallback);
+
+        // Helper to build a card (reused)
+        const makeCard = (title, icon, items) => `
+            <div class="info-card">
+                <div class="card-header"><i class="${icon}"></i> ${title}</div>
+                <div class="card-grid">
+                    ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
                 </div>
             </div>
         `;
 
-        const finalHtml = `<div class="cards-container">${cards.join('')}</div>${rawHtml}`;
-        document.getElementById('pageContent').innerHTML = finalHtml;
+        const cards = [];
 
-        // Toggle for raw properties
-        const toggleBtn = document.getElementById('toggleRawBtn');
-        const panel = document.getElementById('rawPropertiesPanel');
-        if (toggleBtn && panel) {
-            let expanded = false;
-            toggleBtn.addEventListener('click', () => {
-                expanded = !expanded;
-                panel.style.display = expanded ? 'block' : 'none';
-                toggleBtn.textContent = expanded ? 'Hide all raw properties' : `Show all raw properties (${Object.keys(props).length} entries)`;
-            });
+        // ----- Device Overview -----
+        cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
+            { label: 'Model', value: get('ro.product.model', 'Unknown') },
+            { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
+            { label: 'Android', value: `${get('ro.build.version.release')} (SDK ${get('ro.build.version.sdk')})` },
+            { label: 'Security Patch', value: get('ro.build.version.security_patch') },
+            { label: 'Board / CPU', value: `${get('ro.product.board')} / ${get('ro.product.cpu.abi')}` },
+            { label: 'Serial', value: get('ro.serialno') },
+            { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
+        ]));
+
+        // ----- Bluetooth -----
+        const bluetoothEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
+        const bluetoothProfiles = ['a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device',
+            'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'
+        ].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
+        cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
+            { label: 'Enabled', value: bluetoothEnabled ? '✅ Yes' : '❌ No' },
+            { label: 'Active Profiles', value: `${bluetoothProfiles} / 12` },
+            { label: 'Adapter State', value: get('cache_key.bluetooth.bluetooth_adapter_get_state', 'N/A') }
+        ]));
+
+        // ----- WiFi (dynamic) -----
+        let wifiItems = [];
+        if (wifiStatus && wifiStatus.wifi) {
+            const wifi = wifiStatus.wifi;
+            wifiItems = [
+                { label: 'SSID', value: wifi.ssid || 'Not connected' },
+                { label: 'Signal Strength', value: wifi.rssi !== undefined ? `${wifi.rssi} dBm` : 'N/A' },
+                { label: 'IP Address', value: wifi.ipAddress || 'N/A' },
+                { label: 'Link Speed', value: wifi.linkSpeed ? `${wifi.linkSpeed} Mbps` : 'N/A' },
+                { label: 'Frequency', value: wifi.frequency ? `${wifi.frequency} MHz` : 'N/A' }
+            ];
+        } else {
+            wifiItems = [{ label: 'Status', value: 'Unable to fetch WiFi info' }];
         }
+        cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
+
+        // ----- Network & SIM (enhanced) -----
+        const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
+        const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+        const mobileDataEnabled = get('gsm.data.setenabled') === 'true' ? '✅ Yes' : '❌ No';
+        const vonr0 = get('persist.radio.is_vonr_enabled_0') === 'true' ? 'Yes' : 'No';
+        const defaultNet = get('ro.telephony.default_network', 'N/A');
+        cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
+            { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
+            { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
+            { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
+            { label: 'Mobile Data', value: mobileDataEnabled },
+            { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` },
+            { label: 'VoNR (5G Voice)', value: vonr0 },
+            { label: 'Default Network', value: defaultNet }
+        ]));
+
+        // ----- System & Build -----
+        cards.push(makeCard('System & Build', 'fas fa-code-branch', [
+            { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
+            { label: 'Build Date', value: get('ro.build.date', 'N/A') },
+            { label: 'Bootloader', value: get('ro.bootloader', 'locked') },
+            { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
+        ]));
+
+        // ----- Hardware -----
+        cards.push(makeCard('Hardware', 'fas fa-microchip', [
+            { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
+            { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
+            { label: 'RAM', value: get('ro.boot.ddrsize', 'N/A') },
+            { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
+        ]));
+
+        // ----- Special Features -----
+        cards.push(makeCard('Special Features', 'fas fa-star', [
+            { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
+            { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
+            { label: 'Face Unlock', value: get('ro.faceid.support') === '1' ? '✅' : '❌' },
+            { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
+        ]));
+
+        // ----- Security & Boot -----
+        const verifiedBootState = get('ro.boot.verifiedbootstate', 'unknown');
+        const flashLocked = get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked';
+        const verityMode = get('ro.boot.veritymode', 'unknown');
+        const adbSecure = get('ro.adb.secure') === '1' ? 'Yes' : 'No';
+        const secureBuild = get('ro.secure') === '1' ? 'Production' : 'Debug';
+        cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
+            { label: 'Verified Boot', value: verifiedBootState },
+            { label: 'Bootloader', value: flashLocked },
+            { label: 'dm‑verity', value: verityMode },
+            { label: 'ADB Secure', value: adbSecure },
+            { label: 'Build Type', value: secureBuild }
+        ]));
+
+        // ----- Camera -----
+        const manualFocus = get('persist.sys.cam.manual.focus') === 'true' ? '✅' : '❌';
+        const manualShutter = get('persist.sys.cam.manual.shutter') === 'true' ? '✅' : '❌';
+        const beautyMode = get('persist.sys.cam.beauty.fullfuc') === 'true' ? '✅' : '❌';
+        const wideCamera = get('persist.sys.cam.wide.8M') === 'true' ? '✅ (8MP)' : '❌';
+        const zslDisabled = get('camera.disable_zsl_mode') === '1' ? 'Disabled' : 'Enabled';
+        cards.push(makeCard('Camera', 'fas fa-camera', [
+            { label: 'Manual Focus', value: manualFocus },
+            { label: 'Manual Shutter', value: manualShutter },
+            { label: 'Beauty Mode', value: beautyMode },
+            { label: 'Wide Camera', value: wideCamera },
+            { label: 'Zero‑Shutter‑Lag', value: zslDisabled }
+        ]));
+
+        // ----- Audio -----
+        const audioDriver = get('ro.hardware.audio.primary', 'N/A');
+        const callVolSteps = get('ro.config.vc_call_vol_steps', 'N/A');
+        const callVolDefault = get('ro.config.vc_call_vol_default', 'N/A');
+        const highVolumeWarning = get('persist.sys.hight_volume_switch') === 'true' ? 'On' : 'Off';
+        cards.push(makeCard('Audio', 'fas fa-headphones', [
+            { label: 'Audio Driver', value: audioDriver },
+            { label: 'Call Volume Steps', value: callVolSteps },
+            { label: 'Default Call Vol.', value: callVolDefault },
+            { label: 'High Volume Warn', value: highVolumeWarning }
+        ]));
+
+        // ----- Sensors & Extras -----
+        const sensorHub = get('ro.hardware.sensors', 'N/A');
+        const nfc = get('nfc.initialized') === 'true' ? '✅' : '❌';
+        const quickCharge = get('ro.quick_charge_support') === '1' ? '✅' : '❌';
+        const iotCard = get('ro.iot_card_support') === '1' ? '✅' : '❌';
+        const childMode = get('ro.childmode.support') === '1' ? '✅' : '❌';
+        cards.push(makeCard('Sensors & Extras', 'fas fa-microchip', [
+            { label: 'Sensor Hub', value: sensorHub },
+            { label: 'NFC', value: nfc },
+            { label: 'Quick Charge', value: quickCharge },
+            { label: 'IoT/eSIM Support', value: iotCard },
+            { label: 'Child Mode', value: childMode }
+        ]));
+
+        // ----- Final output (no raw properties section) -----
+        const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
+        document.getElementById('pageContent').innerHTML = finalHtml;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
     }

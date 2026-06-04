@@ -1071,14 +1071,87 @@ app.get('/device/:id', async (req, res) => {
   }
 });
 
+// Improved WiFi status endpoint that returns structured JSON
+// Improved WiFi status endpoint that returns structured JSON
+// Improved WiFi status endpoint that returns structured JSON with real values
 app.get('/wifi/status/:id', async (req, res) => {
-  const deviceId = req.params.id;
-  try {
-    const info = await connectivityInfo(deviceId);
-    res.json(info);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+    const deviceId = req.params.id;
+    if (!deviceId) {
+        return res.status(400).json({ error: 'Missing device ID' });
+    }
+    try {
+        // Get Wi-Fi dumpsys (primary source)
+        const wifiDump = await adb('-s', deviceId, 'shell', 'dumpsys wifi');
+        
+        // Parse SSID
+        let ssid = 'Not connected';
+        const ssidMatch = wifiDump.match(/SSID:\s*"?([^"\n]+)"?/i);
+        if (ssidMatch) {
+            let rawSsid = ssidMatch[1].trim();
+            if (rawSsid !== '<unknown ssid>' && rawSsid !== '""' && rawSsid) {
+                ssid = rawSsid;
+            }
+        }
+
+        // Parse RSSI (signal strength)
+        let rssi = null;
+        const rssiMatch = wifiDump.match(/RSSI:\s*(-?\d+)/i);
+        if (rssiMatch) rssi = parseInt(rssiMatch[1]);
+
+        // Parse link speed (Mbps) - try multiple patterns
+        let linkSpeed = null;
+        const speedPatterns = [
+            /link\s*speed:\s*(\d+)/i,
+            /tx_bitrate=\s*(\d+)/i,
+            /bitrate:\s*(\d+)/i,
+            /mWifiInfo.*?linkSpeed=(\d+)/i
+        ];
+        for (const pattern of speedPatterns) {
+            const match = wifiDump.match(pattern);
+            if (match) {
+                linkSpeed = parseInt(match[1]);
+                break;
+            }
+        }
+
+        // Parse frequency (MHz)
+        let frequency = null;
+        const freqMatch = wifiDump.match(/frequency:\s*(\d+)/i);
+        if (freqMatch) frequency = parseInt(freqMatch[1]);
+
+        // Get IP address - try multiple methods
+        let ipAddress = '';
+        try {
+            // Method 1: ip addr show wlan0
+            let ipRaw = await adb('-s', deviceId, 'shell', "ip addr show wlan0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1");
+            ipAddress = ipRaw.trim();
+            if (!ipAddress) {
+                // Method 2: ifconfig wlan0
+                ipRaw = await adb('-s', deviceId, 'shell', "ifconfig wlan0 | grep 'inet addr' | awk '{print $2}' | cut -d: -f2");
+                ipAddress = ipRaw.trim();
+            }
+            if (!ipAddress) {
+                // Method 3: netcfg (older devices)
+                ipRaw = await adb('-s', deviceId, 'shell', "netcfg | grep wlan0 | awk '{print $3}'");
+                ipAddress = ipRaw.trim();
+            }
+        } catch (e) {
+            // Ignore – IP may not be available
+        }
+
+        // Build response object, only include fields that have real values
+        const wifiInfo: any = { ssid };
+        if (rssi !== null) wifiInfo.rssi = rssi;
+        if (ipAddress && ipAddress !== '') wifiInfo.ipAddress = ipAddress;
+        if (linkSpeed !== null) wifiInfo.linkSpeed = linkSpeed;
+        if (frequency !== null) wifiInfo.frequency = frequency;
+
+        res.json({ wifi: wifiInfo });
+    } catch (err) {
+        console.error(`WiFi status error for device ${deviceId}:`, err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: errorMessage });
+    }
 });
 // -----------------------------------------------------
 
