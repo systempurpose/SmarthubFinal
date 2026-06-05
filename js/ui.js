@@ -56,10 +56,17 @@ async function renderDashboard() {
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading storage...</div>
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading RAM...</div>
         </div>
+        <div id="deviceOverview" class="card" style="display: none;"></div>
+        <div id="networkStatus" class="card" style="display: none;"></div>
+        <div id="securityStatus" class="card" style="display: none;"></div>
+        <div id="alertsCard" class="card" style="display: none;"></div>
         <div class="card">
             <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
-            <button id="runFullDiagnostic" class="btn-primary">Run Full Diagnostic</button>
-            <button id="openWizard" class="btn-secondary" style="margin-left: 12px;">USB Debugging Wizard</button>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button id="runFullDiagnostic" class="btn-primary">Run Full Diagnostic</button>
+                <button id="openWizard" class="btn-secondary">USB Debugging Wizard</button>
+                <button id="quickDebloat" class="btn-secondary" style="display: none;">Quick Debloat</button>
+            </div>
         </div>
     `;
 
@@ -70,23 +77,131 @@ async function renderDashboard() {
     }
 
     try {
-        const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
-        const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
-        const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`);
+        // Fetch data in parallel
+        const [battery, storage, ram, deviceProps, wifiStatus] = await Promise.all([
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: '?' })),
+            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?', free: '?' })),
+            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?' })),
+            fetch(`${BACKEND_URL}/device/${currentDeviceId}`).then(r => r.text()).catch(() => ''),
+            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null)
+        ]);
+
+        // Parse device properties for useful info
+        let model = 'Unknown';
+        let androidVer = '?';
+        let securityPatch = '?';
+        let encryption = '?';
+        let bootloader = '?';
+        if (deviceProps) {
+            const lines = deviceProps.split(/\r?\n/);
+            const props = {};
+            for (const line of lines) {
+                const match = line.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
+                if (match) props[match[1]] = match[2];
+            }
+            model = props['ro.product.model'] || props['ro.product.name'] || 'Unknown';
+            androidVer = props['ro.build.version.release'] || '?';
+            securityPatch = props['ro.build.version.security_patch'] || '?';
+            encryption = props['ro.crypto.state'] === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted';
+            bootloader = props['ro.boot.flash.locked'] === '1' ? '🔒 Locked' : '🔓 Unlocked';
+        }
+
+        // WiFi info
+        let wifiSsid = 'Not connected';
+        let wifiSignal = null;
+        if (wifiStatus && wifiStatus.wifi) {
+            wifiSsid = wifiStatus.wifi.ssid || 'Not connected';
+            wifiSignal = wifiStatus.wifi.rssi;
+        }
+
+        // Storage usage bar
+        const totalGB = parseFloat(storage.total) || 0;
+        const usedGB = parseFloat(storage.used) || 0;
+        const freeGB = parseFloat(storage.free) || 0;
+        const usagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
+
+        // Battery
+        const battLevel = battery.level || 0;
+        const battHealth = battery.health || 'unknown';
+        const battOk = (battLevel >= 20 && battHealth === 'good');
+
+        // Alerts
+        let alerts = [];
+        if (battLevel < 15) alerts.push('⚠️ Battery level critically low (<15%)');
+        else if (battLevel < 30) alerts.push('⚠️ Battery level low (<30%)');
+        if (usagePercent > 90) alerts.push('⚠️ Storage nearly full (>90%)');
+        if (securityPatch && securityPatch !== '?' && new Date(securityPatch) < new Date('2025-01-01')) {
+            alerts.push('⚠️ Security patch is outdated (over 5 months old)');
+        }
+
+        // Update health cards
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
-                <div class="status-card"><i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})</div>
-                <div class="status-card"><i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}</div>
-                <div class="status-card"><i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}</div>
+                <div class="status-card"><i class="fas fa-battery-full"></i> Battery: ${battLevel}% (${battHealth})</div>
+                <div class="status-card"><i class="fas fa-hdd"></i> Storage: Free ${storage.free} / ${storage.total}</div>
+                <div class="status-card"><i class="fas fa-memory"></i> RAM: Used ${ram.used} / ${ram.total}</div>
             `;
         }
+
+        // Device overview card
+        document.getElementById('deviceOverview').innerHTML = `
+            <div class="card-title"><i class="fas fa-info-circle"></i> Device Overview</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
+                <div><strong>Model:</strong> ${escapeHtml(model)}</div>
+                <div><strong>Android:</strong> ${escapeHtml(androidVer)}</div>
+                <div><strong>Security Patch:</strong> ${escapeHtml(securityPatch)}</div>
+                <div><strong>Encryption:</strong> ${encryption}</div>
+                <div><strong>Bootloader:</strong> ${bootloader}</div>
+            </div>
+        `;
+        document.getElementById('deviceOverview').style.display = 'block';
+
+        // Network status card
+        document.getElementById('networkStatus').innerHTML = `
+            <div class="card-title"><i class="fas fa-wifi"></i> Network Status</div>
+            <div><strong>WiFi SSID:</strong> ${escapeHtml(wifiSsid)}</div>
+            ${wifiSignal !== null ? `<div><strong>Signal Strength:</strong> ${wifiSignal} dBm</div>` : ''}
+        `;
+        document.getElementById('networkStatus').style.display = 'block';
+
+        // Security status card
+        document.getElementById('securityStatus').innerHTML = `
+            <div class="card-title"><i class="fas fa-shield-alt"></i> Security Status</div>
+            <div><strong>Encryption:</strong> ${encryption}</div>
+            <div><strong>Bootloader:</strong> ${bootloader}</div>
+            <div><strong>ADB Access:</strong> ${currentDeviceId ? 'Connected (USB debugging enabled)' : 'No device'}</div>
+        `;
+        document.getElementById('securityStatus').style.display = 'block';
+
+        // Alerts card
+        if (alerts.length > 0) {
+            document.getElementById('alertsCard').innerHTML = `
+                <div class="card-title"><i class="fas fa-exclamation-triangle"></i> Alerts</div>
+                <ul style="margin:0; color:#d32f2f;">${alerts.map(a => `<li>${a}</li>`).join('')}</ul>
+            `;
+            document.getElementById('alertsCard').style.display = 'block';
+        } else {
+            document.getElementById('alertsCard').style.display = 'none';
+        }
+
+        // Quick Debloat button (optional)
+        const debloatBtn = document.getElementById('quickDebloat');
+        if (debloatBtn) {
+            debloatBtn.style.display = 'inline-block';
+            debloatBtn.addEventListener('click', () => {
+                window.location.href = '#repairs';
+                // Alternatively, call a quick debloat function
+            });
+        }
+
     } catch (err) {
-        console.error('Failed to load health data', err);
+        console.error('Failed to load dashboard data', err);
     }
 
     document.getElementById('runFullDiagnostic')?.addEventListener('click', () => {
         alert('Full diagnostic will run all hardware + software checks.');
+        // Optionally, redirect to hardware tests or run a comprehensive check
     });
     document.getElementById('openWizard')?.addEventListener('click', openWizard);
 }
