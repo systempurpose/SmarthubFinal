@@ -49,6 +49,17 @@ async function updateConnectionStatus() {
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
+    if (!currentDeviceId) {
+        container.innerHTML = `<div class="card" style="text-align: center; padding: 40px;">
+            <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
+            <h2>No Device Connected</h2>
+            <p>Please connect your Android phone via USB and enable USB debugging.</p>
+            <button id="openWizardFromDashboard" class="btn-primary">Open USB Debugging Wizard</button>
+        </div>`;
+        document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
+        return;
+    }
+
     container.innerHTML = `
         <h1 style="margin-bottom: 24px;">Dashboard</h1>
         <div class="dashboard-grid" id="healthCards">
@@ -58,27 +69,25 @@ async function renderDashboard() {
         </div>
         <div id="deviceOverview" class="card" style="display: none;"></div>
         <div id="networkStatus" class="card" style="display: none;"></div>
-        <div id="securityStatus" class="card" style="display: none;"></div>
-        <div id="alertsCard" class="card" style="display: none;"></div>
         <div class="card">
             <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <button id="runFullDiagnostic" class="btn-primary">Run Full Diagnostic</button>
-                <button id="openWizard" class="btn-secondary">USB Debugging Wizard</button>
-                <button id="quickDebloat" class="btn-secondary" style="display: none;">Quick Debloat</button>
+                <button id="startDiagnosticBtn" class="btn-primary">🚀 Start Diagnostic</button>
+                <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
+                <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
+                <button id="helpBtn" class="btn-secondary">❓ Help</button>
             </div>
         </div>
+        <div id="phoneSummary" class="card" style="display: none;">
+            <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
+            <div class="phone-summary-grid"></div>
+        </div>
+        <div id="alertsCard" class="card" style="display: none;"></div>
+        <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
-    if (!currentDeviceId) {
-        const healthDiv = document.getElementById('healthCards');
-        if (healthDiv) healthDiv.innerHTML = `<div class="status-card">No device connected</div>`;
-        return;
-    }
-
     try {
-        // Fetch data in parallel
-        const [battery, storage, ram, deviceProps, wifiStatus] = await Promise.all([
+        const [battery, storage, ram, deviceText, wifiStatus] = await Promise.all([
             apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: '?' })),
             apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?', free: '?' })),
             apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?' })),
@@ -86,14 +95,12 @@ async function renderDashboard() {
             fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null)
         ]);
 
-        // Parse device properties for useful info
-        let model = 'Unknown';
-        let androidVer = '?';
-        let securityPatch = '?';
-        let encryption = '?';
-        let bootloader = '?';
-        if (deviceProps) {
-            const lines = deviceProps.split(/\r?\n/);
+        // Parse device properties
+        let model = 'Unknown', androidVer = '?', securityPatch = '?';
+        if (deviceText) {
+            let raw = deviceText;
+            try { const parsed = JSON.parse(raw); if (typeof parsed === 'string') raw = parsed; } catch(e) {}
+            const lines = raw.split(/\r?\n/);
             const props = {};
             for (const line of lines) {
                 const match = line.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
@@ -102,109 +109,207 @@ async function renderDashboard() {
             model = props['ro.product.model'] || props['ro.product.name'] || 'Unknown';
             androidVer = props['ro.build.version.release'] || '?';
             securityPatch = props['ro.build.version.security_patch'] || '?';
-            encryption = props['ro.crypto.state'] === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted';
-            bootloader = props['ro.boot.flash.locked'] === '1' ? '🔒 Locked' : '🔓 Unlocked';
-        }
-
-        // WiFi info
-        let wifiSsid = 'Not connected';
-        let wifiSignal = null;
-        if (wifiStatus && wifiStatus.wifi) {
-            wifiSsid = wifiStatus.wifi.ssid || 'Not connected';
-            wifiSignal = wifiStatus.wifi.rssi;
-        }
-
-        // Storage usage bar
-        const totalGB = parseFloat(storage.total) || 0;
-        const usedGB = parseFloat(storage.used) || 0;
-        const freeGB = parseFloat(storage.free) || 0;
-        const usagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
-
-        // Battery
-        const battLevel = battery.level || 0;
-        const battHealth = battery.health || 'unknown';
-        const battOk = (battLevel >= 20 && battHealth === 'good');
-
-        // Alerts
-        let alerts = [];
-        if (battLevel < 15) alerts.push('⚠️ Battery level critically low (<15%)');
-        else if (battLevel < 30) alerts.push('⚠️ Battery level low (<30%)');
-        if (usagePercent > 90) alerts.push('⚠️ Storage nearly full (>90%)');
-        if (securityPatch && securityPatch !== '?' && new Date(securityPatch) < new Date('2025-01-01')) {
-            alerts.push('⚠️ Security patch is outdated (over 5 months old)');
         }
 
         // Update health cards
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
-                <div class="status-card"><i class="fas fa-battery-full"></i> Battery: ${battLevel}% (${battHealth})</div>
-                <div class="status-card"><i class="fas fa-hdd"></i> Storage: Free ${storage.free} / ${storage.total}</div>
-                <div class="status-card"><i class="fas fa-memory"></i> RAM: Used ${ram.used} / ${ram.total}</div>
+                <div class="status-card"><i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})</div>
+                <div class="status-card"><i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}</div>
+                <div class="status-card"><i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}</div>
             `;
         }
 
         // Device overview card
         document.getElementById('deviceOverview').innerHTML = `
             <div class="card-title"><i class="fas fa-info-circle"></i> Device Overview</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-                <div><strong>Model:</strong> ${escapeHtml(model)}</div>
-                <div><strong>Android:</strong> ${escapeHtml(androidVer)}</div>
-                <div><strong>Security Patch:</strong> ${escapeHtml(securityPatch)}</div>
-                <div><strong>Encryption:</strong> ${encryption}</div>
-                <div><strong>Bootloader:</strong> ${bootloader}</div>
-            </div>
+            <div><strong>Model:</strong> ${escapeHtml(model)}</div>
+            <div><strong>Android:</strong> ${escapeHtml(androidVer)}</div>
+            <div><strong>Security Patch:</strong> ${escapeHtml(securityPatch)}</div>
         `;
         document.getElementById('deviceOverview').style.display = 'block';
 
         // Network status card
+        const wifiSsid = wifiStatus?.wifi?.ssid || 'Not connected';
+        const wifiSignal = wifiStatus?.wifi?.rssi;
         document.getElementById('networkStatus').innerHTML = `
             <div class="card-title"><i class="fas fa-wifi"></i> Network Status</div>
             <div><strong>WiFi SSID:</strong> ${escapeHtml(wifiSsid)}</div>
-            ${wifiSignal !== null ? `<div><strong>Signal Strength:</strong> ${wifiSignal} dBm</div>` : ''}
+            ${wifiSignal ? `<div><strong>Signal Strength:</strong> ${wifiSignal} dBm</div>` : ''}
         `;
         document.getElementById('networkStatus').style.display = 'block';
 
-        // Security status card
-        document.getElementById('securityStatus').innerHTML = `
-            <div class="card-title"><i class="fas fa-shield-alt"></i> Security Status</div>
-            <div><strong>Encryption:</strong> ${encryption}</div>
-            <div><strong>Bootloader:</strong> ${bootloader}</div>
-            <div><strong>ADB Access:</strong> ${currentDeviceId ? 'Connected (USB debugging enabled)' : 'No device'}</div>
+        // Populate Phone Summary
+        const summaryGrid = document.querySelector('#phoneSummary .phone-summary-grid');
+        summaryGrid.innerHTML = `
+            <div><span class="item-label">Phone Name</span><span class="item-value">${escapeHtml(model)}</span></div>
+            <div><span class="item-label">Android Version</span><span class="item-value">${escapeHtml(androidVer)}</span></div>
+            <div><span class="item-label">ADB Active</span><span class="item-value">${currentDeviceId ? '✅ Active' : '❌ Inactive'}</span></div>
         `;
-        document.getElementById('securityStatus').style.display = 'block';
+        document.getElementById('phoneSummary').style.display = 'block';
 
-        // Alerts card
-        if (alerts.length > 0) {
+        // Alerts (optional)
+        let alerts = [];
+        if (battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
+        else if (battery.level < 30) alerts.push('⚠️ Battery level low (<30%)');
+        if (alerts.length) {
             document.getElementById('alertsCard').innerHTML = `
                 <div class="card-title"><i class="fas fa-exclamation-triangle"></i> Alerts</div>
-                <ul style="margin:0; color:#d32f2f;">${alerts.map(a => `<li>${a}</li>`).join('')}</ul>
+                <ul>${alerts.map(a => `<li>${a}</li>`).join('')}</ul>
             `;
             document.getElementById('alertsCard').style.display = 'block';
-        } else {
-            document.getElementById('alertsCard').style.display = 'none';
         }
-
-        // Quick Debloat button (optional)
-        const debloatBtn = document.getElementById('quickDebloat');
-        if (debloatBtn) {
-            debloatBtn.style.display = 'inline-block';
-            debloatBtn.addEventListener('click', () => {
-                window.location.href = '#repairs';
-                // Alternatively, call a quick debloat function
-            });
-        }
-
     } catch (err) {
-        console.error('Failed to load dashboard data', err);
+        console.error('Dashboard data error:', err);
     }
 
-    document.getElementById('runFullDiagnostic')?.addEventListener('click', () => {
-        alert('Full diagnostic will run all hardware + software checks.');
-        // Optionally, redirect to hardware tests or run a comprehensive check
-    });
+    // Attach event listeners
+    document.getElementById('startDiagnosticBtn')?.addEventListener('click', runQuickDiagnostic);
+   document.getElementById('installAppBtn')?.addEventListener('click', async () => {
+    if (!currentDeviceId) {
+        alert('No device connected. Please connect a phone first.');
+        return;
+    }
+    const btn = document.getElementById('installAppBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Installing...';
+    btn.disabled = true;
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/install-apk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Android app installed successfully!');
+        } else {
+            alert('Installation failed: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
     document.getElementById('openWizard')?.addEventListener('click', openWizard);
+    document.getElementById('helpBtn')?.addEventListener('click', showHelpModal);
 }
+
+// Quick diagnostic function
+async function runQuickDiagnostic() {
+    const resultDiv = document.getElementById('diagnosticResult');
+    resultDiv.innerHTML = `<div class="card-title"><i class="fas fa-spinner fa-pulse"></i> Running diagnostic...</div><div class="card-content">Analyzing system...</div>`;
+    resultDiv.style.display = 'block';
+
+    try {
+        // Check battery, storage, and RAM health
+        const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
+        const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
+        const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
+
+        const totalGB = parseFloat(storage.total) || 0;
+        const usedGB = parseFloat(storage.used) || 0;
+        const storagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
+
+        const ramTotal = parseFloat(ram.total) || 0;
+        const ramUsed = parseFloat(ram.used) || 0;
+        const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal) * 100 : 0;
+
+        const issues = [];
+        if (battery.level < 20) issues.push('Battery level is low.');
+        if (battery.health !== 'good') issues.push('Battery health is not optimal.');
+        if (storagePercent > 90) issues.push('Storage is nearly full.');
+        if (ramPercent > 85) issues.push('RAM usage is very high.');
+
+        let resultHtml = '<div class="card-title"><i class="fas fa-check-circle"></i> Diagnostic Complete</div><div class="card-content">';
+        if (issues.length === 0) {
+            resultHtml += '<p style="color: #2e7d32;">✅ All tests passed. Your device is in good health.</p>';
+        } else {
+            resultHtml += '<p style="color: #d32f2f;">⚠️ Issues found:</p><ul>' + issues.map(i => `<li>${i}</li>`).join('') + '</ul>';
+        }
+        resultHtml += '</div>';
+        resultDiv.innerHTML = resultHtml;
+    } catch (err) {
+        resultDiv.innerHTML = `<div class="card-title"><i class="fas fa-exclamation-triangle"></i> Diagnostic Failed</div><div class="card-content">Error: ${err.message}</div>`;
+    }
+}
+
+// Help Modal functions
+function showHelpModal() {
+    const modal = document.getElementById('helpModal');
+    if (!modal) {
+        createHelpModal();
+    } else {
+        modal.style.display = 'flex';
+    }
+}
+
+function createHelpModal() {
+    const modalHTML = `
+        <div id="helpModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-question-circle"></i> SmartHub Help Guide</h3>
+                    <span class="close-button" id="closeHelpModalBtn">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="help-tabs">
+                        <button class="help-tab active" data-tab="adb">ADB Setup</button>
+                        <button class="help-tab" data-tab="ui">UI Fields</button>
+                    </div>
+                    <div id="helpTabAdb" class="help-tab-content active">
+                        <h4>How to Enable USB Debugging</h4>
+                        <ol>
+                            <li>Go to Settings → About Phone → Tap "Build Number" 7 times.</li>
+                            <li>Return to Settings → Developer Options → Enable USB Debugging.</li>
+                            <li>Connect your phone via USB and accept the RSA key fingerprint.</li>
+                            <li>Your device should appear as "Connected" in the sidebar.</li>
+                        </ol>
+                        <p><strong>Note:</strong> Some devices may require additional steps. Consult your manufacturer's guide if needed.</p>
+                    </div>
+                    <div id="helpTabUi" class="help-tab-content">
+                        <h4>UI Sections Overview</h4>
+                        <ul>
+                            <li><strong>Dashboard:</strong> Shows battery, storage, RAM, network status, and quick actions.</li>
+                            <li><strong>Device Info:</strong> Displays detailed hardware and software properties of the connected device.</li>
+                            <li><strong>Hardware Tests:</strong> Runs diagnostic tests on components like battery, storage, sensors, and camera.</li>
+                            <li><strong>Connection Troubleshoot:</strong> Allows you to reset Wi-Fi, Bluetooth, and mobile data.</li>
+                            <li><strong>AI Diagnosis:</strong> Provides intelligent suggestions based on device logs and symptoms.</li>
+                            <li><strong>Repairs:</strong> Offers debloating tools to remove unwanted apps.</li>
+                            <li><strong>BSOD Diagnosis:</strong> Analyzes boot failures and black screen issues.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="closeHelpModalBtnFooter" class="btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Tab switching logic
+    document.querySelectorAll('.help-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.help-tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`helpTab${tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)}`).classList.add('active');
+        });
+    });
+
+    // Close modal
+    const closeModal = () => document.getElementById('helpModal').style.display = 'none';
+    document.getElementById('closeHelpModalBtn')?.addEventListener('click', closeModal);
+    document.getElementById('closeHelpModalBtnFooter')?.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => { if (e.target === document.getElementById('helpModal')) closeModal(); });
+
+    document.getElementById('helpModal').style.display = 'flex';
+}
+
 
 // ==================== HARDWARE TESTS PAGE ====================
 async function renderHardwareTests() {

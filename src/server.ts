@@ -8,6 +8,7 @@ import networkRoutes from './routes/networkRoutes';
 import crypto from 'node:crypto';
 import { registerBsodRoutes } from './routes/bsodRoutes';
 
+
 import {
   listDevices,
   screencap,
@@ -176,6 +177,27 @@ app.get('/read-only', (_req: Request, res: Response) => {
   res.json({ ok: true, enabled: isReadOnlyEnabled(), forced: !!readOnlyForced });
 });
 
+app.post('/api/install-apk', async (req, res) => {
+    const { deviceId } = req.body;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const apkPath = path.join(process.cwd(), '3rdpartyApp', 'app.apk');
+        await fs.access(apkPath); // check existence
+        const installOutput = await adb('-s', deviceId, 'install', '-r', apkPath);
+        // Launch the app after successful install
+        let launchOutput = '';
+        try {
+            launchOutput = await adb('-s', deviceId, 'shell', 'am', 'start', '-n', 'com.smarthub.diagnostics/.MainActivity');
+        } catch (launchErr) {
+            launchOutput = 'Failed to auto-launch. Please open manually.';
+        }
+        res.json({ ok: true, installOutput: installOutput.trim(), launchOutput: launchOutput.trim() });
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
 app.post('/read-only', (req: Request, res: Response) => {
   const next = !!(req.body && (req.body as any).enabled);
   if (readOnlyForced && !next) {
@@ -295,6 +317,57 @@ function findCodeBytes(codeMap: Record<string, number>, pkg: string): number | u
 // No-debug + camera + AI routes were extracted to src/routes/noDebugRoutes.ts
 
 // Blue/blank-screen quick tests were extracted to src/routes/blueTestRoutes.ts
+
+
+// CPU usage and temperature
+app.get('/api/system/cpu', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        // Get CPU usage from top
+        const topOutput = await adb('-s', deviceId, 'shell', 'top -n 1 -b | head -5');
+        const usageMatch = topOutput.match(/CPU:\s*(\d+)%/);
+        const usage = usageMatch ? parseInt(usageMatch[1]) : 0;
+        
+        // Get CPU cores count
+        const cpuPresent = await adb('-s', deviceId, 'shell', 'cat /sys/devices/system/cpu/present');
+        let cores = '?';
+        if (cpuPresent) {
+            const match = cpuPresent.match(/0-(\d+)/);
+            if (match) cores = (parseInt(match[1]) + 1).toString();
+        }
+        
+        // Get temperature (try common thermal zones)
+        let temp = '?';
+        try {
+            const tempRaw = await adb('-s', deviceId, 'shell', 'cat /sys/class/thermal/thermal_zone0/temp');
+            if (tempRaw) temp = (parseInt(tempRaw) / 1000).toFixed(0);
+        } catch(e) { /* ignore */ }
+        
+        res.json({ usage, temp, cores });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
+
+// System uptime
+app.get('/api/system/uptime', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const uptime = await adb('-s', deviceId, 'shell', 'cat /proc/uptime');
+        const seconds = parseFloat(uptime.split(' ')[0]);
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        res.json({ uptime: `${days}d ${hours}h ${mins}m` });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
+
 
 app.get('/mobile-app-state/:id', async (req: Request, res: Response) => {
   const id = req.params.id;
