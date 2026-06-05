@@ -862,110 +862,95 @@ async function renderAIDiagnosis() {
 }
 
 // ==================== BSOD DIAGNOSIS ====================
+// In js/ui.js
 async function renderBsodDiagnosis() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
-    try {
-        const res = await fetch(`${BACKEND_URL}/blue-test/run/${currentDeviceId}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
 
-        // Parse battery text
-        const batteryText = data.battery || '';
-        const batteryLevel = batteryText.match(/level:\s*(\d+)/)?.[1] || '?';
-        const batteryHealthRaw = batteryText.match(/health:\s*(\d+)/)?.[1] || '?';
-        const batteryHealthMap = { '2': 'good', '3': 'overheat', '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold' };
-        const batteryHealth = batteryHealthMap[batteryHealthRaw] || 'unknown';
-        const batteryVoltage = batteryText.match(/voltage:\s*(\d+)/)?.[1] || '?';
-        const batteryTemp = batteryText.match(/temperature:\s*(\d+)/)?.[1] || '?';
-        const batteryStatusRaw = batteryText.match(/status:\s*(\d+)/)?.[1] || '?';
-        const batteryStatusMap = { '2': 'Charging', '3': 'Discharging', '4': 'Not charging', '5': 'Full' };
-        const batteryStatus = batteryStatusMap[batteryStatusRaw] || 'Unknown';
-        const batteryPresent = batteryText.match(/present:\s*true/);
-        const batteryOk = batteryLevel >= 20 && batteryHealth === 'good';
-
-        // Parse memory text
-        const memText = data.memory || '';
-        const memTotal = memText.match(/MemTotal:\s*(\d+)/)?.[1] || '?';
-        const memFree = memText.match(/MemFree:\s*(\d+)/)?.[1] || '?';
-        const memAvailable = memText.match(/MemAvailable:\s*(\d+)/)?.[1] || '?';
-        const memTotalGB = memTotal !== '?' ? (parseInt(memTotal) / 1024 / 1024).toFixed(1) : '?';
-        const memFreeGB = memFree !== '?' ? (parseInt(memFree) / 1024 / 1024).toFixed(1) : '?';
-        const memAvailGB = memAvailable !== '?' ? (parseInt(memAvailable) / 1024 / 1024).toFixed(1) : '?';
-        const memUsagePercent = memTotal !== '?' && memAvailable !== '?' ? ((1 - (parseInt(memAvailable) / parseInt(memTotal))) * 100).toFixed(1) : '?';
-
-        // Parse sensors text for summary
-        const sensorText = data.sensors || '';
-        const sensorList = [];
-        // Extract sensor names and types
-        const sensorLines = sensorText.split('\n');
-        let inList = false;
-        for (const line of sensorLines) {
-            if (line.includes('Sensor List:')) {
-                inList = true;
-                continue;
-            }
-            if (inList && line.trim() === '') break;
-            if (inList) {
-                const match = line.match(/^\s*0x[0-9a-f]+\)\s+(\S+)\s+\|\s+([^|]+)\|\s+ver:\s+\d+\s+\|\s+type:\s+(.+)/i);
-                if (match) {
-                    sensorList.push({
-                        name: match[1].trim(),
-                        vendor: match[2].trim(),
-                        type: match[3].trim()
-                    });
-                }
-            }
-        }
-        const hasAccel = sensorList.some(s => s.type.includes('accelerometer'));
-        const hasGyro = sensorList.some(s => s.type.includes('gyroscope'));
-        const hasProx = sensorList.some(s => s.type.includes('proximity'));
-        const hasLight = sensorList.some(s => s.type.includes('light'));
-
-        const html = `
-            <div class="cards-container">
-                <div class="info-card">
-                    <div class="card-header"><i class="fas fa-battery-full"></i> Battery Status</div>
-                    <div class="card-content">
-                        <div class="card-item"><span class="item-label">Level</span><span class="item-value">${batteryLevel}%</span></div>
-                        <div class="card-item"><span class="item-label">Health</span><span class="item-value">${batteryHealth} ${batteryHealth === 'good' ? '✅' : '⚠️'}</span></div>
-                        <div class="card-item"><span class="item-label">Voltage</span><span class="item-value">${batteryVoltage !== '?' ? (parseInt(batteryVoltage)/1000).toFixed(2) + ' V' : '?'}</span></div>
-                        <div class="card-item"><span class="item-label">Temperature</span><span class="item-value">${batteryTemp !== '?' ? (parseInt(batteryTemp)/10).toFixed(1) + ' °C' : '?'}</span></div>
-                        <div class="card-item"><span class="item-label">Status</span><span class="item-value">${batteryStatus}</span></div>
-                        <div class="card-item"><span class="item-label">Present</span><span class="item-value">${batteryPresent ? 'Yes' : 'No'}</span></div>
-                        <div class="card-item"><span class="item-label">Overall</span><span class="item-value">${batteryOk ? '✅ Normal' : '⚠️ Check battery'}</span></div>
-                    </div>
-                </div>
-                <div class="info-card">
-                    <div class="card-header"><i class="fas fa-memory"></i> Memory (RAM) Usage</div>
-                    <div class="card-content">
-                        <div class="card-item"><span class="item-label">Total</span><span class="item-value">${memTotalGB} GB</span></div>
-                        <div class="card-item"><span class="item-label">Free</span><span class="item-value">${memFreeGB} GB</span></div>
-                        <div class="card-item"><span class="item-label">Available</span><span class="item-value">${memAvailGB} GB</span></div>
-                        <div class="card-item"><span class="item-label">Usage</span><span class="item-value">${memUsagePercent}%</span></div>
-                        <div style="background:#e0e0e0; border-radius:12px; height:8px; margin-top:12px;"><div style="background:#f44336; width:${memUsagePercent}%; height:8px; border-radius:12px;"></div></div>
-                    </div>
-                </div>
-                <div class="info-card">
-                    <div class="card-header"><i class="fas fa-microchip"></i> Sensors Summary</div>
-                    <div class="card-content">
-                        <div class="card-item"><span class="item-label">Total Sensors</span><span class="item-value">${sensorList.length}</span></div>
-                        <div class="card-item"><span class="item-label">Accelerometer</span><span class="item-value">${hasAccel ? '✅' : '❌'}</span></div>
-                        <div class="card-item"><span class="item-label">Gyroscope</span><span class="item-value">${hasGyro ? '✅' : '❌'}</span></div>
-                        <div class="card-item"><span class="item-label">Proximity</span><span class="item-value">${hasProx ? '✅' : '❌'}</span></div>
-                        <div class="card-item"><span class="item-label">Light Sensor</span><span class="item-value">${hasLight ? '✅' : '❌'}</span></div>
-                    </div>
-                </div>
+    // Initial UI with a button
+    const startHtml = `
+        <div class="info-card" style="text-align: center;">
+            <div class="card-header"><i class="fas fa-skull-crosswalk"></i> BSOD / Black Screen Analysis</div>
+            <div class="card-content">
+                <p>Click the button below to start a full diagnostic. This will check for OS corruption, unexpected reboots, kernel panics, and other crash indicators.</p>
+                <button id="startBsodBtn" class="btn-primary" style="font-size: 18px;">🔍 Diagnose Now</button>
             </div>
-        `;
-        document.getElementById('pageContent').innerHTML = html;
-    } catch (err) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
-    }
+        </div>
+        <div id="bsodResult" style="display: none;"></div>
+    `;
+    document.getElementById('pageContent').innerHTML = startHtml;
+
+    const startBtn = document.getElementById('startBsodBtn');
+    const resultDiv = document.getElementById('bsodResult');
+
+    startBtn?.addEventListener('click', async () => {
+        // Show loading state
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<div class="info-card"><div class="card-header"><i class="fas fa-spinner fa-pulse"></i> Analyzing...</div><div class="card-content"><p>Please wait while we check for crash signatures and instability signs.</p></div></div>`;
+
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/bsod/diagnose`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adbDeviceId: currentDeviceId })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error);
+
+            const diag = data.diagnosis;
+            const cause = diag.cause;
+            let severityColor = '#2e7d32'; // green for normal
+            let icon = 'fa-check-circle';
+            if (cause.includes("corruption") || cause.includes("crash")) {
+                severityColor = '#c62828';
+                icon = 'fa-exclamation-triangle';
+            } else if (cause.includes("instability")) {
+                severityColor = '#ed6c02';
+                icon = 'fa-exclamation-circle';
+            }
+
+            // Build signals list
+            let signalsHtml = '';
+            if (diag.signals && diag.signals.length > 0) {
+                signalsHtml = `<div class="card-header"><i class="fas fa-list"></i> Detected Signals</div><div class="card-content"><ul style="margin:0; padding-left:20px;">` +
+                    diag.signals.map(s => `<li><strong>${s.title}</strong> (${s.severity}) - ${s.points} points</li>`).join('') +
+                    `</ul></div>`;
+            }
+
+            const html = `
+                <div class="info-card">
+                    <div class="card-header"><i class="fas ${icon}" style="color:${severityColor}"></i> Diagnosis Result</div>
+                    <div class="card-content">
+                        <div class="card-item"><span class="item-label">Conclusion</span><span class="item-value">${cause}</span></div>
+                        <div class="card-item"><span class="item-label">Confidence</span><span class="item-value">${diag.confidence} (Score: ${diag.score}/100)</span></div>
+                        <div class="card-item"><span class="item-label">Details</span><span class="item-value">${diag.detail || 'No additional details.'}</span></div>
+                    </div>
+                </div>
+                ${signalsHtml}
+                <div class="info-card">
+                    <div class="card-header"><i class="fas fa-lightbulb"></i> Next Steps</div>
+                    <div class="card-content">
+                        <p>${getRecommendation(cause)}</p>
+                    </div>
+                </div>
+            `;
+            resultDiv.innerHTML = html;
+        } catch (err) {
+            resultDiv.innerHTML = `<div class="info-card"><div class="card-header"><i class="fas fa-times-circle"></i> Error</div><div class="card-content"><p>Failed to diagnose: ${err.message}</p></div></div>`;
+        }
+    });
 }
 
+function getRecommendation(cause) {
+    if (cause.includes("corruption") || cause.includes("crash")) {
+        return "📱 Consider re-flashing the stock firmware. Back up your data if possible. If the issue persists, it may point to a hardware problem with the storage chip.";
+    } else if (cause.includes("instability")) {
+        return "🔧 Boot into Safe Mode (if possible) and uninstall recently added apps. Check for system updates or perform a factory reset as a last resort.";
+    }
+    return "✅ Your phone shows no clear signs of OS corruption. If the screen remains black, the issue is likely hardware-related (display cable, motherboard, or power).";
+}
 // ==================== USB DEBUGGING WIZARD ====================
 const modal = document.getElementById('wizardModal');
 const closeModal = document.querySelector('.close-button');

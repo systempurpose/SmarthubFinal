@@ -60,6 +60,39 @@ router.get('/battery', async (req, res) => {
     }
 });
 
+router.get('/sensors', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const output = await adbShellOnDevice(deviceId, 'dumpsys sensorservice');
+        // Extract sensor list (human-readable names)
+        const lines = output.split('\n');
+        const sensorList = [];
+        let inSensorList = false;
+        for (const line of lines) {
+            if (line.includes('Sensor List:')) {
+                inSensorList = true;
+                continue;
+            }
+            if (inSensorList) {
+                // Stop at empty line or Fusion States
+                if (line.trim() === '' || line.includes('Fusion States')) break;
+                // Match lines like: "0x00000001) sc7a20e                   | Silan           | ver: 1 | type: android.sensor.accelerometer(1)"
+                const match = line.match(/^\s*0x[0-9a-f]+\)\s+(\S+)\s+\|\s+([^|]+)\|\s+ver:\s+\d+\s+\|\s+type:\s+(.+)/i);
+                if (match) {
+                    sensorList.push({
+                        name: match[1].trim(),
+                        vendor: match[2].trim(),
+                        type: match[3].trim()
+                    });
+                }
+            }
+        }
+        res.json({ sensors: sensorList.slice(0, 30), raw: output.substring(0, 2000) });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/storage', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);

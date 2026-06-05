@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import networkRoutes from './routes/networkRoutes';
 import crypto from 'node:crypto';
+import { registerBsodRoutes } from './routes/bsodRoutes';
 
 import {
   listDevices,
@@ -245,7 +246,7 @@ app.use(express.static('html'));
 app.use('/css', express.static('css'));
 
 ensureBaseDirs();
-
+registerBsodRoutes(app);
 registerAiRoutes(app);
 registerDeviceRoutes(app);
 registerConnectionCheckRoutes(app);
