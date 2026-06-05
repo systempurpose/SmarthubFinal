@@ -870,13 +870,97 @@ async function renderBsodDiagnosis() {
     try {
         const res = await fetch(`${BACKEND_URL}/blue-test/run/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-        document.getElementById('pageContent').innerHTML = `
-            <div class="card">
-                <h3>BSOD / Black Screen Analysis</h3>
-                <pre>${JSON.stringify(result, null, 2)}</pre>
+        const data = await res.json();
+
+        // Parse battery text
+        const batteryText = data.battery || '';
+        const batteryLevel = batteryText.match(/level:\s*(\d+)/)?.[1] || '?';
+        const batteryHealthRaw = batteryText.match(/health:\s*(\d+)/)?.[1] || '?';
+        const batteryHealthMap = { '2': 'good', '3': 'overheat', '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold' };
+        const batteryHealth = batteryHealthMap[batteryHealthRaw] || 'unknown';
+        const batteryVoltage = batteryText.match(/voltage:\s*(\d+)/)?.[1] || '?';
+        const batteryTemp = batteryText.match(/temperature:\s*(\d+)/)?.[1] || '?';
+        const batteryStatusRaw = batteryText.match(/status:\s*(\d+)/)?.[1] || '?';
+        const batteryStatusMap = { '2': 'Charging', '3': 'Discharging', '4': 'Not charging', '5': 'Full' };
+        const batteryStatus = batteryStatusMap[batteryStatusRaw] || 'Unknown';
+        const batteryPresent = batteryText.match(/present:\s*true/);
+        const batteryOk = batteryLevel >= 20 && batteryHealth === 'good';
+
+        // Parse memory text
+        const memText = data.memory || '';
+        const memTotal = memText.match(/MemTotal:\s*(\d+)/)?.[1] || '?';
+        const memFree = memText.match(/MemFree:\s*(\d+)/)?.[1] || '?';
+        const memAvailable = memText.match(/MemAvailable:\s*(\d+)/)?.[1] || '?';
+        const memTotalGB = memTotal !== '?' ? (parseInt(memTotal) / 1024 / 1024).toFixed(1) : '?';
+        const memFreeGB = memFree !== '?' ? (parseInt(memFree) / 1024 / 1024).toFixed(1) : '?';
+        const memAvailGB = memAvailable !== '?' ? (parseInt(memAvailable) / 1024 / 1024).toFixed(1) : '?';
+        const memUsagePercent = memTotal !== '?' && memAvailable !== '?' ? ((1 - (parseInt(memAvailable) / parseInt(memTotal))) * 100).toFixed(1) : '?';
+
+        // Parse sensors text for summary
+        const sensorText = data.sensors || '';
+        const sensorList = [];
+        // Extract sensor names and types
+        const sensorLines = sensorText.split('\n');
+        let inList = false;
+        for (const line of sensorLines) {
+            if (line.includes('Sensor List:')) {
+                inList = true;
+                continue;
+            }
+            if (inList && line.trim() === '') break;
+            if (inList) {
+                const match = line.match(/^\s*0x[0-9a-f]+\)\s+(\S+)\s+\|\s+([^|]+)\|\s+ver:\s+\d+\s+\|\s+type:\s+(.+)/i);
+                if (match) {
+                    sensorList.push({
+                        name: match[1].trim(),
+                        vendor: match[2].trim(),
+                        type: match[3].trim()
+                    });
+                }
+            }
+        }
+        const hasAccel = sensorList.some(s => s.type.includes('accelerometer'));
+        const hasGyro = sensorList.some(s => s.type.includes('gyroscope'));
+        const hasProx = sensorList.some(s => s.type.includes('proximity'));
+        const hasLight = sensorList.some(s => s.type.includes('light'));
+
+        const html = `
+            <div class="cards-container">
+                <div class="info-card">
+                    <div class="card-header"><i class="fas fa-battery-full"></i> Battery Status</div>
+                    <div class="card-content">
+                        <div class="card-item"><span class="item-label">Level</span><span class="item-value">${batteryLevel}%</span></div>
+                        <div class="card-item"><span class="item-label">Health</span><span class="item-value">${batteryHealth} ${batteryHealth === 'good' ? '✅' : '⚠️'}</span></div>
+                        <div class="card-item"><span class="item-label">Voltage</span><span class="item-value">${batteryVoltage !== '?' ? (parseInt(batteryVoltage)/1000).toFixed(2) + ' V' : '?'}</span></div>
+                        <div class="card-item"><span class="item-label">Temperature</span><span class="item-value">${batteryTemp !== '?' ? (parseInt(batteryTemp)/10).toFixed(1) + ' °C' : '?'}</span></div>
+                        <div class="card-item"><span class="item-label">Status</span><span class="item-value">${batteryStatus}</span></div>
+                        <div class="card-item"><span class="item-label">Present</span><span class="item-value">${batteryPresent ? 'Yes' : 'No'}</span></div>
+                        <div class="card-item"><span class="item-label">Overall</span><span class="item-value">${batteryOk ? '✅ Normal' : '⚠️ Check battery'}</span></div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="card-header"><i class="fas fa-memory"></i> Memory (RAM) Usage</div>
+                    <div class="card-content">
+                        <div class="card-item"><span class="item-label">Total</span><span class="item-value">${memTotalGB} GB</span></div>
+                        <div class="card-item"><span class="item-label">Free</span><span class="item-value">${memFreeGB} GB</span></div>
+                        <div class="card-item"><span class="item-label">Available</span><span class="item-value">${memAvailGB} GB</span></div>
+                        <div class="card-item"><span class="item-label">Usage</span><span class="item-value">${memUsagePercent}%</span></div>
+                        <div style="background:#e0e0e0; border-radius:12px; height:8px; margin-top:12px;"><div style="background:#f44336; width:${memUsagePercent}%; height:8px; border-radius:12px;"></div></div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="card-header"><i class="fas fa-microchip"></i> Sensors Summary</div>
+                    <div class="card-content">
+                        <div class="card-item"><span class="item-label">Total Sensors</span><span class="item-value">${sensorList.length}</span></div>
+                        <div class="card-item"><span class="item-label">Accelerometer</span><span class="item-value">${hasAccel ? '✅' : '❌'}</span></div>
+                        <div class="card-item"><span class="item-label">Gyroscope</span><span class="item-value">${hasGyro ? '✅' : '❌'}</span></div>
+                        <div class="card-item"><span class="item-label">Proximity</span><span class="item-value">${hasProx ? '✅' : '❌'}</span></div>
+                        <div class="card-item"><span class="item-label">Light Sensor</span><span class="item-value">${hasLight ? '✅' : '❌'}</span></div>
+                    </div>
+                </div>
             </div>
         `;
+        document.getElementById('pageContent').innerHTML = html;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">BSOD diagnosis failed: ${err.message}</div>`;
     }
