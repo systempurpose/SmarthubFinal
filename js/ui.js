@@ -576,49 +576,54 @@ async function renderHardwareTests() {
     ];
 
     async function runAllTests() {
-        const resultsContainer = document.getElementById('hwResults');
-        resultsContainer.style.display = 'block';
-        const cardsContainer = document.getElementById('hwCardsContainer');
-        cardsContainer.innerHTML = '';
-        const results = {};
+    const resultsContainer = document.getElementById('hwResults');
+    resultsContainer.style.display = 'block';
+    const cardsContainer = document.getElementById('hwCardsContainer');
+    cardsContainer.innerHTML = '';
+    const results = {};
 
-        await launchAndroidApp();
+    await launchAndroidApp();
 
-        for (const test of tests) {
-            const card = document.createElement('div');
-            card.className = 'info-card';
-            card.id = `test-card-${test.id}`;
-            card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
-            cardsContainer.appendChild(card);
-            try {
-                const result = await test.run();
-                results[test.id] = { name: test.name, passed: result.passed, message: result.message };
-                const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
-                const color = result.passed ? '#2e7d32' : '#d32f2f';
-                card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
-                card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
-            } catch (err) {
-                results[test.id] = { name: test.name, passed: false, message: err.message };
-                card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
-                card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
-            }
-            await new Promise(r => setTimeout(r, 500));
+    for (const test of tests) {
+        const card = document.createElement('div');
+        card.className = 'info-card';
+        card.id = `test-card-${test.id}`;
+        card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
+        cardsContainer.appendChild(card);
+        try {
+            const result = await test.run();
+            results[test.id] = { name: test.name, passed: result.passed, message: result.message };
+            const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
+            const color = result.passed ? '#2e7d32' : '#d32f2f';
+            card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
+            card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
+        } catch (err) {
+            results[test.id] = { name: test.name, passed: false, message: err.message };
+            card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
+            card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
         }
-
-        const passedCount = Object.values(results).filter(r => r.passed).length;
-        const total = tests.length;
-        const summaryDiv = document.getElementById('hwSummaryCard');
-        summaryDiv.innerHTML = `
-            <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-            <div class="card-content">
-                <div style="background: ${passedCount === total ? '#e8f5e9' : '#ffebee'}; padding: 16px; border-radius: 16px;">
-                    <i class="fas ${passedCount === total ? 'fa-check-circle' : 'fa-exclamation-triangle'}" style="font-size: 32px; color: ${passedCount === total ? '#2e7d32' : '#c62828'};"></i>
-                    <h3>${passedCount}/${total} tests passed</h3>
-                    <ul>${Object.values(results).map(r => `<li><strong>${r.name}</strong>: ${r.passed ? '✅ Pass' : '❌ Fail'}${r.message ? ` (${escapeHtml(r.message)})` : ''}</li>`).join('')}</ul>
-                </div>
-            </div>
-        `;
+        await new Promise(r => setTimeout(r, 500));
     }
+
+    const passedCount = Object.values(results).filter(r => r.passed).length;
+    const total = tests.length;
+    const summaryDiv = document.getElementById('hwSummaryCard');
+    summaryDiv.innerHTML = `
+        <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
+        <div class="card-content">
+            <div style="background: ${passedCount === total ? '#e8f5e9' : '#ffebee'}; padding: 16px; border-radius: 16px;">
+                <i class="fas ${passedCount === total ? 'fa-check-circle' : 'fa-exclamation-triangle'}" style="font-size: 32px; color: ${passedCount === total ? '#2e7d32' : '#c62828'};"></i>
+                <h3>${passedCount}/${total} tests passed</h3>
+                <ul>${Object.values(results).map(r => `<li><strong>${r.name}</strong>: ${r.passed ? '✅ Pass' : '❌ Fail'}${r.message ? ` (${escapeHtml(r.message)})` : ''}</li>`).join('')}</ul>
+            </div>
+        </div>
+    `;
+
+    // Store results for AI Conclusion
+    localStorage.setItem('smartHubDiagnostics', JSON.stringify({
+        hardwareTests: { results: results, timestamp: Date.now() }
+    }));
+}
 
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
@@ -856,6 +861,98 @@ async function renderDeviceInfo() {
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
     }
+}
+
+// ==================== AI CONCLUSION (STRUCTURED CARD) ====================
+async function renderAIConclusion() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
+        return;
+    }
+
+    // Retrieve stored diagnostic results from localStorage
+    const storedResults = JSON.parse(localStorage.getItem('smartHubDiagnostics') || '{}');
+    
+    // Build a list of available reports
+    const reports = [];
+    if (storedResults.hardwareTests) reports.push({ id: 'hardware', name: 'Hardware Tests', data: storedResults.hardwareTests });
+    if (storedResults.bsod) reports.push({ id: 'bsod', name: 'BSOD Diagnosis', data: storedResults.bsod });
+    if (storedResults.network) reports.push({ id: 'network', name: 'Network Troubleshoot', data: storedResults.network });
+    if (storedResults.deviceInfo) reports.push({ id: 'device', name: 'Device Info', data: storedResults.deviceInfo });
+
+    const reportsHtml = reports.map(r => `
+        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <input type="checkbox" value="${r.id}" data-report='${JSON.stringify(r.data)}'> ${r.name}
+        </label>
+    `).join('');
+
+    const html = `
+        <div class="cards-container">
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-brain"></i> AI Conclusion</div>
+                <div class="card-content">
+                    <p>Select which diagnostic results you want the AI to analyze:</p>
+                    <div id="reportsList">
+                        ${reportsHtml || '<p>No diagnostic results yet. Run some tests (Hardware, BSOD, etc.) first.</p>'}
+                    </div>
+                    <button id="runAIConclusion" class="btn-primary" style="margin-top: 16px;">🔍 Get AI Conclusion</button>
+                </div>
+            </div>
+            <div id="aiResult" class="info-card" style="display: none;">
+                <div class="card-header"><i class="fas fa-comment-dots"></i> AI Analysis</div>
+                <div class="card-content" id="aiResultContent"></div>
+            </div>
+        </div>
+    `;
+    document.getElementById('pageContent').innerHTML = html;
+
+    document.getElementById('runAIConclusion')?.addEventListener('click', async () => {
+        const selected = [];
+        document.querySelectorAll('#reportsList input:checked').forEach(cb => {
+            const reportData = JSON.parse(cb.getAttribute('data-report') || '{}');
+            selected.push(reportData);
+        });
+        if (selected.length === 0) {
+            alert('Please select at least one diagnostic result.');
+            return;
+        }
+        const resultDiv = document.getElementById('aiResult');
+        const resultContent = document.getElementById('aiResultContent');
+        resultDiv.style.display = 'block';
+        resultContent.innerHTML = '<div class="spinner"></div><p>AI is analyzing...</p>';
+        
+        try {
+            // Build a comprehensive diagnostic report
+            const diagStages = {
+                hardware: selected.find(s => s.hardwareTests)?.hardwareTests || null,
+                bsod: selected.find(s => s.bsod)?.bsod || null,
+                network: selected.find(s => s.network)?.network || null
+            };
+            const response = await fetch(`${BACKEND_URL}/ai-adb-conclude`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deviceId: currentDeviceId,
+                    diagStages,
+                    diagDetails: { selectedReports: selected.map(s => s.type) }
+                })
+            });
+            const data = await response.json();
+            if (data.ok && data.conclusion) {
+                const conclusion = data.conclusion;
+                resultContent.innerHTML = `
+                    <div><strong>Conclusion:</strong> ${escapeHtml(conclusion.humanSummary || conclusion.likelyCause || 'No clear cause')}</div>
+                    <div style="margin-top: 12px;"><strong>Recommended Fixes:</strong></div>
+                    <ul>${(conclusion.actions || ['Run full hardware test']).map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
+                    ${conclusion.nextStep ? `<div><strong>Next Step:</strong> ${escapeHtml(conclusion.nextStep)}</div>` : ''}
+                `;
+            } else {
+                resultContent.innerHTML = '<p>AI could not generate a conclusion. Please try again later.</p>';
+            }
+        } catch (err) {
+            resultContent.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
+        }
+    });
 }
 // ==================== NETWORK CHECK (STRUCTURED CARD) ====================
 
@@ -1247,9 +1344,8 @@ function initNavigation() {
             if (page === 'dashboard') await renderDashboard();
             else if (page === 'device-info') await renderDeviceInfo();
             else if (page === 'hardware-tests') await renderHardwareTests();
-            else if (page === 'network') await renderNetwork();
             else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
-            else if (page === 'ai-diagnosis') await renderAIDiagnosis();
+            else if (page === 'ai-conclusion') await renderAIConclusion();
             else if (page === 'repairs') await renderRepairs();
             else if (page === 'bsod') await renderBsodDiagnosis();
             else await renderDashboard();
