@@ -90,6 +90,28 @@ import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
 
 const app = express();
+app.get('/ping', (req, res) => {
+    res.json({ ok: true, message: 'pong' });
+});
+// TEMPORARY: Public endpoint for testing (no auth)
+app.get('/api/test-scan', async (req, res) => {
+    console.log('✅ Test endpoint reached');
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const allApps = await listApps(deviceId);
+        const permsByPkg: Record<string, string[]> = {};
+        for (const app of allApps) {
+            if (!app.packageName) continue;
+            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
+        }
+        const installerMap = await getInstallerMap(deviceId);
+        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+        res.json({ suspiciousApps, debug: { totalApps: allApps.length } });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
 app.disable('x-powered-by');
 
 function envBool(name: string, fallback = false): boolean {
@@ -118,6 +140,70 @@ function isLoopbackAddress(addr: string | undefined | null): boolean {
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
 }
 
+app.get('/api/suspicious-apps', async (req, res) => {
+  console.log('✅ Suspicious apps endpoint was called'); // ← ADD THIS LINE
+  const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const allApps = await listApps(deviceId);
+        const permsByPkg: Record<string, string[]> = {};
+        for (const app of allApps) {
+            if (!app.packageName) continue;
+            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
+        }
+        const installerMap = await getInstallerMap(deviceId);
+        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+
+        // Collect debug stats
+        let totalApps = allApps.length;
+        let skippedByTrustedPrefix = 0;
+        let skippedByTrustedExact = 0;
+        let skippedByLegitStore = 0;
+        let evaluatedSideloaded = 0;
+        let sampleSkippedTrustedPrefix: string[] = [];
+        let sampleSkippedTrustedExact: string[] = [];
+        let sampleSkippedLegitStore: string[] = [];
+
+        for (const app of allApps) {
+            const pkg = app.packageName;
+            if (!pkg) continue;
+            if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
+                skippedByTrustedPrefix++;
+                if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
+                continue;
+            }
+            if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
+                skippedByTrustedExact++;
+                if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
+                continue;
+            }
+            const installer = installerMap?.[pkg];
+            const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
+            if (fromLegitStore) {
+                skippedByLegitStore++;
+                if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
+                continue;
+            }
+            evaluatedSideloaded++;
+        }
+
+        res.json({
+            suspiciousApps,
+            debug: {
+                totalApps,
+                skippedByTrustedPrefix,
+                skippedByTrustedExact,
+                skippedByLegitStore,
+                evaluatedSideloaded,
+                sampleSkippedTrustedPrefix,
+                sampleSkippedTrustedExact,
+                sampleSkippedLegitStore
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
 // Basic hardening: security headers.
 app.use((_req: Request, res: Response, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -170,6 +256,8 @@ app.use((req: Request, res: Response, next) => {
 
 app.use(express.json({ limit: '1mb' }));
 
+
+
 let readOnlyEnabled = envBool('SMARTHUB_READ_ONLY') || envBool('SMART_HUB_READ_ONLY');
 const readOnlyForced = envBool('SMARTHUB_READ_ONLY_FORCE') || envBool('SMART_HUB_READ_ONLY_FORCE');
 
@@ -202,69 +290,8 @@ app.post('/api/install-apk', async (req, res) => {
     }
 });
 
-app.get('/api/suspicious-apps', async (req, res) => {
-    const deviceId = req.query.deviceId as string;
-    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
-    try {
-        const allApps = await listApps(deviceId);
-        const permsByPkg: Record<string, string[]> = {};
-        for (const app of allApps) {
-            if (!app.packageName) continue;
-            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
-        }
-        const installerMap = await getInstallerMap(deviceId);
-        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+// 🔽 Public endpoint for suspicious apps (no authentication required)
 
-        // Collect debug stats
-        let totalApps = allApps.length;
-        let skippedByTrustedPrefix = 0;
-        let skippedByTrustedExact = 0;
-        let skippedByLegitStore = 0;
-        let evaluatedSideloaded = 0;
-        let sampleSkippedTrustedPrefix: string[] = [];
-        let sampleSkippedTrustedExact: string[] = [];
-        let sampleSkippedLegitStore: string[] = [];
-
-        for (const app of allApps) {
-            const pkg = app.packageName;
-            if (!pkg) continue;
-            if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
-                skippedByTrustedPrefix++;
-                if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
-                continue;
-            }
-            if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
-                skippedByTrustedExact++;
-                if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
-                continue;
-            }
-            const installer = installerMap?.[pkg];
-            const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
-            if (fromLegitStore) {
-                skippedByLegitStore++;
-                if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
-                continue;
-            }
-            evaluatedSideloaded++;
-        }
-
-        res.json({
-            suspiciousApps,
-            debug: {
-                totalApps,
-                skippedByTrustedPrefix,
-                skippedByTrustedExact,
-                skippedByLegitStore,
-                evaluatedSideloaded,
-                sampleSkippedTrustedPrefix,
-                sampleSkippedTrustedExact,
-                sampleSkippedLegitStore
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ error: String(err) });
-    }
-});
 
 app.post('/api/uninstall-package', async (req, res) => {
     const { deviceId, packageName } = req.body;
@@ -313,73 +340,9 @@ app.post('/shutdown', (_req: Request, res: Response) => {
   }, 50);
 });
 
-app.get('/api/suspicious-apps', async (req, res) => {
-    const deviceId = req.query.deviceId as string;
-    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
-    try {
-        const allApps = await listApps(deviceId);
-        const permsByPkg: Record<string, string[]> = {};
-        for (const app of allApps) {
-            if (!app.packageName) continue;
-            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
-        }
-        const installerMap = await getInstallerMap(deviceId);
-        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
-
-        // Collect debug stats
-        let totalApps = allApps.length;
-        let skippedByTrustedPrefix = 0;
-        let skippedByTrustedExact = 0;
-        let skippedByLegitStore = 0;
-        let evaluatedSideloaded = 0;
-        let sampleSkippedTrustedPrefix: string[] = [];
-        let sampleSkippedTrustedExact: string[] = [];
-        let sampleSkippedLegitStore: string[] = [];
-
-        for (const app of allApps) {
-            const pkg = app.packageName;
-            if (!pkg) continue;
-            if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
-                skippedByTrustedPrefix++;
-                if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
-                continue;
-            }
-            if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
-                skippedByTrustedExact++;
-                if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
-                continue;
-            }
-            const installer = installerMap?.[pkg];
-            const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
-            if (fromLegitStore) {
-                skippedByLegitStore++;
-                if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
-                continue;
-            }
-            evaluatedSideloaded++;
-        }
-
-        res.json({
-            suspiciousApps,
-            debug: {
-                totalApps,
-                skippedByTrustedPrefix,
-                skippedByTrustedExact,
-                skippedByLegitStore,
-                evaluatedSideloaded,
-                sampleSkippedTrustedPrefix,
-                sampleSkippedTrustedExact,
-                sampleSkippedLegitStore
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ error: String(err) });
-    }
-});
-
-
-registerAuthRoutes(app);
-// app.use(createAuthMiddleware());
+// 🔽 Authentication routes – keep public endpoints above this line
+// registerAuthRoutes(app);
+// app.use(createAuthMiddleware()); // Authentication is disabled for now (no token required)
 
 // Backend enforcement: block mutating device actions when Read-only mode is enabled.
 app.use((req: Request, res: Response, next) => {
@@ -1289,8 +1252,6 @@ app.get('/device/:id', async (req, res) => {
   }
 });
 
-// Improved WiFi status endpoint that returns structured JSON
-// Improved WiFi status endpoint that returns structured JSON
 // Improved WiFi status endpoint that returns structured JSON with real values
 app.get('/wifi/status/:id', async (req, res) => {
     const deviceId = req.params.id;

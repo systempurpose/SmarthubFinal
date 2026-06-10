@@ -6,5 +6,11 @@
     "bsod-diagnostic/bsod_diag.py",
     "bsod-diagnostic/bsod_gui.py",
     "bsod-diagnostic/phone_screen_diag.py"
-  ]
+  ],
+  "files.exclude": {
+    "**/*.rpyc": true,
+    "**/*.rpa": true,
+    "**/*.rpymc": true,
+    "**/cache/": true
+  }
 }

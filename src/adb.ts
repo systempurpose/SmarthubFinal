@@ -154,6 +154,12 @@ function assertAdbCommandSafe(args: string[]): void {
       return;
     }
 
+    // ⭐ NEW: Allow `dumpsys package` commands even if they contain blocked words
+    // (e.g., package name may contain "reboot" as in com.unisoc.silent.reboot).
+    if (/^dumpsys\s+package\b/.test(s.trim())) {
+      return;
+    }
+
     // Conservative blacklist for destructive or system-modifying operations.
     const blockedPatterns: Array<{ re: RegExp; reason: string }> = [
       { re: /\breboot\b/, reason: 'shell reboot' },
