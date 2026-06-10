@@ -67,8 +67,6 @@ async function renderDashboard() {
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading storage...</div>
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading RAM...</div>
         </div>
-        <div id="deviceOverview" class="card" style="display: none;"></div>
-        <div id="networkStatus" class="card" style="display: none;"></div>
         <div class="card">
             <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
@@ -78,6 +76,8 @@ async function renderDashboard() {
                 <button id="helpBtn" class="btn-secondary">❓ Help</button>
             </div>
         </div>
+        <div id="deviceOverview" class="card" style="display: none;"></div>
+        <div id="networkStatus" class="card" style="display: none;"></div>
         <div id="phoneSummary" class="card" style="display: none;">
             <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
             <div class="phone-summary-grid"></div>
@@ -166,34 +166,34 @@ async function renderDashboard() {
 
     // Attach event listeners
     document.getElementById('startDiagnosticBtn')?.addEventListener('click', runQuickDiagnostic);
-   document.getElementById('installAppBtn')?.addEventListener('click', async () => {
-    if (!currentDeviceId) {
-        alert('No device connected. Please connect a phone first.');
-        return;
-    }
-    const btn = document.getElementById('installAppBtn');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Installing...';
-    btn.disabled = true;
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/install-apk`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: currentDeviceId })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            alert('Android app installed successfully!');
-        } else {
-            alert('Installation failed: ' + data.error);
+    document.getElementById('installAppBtn')?.addEventListener('click', async () => {
+        if (!currentDeviceId) {
+            alert('No device connected. Please connect a phone first.');
+            return;
         }
-    } catch (err) {
-        alert('Error: ' + err.message);
-    } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
-});
+        const btn = document.getElementById('installAppBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Installing...';
+        btn.disabled = true;
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/install-apk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Android app installed successfully!');
+            } else {
+                alert('Installation failed: ' + data.error);
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    });
     document.getElementById('openWizard')?.addEventListener('click', openWizard);
     document.getElementById('helpBtn')?.addEventListener('click', showHelpModal);
 }
