@@ -198,6 +198,35 @@ app.post('/api/install-apk', async (req, res) => {
     }
 });
 
+app.get('/api/suspicious-apps', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const allApps = await listApps(deviceId);
+        const permsByPkg: Record<string, string[]> = {};
+        for (const app of allApps) {
+            if (!app.packageName) continue;
+            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
+        }
+        const installerMap = await getInstallerMap(deviceId);
+        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+        res.json({ suspiciousApps });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
+app.post('/api/uninstall-package', async (req, res) => {
+    const { deviceId, packageName } = req.body;
+    if (!deviceId || !packageName) return res.status(400).json({ error: 'Missing deviceId or packageName' });
+    try {
+        const output = await adb('-s', deviceId, 'uninstall', packageName);
+        res.json({ ok: true, output: output.trim() });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
 app.post('/read-only', (req: Request, res: Response) => {
   const next = !!(req.body && (req.body as any).enabled);
   if (readOnlyForced && !next) {

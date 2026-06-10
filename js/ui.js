@@ -200,12 +200,47 @@ async function renderDashboard() {
 
 // Quick diagnostic function
 async function runQuickDiagnostic() {
-    const resultDiv = document.getElementById('diagnosticResult');
-    resultDiv.innerHTML = `<div class="card-title"><i class="fas fa-spinner fa-pulse"></i> Running diagnostic...</div><div class="card-content">Analyzing system...</div>`;
-    resultDiv.style.display = 'block';
+    // Get modal elements (create modal if not exists)
+    let modal = document.getElementById('quickDiagModal');
+    if (!modal) {
+        // Create modal dynamically if not present in HTML
+        const modalHTML = `
+            <div id="quickDiagModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3 id="quickDiagModalTitle">Diagnostic Result</h3>
+                        <span class="close-button" id="closeQuickDiagModal">&times;</span>
+                    </div>
+                    <div class="modal-body" id="quickDiagModalBody">
+                        <div class="spinner"></div>
+                        <p style="text-align: center;">Analyzing system...</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        modal = document.getElementById('quickDiagModal');
+    }
+
+    const modalTitle = document.getElementById('quickDiagModalTitle');
+    const modalBody = document.getElementById('quickDiagModalBody');
+    
+    // Show modal with loading state
+    modalTitle.textContent = 'Running Diagnostic';
+    modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
+    modal.style.display = 'flex';
+
+    // Close modal handlers
+    const closeModal = () => modal.style.display = 'none';
+    document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
+    document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
     try {
-        // Check battery, storage, and RAM health
+        // Fetch hardware health data
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
@@ -224,16 +259,90 @@ async function runQuickDiagnostic() {
         if (storagePercent > 90) issues.push('Storage is nearly full.');
         if (ramPercent > 85) issues.push('RAM usage is very high.');
 
-        let resultHtml = '<div class="card-title"><i class="fas fa-check-circle"></i> Diagnostic Complete</div><div class="card-content">';
-        if (issues.length === 0) {
-            resultHtml += '<p style="color: #2e7d32;">✅ All tests passed. Your device is in good health.</p>';
-        } else {
-            resultHtml += '<p style="color: #d32f2f;">⚠️ Issues found:</p><ul>' + issues.map(i => `<li>${i}</li>`).join('') + '</ul>';
+        // Fetch suspicious apps
+        let suspiciousAppsList = [];
+        try {
+            const appsResponse = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
+            if (appsResponse.ok) {
+                const appsData = await appsResponse.json();
+                suspiciousAppsList = appsData.suspiciousApps || [];
+            }
+        } catch (err) {
+            console.warn('Failed to fetch suspicious apps:', err);
         }
-        resultHtml += '</div>';
-        resultDiv.innerHTML = resultHtml;
+
+        // Build HTML for hardware issues
+        let hardwareHtml = '';
+        if (issues.length > 0) {
+            hardwareHtml = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3>
+                    <ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul>
+                </div>
+            `;
+        } else {
+            hardwareHtml = `<div style="margin-bottom: 20px;"><h3 style="color: #2e7d32;">✅ Hardware Check Passed</h3><p>All hardware metrics are within normal ranges.</p></div>`;
+        }
+
+        // Build HTML for suspicious apps
+        let appsHtml = '';
+        if (suspiciousAppsList.length > 0) {
+            appsHtml = `
+                <div>
+                    <h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>
+                    <ul style="list-style: none; padding-left: 0;">
+                        ${suspiciousAppsList.map(app => `
+                            <li style="margin-bottom: 16px; padding: 12px; background: #fff3e0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                                <div style="flex: 1;">
+                                    <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})
+                                    <br><span style="font-size: 12px; color: #666;">Risk: ${escapeHtml(app.threatLevel)} - ${escapeHtml(app.reason)}</span>
+                                </div>
+                                <button onclick="uninstallPackage('${escapeHtml(app.packageName)}')" 
+                                        style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; margin-left: 12px; cursor: pointer;">
+                                    Delete
+                                </button>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+        } else {
+            appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
+        }
+
+        // Combine and display
+        modalTitle.textContent = 'Diagnostic Complete';
+        modalBody.innerHTML = `
+            <div style="max-height: 500px; overflow-y: auto; padding-right: 8px;">
+                ${hardwareHtml}
+                ${appsHtml}
+            </div>
+        `;
     } catch (err) {
-        resultDiv.innerHTML = `<div class="card-title"><i class="fas fa-exclamation-triangle"></i> Diagnostic Failed</div><div class="card-content">Error: ${err.message}</div>`;
+        modalTitle.textContent = 'Diagnostic Failed';
+        modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function uninstallPackage(packageName) {
+    if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, packageName })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert(`Successfully uninstalled ${packageName}`);
+            // Refresh the diagnostic results
+            runQuickDiagnostic();
+        } else {
+            alert(`Failed to uninstall: ${data.error}`);
+        }
+    } catch (err) {
+        alert(`Error: ${err.message}`);
     }
 }
 
