@@ -1151,81 +1151,36 @@ export function detectSuspiciousApps(
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
 
-    const perms = permsByPkg[pkg] || [];
-    const upper = perms.map(p => p.toUpperCase());
-
     // Check if installed from a trusted store
     const installer = installerMap?.[pkg];
     const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
     if (fromLegitStore) continue;
 
-    // Now we have a sideloaded app (not from official store)
-    let reason = '';
-    let threatLevel: 'high' | 'medium' | 'low' = 'medium';
-
-    // 1. Check for storage permissions (the user specifically wants to see these)
-    const hasStoragePerm = upper.some(p => 
-      p.includes('READ_EXTERNAL_STORAGE') || 
-      p.includes('WRITE_EXTERNAL_STORAGE') || 
-      p.includes('MANAGE_EXTERNAL_STORAGE')
-    );
-    if (hasStoragePerm) {
-      reason = `Sideloaded app has storage access (can read/modify files).`;
-      threatLevel = 'high';
-    }
-
-    // 2. Check for dangerous permissions (overlay, accessibility, admin, SMS, call log)
-    const dangerousPermsList = [
-      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN',
-      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE'
-    ];
-    const dangerousFound = dangerousPermsList.filter(d => upper.some(p => p.includes(d)));
-    if (dangerousFound.length && !reason) {
-      reason = `Sideloaded app with dangerous permissions: ${dangerousFound.join(', ')}.`;
-      threatLevel = 'high';
-    } else if (dangerousFound.length) {
-      reason += ` Also has dangerous permissions: ${dangerousFound.join(', ')}.`;
-      threatLevel = 'high';
-    }
-
-    // 3. Check for suspicious package name patterns (adware-like)
-    const suspiciousPatterns = [
-      /cleaner|booster|optimizer|battery[._-]?saver|ram[._-]?cleaner|super[._-]?clean|fast[._-]?clean|turbo[._-]?clean/i,
-      /virus|trojan|malware|spy|hack|crack|cheat|keygen|mod[._-]?apk/i,
-      /wifi[._-]?(hack|crack|free)/i, /root[._-]?(checker|tool|master)/i
-    ];
-    const matchedPattern = suspiciousPatterns.find(pattern => pattern.test(pkg));
-    if (matchedPattern && !reason) {
-      reason = `Suspicious package name pattern: ${matchedPattern.source.slice(0, 40)}.`;
-      threatLevel = 'medium';
-    } else if (matchedPattern) {
-      reason += ` Package name matches suspicious pattern.`;
-    }
-
-    // 4. Check for unusually high number of permissions (>= 10)
-    const totalPerms = perms.length;
-    if (totalPerms > 10 && !reason) {
-      reason = `Sideloaded app with unusually high number of permissions (${totalPerms}).`;
-      threatLevel = 'medium';
-    } else if (totalPerms > 10) {
-      reason += ` Also has ${totalPerms} total permissions.`;
-    }
-
-    // If none of the above matched, skip this app
-    if (!reason) continue;
-
+    // Now we have a sideloaded app – flag it immediately
     let displayName = pkg.split('.').pop() || pkg;
     displayName = displayName.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    const perms = permsByPkg[pkg] || [];
+    
+    // Simple reason without calling classifyThreatTypes to avoid errors
+    const reason = `Sideloaded app – not installed from official store. Has ${perms.length} permissions.`;
+    const threatLevel: 'high' | 'medium' | 'low' = 'low';
+    
+    // Try to get threat types, but if it fails, provide a default
+    let threatTypes: ThreatInfo[] | undefined;
+    try {
+      threatTypes = classifyThreatTypes(pkg, perms);
+    } catch (e) {
+      threatTypes = [{ type: 'generic_risk', description: 'Suspicious behavior detected', severity: 'medium' }];
+    }
 
     suspicious.push({
       packageName: pkg,
       displayName,
       reason,
       threatLevel,
-      suggestedAction: threatLevel === 'high'
-        ? `Immediately uninstall ${displayName}. This app has dangerous capabilities.`
-        : `Review ${displayName} and uninstall if not trusted.`,
-      threatTypes: classifyThreatTypes(pkg, perms)
+      suggestedAction: `Review ${displayName} and uninstall if not trusted.`,
+      threatTypes
     });
   }
   return suspicious;
