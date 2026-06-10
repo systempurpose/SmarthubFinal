@@ -373,6 +373,7 @@ app.use('/api/hardware', hardwareRoutes);
 app.use('/api/repair', repairRoutes);
 app.use(express.static('html'));
 app.use('/css', express.static('css'));
+app.use('/js', express.static('js'));
 
 ensureBaseDirs();
 registerBsodRoutes(app);

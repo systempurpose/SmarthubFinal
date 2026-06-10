@@ -3,7 +3,7 @@ let currentDeviceId = null;
 let wizardStep = 0;
 
 // ==================== API HELPER ====================
-const BACKEND_URL = 'http://localhost:3333';
+const BACKEND_URL = 'http://127.0.0.1:3333';
 async function apiCall(endpoint, options = {}) {
     const res = await fetch(`${BACKEND_URL}/api${endpoint}`, {
         headers: { 'Content-Type': 'application/json' },
@@ -42,6 +42,82 @@ async function updateConnectionStatus() {
     } catch (err) {
         statusSpan.innerText = 'ADB error';
         statusSpan.style.color = '#d83b01';
+    }
+}
+
+// ==================== SUSPICIOUS SCAN DEBUG ====================
+async function testSuspiciousScan() {
+    if (!currentDeviceId) {
+        alert('No device connected');
+        return;
+    }
+    let modal = document.getElementById('scanDebugModal');
+    if (!modal) {
+        const modalHtml = `
+            <div id="scanDebugModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h3>Suspicious App Scan Results</h3>
+                        <span class="close-button" id="closeScanDebugModal">&times;</span>
+                    </div>
+                    <div class="modal-body" id="scanDebugBody" style="max-height: 500px; overflow-y: auto;">
+                        Loading...
+                    </div>
+                    <div class="modal-footer">
+                        <button id="closeScanDebugModalBtn" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('scanDebugModal');
+        const closeModal = () => modal.style.display = 'none';
+        document.getElementById('closeScanDebugModal')?.addEventListener('click', closeModal);
+        document.getElementById('closeScanDebugModalBtn')?.addEventListener('click', closeModal);
+        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+    modal.style.display = 'flex';
+    const bodyDiv = document.getElementById('scanDebugBody');
+    bodyDiv.innerHTML = '<div class="spinner"></div><p>Scanning for suspicious apps...</p>';
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
+        const data = await response.json();
+        const apps = data.suspiciousApps || [];
+        const debug = data.debug || {};
+        if (apps.length === 0) {
+            let debugHtml = '<p>✅ No suspicious apps found.</p>';
+            if (debug.totalApps) {
+                debugHtml += `<details><summary>Debug Info (${debug.totalApps} apps scanned)</summary>
+                    <ul>
+                        <li>✅ Apps from trusted prefixes (Google, Samsung, etc.): ${debug.skippedByTrustedPrefix} (e.g., ${debug.sampleSkippedTrustedPrefix?.join(', ') || 'none'})</li>
+                        <li>✅ Apps from trusted exact packages (OTA agents): ${debug.skippedByTrustedExact} (e.g., ${debug.sampleSkippedTrustedExact?.join(', ') || 'none'})</li>
+                        <li>✅ Apps installed via legitimate stores (Play Store, Galaxy Store, etc.): ${debug.skippedByLegitStore} (e.g., ${debug.sampleSkippedLegitStore?.join(', ') || 'none'})</li>
+                        <li>🔍 Sideloaded apps evaluated: ${debug.evaluatedSideloaded}</li>
+                    </ul>
+                    <p>If you expect some apps to be flagged, they may have been installed from a trusted store or have a trusted package name prefix.</p>
+                </details>`;
+            } else {
+                debugHtml += '<p><small>No debug information returned from backend.</small></p>';
+            }
+            bodyDiv.innerHTML = debugHtml;
+        } else {
+            let html = `<p>Found ${apps.length} suspicious app(s):</p><ul style="list-style: none; padding-left: 0;">`;
+            for (const app of apps) {
+                html += `
+                    <li style="margin-bottom: 16px; padding: 12px; background: #fff3e0; border-radius: 12px;">
+                        <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})<br>
+                        <span style="font-size: 12px;">Reason: ${escapeHtml(app.reason)}</span><br>
+                        <span style="font-size: 12px;">Threat Level: ${app.threatLevel}</span><br>
+                        ${app.threatTypes && app.threatTypes.length > 0 ? `<span style="font-size: 12px;">Threat Types: ${app.threatTypes.map(t => t.type).join(', ')}</span><br>` : ''}
+                        <span style="font-size: 12px;">Suggested Action: ${escapeHtml(app.suggestedAction)}</span>
+                    </li>
+                `;
+            }
+            html += '</ul>';
+            bodyDiv.innerHTML = html;
+        }
+    } catch (err) {
+        bodyDiv.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
     }
 }
 
@@ -249,28 +325,20 @@ async function runQuickDiagnostic() {
         if (storagePercent > 90) issues.push('Storage is nearly full.');
         if (ramPercent > 85) issues.push('RAM usage is very high.');
 
-        // Fetch suspicious apps using the same BACKEND_URL as apiCall
+        // ✅ FIX: Use apiCall (which works for other endpoints) to fetch suspicious apps
         let suspiciousAppsList = [];
         let fetchError = null;
         try {
-            const url = `${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`;
-            console.log('[QuickDiag] Fetching suspicious apps from:', url);
-            const appsResponse = await fetch(url);
-            console.log('[QuickDiag] Response status:', appsResponse.status);
-            if (appsResponse.ok) {
-                const appsData = await appsResponse.json();
-                suspiciousAppsList = appsData.suspiciousApps || [];
-                console.log('[QuickDiag] Suspicious apps count:', suspiciousAppsList.length);
-            } else {
-                fetchError = `HTTP ${appsResponse.status}: ${await appsResponse.text()}`;
-                console.warn('[QuickDiag] Response not OK:', fetchError);
-            }
+            // apiCall adds /api prefix, so we pass '/suspicious-apps'
+            const data = await apiCall(`/suspicious-apps?deviceId=${currentDeviceId}`);
+            suspiciousAppsList = data.suspiciousApps || [];
+            console.log('[QuickDiag] Suspicious apps count:', suspiciousAppsList.length);
         } catch (err) {
             fetchError = err.message;
-            console.error('[QuickDiag] Failed to fetch suspicious apps:', err);
+            console.error('[QuickDiag] Failed to fetch suspicious apps via apiCall:', err);
         }
 
-        // Permission descriptions (same as before)
+        // Permission descriptions
         const permissionDescriptions = {
             'android.permission.READ_SMS': 'Read your text messages',
             'android.permission.SEND_SMS': 'Send SMS messages (may cost money)',
