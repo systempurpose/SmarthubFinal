@@ -38,6 +38,7 @@ import {
   assessAppRisk,
   scoreAppRisk,
   detectSuspiciousApps,
+  classifyThreatTypes,
   RiskLevel,
 } from './heuristics';
 
@@ -210,7 +211,20 @@ app.get('/api/suspicious-apps', async (req, res) => {
         }
         const installerMap = await getInstallerMap(deviceId);
         const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
-        res.json({ suspiciousApps });
+        
+        // Add risky permissions for each suspicious app
+        const enrichedApps = suspiciousApps.map(app => {
+            const perms = permsByPkg[app.packageName] || [];
+            const riskDetails = assessAppRisk(perms); // returns { riskyPermissions, moderatePermissions, risk }
+            return {
+                ...app,
+                threatTypes: classifyThreatTypes(app.packageName, permsByPkg[app.packageName] || []),
+                riskyPermissions: riskDetails.riskyPermissions || [],
+                moderatePermissions: riskDetails.moderatePermissions || []
+            };
+        });
+        
+        res.json({ suspiciousApps: enrichedApps });
     } catch (err) {
         res.status(500).json({ error: String(err) });
     }
