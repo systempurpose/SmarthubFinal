@@ -145,11 +145,11 @@ async function renderDashboard() {
         <div class="card">
             <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <button id="startDiagnosticBtn" class="btn-primary">🚀 Start Diagnostic</button>
+                <button id="startDiagnosticBtn" class="btn-primary">🔬 Deep Diagnostic</button>
                 <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
                 <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
                 <button id="helpBtn" class="btn-secondary">❓ Help</button>
-                <button id="testScanBtn" class="btn-secondary">🔍 Test Suspicious Scan</button>
+                
             </div>
         </div>
         <div id="deviceOverview" class="card" style="display: none;"></div>
@@ -234,7 +234,7 @@ async function renderDashboard() {
         console.error('Dashboard data error:', err);
     }
 
-    document.getElementById('startDiagnosticBtn')?.addEventListener('click', runQuickDiagnostic);
+    document.getElementById('startDiagnosticBtn')?.addEventListener('click', runDeepDiagnostic);
     document.getElementById('installAppBtn')?.addEventListener('click', async () => {
         if (!currentDeviceId) {
             alert('No device connected. Please connect a phone first.');
@@ -266,18 +266,18 @@ async function renderDashboard() {
 }
 
 // ==================== QUICK DIAGNOSTIC ====================
-async function runQuickDiagnostic() {
-    // Get modal elements (create modal if not exists)
+async function runDeepDiagnostic() {
+    // Get or create modal
     let modal = document.getElementById('quickDiagModal');
     if (!modal) {
         const modalHTML = `
             <div id="quickDiagModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 650px;">
+                <div class="modal-content" style="max-width: 750px;">
                     <div class="modal-header">
-                        <h3 id="quickDiagModalTitle">Diagnostic Result</h3>
+                        <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
                     </div>
-                    <div class="modal-body" id="quickDiagModalBody">
+                    <div class="modal-body" id="quickDiagModalBody" style="max-height: 600px; overflow-y: auto;">
                         <div class="spinner"></div>
                         <p style="text-align: center;">Analyzing system...</p>
                     </div>
@@ -294,19 +294,17 @@ async function runQuickDiagnostic() {
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
     
-    // Show modal with loading
-    modalTitle.textContent = 'Running Diagnostic';
+    modalTitle.textContent = 'Running Deep Diagnostic';
     modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
     modal.style.display = 'flex';
 
-    // Close modal handlers
     const closeModal = () => modal.style.display = 'none';
     document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
     try {
-        // Fetch hardware data (using apiCall – works)
+        // 1. Hardware checks
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
@@ -314,10 +312,7 @@ async function runQuickDiagnostic() {
         const totalGB = parseFloat(storage.total) || 0;
         const usedGB = parseFloat(storage.used) || 0;
         const storagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
-
-        const ramTotal = parseFloat(ram.total) || 0;
-        const ramUsed = parseFloat(ram.used) || 0;
-        const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal) * 100 : 0;
+        const ramPercent = parseFloat(ram.total) > 0 ? (parseFloat(ram.used) / parseFloat(ram.total)) * 100 : 0;
 
         const issues = [];
         if (battery.level < 20) issues.push('Battery level is low.');
@@ -325,97 +320,93 @@ async function runQuickDiagnostic() {
         if (storagePercent > 90) issues.push('Storage is nearly full.');
         if (ramPercent > 85) issues.push('RAM usage is very high.');
 
-        // ✅ FIX: Use apiCall (which works for other endpoints) to fetch suspicious apps
+        let hardwareHtml = issues.length > 0
+            ? `<div style="margin-bottom: 20px;"><h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3><ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`
+            : `<div style="margin-bottom: 20px;"><h3 style="color: #2e7d32;">✅ Hardware Check Passed</h3><p>All hardware metrics are within normal ranges.</p></div>`;
+
+        // 2. Fetch suspicious apps
         let suspiciousAppsList = [];
-        let fetchError = null;
         try {
-            // apiCall adds /api prefix, so we pass '/suspicious-apps'
-            const data = await apiCall(`/suspicious-apps?deviceId=${currentDeviceId}`);
-            suspiciousAppsList = data.suspiciousApps || [];
-            console.log('[QuickDiag] Suspicious apps count:', suspiciousAppsList.length);
+            const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
+            if (appsResponse.ok) {
+                const appsData = await appsResponse.json();
+                suspiciousAppsList = appsData.suspiciousApps || [];
+            }
         } catch (err) {
-            fetchError = err.message;
-            console.error('[QuickDiag] Failed to fetch suspicious apps via apiCall:', err);
+            console.error('Failed to fetch suspicious apps:', err);
         }
 
-        // Permission descriptions
-        const permissionDescriptions = {
-            'android.permission.READ_SMS': 'Read your text messages',
-            'android.permission.SEND_SMS': 'Send SMS messages (may cost money)',
-            'android.permission.RECEIVE_SMS': 'Receive and read incoming SMS',
-            'android.permission.ACCESS_FINE_LOCATION': 'Access precise GPS location',
-            'android.permission.ACCESS_COARSE_LOCATION': 'Access approximate location',
-            'android.permission.CAMERA': 'Take pictures and record video',
-            'android.permission.RECORD_AUDIO': 'Record audio through microphone',
-            'android.permission.READ_CONTACTS': 'Read your contacts list',
-            'android.permission.WRITE_CONTACTS': 'Modify or delete contacts',
-            'android.permission.READ_CALL_LOG': 'Read your call history',
-            'android.permission.WRITE_CALL_LOG': 'Modify call log',
-            'android.permission.CALL_PHONE': 'Directly call phone numbers',
-            'android.permission.READ_EXTERNAL_STORAGE': 'Read files on your storage',
-            'android.permission.WRITE_EXTERNAL_STORAGE': 'Modify or delete files',
-            'android.permission.INSTALL_PACKAGES': 'Install other apps',
-            'android.permission.REQUEST_INSTALL_PACKAGES': 'Install unknown apps',
-            'android.permission.SYSTEM_ALERT_WINDOW': 'Draw over other apps (overlay)',
-            'android.permission.BIND_ACCESSIBILITY_SERVICE': 'Accessibility service (can monitor and control device)',
-            'android.permission.READ_PHONE_STATE': 'Read phone status and identity'
-        };
-        function getPermissionDescription(perm) {
-            return permissionDescriptions[perm] || `Requested permission: ${perm.split('.').pop()}`;
-        }
+        // Helper to escape HTML
+        const escape = (str) => escapeHtml(str);
 
-        // Build hardware HTML
-        let hardwareHtml = '';
-        if (issues.length > 0) {
-            hardwareHtml = `<div style="margin-bottom: 20px;"><h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3><ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
-        } else {
-            hardwareHtml = `<div style="margin-bottom: 20px;"><h3 style="color: #2e7d32;">✅ Hardware Check Passed</h3><p>All hardware metrics are within normal ranges.</p></div>`;
-        }
-
-        // Build apps HTML
+        // Build initial apps HTML with loading placeholders
         let appsHtml = '';
-        if (fetchError) {
-            appsHtml = `<div><h3 style="color: #d32f2f;">⚠️ Suspicious Apps Error</h3><p>Could not fetch suspicious apps: ${escapeHtml(fetchError)}</p><p>Make sure the backend is running and the UI is loaded from http://localhost:3333/ui.html.</p></div>`;
-        } else if (suspiciousAppsList.length > 0) {
-            appsHtml = `
-                <div>
-                    <h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>
-                    ${suspiciousAppsList.map(app => {
-                        const riskyPerms = app.riskyPermissions || [];
-                        return `
-                            <div style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-                                    <div>
-                                        <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})
-                                        <br><span style="font-size: 12px;">Risk: ${escapeHtml(app.threatLevel)} - ${escapeHtml(app.reason)}</span>
-                                    </div>
-                                    <button onclick="uninstallPackage('${escapeHtml(app.packageName)}')" 
-                                            style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; cursor: pointer;">
-                                        Delete
-                                    </button>
-                                </div>
-                                ${riskyPerms.length > 0 ? `
-                                    <div style="margin-top: 12px;">
-                                        <strong>⚠️ This app can:</strong>
-                                        <ul style="margin: 8px 0 0 20px;">
-                                            ${riskyPerms.map(p => `<li>${getPermissionDescription(p)}</li>`).join('')}
-                                        </ul>
-                                    </div>
-                                ` : '<div style="margin-top: 12px; font-style: italic;">No dangerous permissions detected, but flagged by heuristics.</div>'}
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            `;
-        } else {
+        if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
+        } else {
+            appsHtml = `<div><h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>`;
+            for (const app of suspiciousAppsList) {
+                appsHtml += `
+                    <div id="app-card-${escape(app.packageName)}" style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+                            <div>
+                                <strong>${escape(app.displayName)}</strong> (${escape(app.packageName)})
+                                <br><span style="font-size: 12px;">Risk: ${escape(app.threatLevel)} - ${escape(app.reason)}</span>
+                            </div>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')" 
+                                    style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; cursor: pointer;">
+                                Delete
+                            </button>
+                        </div>
+                        <div id="deep-${escape(app.packageName)}" style="margin-top: 12px;">
+                            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div> <span style="font-size: 12px;">Running deep scan...</span>
+                        </div>
+                    </div>
+                `;
+            }
+            appsHtml += `</div>`;
         }
 
-        // Final modal content
-        modalTitle.textContent = 'Diagnostic Complete';
-        modalBody.innerHTML = `<div style="max-height: 500px; overflow-y: auto; padding-right: 8px;">${hardwareHtml}${appsHtml}</div>`;
+        modalBody.innerHTML = hardwareHtml + appsHtml;
+
+        // 3. Perform deep scans for each suspicious app (in parallel)
+        const scanPromises = suspiciousAppsList.map(async (app) => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId: currentDeviceId, packageName: app.packageName })
+                });
+                const data = await response.json();
+                const container = document.getElementById(`deep-${app.packageName}`);
+                if (!container) return;
+                if (data.ok) {
+                    const analysis = data.staticAnalysis;
+                    let html = '';
+                    if (analysis.error) {
+                        html = `<p style="color: #d32f2f;">Deep scan failed: ${analysis.error}</p>`;
+                    } else {
+                        html = `
+                            <strong>Deep Scan Results:</strong><br>
+                            <span style="font-size: 12px;">Risk Score: ${analysis.risk_score || 0}/100</span><br>
+                            <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
+                            ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${analysis.suspicious_indicators.join(', ')}</span><br>` : ''}
+                            ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
+                        `;
+                    }
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
+                }
+            } catch (err) {
+                const container = document.getElementById(`deep-${app.packageName}`);
+                if (container) container.innerHTML = `<span style="color: #d32f2f;">Deep scan error: ${err.message}</span>`;
+            }
+        });
+        await Promise.all(scanPromises);
+        modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
-        console.error('[QuickDiag] Error:', err);
+        console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(err.message)}</div>`;
     }
@@ -432,7 +423,7 @@ async function uninstallPackage(packageName) {
         const data = await response.json();
         if (response.ok) {
             alert(`Successfully uninstalled ${packageName}`);
-            runQuickDiagnostic();
+            runDeepDiagnostic();
         } else {
             alert(`Failed to uninstall: ${data.error}`);
         }

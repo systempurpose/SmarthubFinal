@@ -7,6 +7,9 @@ import os from 'node:os';
 import networkRoutes from './routes/networkRoutes';
 import crypto from 'node:crypto';
 import { registerBsodRoutes } from './routes/bsodRoutes';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+const execAsync = promisify(exec);
 
 
 import {
@@ -89,6 +92,22 @@ import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
 
+async function pullApk(deviceId: string, packageName: string): Promise<string> {
+  const tmpDir = os.tmpdir();
+  const safePkg = packageName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const localApk = path.join(tmpDir, `smarthub-scan-${safePkg}-${Date.now()}.apk`);
+  const pmPath = await adb('-s', deviceId, 'shell', 'pm', 'path', packageName);
+  const match = pmPath.match(/package:(.+)/);
+  if (!match) throw new Error(`Could not find APK path for ${packageName}`);
+  const remotePath = match[1].trim();
+  await adbPull(deviceId, remotePath, localApk);
+  return localApk;
+}
+
+async function computeSha256(filePath: string): Promise<string> {
+  const buffer = await fs.readFile(filePath);
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
 const app = express();
 app.get('/ping', (req, res) => {
     res.json({ ok: true, message: 'pong' });
@@ -1022,7 +1041,58 @@ app.get('/suspicious-apps/:id', async (req: Request, res: Response) => {
     await endMobileDiagnostic(id);
   }
 });
+app.post('/api/scan-apk', async (req, res) => {
+  const { deviceId, packageName } = req.body;
+  if (!deviceId || !packageName) {
+    return res.status(400).json({ error: 'Missing deviceId or packageName' });
+  }
 
+  let apkPath: string | null = null;
+  try {
+    apkPath = await pullApk(deviceId, packageName);
+
+    const python = await resolvePythonCommand();
+    const analyzerScript = path.join(process.cwd(), 'tools', 'apk_analyzer.py');
+    const { stdout } = await execAsync(
+      `"${python.exe}" "${analyzerScript}" "${apkPath}"`,
+      { timeout: 120_000, maxBuffer: 50 * 1024 * 1024 }
+    );
+
+    let analysis = {};
+    try {
+      analysis = JSON.parse(stdout);
+    } catch {
+      analysis = { error: 'Failed to parse analyzer output', raw: stdout };
+    }
+
+    // Optional VirusTotal integration (requires API key)
+    let vtResult = null;
+    const vtApiKey = process.env.VIRUSTOTAL_API_KEY;
+    if (vtApiKey) {
+      const hash = await computeSha256(apkPath);
+      const vtResp = await fetch(`https://www.virustotal.com/api/v3/files/${hash}`, {
+        headers: { 'x-apikey': vtApiKey }
+      });
+      if (vtResp.ok) vtResult = await vtResp.json();
+    }
+
+    res.json({
+      ok: true,
+      packageName,
+      staticAnalysis: analysis,
+      virusTotal: vtResult ? {
+        malicious: vtResult.data?.attributes?.last_analysis_stats?.malicious || 0,
+        suspicious: vtResult.data?.attributes?.last_analysis_stats?.suspicious || 0,
+        totalEngines: Object.keys(vtResult.data?.attributes?.last_analysis_results || {}).length
+      } : null
+    });
+  } catch (err: any) {
+    console.error('APK scan error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (apkPath) try { await fs.unlink(apkPath); } catch { }
+  }
+});
 app.post('/adb-uninstall', async (req: Request, res: Response) => {
   const body = req.body || {};
   const deviceIdRaw = typeof (body as any).deviceId === 'string' ? (body as any).deviceId : String((body as any).deviceId || '');
@@ -1505,4 +1575,7 @@ httpServer.on('error', (err: any) => {
   // eslint-disable-next-line no-console
   console.error('Backend server error:', err);
   process.exit(1);
+  const execAsync = promisify(exec);
+
+
 });

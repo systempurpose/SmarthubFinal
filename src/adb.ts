@@ -774,4 +774,5 @@ export async function pull(deviceId: string, remotePath: string, localPath: stri
       return '';
     }),
   );
+  
 }
