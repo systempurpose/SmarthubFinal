@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
-from androguard.core.bytecodes.apk import APK
+from androguard.core.apk import APK
 
 # Dangerous permissions list (same as in heuristics.ts)
 DANGEROUS_PERMS = [

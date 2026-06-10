@@ -23,6 +23,56 @@ function escapeHtml(str) {
     });
 }
 
+// Convert RSSI dBm to a short user-friendly label and simple bar indicator
+function rssiToLabel(rssi) {
+    // Treat invalid sentinel values as no signal
+    if (rssi === null || rssi === undefined || rssi <= -127) {
+        return { label: 'No signal', bars: '◯◯◯◯' , detailed: false };
+    }
+    // Stronger is closer to 0 (e.g., -30 is excellent)
+    if (rssi >= -50) return { label: 'Excellent', bars: '▂▃▄▅', detailed: true };
+    if (rssi >= -60) return { label: 'Good', bars: '▂▃▄◯', detailed: true };
+    if (rssi >= -70) return { label: 'Fair', bars: '▂▃◯◯', detailed: true };
+    if (rssi >= -80) return { label: 'Weak', bars: '▂◯◯◯', detailed: true };
+    return { label: 'Very weak', bars: '◯◯◯◯', detailed: true };
+}
+
+function formatWifiStatus(wifi) {
+    if (!wifi) {
+        return {
+            ssid: 'Not connected',
+            status: 'No Wi-Fi info',
+            signal: 'N/A',
+            linkSpeed: 'N/A',
+            frequency: 'N/A'
+        };
+    }
+    let rawSsid = wifi.ssid && wifi.ssid !== '<unknown ssid>' ? String(wifi.ssid).trim() : '';
+    if (rawSsid.includes(',') && rawSsid.toLowerCase().includes('bssid:')) {
+        rawSsid = rawSsid.split(',')[0].trim();
+    }
+    const ssid = rawSsid || 'Not connected';
+    const supplicant = (wifi.supplicantState || wifi.state || '').toString();
+    const disconnected = /disconnect|disconnected|inactive|scanning|unknown/i.test(supplicant) || ssid === 'Not connected';
+    const status = disconnected ? 'Disconnected' : (supplicant || 'Connected');
+    const rssi = wifi.rssi;
+    let signal = 'N/A';
+    if (disconnected) {
+        signal = 'Disconnected';
+    } else if (rssi !== undefined && rssi !== null) {
+        const label = rssiToLabel(rssi);
+        signal = `${label.label} ${label.bars}`;
+        if (label.detailed) signal += ` (${rssi} dBm)`;
+    }
+    return {
+        ssid,
+        status,
+        signal,
+        linkSpeed: wifi.linkSpeed ? `${wifi.linkSpeed} Mbps` : 'N/A',
+        frequency: wifi.frequency ? `${wifi.frequency} MHz` : 'N/A'
+    };
+}
+
 // ==================== CONNECTION STATUS ====================
 async function updateConnectionStatus() {
     const statusSpan = document.querySelector('#connectionStatus span');
@@ -203,12 +253,14 @@ async function renderDashboard() {
         `;
         document.getElementById('deviceOverview').style.display = 'block';
 
-        const wifiSsid = wifiStatus?.wifi?.ssid || 'Not connected';
-        const wifiSignal = wifiStatus?.wifi?.rssi;
+        const wifiInfo = formatWifiStatus(wifiStatus?.wifi);
         document.getElementById('networkStatus').innerHTML = `
             <div class="card-title"><i class="fas fa-wifi"></i> Network Status</div>
-            <div><strong>WiFi SSID:</strong> ${escapeHtml(wifiSsid)}</div>
-            ${wifiSignal ? `<div><strong>Signal Strength:</strong> ${wifiSignal} dBm</div>` : ''}
+            <div><strong>WiFi SSID:</strong> ${escapeHtml(wifiInfo.ssid)}</div>
+            <div><strong>Status:</strong> ${escapeHtml(wifiInfo.status)}</div>
+            <div><strong>Signal:</strong> ${escapeHtml(wifiInfo.signal)}</div>
+            <div><strong>Link Speed:</strong> ${escapeHtml(wifiInfo.linkSpeed)}</div>
+            <div><strong>Frequency:</strong> ${escapeHtml(wifiInfo.frequency)}</div>
         `;
         document.getElementById('networkStatus').style.display = 'block';
 
@@ -863,13 +915,13 @@ async function renderDeviceInfo() {
 
         let wifiItems = [];
         if (wifiStatus && wifiStatus.wifi) {
-            const w = wifiStatus.wifi;
+            const info = formatWifiStatus(wifiStatus.wifi);
             wifiItems = [
-                { label: 'SSID', value: w.ssid || 'Not connected' },
-                { label: 'Signal Strength', value: w.rssi !== undefined ? `${w.rssi} dBm` : 'N/A' },
-                { label: 'IP Address', value: w.ipAddress || 'N/A' },
-                { label: 'Link Speed', value: w.linkSpeed ? `${w.linkSpeed} Mbps` : 'N/A' },
-                { label: 'Frequency', value: w.frequency ? `${w.frequency} MHz` : 'N/A' }
+                { label: 'SSID', value: info.ssid },
+                { label: 'Status', value: info.status },
+                { label: 'Signal', value: info.signal },
+                { label: 'Link Speed', value: info.linkSpeed },
+                { label: 'Frequency', value: info.frequency }
             ];
         } else {
             wifiItems = [{ label: 'Status', value: 'Unable to fetch WiFi info' }];
@@ -1023,11 +1075,12 @@ async function renderConnectionTroubleshoot() {
         let wifiHtml = '';
         if (wifiStatus && wifiStatus.wifi) {
             const w = wifiStatus.wifi;
+            const info = formatWifiStatus(w);
             wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid">
-                <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(w.ssid || 'Not connected')}</span></div>
-                <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${w.rssi !== undefined ? w.rssi + ' dBm' : 'N/A'}</span></div>
-                <div class="card-item"><span class="item-label">IP Address</span><span class="item-value">${escapeHtml(w.ipAddress || 'N/A')}</span></div>
-                <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${w.linkSpeed ? w.linkSpeed + ' Mbps' : 'N/A'}</span></div>
+                <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(info.ssid)}</span></div>
+                <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(info.status)}</span></div>
+                <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${escapeHtml(info.signal)}</span></div>
+                <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${escapeHtml(info.linkSpeed)}</span></div>
             </div><div class="card-actions"><button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button></div></div>`;
         } else {
             wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;

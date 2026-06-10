@@ -1335,7 +1335,7 @@ app.get('/wifi/status/:id', async (req, res) => {
         
         // Parse SSID
         let ssid = 'Not connected';
-        const ssidMatch = wifiDump.match(/SSID:\s*"?([^"\n]+)"?/i);
+        const ssidMatch = wifiDump.match(/SSID:\s*"?([^",\r\n]+?)"?(?:,|$)/i);
         if (ssidMatch) {
             let rawSsid = ssidMatch[1].trim();
             if (rawSsid !== '<unknown ssid>' && rawSsid !== '""' && rawSsid) {
