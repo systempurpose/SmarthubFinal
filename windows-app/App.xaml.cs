@@ -3,12 +3,12 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Windows;
 
-namespace WindowsShell;
-
-public partial class App : Application
+namespace WindowsShell
 {
-	private void OnStartup(object sender, StartupEventArgs e)
-	{
+    public partial class App : Application
+    {
+        private void OnStartup(object sender, StartupEventArgs e)
+        {
 		try
 		{
 			// In development (launched from VS/CLI), don't auto-elevate to
@@ -65,5 +65,6 @@ public partial class App : Application
 		using var identity = WindowsIdentity.GetCurrent();
 		var principal = new WindowsPrincipal(identity);
 		return principal.IsInRole(WindowsBuiltInRole.Administrator);
-	}
+    }
+}
 }

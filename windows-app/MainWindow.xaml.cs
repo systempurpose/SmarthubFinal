@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using System.Windows;
 
-namespace WindowsShell;
-
-public partial class MainWindow : Window
+namespace WindowsShell
 {
-    private Process? _backendProcess;
-    private string? _root;
-    private bool _isDevMode;
+    public partial class MainWindow : Window
+    {
+        private Process? _backendProcess;
+        private string? _root;
+        private bool _isDevMode;
     private static readonly HttpClient Http = new()
     {
         Timeout = TimeSpan.FromMilliseconds(1500)
@@ -1033,4 +1033,5 @@ public partial class MainWindow : Window
 
         return null;
     }
+}
 }

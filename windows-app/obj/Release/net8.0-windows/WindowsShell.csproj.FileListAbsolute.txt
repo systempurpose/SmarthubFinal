@@ -54,3 +54,4 @@ D:\SmartHubv14\SmartHubv5\windows-app\bin\Release\net8.0-windows\Microsoft.Web.W
 D:\SmartHubv14\SmartHubv5\windows-app\obj\Release\net8.0-windows\WindowsS.0EE53A25.Up2Date
 D:\SmartHubv14\SmartHubv5\windows-app\obj\Release\net8.0-windows\WindowsShell.genruntimeconfig.cache
 D:\SmartHubv14\SmartHubv5\windows-app\obj\Release\net8.0-windows\ref\SmartHub.dll
+D:\SmartHubv14\SmartHubv5\windows-app\obj\Release\net8.0-windows\WindowsShell.sourcelink.json
