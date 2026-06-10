@@ -40,6 +40,9 @@ import {
   detectSuspiciousApps,
   classifyThreatTypes,
   RiskLevel,
+  TRUSTED_PREFIXES,
+  TRUSTED_EXACT_PACKAGES,
+  LEGITIMATE_INSTALLERS,
 } from './heuristics';
 
 import { type SavedRun } from './lib/historyStore';

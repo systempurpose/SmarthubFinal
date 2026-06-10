@@ -939,7 +939,7 @@ const SUSPICIOUS_PACKAGE_PATTERNS = [
 ];
 
 // Known legitimate package prefixes to exclude from suspicious detection
-const TRUSTED_PREFIXES = [
+export const TRUSTED_PREFIXES = [
   'com.google.',
   'com.android.',
   'com.samsung.',
@@ -967,7 +967,7 @@ const TRUSTED_PREFIXES = [
   'com.tecno.',
   'com.infinix.',
   'com.microsoft.',
-  'com.facebook.', // Legitimate Facebook apps
+  'com.facebook.',
   'com.whatsapp',
   'com.instagram.',
   'com.twitter.',
@@ -979,8 +979,7 @@ const TRUSTED_PREFIXES = [
   'com.opera.',
 ];
 
-const TRUSTED_EXACT_PACKAGES = [
-  // Common OEM OTA / device-management agents
+export const TRUSTED_EXACT_PACKAGES = [
   'com.wssyncmldm',
   'com.ws.dm',
   'com.ws.dmclient',
@@ -1121,7 +1120,7 @@ export interface SuspiciousApp {
 }
 
 // Known Play Store / legitimate installer package names
-const LEGITIMATE_INSTALLERS = [
+export const LEGITIMATE_INSTALLERS = [
   'com.android.vending',         // Google Play Store
   'com.google.android.packageinstaller',
   'com.samsung.android.scloud',  // Samsung Cloud restore
