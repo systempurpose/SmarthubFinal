@@ -1,5 +1,19 @@
 export type Severity = 'low' | 'medium' | 'high';
+export type ThreatType = 
+  | 'banking_trojan' 
+  | 'spyware' 
+  | 'rat' 
+  | 'adware' 
+  | 'ransomware' 
+  | 'click_fraud' 
+  | 'cryptominer'
+  | 'generic_risk';
 
+export interface ThreatInfo {
+  type: ThreatType;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+}
 export type Finding = {
   id: string;
   title: string;
@@ -983,6 +997,95 @@ function isHighRiskByPermissions(upperPerms: string[]): boolean {
     upperPerms.some(p => p.includes('READ_SMS') || p.includes('SEND_SMS') || p.includes('READ_CALL_LOG') || p.includes('WRITE_CALL_LOG'))
   );
 }
+export function classifyThreatTypes(packageName: string, permissions: string[]): ThreatInfo[] {
+  const threats: ThreatInfo[] = [];
+  
+  // Banking trojan indicators
+  const bankingKeywords = ['bank', 'pay', 'cash', 'wallet', 'credit', 'debit', 'finance', 'vbv', 'otp', 'secure'];
+  const hasSmsPerm = permissions.includes('android.permission.READ_SMS') || permissions.includes('android.permission.SEND_SMS');
+  const hasInternet = permissions.includes('android.permission.INTERNET');
+  if (hasSmsPerm && hasInternet && bankingKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+    threats.push({
+      type: 'banking_trojan',
+      description: 'May steal banking credentials, intercept OTPs, and drain financial accounts.',
+      severity: 'critical'
+    });
+  }
+  
+  // Spyware indicators
+  const spyPerms = [
+    'android.permission.RECORD_AUDIO',
+    'android.permission.CAMERA',
+    'android.permission.READ_CONTACTS',
+    'android.permission.ACCESS_FINE_LOCATION',
+    'android.permission.READ_CALL_LOG'
+  ];
+  const spyCount = spyPerms.filter(p => permissions.includes(p)).length;
+  if (spyCount >= 3) {
+    threats.push({
+      type: 'spyware',
+      description: 'Can secretly record audio/video, track location, and steal personal data.',
+      severity: 'critical'
+    });
+  }
+  
+  // RAT (Remote Access Trojan) indicators
+  const ratPerms = [
+    'android.permission.SYSTEM_ALERT_WINDOW',
+    'android.permission.BIND_ACCESSIBILITY_SERVICE',
+    'android.permission.REQUEST_INSTALL_PACKAGES'
+  ];
+  const ratCount = ratPerms.filter(p => permissions.includes(p)).length;
+  if (ratCount >= 2) {
+    threats.push({
+      type: 'rat',
+      description: 'Can take full remote control of your device, view screen, and perform actions without consent.',
+      severity: 'critical'
+    });
+  }
+  
+  // Adware / click fraud indicators
+  const adwareKeywords = ['ad', 'push', 'notification', 'click', 'reward', 'offer', 'ads', 'advert'];
+  const hasOverlay = permissions.includes('android.permission.SYSTEM_ALERT_WINDOW');
+  if (adwareKeywords.some(kw => packageName.toLowerCase().includes(kw)) || hasOverlay) {
+    threats.push({
+      type: 'adware',
+      description: 'Shows intrusive ads, may simulate clicks to generate fraudulent revenue, drains battery and data.',
+      severity: 'medium'
+    });
+  }
+  
+  // Cryptominer indicators
+  const minerKeywords = ['miner', 'crypto', 'bitcoin', 'eth', 'monero', 'mine'];
+  if (minerKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+    threats.push({
+      type: 'cryptominer',
+      description: 'Uses your CPU to mine cryptocurrency, causing overheating, battery drain, and potential hardware damage.',
+      severity: 'high'
+    });
+  }
+  
+  // Ransomware indicators
+  const ransomKeywords = ['ransom', 'lock', 'encrypt', 'decrypt', 'unlock'];
+  if (ransomKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+    threats.push({
+      type: 'ransomware',
+      description: 'May lock your device or encrypt files and demand payment.',
+      severity: 'critical'
+    });
+  }
+  
+  // If no specific threat but still flagged as suspicious by heuristics
+  if (threats.length === 0) {
+    threats.push({
+      type: 'generic_risk',
+      description: 'Suspicious behavior detected (unknown source, unusual permissions, or pattern).',
+      severity: 'medium'
+    });
+  }
+  
+  return threats;
+}
 
 function isFromLegitStore(pkg: string, installerMap?: Record<string, string | null>): boolean {
   if (!installerMap) return false;
@@ -1014,6 +1117,7 @@ export interface SuspiciousApp {
   reason: string;
   threatLevel: 'high' | 'medium' | 'low';
   suggestedAction: string;
+  threatTypes?: ThreatInfo[]; // optional, for backwards compatibility
 }
 
 // Known Play Store / legitimate installer package names
@@ -1077,6 +1181,7 @@ export function detectSuspiciousApps(
         reason: 'Unofficial/modified version of popular app. May contain ads, malware, or spyware.',
         threatLevel: 'high',
         suggestedAction: `Uninstall ${KNOWN_FAKE_APPS[pkg]} and install the official version from Google Play Store.`,
+        threatTypes: classifyThreatTypes(pkg, perms),
       });
       continue;
     }
@@ -1131,6 +1236,7 @@ export function detectSuspiciousApps(
           threatLevel === 'high'
             ? `Immediately uninstall ${displayName}. If uninstall fails, disable Device Admin first: Settings → Security → Device Admins.`
             : `Review and uninstall ${displayName} if you didn't intentionally install it.`,
+        threatTypes: classifyThreatTypes(pkg, perms),
       });
       continue;
     }
@@ -1152,6 +1258,7 @@ export function detectSuspiciousApps(
             'App has adware signature: screen overlay + internet access + background persistence. Likely causes automatic ads or popup notifications.',
           threatLevel: 'high',
           suggestedAction: `Uninstall ${displayName} to stop automatic ads and popups.`,
+          threatTypes: classifyThreatTypes(pkg, perms),
         });
         continue;
       }
@@ -1167,6 +1274,7 @@ export function detectSuspiciousApps(
           'App has accessibility service permission. This allows full device control and can read all screen content including passwords.',
         threatLevel: 'high',
         suggestedAction: `Review ${displayName} carefully. Uninstall if you don't trust it or didn't intentionally grant accessibility access.`,
+        threatTypes: classifyThreatTypes(pkg, perms),
       });
       continue;
     }
@@ -1211,6 +1319,7 @@ export function detectSuspiciousApps(
           suggestedAction: threatLevel === 'high'
             ? `Immediately uninstall ${displayName} using: adb uninstall ${pkg}`
             : `Review ${displayName}. If unrecognized, uninstall via Settings → Apps → ${displayName} → Uninstall, or use: adb uninstall ${pkg}`,
+          threatTypes: classifyThreatTypes(pkg, perms),
         });
       }
     }
