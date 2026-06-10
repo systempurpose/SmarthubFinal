@@ -212,7 +212,7 @@ app.get('/api/suspicious-apps', async (req, res) => {
         const installerMap = await getInstallerMap(deviceId);
         const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
 
-        // Collect debug statistics
+        // Collect debug stats
         let totalApps = allApps.length;
         let skippedByTrustedPrefix = 0;
         let skippedByTrustedExact = 0;
@@ -225,7 +225,6 @@ app.get('/api/suspicious-apps', async (req, res) => {
         for (const app of allApps) {
             const pkg = app.packageName;
             if (!pkg) continue;
-            // Check if trusted prefix
             if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
                 skippedByTrustedPrefix++;
                 if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
@@ -236,8 +235,7 @@ app.get('/api/suspicious-apps', async (req, res) => {
                 if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
                 continue;
             }
-            // Check if from legit store
-            const installer = installerMap && installerMap[pkg];
+            const installer = installerMap?.[pkg];
             const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
             if (fromLegitStore) {
                 skippedByLegitStore++;

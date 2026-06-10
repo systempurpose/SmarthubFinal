@@ -1141,148 +1141,62 @@ export function detectSuspiciousApps(
 ): SuspiciousApp[] {
   const suspicious: SuspiciousApp[] = [];
 
-  // Log the total number of apps and available installer info
-  console.log(`[detectSuspiciousApps] Scanning ${apps.length} apps. Installer map size: ${installerMap ? Object.keys(installerMap).length : 'missing'}`);
-
   for (const app of apps) {
     const pkg = app.packageName;
     if (!pkg) continue;
 
-    // Skip if we have installer info and the app is not present (should not happen)
-    if (installerMap && !(pkg in installerMap)) {
-      // This can happen for system apps that don't have installer recorded
-      // We'll still consider them if they have dangerous permissions
-      console.log(`[detectSuspiciousApps] ${pkg} not in installerMap, treating as possible system app`);
-    }
+    // Skip if installerMap missing (should not happen)
+    if (installerMap && !(pkg in installerMap)) continue;
 
-    // Check if installed from a trusted store (Play Store, OEM stores)
-    let fromLegitStore = false;
-    let installerLabel = 'unknown';
-    if (installerMap && pkg in installerMap) {
-      const installer = installerMap[pkg];
-      installerLabel = installer || 'null';
-      fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer);
-    }
+    // Skip trusted system apps by prefix
+    if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
+    if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
 
-    // If we have no installer map, we cannot assume it's from a legit store
-    // So we will treat it as potentially sideloaded (safer to check)
-    const isSideloaded = !fromLegitStore;
-
-    // Get permissions for this app
     const perms = permsByPkg[pkg] || [];
-    const upperPerms = perms.map(p => p.toUpperCase());
+    const upper = perms.map(p => p.toUpperCase());
 
-    // Skip trusted system apps by package name prefix (Google, Samsung, etc.)
-    const isTrustedPrefix = TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix));
-    if (isTrustedPrefix && fromLegitStore) {
-      console.log(`[detectSuspiciousApps] Skipping trusted prefix: ${pkg}`);
-      continue;
-    }
+    // Check if installed from a trusted store
+    const installer = installerMap?.[pkg];
+    const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
+    if (fromLegitStore) continue;
 
-    // Skip exact trusted packages (OEM update agents)
-    if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
-      console.log(`[detectSuspiciousApps] Skipping trusted exact: ${pkg}`);
-      continue;
-    }
-
-    // Generate display name
-    let displayName = pkg.split('.').pop() || pkg;
-    displayName = displayName.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-    // --- Check for known fake/modded apps (always flag, regardless of store) ---
-    if (KNOWN_FAKE_APPS[pkg]) {
-      console.log(`[detectSuspiciousApps] Flagging known fake app: ${pkg}`);
-      suspicious.push({
-        packageName: pkg,
-        displayName: KNOWN_FAKE_APPS[pkg],
-        reason: 'Unofficial/modified version of popular app. May contain ads, malware, or spyware.',
-        threatLevel: 'high',
-        suggestedAction: `Uninstall ${KNOWN_FAKE_APPS[pkg]} and install the official version from Google Play Store.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // --- Only evaluate sideloaded apps (not from trusted stores) ---
-    if (!isSideloaded) {
-      console.log(`[detectSuspiciousApps] Skipping app from legit store: ${pkg} (installer: ${installerLabel})`);
-      continue;
-    }
-
-    // --- Now we only consider apps that are sideloaded ---
-    console.log(`[detectSuspiciousApps] Evaluating sideloaded app: ${pkg} (installer: ${installerLabel})`);
-
-    // Check for suspicious package name patterns
-    const matchedPattern = SUSPICIOUS_PACKAGE_PATTERNS.find(pattern => pattern.test(pkg));
-    
-    // Check for dangerous permissions
-    const hasRiskyPerm = upperPerms.some(p =>
-      RISKY_PERMISSIONS.some(r => p.includes(r))
-    );
-    const hasModeratePerm = upperPerms.some(p =>
-      MODERATE_PERMISSIONS.some(m => p.includes(m))
-    );
+    // Now we have a sideloaded app (not from official store)
+    // Flag it if it has any dangerous permission
+    const dangerousPerms = [
+      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE',
+      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
+      'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
+      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN', 'REQUEST_INSTALL_PACKAGES',
+      'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS', 'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS'
+    ];
+    const hasDangerous = dangerousPerms.some(d => upper.some(p => p.includes(d)));
     const totalPerms = perms.length;
 
-    // Check for specific high-risk permissions
-    const hasOverlay = upperPerms.some(p => p.includes('SYSTEM_ALERT_WINDOW'));
-    const hasAccessibility = upperPerms.some(p => p.includes('BIND_ACCESSIBILITY_SERVICE'));
-    const hasAdmin = upperPerms.some(p => p.includes('DEVICE_ADMIN'));
-    const hasSmsOrCall = upperPerms.some(p => 
-      p.includes('READ_SMS') || p.includes('SEND_SMS') || p.includes('READ_CALL_LOG')
-    );
-
-    // Determine if this app should be flagged
-    let shouldFlag = false;
-    let reason = '';
-    let threatLevel: 'high' | 'medium' | 'low' = 'low';
-
-    if (matchedPattern) {
-      shouldFlag = true;
-      reason = `Suspicious package name pattern detected (${matchedPattern.source.slice(0, 30)}...).`;
-      threatLevel = 'medium';
-      if (hasOverlay || hasAccessibility || hasAdmin || hasSmsOrCall) {
+    if (hasDangerous || totalPerms > 10) {
+      let reason = '';
+      let threatLevel: 'high' | 'medium' | 'low' = 'medium';
+      if (hasDangerous) {
+        const dangerousFound = dangerousPerms.filter(d => upper.some(p => p.includes(d)));
+        reason = `Sideloaded app with dangerous permissions: ${dangerousFound.join(', ')}.`;
         threatLevel = 'high';
-        reason += ' Also has dangerous permissions.';
+      } else {
+        reason = `Sideloaded app with unusually high number of permissions (${totalPerms}).`;
+        threatLevel = 'medium';
       }
-    } else if (hasRiskyPerm) {
-      shouldFlag = true;
-      reason = `App requests risky permissions: ${perms.filter(p => RISKY_PERMISSIONS.some(r => p.toUpperCase().includes(r))).join(', ')}.`;
-      threatLevel = 'high';
-    } else if (totalPerms > 15) {
-      shouldFlag = true;
-      reason = `App requests an unusually high number of permissions (${totalPerms}). This is often seen in adware or spyware.`;
-      threatLevel = 'medium';
-    } else if (hasModeratePerm && totalPerms > 8) {
-      shouldFlag = true;
-      reason = `App requests several sensitive permissions (${perms.filter(p => MODERATE_PERMISSIONS.some(m => p.toUpperCase().includes(m))).join(', ')}). Review carefully.`;
-      threatLevel = 'medium';
-    }
 
-    if (shouldFlag) {
-      // Add extra details for high-risk permissions
-      if (hasOverlay) reason += ' Has screen overlay permission (can show ads over other apps or steal input).';
-      if (hasAccessibility) reason += ' Has accessibility service access (can control device and read all screen content).';
-      if (hasAdmin) reason += ' Has device admin rights (difficult to uninstall).';
-      if (hasSmsOrCall) reason += ' Can access SMS or call logs (may be used for financial fraud).';
+      let displayName = pkg.split('.').pop() || pkg;
+      displayName = displayName.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-      console.log(`[detectSuspiciousApps] FLAGGING ${pkg}: ${reason}`);
       suspicious.push({
         packageName: pkg,
         displayName,
         reason,
         threatLevel,
-        suggestedAction: threatLevel === 'high'
-          ? `Immediately uninstall ${displayName}. If uninstall fails, disable Device Admin first: Settings → Security → Device Admins.`
-          : `Review and uninstall ${displayName} if you didn't intentionally install it.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
+        suggestedAction: `Uninstall ${displayName} if not trusted.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
       });
-    } else {
-      console.log(`[detectSuspiciousApps] Skipping sideloaded app (no flags): ${pkg} (perms: ${totalPerms})`);
     }
   }
-
-  console.log(`[detectSuspiciousApps] Total suspicious apps found: ${suspicious.length}`);
   return suspicious;
 }
 
