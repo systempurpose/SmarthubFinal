@@ -313,6 +313,71 @@ app.post('/shutdown', (_req: Request, res: Response) => {
   }, 50);
 });
 
+app.get('/api/suspicious-apps', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+    try {
+        const allApps = await listApps(deviceId);
+        const permsByPkg: Record<string, string[]> = {};
+        for (const app of allApps) {
+            if (!app.packageName) continue;
+            permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
+        }
+        const installerMap = await getInstallerMap(deviceId);
+        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+
+        // Collect debug stats
+        let totalApps = allApps.length;
+        let skippedByTrustedPrefix = 0;
+        let skippedByTrustedExact = 0;
+        let skippedByLegitStore = 0;
+        let evaluatedSideloaded = 0;
+        let sampleSkippedTrustedPrefix: string[] = [];
+        let sampleSkippedTrustedExact: string[] = [];
+        let sampleSkippedLegitStore: string[] = [];
+
+        for (const app of allApps) {
+            const pkg = app.packageName;
+            if (!pkg) continue;
+            if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
+                skippedByTrustedPrefix++;
+                if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
+                continue;
+            }
+            if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
+                skippedByTrustedExact++;
+                if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
+                continue;
+            }
+            const installer = installerMap?.[pkg];
+            const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
+            if (fromLegitStore) {
+                skippedByLegitStore++;
+                if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
+                continue;
+            }
+            evaluatedSideloaded++;
+        }
+
+        res.json({
+            suspiciousApps,
+            debug: {
+                totalApps,
+                skippedByTrustedPrefix,
+                skippedByTrustedExact,
+                skippedByLegitStore,
+                evaluatedSideloaded,
+                sampleSkippedTrustedPrefix,
+                sampleSkippedTrustedExact,
+                sampleSkippedLegitStore
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
+
 registerAuthRoutes(app);
 // app.use(createAuthMiddleware());
 
