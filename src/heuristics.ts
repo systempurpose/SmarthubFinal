@@ -1212,7 +1212,7 @@ export function analyzeApps(apps: AppWithPerms[], permsByPkg: Record<string, str
       findings.push({
         id: `risky-${pkg}`,
         title: `App requests risky permissions: ${pkg}`,
-        severity: 'high',
+        severity: 'high',app.use(express.json
         details: risky.join(', '),
       });
     } else if (risk === 'moderate') {
