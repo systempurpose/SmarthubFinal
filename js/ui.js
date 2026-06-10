@@ -13,7 +13,6 @@ async function apiCall(endpoint, options = {}) {
     return res.json();
 }
 
-// Helper to escape HTML special characters
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/[&<>]/g, function(m) {
@@ -46,6 +45,82 @@ async function updateConnectionStatus() {
     }
 }
 
+// ==================== SUSPICIOUS SCAN DEBUG ====================
+async function testSuspiciousScan() {
+    if (!currentDeviceId) {
+        alert('No device connected');
+        return;
+    }
+    let modal = document.getElementById('scanDebugModal');
+    if (!modal) {
+        const modalHtml = `
+            <div id="scanDebugModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h3>Suspicious App Scan Results</h3>
+                        <span class="close-button" id="closeScanDebugModal">&times;</span>
+                    </div>
+                    <div class="modal-body" id="scanDebugBody" style="max-height: 500px; overflow-y: auto;">
+                        Loading...
+                    </div>
+                    <div class="modal-footer">
+                        <button id="closeScanDebugModalBtn" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('scanDebugModal');
+        const closeModal = () => modal.style.display = 'none';
+        document.getElementById('closeScanDebugModal')?.addEventListener('click', closeModal);
+        document.getElementById('closeScanDebugModalBtn')?.addEventListener('click', closeModal);
+        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+    modal.style.display = 'flex';
+    const bodyDiv = document.getElementById('scanDebugBody');
+    bodyDiv.innerHTML = '<div class="spinner"></div><p>Scanning for suspicious apps...</p>';
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
+        const data = await response.json();
+        const apps = data.suspiciousApps || [];
+        const debug = data.debug || {};
+        if (apps.length === 0) {
+            let debugHtml = '<p>✅ No suspicious apps found.</p>';
+            if (debug.totalApps) {
+                debugHtml += `<details><summary>Debug Info (${debug.totalApps} apps scanned)</summary>
+                    <ul>
+                        <li>✅ Apps from trusted prefixes (Google, Samsung, etc.): ${debug.skippedByTrustedPrefix} (e.g., ${debug.sampleSkippedTrustedPrefix?.join(', ') || 'none'})</li>
+                        <li>✅ Apps from trusted exact packages (OTA agents): ${debug.skippedByTrustedExact} (e.g., ${debug.sampleSkippedTrustedExact?.join(', ') || 'none'})</li>
+                        <li>✅ Apps installed via legitimate stores (Play Store, Galaxy Store, etc.): ${debug.skippedByLegitStore} (e.g., ${debug.sampleSkippedLegitStore?.join(', ') || 'none'})</li>
+                        <li>🔍 Sideloaded apps evaluated: ${debug.evaluatedSideloaded}</li>
+                    </ul>
+                    <p>If you expect some apps to be flagged, they may have been installed from a trusted store or have a trusted package name prefix.</p>
+                </details>`;
+            } else {
+                debugHtml += '<p><small>No debug information returned from backend.</small></p>';
+            }
+            bodyDiv.innerHTML = debugHtml;
+        } else {
+            let html = `<p>Found ${apps.length} suspicious app(s):</p><ul style="list-style: none; padding-left: 0;">`;
+            for (const app of apps) {
+                html += `
+                    <li style="margin-bottom: 16px; padding: 12px; background: #fff3e0; border-radius: 12px;">
+                        <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})<br>
+                        <span style="font-size: 12px;">Reason: ${escapeHtml(app.reason)}</span><br>
+                        <span style="font-size: 12px;">Threat Level: ${app.threatLevel}</span><br>
+                        ${app.threatTypes && app.threatTypes.length > 0 ? `<span style="font-size: 12px;">Threat Types: ${app.threatTypes.map(t => t.type).join(', ')}</span><br>` : ''}
+                        <span style="font-size: 12px;">Suggested Action: ${escapeHtml(app.suggestedAction)}</span>
+                    </li>
+                `;
+            }
+            html += '</ul>';
+            bodyDiv.innerHTML = html;
+        }
+    } catch (err) {
+        bodyDiv.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
+    }
+}
+
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
@@ -74,6 +149,7 @@ async function renderDashboard() {
                 <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
                 <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
                 <button id="helpBtn" class="btn-secondary">❓ Help</button>
+                <button id="testScanBtn" class="btn-secondary">🔍 Test Suspicious Scan</button>
             </div>
         </div>
         <div id="deviceOverview" class="card" style="display: none;"></div>
@@ -95,7 +171,6 @@ async function renderDashboard() {
             fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null)
         ]);
 
-        // Parse device properties
         let model = 'Unknown', androidVer = '?', securityPatch = '?';
         if (deviceText) {
             let raw = deviceText;
@@ -111,7 +186,6 @@ async function renderDashboard() {
             securityPatch = props['ro.build.version.security_patch'] || '?';
         }
 
-        // Update health cards
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
@@ -121,7 +195,6 @@ async function renderDashboard() {
             `;
         }
 
-        // Device overview card
         document.getElementById('deviceOverview').innerHTML = `
             <div class="card-title"><i class="fas fa-info-circle"></i> Device Overview</div>
             <div><strong>Model:</strong> ${escapeHtml(model)}</div>
@@ -130,7 +203,6 @@ async function renderDashboard() {
         `;
         document.getElementById('deviceOverview').style.display = 'block';
 
-        // Network status card
         const wifiSsid = wifiStatus?.wifi?.ssid || 'Not connected';
         const wifiSignal = wifiStatus?.wifi?.rssi;
         document.getElementById('networkStatus').innerHTML = `
@@ -140,7 +212,6 @@ async function renderDashboard() {
         `;
         document.getElementById('networkStatus').style.display = 'block';
 
-        // Populate Phone Summary
         const summaryGrid = document.querySelector('#phoneSummary .phone-summary-grid');
         summaryGrid.innerHTML = `
             <div><span class="item-label">Phone Name</span><span class="item-value">${escapeHtml(model)}</span></div>
@@ -149,7 +220,6 @@ async function renderDashboard() {
         `;
         document.getElementById('phoneSummary').style.display = 'block';
 
-        // Alerts (optional)
         let alerts = [];
         if (battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
         else if (battery.level < 30) alerts.push('⚠️ Battery level low (<30%)');
@@ -164,7 +234,6 @@ async function renderDashboard() {
         console.error('Dashboard data error:', err);
     }
 
-    // Attach event listeners
     document.getElementById('startDiagnosticBtn')?.addEventListener('click', runQuickDiagnostic);
     document.getElementById('installAppBtn')?.addEventListener('click', async () => {
         if (!currentDeviceId) {
@@ -182,11 +251,8 @@ async function renderDashboard() {
                 body: JSON.stringify({ deviceId: currentDeviceId })
             });
             const data = await response.json();
-            if (response.ok) {
-                alert('Android app installed successfully!');
-            } else {
-                alert('Installation failed: ' + data.error);
-            }
+            if (response.ok) alert('Android app installed successfully!');
+            else alert('Installation failed: ' + data.error);
         } catch (err) {
             alert('Error: ' + err.message);
         } finally {
@@ -196,17 +262,16 @@ async function renderDashboard() {
     });
     document.getElementById('openWizard')?.addEventListener('click', openWizard);
     document.getElementById('helpBtn')?.addEventListener('click', showHelpModal);
+    document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
 }
 
-// Quick diagnostic function
+// ==================== QUICK DIAGNOSTIC ====================
 async function runQuickDiagnostic() {
-    // Get modal elements (create modal if not exists)
     let modal = document.getElementById('quickDiagModal');
     if (!modal) {
-        // Create modal dynamically if not present in HTML
         const modalHTML = `
             <div id="quickDiagModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-content" style="max-width: 650px;">
                     <div class="modal-header">
                         <h3 id="quickDiagModalTitle">Diagnostic Result</h3>
                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
@@ -227,20 +292,16 @@ async function runQuickDiagnostic() {
 
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
-    
-    // Show modal with loading state
     modalTitle.textContent = 'Running Diagnostic';
     modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
     modal.style.display = 'flex';
 
-    // Close modal handlers
     const closeModal = () => modal.style.display = 'none';
     document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
     try {
-        // Fetch hardware health data
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
@@ -248,7 +309,6 @@ async function runQuickDiagnostic() {
         const totalGB = parseFloat(storage.total) || 0;
         const usedGB = parseFloat(storage.used) || 0;
         const storagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
-
         const ramTotal = parseFloat(ram.total) || 0;
         const ramUsed = parseFloat(ram.used) || 0;
         const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal) * 100 : 0;
@@ -259,7 +319,6 @@ async function runQuickDiagnostic() {
         if (storagePercent > 90) issues.push('Storage is nearly full.');
         if (ramPercent > 85) issues.push('RAM usage is very high.');
 
-        // Fetch suspicious apps
         let suspiciousAppsList = [];
         try {
             const appsResponse = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
@@ -271,53 +330,73 @@ async function runQuickDiagnostic() {
             console.warn('Failed to fetch suspicious apps:', err);
         }
 
-        // Build HTML for hardware issues
+        const permissionDescriptions = {
+            'android.permission.READ_SMS': 'Read your text messages',
+            'android.permission.SEND_SMS': 'Send SMS messages (may cost money)',
+            'android.permission.RECEIVE_SMS': 'Receive and read incoming SMS',
+            'android.permission.ACCESS_FINE_LOCATION': 'Access precise GPS location',
+            'android.permission.ACCESS_COARSE_LOCATION': 'Access approximate location',
+            'android.permission.CAMERA': 'Take pictures and record video',
+            'android.permission.RECORD_AUDIO': 'Record audio through microphone',
+            'android.permission.READ_CONTACTS': 'Read your contacts list',
+            'android.permission.WRITE_CONTACTS': 'Modify or delete contacts',
+            'android.permission.READ_CALL_LOG': 'Read your call history',
+            'android.permission.WRITE_CALL_LOG': 'Modify call log',
+            'android.permission.CALL_PHONE': 'Directly call phone numbers',
+            'android.permission.READ_EXTERNAL_STORAGE': 'Read files on your storage',
+            'android.permission.WRITE_EXTERNAL_STORAGE': 'Modify or delete files',
+            'android.permission.INSTALL_PACKAGES': 'Install other apps',
+            'android.permission.REQUEST_INSTALL_PACKAGES': 'Install unknown apps',
+            'android.permission.SYSTEM_ALERT_WINDOW': 'Draw over other apps (overlay)',
+            'android.permission.BIND_ACCESSIBILITY_SERVICE': 'Accessibility service (can monitor and control device)',
+            'android.permission.READ_PHONE_STATE': 'Read phone status and identity'
+        };
+        function getPermissionDescription(perm) {
+            return permissionDescriptions[perm] || `Requested permission: ${perm.split('.').pop()}`;
+        }
+
         let hardwareHtml = '';
         if (issues.length > 0) {
-            hardwareHtml = `
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3>
-                    <ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul>
-                </div>
-            `;
+            hardwareHtml = `<div style="margin-bottom: 20px;"><h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3><ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
         } else {
             hardwareHtml = `<div style="margin-bottom: 20px;"><h3 style="color: #2e7d32;">✅ Hardware Check Passed</h3><p>All hardware metrics are within normal ranges.</p></div>`;
         }
 
-        // Build HTML for suspicious apps
         let appsHtml = '';
         if (suspiciousAppsList.length > 0) {
             appsHtml = `
                 <div>
                     <h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>
-                    <ul style="list-style: none; padding-left: 0;">
-                        ${suspiciousAppsList.map(app => `
-                            <li style="margin-bottom: 16px; padding: 12px; background: #fff3e0; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                                <div style="flex: 1;">
+                    ${suspiciousAppsList.map(app => `
+                        <div style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+                                <div>
                                     <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})
-                                    <br><span style="font-size: 12px; color: #666;">Risk: ${escapeHtml(app.threatLevel)} - ${escapeHtml(app.reason)}</span>
+                                    <br><span style="font-size: 12px;">Risk: ${escapeHtml(app.threatLevel)} - ${escapeHtml(app.reason)}</span>
                                 </div>
                                 <button onclick="uninstallPackage('${escapeHtml(app.packageName)}')" 
-                                        style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; margin-left: 12px; cursor: pointer;">
+                                        style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; cursor: pointer;">
                                     Delete
                                 </button>
-                            </li>
-                        `).join('')}
-                    </ul>
+                            </div>
+                            ${app.riskyPermissions && app.riskyPermissions.length > 0 ? `
+                                <div style="margin-top: 12px;">
+                                    <strong>⚠️ This app can:</strong>
+                                    <ul style="margin: 8px 0 0 20px;">
+                                        ${app.riskyPermissions.map(p => `<li>${getPermissionDescription(p)}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : '<div style="margin-top: 12px; font-style: italic;">No dangerous permissions detected, but flagged by heuristics.</div>'}
+                        </div>
+                    `).join('')}
                 </div>
             `;
         } else {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         }
 
-        // Combine and display
         modalTitle.textContent = 'Diagnostic Complete';
-        modalBody.innerHTML = `
-            <div style="max-height: 500px; overflow-y: auto; padding-right: 8px;">
-                ${hardwareHtml}
-                ${appsHtml}
-            </div>
-        `;
+        modalBody.innerHTML = `<div style="max-height: 500px; overflow-y: auto; padding-right: 8px;">${hardwareHtml}${appsHtml}</div>`;
     } catch (err) {
         modalTitle.textContent = 'Diagnostic Failed';
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(err.message)}</div>`;
@@ -326,7 +405,6 @@ async function runQuickDiagnostic() {
 
 async function uninstallPackage(packageName) {
     if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
-
     try {
         const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
             method: 'POST',
@@ -336,7 +414,6 @@ async function uninstallPackage(packageName) {
         const data = await response.json();
         if (response.ok) {
             alert(`Successfully uninstalled ${packageName}`);
-            // Refresh the diagnostic results
             runQuickDiagnostic();
         } else {
             alert(`Failed to uninstall: ${data.error}`);
@@ -346,14 +423,11 @@ async function uninstallPackage(packageName) {
     }
 }
 
-// Help Modal functions
+// ==================== HELP MODAL ====================
 function showHelpModal() {
     const modal = document.getElementById('helpModal');
-    if (!modal) {
-        createHelpModal();
-    } else {
-        modal.style.display = 'flex';
-    }
+    if (!modal) createHelpModal();
+    else modal.style.display = 'flex';
 }
 
 function createHelpModal() {
@@ -377,18 +451,17 @@ function createHelpModal() {
                             <li>Connect your phone via USB and accept the RSA key fingerprint.</li>
                             <li>Your device should appear as "Connected" in the sidebar.</li>
                         </ol>
-                        <p><strong>Note:</strong> Some devices may require additional steps. Consult your manufacturer's guide if needed.</p>
                     </div>
                     <div id="helpTabUi" class="help-tab-content">
                         <h4>UI Sections Overview</h4>
                         <ul>
                             <li><strong>Dashboard:</strong> Shows battery, storage, RAM, network status, and quick actions.</li>
-                            <li><strong>Device Info:</strong> Displays detailed hardware and software properties of the connected device.</li>
-                            <li><strong>Hardware Tests:</strong> Runs diagnostic tests on components like battery, storage, sensors, and camera.</li>
-                            <li><strong>Connection Troubleshoot:</strong> Allows you to reset Wi-Fi, Bluetooth, and mobile data.</li>
-                            <li><strong>AI Diagnosis:</strong> Provides intelligent suggestions based on device logs and symptoms.</li>
-                            <li><strong>Repairs:</strong> Offers debloating tools to remove unwanted apps.</li>
-                            <li><strong>BSOD Diagnosis:</strong> Analyzes boot failures and black screen issues.</li>
+                            <li><strong>Device Info:</strong> Displays detailed hardware and software properties.</li>
+                            <li><strong>Hardware Tests:</strong> Runs diagnostic tests on components.</li>
+                            <li><strong>Connection Troubleshoot:</strong> Reset Wi-Fi, Bluetooth, and mobile data.</li>
+                            <li><strong>AI Conclusion:</strong> Analyzes test results and suggests fixes.</li>
+                            <li><strong>Repairs:</strong> Debloating tools.</li>
+                            <li><strong>BSOD Diagnosis:</strong> Analyzes boot failures.</li>
                         </ul>
                     </div>
                 </div>
@@ -399,26 +472,20 @@ function createHelpModal() {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-    // Tab switching logic
     document.querySelectorAll('.help-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            document.querySelectorAll('.help-tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelectorAll('.help-tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(`helpTab${tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)}`).classList.add('active');
         });
     });
-
-    // Close modal
     const closeModal = () => document.getElementById('helpModal').style.display = 'none';
     document.getElementById('closeHelpModalBtn')?.addEventListener('click', closeModal);
     document.getElementById('closeHelpModalBtnFooter')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === document.getElementById('helpModal')) closeModal(); });
-
     document.getElementById('helpModal').style.display = 'flex';
 }
-
 
 // ==================== HARDWARE TESTS PAGE ====================
 async function renderHardwareTests() {
@@ -496,10 +563,7 @@ async function renderHardwareTests() {
             yesBtn.addEventListener('click', onYes);
             noBtn.addEventListener('click', onNo);
             autoCloseTimeout = setTimeout(() => {
-                if (currentTestResolver) {
-                    cleanup();
-                    resolve('no');
-                }
+                if (currentTestResolver) cleanup(), resolve('no');
             }, timeoutMs);
         });
     }
@@ -529,213 +593,163 @@ async function renderHardwareTests() {
         await launchAndroidApp();
     }
 
-    // Test definitions
     const tests = [
-        {
-            id: 'battery',
-            name: 'Battery',
-            run: async () => {
-                const data = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
-                const level = data.level || 0;
-                const health = data.health || 'unknown';
-                const passed = (level >= 20 && health === 'good');
-                const message = passed ? `Level: ${level}%, health: ${health}` : (level < 20 ? 'Low battery (<20%)' : 'Poor battery health');
+        { id: 'battery', name: 'Battery', run: async () => {
+            const data = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
+            const level = data.level || 0;
+            const health = data.health || 'unknown';
+            const passed = (level >= 20 && health === 'good');
+            const message = passed ? `Level: ${level}%, health: ${health}` : (level < 20 ? 'Low battery (<20%)' : 'Poor battery health');
+            return { passed, message };
+        }},
+        { id: 'storage', name: 'Storage', run: async () => {
+            const data = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
+            const free = data.free || '0';
+            let freeGB = 0;
+            const match = String(free).match(/(\d+(?:\.\d+)?)/);
+            if (match) freeGB = parseFloat(match[1]);
+            const passed = freeGB > 1.0;
+            const message = `Free space: ${free}`;
+            return { passed, message };
+        }},
+        { id: 'sensors', name: 'Sensors', run: async () => {
+            try {
+                const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
+                const sensors = res.sensors || [];
+                const types = sensors.map(s => s.type.toLowerCase());
+                const passed = types.some(t => t.includes('accelerometer')) && types.some(t => t.includes('gyroscope')) &&
+                              types.some(t => t.includes('proximity')) && types.some(t => t.includes('light'));
+                const missing = [];
+                if (!types.some(t => t.includes('accelerometer'))) missing.push('accelerometer');
+                if (!types.some(t => t.includes('gyroscope'))) missing.push('gyroscope');
+                if (!types.some(t => t.includes('proximity'))) missing.push('proximity');
+                if (!types.some(t => t.includes('light'))) missing.push('light');
+                const message = passed ? 'All core sensors detected' : `Missing: ${missing.join(', ')}`;
                 return { passed, message };
+            } catch (err) {
+                return { passed: false, message: 'Failed to read sensors' };
             }
-        },
-        {
-            id: 'storage',
-            name: 'Storage',
-            run: async () => {
-                const data = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
-                const free = data.free || '0';
-                let freeGB = 0;
-                const match = String(free).match(/(\d+(?:\.\d+)?)/);
-                if (match) freeGB = parseFloat(match[1]);
-                const passed = freeGB > 1.0;
-                const message = `Free space: ${free}`;
-                return { passed, message };
-            }
-        },
-        {
-            id: 'sensors',
-            name: 'Sensors',
-            run: async () => {
-                try {
-                    const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
-                    const sensors = res.sensors || [];
-                    const sensorTypes = sensors.map(s => s.type.toLowerCase());
-                    const hasAccel = sensorTypes.some(t => t.includes('accelerometer'));
-                    const hasGyro = sensorTypes.some(t => t.includes('gyroscope'));
-                    const hasProx = sensorTypes.some(t => t.includes('proximity'));
-                    const hasLight = sensorTypes.some(t => t.includes('light'));
-                    const passed = hasAccel && hasGyro && hasProx && hasLight;
-                    const missing = [];
-                    if (!hasAccel) missing.push('accelerometer');
-                    if (!hasGyro) missing.push('gyroscope');
-                    if (!hasProx) missing.push('proximity');
-                    if (!hasLight) missing.push('light');
-                    const message = passed ? 'All core sensors detected' : `Missing: ${missing.join(', ')}`;
-                    return { passed, message };
-                } catch (err) {
-                    return { passed: false, message: 'Failed to read sensors' };
-                }
-            }
-        },
-        {
-            id: 'display',
-            name: 'Display',
-            run: async () => {
-                const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
-                let raw = await deviceRes.text();
-                try { const p = JSON.parse(raw); if (typeof p === 'string') raw = p; } catch(e) {}
-                const width = raw.match(/\[sys.logical.width\]:\s*\[(\d+)\]/)?.[1];
-                const height = raw.match(/\[sys.logical.height\]:\s*\[(\d+)\]/)?.[1];
-                const passed = width && height;
-                const message = passed ? `${width} x ${height}` : 'Could not read resolution';
-                return { passed, message };
-            }
-        },
-        {
-            id: 'touch',
-            name: 'Touch Screen',
-            run: async () => {
-                await launchAndroidTest('touch');
-                modalTitle.textContent = 'Touch Screen Test';
-                modalBody.innerHTML = `
-                    <p>📱 The phone is now in touch test mode.</p>
-                    <p>Please tap the screen several times. Does the screen register your touches?</p>
-                    <p>(You will see a counter increase on the phone.)</p>
-                `;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation(30000);
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
-                return { passed, message };
-            }
-        },
-        {
-            id: 'vibration',
-            name: 'Vibration',
-            run: async () => {
-                await launchAndroidTest('vibrate');
-                modalTitle.textContent = 'Vibration Test';
-                modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation(5000);
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
-                return { passed, message };
-            }
-        },
-        {
-            id: 'flashlight',
-            name: 'Flashlight',
-            run: async () => {
-                await launchAndroidTest('flash');
-                modalTitle.textContent = 'Flashlight Test';
-                modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation(5000);
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed flashlight' : 'User did not see light';
-                return { passed, message };
-            }
-        },
-        {
-            id: 'speaker',
-            name: 'Speaker',
-            run: async () => {
-                await launchAndroidTest('sound');
-                modalTitle.textContent = 'Speaker Test';
-                modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation(5000);
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
-                return { passed, message };
-            }
-        },
-        {
-            id: 'camera',
-            name: 'Camera',
-            run: async () => {
-                await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
-                modalTitle.textContent = 'Camera Test';
-                modalBody.innerHTML = `<p>📸 The phone's camera app should have opened.</p><p>Does the camera viewfinder appear and work normally?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation(5000);
-                closeModal();
-                await runAdb('input keyevent KEYCODE_HOME');
-                await new Promise(r => setTimeout(r, 500));
-                await launchAndroidApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed camera working' : 'User reported camera issues';
-                return { passed, message };
-            }
-        }
+        }},
+        { id: 'display', name: 'Display', run: async () => {
+            const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
+            let raw = await deviceRes.text();
+            try { const p = JSON.parse(raw); if (typeof p === 'string') raw = p; } catch(e) {}
+            const width = raw.match(/\[sys.logical.width\]:\s*\[(\d+)\]/)?.[1];
+            const height = raw.match(/\[sys.logical.height\]:\s*\[(\d+)\]/)?.[1];
+            const passed = width && height;
+            const message = passed ? `${width} x ${height}` : 'Could not read resolution';
+            return { passed, message };
+        }},
+        { id: 'touch', name: 'Touch Screen', run: async () => {
+            await launchAndroidTest('touch');
+            modalTitle.textContent = 'Touch Screen Test';
+            modalBody.innerHTML = `<p>📱 The phone is now in touch test mode.</p><p>Please tap the screen several times. Does the screen register your touches?</p><p>(You will see a counter increase on the phone.)</p>`;
+            modal.style.display = 'flex';
+            const result = await waitForUserConfirmation(30000);
+            closeModal();
+            await returnToMainApp();
+            const passed = (result === 'yes');
+            const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
+            return { passed, message };
+        }},
+        { id: 'vibration', name: 'Vibration', run: async () => {
+            await launchAndroidTest('vibrate');
+            modalTitle.textContent = 'Vibration Test';
+            modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
+            modal.style.display = 'flex';
+            const result = await waitForUserConfirmation(5000);
+            closeModal();
+            await returnToMainApp();
+            const passed = (result === 'yes');
+            const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
+            return { passed, message };
+        }},
+        { id: 'flashlight', name: 'Flashlight', run: async () => {
+            await launchAndroidTest('flash');
+            modalTitle.textContent = 'Flashlight Test';
+            modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
+            modal.style.display = 'flex';
+            const result = await waitForUserConfirmation(5000);
+            closeModal();
+            await returnToMainApp();
+            const passed = (result === 'yes');
+            const message = passed ? 'User confirmed flashlight' : 'User did not see light';
+            return { passed, message };
+        }},
+        { id: 'speaker', name: 'Speaker', run: async () => {
+            await launchAndroidTest('sound');
+            modalTitle.textContent = 'Speaker Test';
+            modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
+            modal.style.display = 'flex';
+            const result = await waitForUserConfirmation(5000);
+            closeModal();
+            await returnToMainApp();
+            const passed = (result === 'yes');
+            const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
+            return { passed, message };
+        }},
+        { id: 'camera', name: 'Camera', run: async () => {
+            await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
+            modalTitle.textContent = 'Camera Test';
+            modalBody.innerHTML = `<p>📸 The phone's camera app should have opened.</p><p>Does the camera viewfinder appear and work normally?</p>`;
+            modal.style.display = 'flex';
+            const result = await waitForUserConfirmation(5000);
+            closeModal();
+            await runAdb('input keyevent KEYCODE_HOME');
+            await new Promise(r => setTimeout(r, 500));
+            await launchAndroidApp();
+            const passed = (result === 'yes');
+            const message = passed ? 'User confirmed camera working' : 'User reported camera issues';
+            return { passed, message };
+        }}
     ];
 
     async function runAllTests() {
-    const resultsContainer = document.getElementById('hwResults');
-    resultsContainer.style.display = 'block';
-    const cardsContainer = document.getElementById('hwCardsContainer');
-    cardsContainer.innerHTML = '';
-    const results = {};
+        const resultsContainer = document.getElementById('hwResults');
+        resultsContainer.style.display = 'block';
+        const cardsContainer = document.getElementById('hwCardsContainer');
+        cardsContainer.innerHTML = '';
+        const results = {};
 
-    await launchAndroidApp();
-
-    for (const test of tests) {
-        const card = document.createElement('div');
-        card.className = 'info-card';
-        card.id = `test-card-${test.id}`;
-        card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
-        cardsContainer.appendChild(card);
-        try {
-            const result = await test.run();
-            results[test.id] = { name: test.name, passed: result.passed, message: result.message };
-            const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
-            const color = result.passed ? '#2e7d32' : '#d32f2f';
-            card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
-            card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
-        } catch (err) {
-            results[test.id] = { name: test.name, passed: false, message: err.message };
-            card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
-            card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
+        await launchAndroidApp();
+        for (const test of tests) {
+            const card = document.createElement('div');
+            card.className = 'info-card';
+            card.id = `test-card-${test.id}`;
+            card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
+            cardsContainer.appendChild(card);
+            try {
+                const result = await test.run();
+                results[test.id] = { name: test.name, passed: result.passed, message: result.message };
+                const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
+                const color = result.passed ? '#2e7d32' : '#d32f2f';
+                card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
+                card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
+            } catch (err) {
+                results[test.id] = { name: test.name, passed: false, message: err.message };
+                card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
+                card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
+            }
+            await new Promise(r => setTimeout(r, 500));
         }
-        await new Promise(r => setTimeout(r, 500));
-    }
-
-    const passedCount = Object.values(results).filter(r => r.passed).length;
-    const total = tests.length;
-    const summaryDiv = document.getElementById('hwSummaryCard');
-    summaryDiv.innerHTML = `
-        <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-        <div class="card-content">
-            <div style="background: ${passedCount === total ? '#e8f5e9' : '#ffebee'}; padding: 16px; border-radius: 16px;">
-                <i class="fas ${passedCount === total ? 'fa-check-circle' : 'fa-exclamation-triangle'}" style="font-size: 32px; color: ${passedCount === total ? '#2e7d32' : '#c62828'};"></i>
-                <h3>${passedCount}/${total} tests passed</h3>
-                <ul>${Object.values(results).map(r => `<li><strong>${r.name}</strong>: ${r.passed ? '✅ Pass' : '❌ Fail'}${r.message ? ` (${escapeHtml(r.message)})` : ''}</li>`).join('')}</ul>
+        const passedCount = Object.values(results).filter(r => r.passed).length;
+        const total = tests.length;
+        const summaryDiv = document.getElementById('hwSummaryCard');
+        summaryDiv.innerHTML = `
+            <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
+            <div class="card-content">
+                <div style="background: ${passedCount === total ? '#e8f5e9' : '#ffebee'}; padding: 16px; border-radius: 16px;">
+                    <i class="fas ${passedCount === total ? 'fa-check-circle' : 'fa-exclamation-triangle'}" style="font-size: 32px; color: ${passedCount === total ? '#2e7d32' : '#c62828'};"></i>
+                    <h3>${passedCount}/${total} tests passed</h3>
+                    <ul>${Object.values(results).map(r => `<li><strong>${r.name}</strong>: ${r.passed ? '✅ Pass' : '❌ Fail'}${r.message ? ` (${escapeHtml(r.message)})` : ''}</li>`).join('')}</ul>
+                </div>
             </div>
-        </div>
-    `;
-
-    // Store results for AI Conclusion
-    localStorage.setItem('smartHubDiagnostics', JSON.stringify({
-        hardwareTests: { results: results, timestamp: Date.now() }
-    }));
-}
-
+        `;
+        localStorage.setItem('smartHubDiagnostics', JSON.stringify({ hardwareTests: { results, timestamp: Date.now() } }));
+    }
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
+
 // ==================== REPAIRS PAGE ====================
 async function renderRepairs() {
     if (!currentDeviceId) {
@@ -758,43 +772,38 @@ async function renderRepairs() {
         </div>
         <div id="repairOutput" class="card"></div>
     `;
-
     const listBtn = document.getElementById('listPackages');
     const runBtn = document.getElementById('runDebloat');
     const packageSelect = document.getElementById('packageSelect');
-
     listBtn?.addEventListener('click', async () => {
         const packages = await apiCall('/repair/list-packages');
         packageSelect.innerHTML = packages.map(p => `<option value="${p}">${p}</option>`).join('');
         runBtn.disabled = false;
     });
-
     runBtn?.addEventListener('click', async () => {
         const selected = Array.from(packageSelect.selectedOptions).map(opt => opt.value);
         const result = await apiCall('/repair/uninstall', { method: 'POST', body: JSON.stringify({ packages: selected }) });
         document.getElementById('repairOutput').innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
     });
-
     document.getElementById('flashRecovery')?.addEventListener('click', () => {
         alert('Firmware flashing not fully implemented. Use with caution.');
     });
 }
 
-// ==================== DEVICE INFO (FORMATTED TABLE) ====================
+// ==================== DEVICE INFO ====================
 async function renderDeviceInfo() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
     try {
-        // 1. Fetch static device properties
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let rawText = await res.text();
         try {
             const parsedJson = JSON.parse(rawText);
             if (typeof parsedJson === 'string') rawText = parsedJson;
-        } catch (e) { /* not JSON */ }
+        } catch (e) {}
         const lines = rawText.split(/\r?\n/);
         const props = {};
         for (const line of lines) {
@@ -808,19 +817,13 @@ async function renderDeviceInfo() {
             return;
         }
 
-        // 2. Fetch WiFi status dynamically
         let wifiStatus = null;
         try {
             const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
             if (wifiRes.ok) wifiStatus = await wifiRes.json();
-        } catch (err) {
-            console.warn('Could not fetch WiFi status:', err);
-        }
+        } catch (err) {}
 
-        // Helper to get property with fallback
-        const get = (key, fallback = '?') => (props[key] !== undefined ? props[key] : fallback);
-
-        // Helper to build a card (reused)
+        const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
         const makeCard = (title, icon, items) => `
             <div class="info-card">
                 <div class="card-header"><i class="${icon}"></i> ${title}</div>
@@ -831,8 +834,6 @@ async function renderDeviceInfo() {
         `;
 
         const cards = [];
-
-        // ----- Device Overview -----
         cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
             { label: 'Model', value: get('ro.product.model', 'Unknown') },
             { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
@@ -843,58 +844,47 @@ async function renderDeviceInfo() {
             { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
         ]));
 
-        // ----- Bluetooth -----
         const bluetoothEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
-        const bluetoothProfiles = ['a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device',
-            'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'
-        ].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
+        const bluetoothProfiles = ['a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device', 'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
         cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
             { label: 'Enabled', value: bluetoothEnabled ? '✅ Yes' : '❌ No' },
             { label: 'Active Profiles', value: `${bluetoothProfiles} / 12` },
             { label: 'Adapter State', value: get('cache_key.bluetooth.bluetooth_adapter_get_state', 'N/A') }
         ]));
 
-        // ----- WiFi (dynamic) -----
         let wifiItems = [];
         if (wifiStatus && wifiStatus.wifi) {
-            const wifi = wifiStatus.wifi;
+            const w = wifiStatus.wifi;
             wifiItems = [
-                { label: 'SSID', value: wifi.ssid || 'Not connected' },
-                { label: 'Signal Strength', value: wifi.rssi !== undefined ? `${wifi.rssi} dBm` : 'N/A' },
-                { label: 'IP Address', value: wifi.ipAddress || 'N/A' },
-                { label: 'Link Speed', value: wifi.linkSpeed ? `${wifi.linkSpeed} Mbps` : 'N/A' },
-                { label: 'Frequency', value: wifi.frequency ? `${wifi.frequency} MHz` : 'N/A' }
+                { label: 'SSID', value: w.ssid || 'Not connected' },
+                { label: 'Signal Strength', value: w.rssi !== undefined ? `${w.rssi} dBm` : 'N/A' },
+                { label: 'IP Address', value: w.ipAddress || 'N/A' },
+                { label: 'Link Speed', value: w.linkSpeed ? `${w.linkSpeed} Mbps` : 'N/A' },
+                { label: 'Frequency', value: w.frequency ? `${w.frequency} MHz` : 'N/A' }
             ];
         } else {
             wifiItems = [{ label: 'Status', value: 'Unable to fetch WiFi info' }];
         }
         cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
 
-        // ----- Network & SIM (enhanced) -----
         const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
         const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
         const mobileDataEnabled = get('gsm.data.setenabled') === 'true' ? '✅ Yes' : '❌ No';
-        const vonr0 = get('persist.radio.is_vonr_enabled_0') === 'true' ? 'Yes' : 'No';
-        const defaultNet = get('ro.telephony.default_network', 'N/A');
         cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
             { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
             { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
             { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
             { label: 'Mobile Data', value: mobileDataEnabled },
-            { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` },
-            { label: 'VoNR (5G Voice)', value: vonr0 },
-            { label: 'Default Network', value: defaultNet }
+            { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
         ]));
 
-        // ----- System & Build -----
         cards.push(makeCard('System & Build', 'fas fa-code-branch', [
-            { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
+            { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0,60)+'...' },
             { label: 'Build Date', value: get('ro.build.date', 'N/A') },
             { label: 'Bootloader', value: get('ro.bootloader', 'locked') },
             { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
         ]));
 
-        // ----- Hardware -----
         cards.push(makeCard('Hardware', 'fas fa-microchip', [
             { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
             { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
@@ -902,7 +892,6 @@ async function renderDeviceInfo() {
             { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
         ]));
 
-        // ----- Special Features -----
         cards.push(makeCard('Special Features', 'fas fa-star', [
             { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
             { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
@@ -910,61 +899,13 @@ async function renderDeviceInfo() {
             { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
         ]));
 
-        // ----- Security & Boot -----
-        const verifiedBootState = get('ro.boot.verifiedbootstate', 'unknown');
-        const flashLocked = get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked';
-        const verityMode = get('ro.boot.veritymode', 'unknown');
-        const adbSecure = get('ro.adb.secure') === '1' ? 'Yes' : 'No';
-        const secureBuild = get('ro.secure') === '1' ? 'Production' : 'Debug';
         cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
-            { label: 'Verified Boot', value: verifiedBootState },
-            { label: 'Bootloader', value: flashLocked },
-            { label: 'dm‑verity', value: verityMode },
-            { label: 'ADB Secure', value: adbSecure },
-            { label: 'Build Type', value: secureBuild }
+            { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
+            { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },
+            { label: 'dm‑verity', value: get('ro.boot.veritymode', 'unknown') },
+            { label: 'ADB Secure', value: get('ro.adb.secure') === '1' ? 'Yes' : 'No' }
         ]));
 
-        // ----- Camera -----
-        const manualFocus = get('persist.sys.cam.manual.focus') === 'true' ? '✅' : '❌';
-        const manualShutter = get('persist.sys.cam.manual.shutter') === 'true' ? '✅' : '❌';
-        const beautyMode = get('persist.sys.cam.beauty.fullfuc') === 'true' ? '✅' : '❌';
-        const wideCamera = get('persist.sys.cam.wide.8M') === 'true' ? '✅ (8MP)' : '❌';
-        const zslDisabled = get('camera.disable_zsl_mode') === '1' ? 'Disabled' : 'Enabled';
-        cards.push(makeCard('Camera', 'fas fa-camera', [
-            { label: 'Manual Focus', value: manualFocus },
-            { label: 'Manual Shutter', value: manualShutter },
-            { label: 'Beauty Mode', value: beautyMode },
-            { label: 'Wide Camera', value: wideCamera },
-            { label: 'Zero‑Shutter‑Lag', value: zslDisabled }
-        ]));
-
-        // ----- Audio -----
-        const audioDriver = get('ro.hardware.audio.primary', 'N/A');
-        const callVolSteps = get('ro.config.vc_call_vol_steps', 'N/A');
-        const callVolDefault = get('ro.config.vc_call_vol_default', 'N/A');
-        const highVolumeWarning = get('persist.sys.hight_volume_switch') === 'true' ? 'On' : 'Off';
-        cards.push(makeCard('Audio', 'fas fa-headphones', [
-            { label: 'Audio Driver', value: audioDriver },
-            { label: 'Call Volume Steps', value: callVolSteps },
-            { label: 'Default Call Vol.', value: callVolDefault },
-            { label: 'High Volume Warn', value: highVolumeWarning }
-        ]));
-
-        // ----- Sensors & Extras -----
-        const sensorHub = get('ro.hardware.sensors', 'N/A');
-        const nfc = get('nfc.initialized') === 'true' ? '✅' : '❌';
-        const quickCharge = get('ro.quick_charge_support') === '1' ? '✅' : '❌';
-        const iotCard = get('ro.iot_card_support') === '1' ? '✅' : '❌';
-        const childMode = get('ro.childmode.support') === '1' ? '✅' : '❌';
-        cards.push(makeCard('Sensors & Extras', 'fas fa-microchip', [
-            { label: 'Sensor Hub', value: sensorHub },
-            { label: 'NFC', value: nfc },
-            { label: 'Quick Charge', value: quickCharge },
-            { label: 'IoT/eSIM Support', value: iotCard },
-            { label: 'Child Mode', value: childMode }
-        ]));
-
-        // ----- Final output (no raw properties section) -----
         const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
         document.getElementById('pageContent').innerHTML = finalHtml;
     } catch (err) {
@@ -972,28 +913,19 @@ async function renderDeviceInfo() {
     }
 }
 
-// ==================== AI CONCLUSION (STRUCTURED CARD) ====================
+// ==================== AI CONCLUSION ====================
 async function renderAIConclusion() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
-
-    // Retrieve stored diagnostic results from localStorage
     const storedResults = JSON.parse(localStorage.getItem('smartHubDiagnostics') || '{}');
-    
-    // Build a list of available reports
     const reports = [];
     if (storedResults.hardwareTests) reports.push({ id: 'hardware', name: 'Hardware Tests', data: storedResults.hardwareTests });
     if (storedResults.bsod) reports.push({ id: 'bsod', name: 'BSOD Diagnosis', data: storedResults.bsod });
     if (storedResults.network) reports.push({ id: 'network', name: 'Network Troubleshoot', data: storedResults.network });
     if (storedResults.deviceInfo) reports.push({ id: 'device', name: 'Device Info', data: storedResults.deviceInfo });
-
-    const reportsHtml = reports.map(r => `
-        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <input type="checkbox" value="${r.id}" data-report='${JSON.stringify(r.data)}'> ${r.name}
-        </label>
-    `).join('');
+    const reportsHtml = reports.map(r => `<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"><input type="checkbox" value="${r.id}" data-report='${JSON.stringify(r.data)}'> ${r.name}</label>`).join('');
 
     const html = `
         <div class="cards-container">
@@ -1001,9 +933,7 @@ async function renderAIConclusion() {
                 <div class="card-header"><i class="fas fa-brain"></i> AI Conclusion</div>
                 <div class="card-content">
                     <p>Select which diagnostic results you want the AI to analyze:</p>
-                    <div id="reportsList">
-                        ${reportsHtml || '<p>No diagnostic results yet. Run some tests (Hardware, BSOD, etc.) first.</p>'}
-                    </div>
+                    <div id="reportsList">${reportsHtml || '<p>No diagnostic results yet. Run some tests first.</p>'}</div>
                     <button id="runAIConclusion" class="btn-primary" style="margin-top: 16px;">🔍 Get AI Conclusion</button>
                 </div>
             </div>
@@ -1021,40 +951,25 @@ async function renderAIConclusion() {
             const reportData = JSON.parse(cb.getAttribute('data-report') || '{}');
             selected.push(reportData);
         });
-        if (selected.length === 0) {
-            alert('Please select at least one diagnostic result.');
-            return;
-        }
+        if (selected.length === 0) { alert('Please select at least one diagnostic result.'); return; }
         const resultDiv = document.getElementById('aiResult');
         const resultContent = document.getElementById('aiResultContent');
         resultDiv.style.display = 'block';
         resultContent.innerHTML = '<div class="spinner"></div><p>AI is analyzing...</p>';
-        
         try {
-            // Build a comprehensive diagnostic report
-            const diagStages = {
-                hardware: selected.find(s => s.hardwareTests)?.hardwareTests || null,
-                bsod: selected.find(s => s.bsod)?.bsod || null,
-                network: selected.find(s => s.network)?.network || null
-            };
+            const diagStages = { hardware: selected.find(s => s.hardwareTests)?.hardwareTests || null, bsod: selected.find(s => s.bsod)?.bsod || null, network: selected.find(s => s.network)?.network || null };
             const response = await fetch(`${BACKEND_URL}/ai-adb-conclude`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: currentDeviceId,
-                    diagStages,
-                    diagDetails: { selectedReports: selected.map(s => s.type) }
-                })
+                body: JSON.stringify({ deviceId: currentDeviceId, diagStages, diagDetails: { selectedReports: selected.map(s => s.type) } })
             });
             const data = await response.json();
             if (data.ok && data.conclusion) {
                 const conclusion = data.conclusion;
-                resultContent.innerHTML = `
-                    <div><strong>Conclusion:</strong> ${escapeHtml(conclusion.humanSummary || conclusion.likelyCause || 'No clear cause')}</div>
-                    <div style="margin-top: 12px;"><strong>Recommended Fixes:</strong></div>
+                resultContent.innerHTML = `<div><strong>Conclusion:</strong> ${escapeHtml(conclusion.humanSummary || conclusion.likelyCause || 'No clear cause')}</div>
+                    <div style="margin-top:12px;"><strong>Recommended Fixes:</strong></div>
                     <ul>${(conclusion.actions || ['Run full hardware test']).map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
-                    ${conclusion.nextStep ? `<div><strong>Next Step:</strong> ${escapeHtml(conclusion.nextStep)}</div>` : ''}
-                `;
+                    ${conclusion.nextStep ? `<div><strong>Next Step:</strong> ${escapeHtml(conclusion.nextStep)}</div>` : ''}`;
             } else {
                 resultContent.innerHTML = '<p>AI could not generate a conclusion. Please try again later.</p>';
             }
@@ -1063,305 +978,139 @@ async function renderAIConclusion() {
         }
     });
 }
-// ==================== NETWORK CHECK (STRUCTURED CARD) ====================
 
-// Helper to call a fix action (e.g., bluetooth_reset, mobile_data_reset)
+// ==================== CONNECTION TROUBLESHOOT ====================
 async function callFix(service, action) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action })
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result = await response.json();
-        return result;
-    } catch (err) {
-        console.error(`Fix failed for ${service}:`, err);
-        throw err;
-    }
+    const response = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action })
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
 }
+
 async function renderConnectionTroubleshoot() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
         return;
     }
-
-    // Show loading state
     document.getElementById('pageContent').innerHTML = `<div class="card">Loading connection status...</div>`;
-
     try {
-        // Fetch WiFi status
         const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
-        let wifiStatus = null;
-        if (wifiRes.ok) wifiStatus = await wifiRes.json();
-
-        // Fetch Bluetooth diagnosis
+        let wifiStatus = wifiRes.ok ? await wifiRes.json() : null;
         const btRes = await fetch(`${BACKEND_URL}/android-connectivity/diagnose/${currentDeviceId}?target=bluetooth`);
-        let btStatus = null;
-        if (btRes.ok) btStatus = await btRes.json();
-
-        // For mobile data, we can read from device properties or use a simple ADB command
-        // We'll use the existing `/device/${currentDeviceId}` to get gsm.data.setenabled
+        let btStatus = btRes.ok ? await btRes.json() : null;
         const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         let mobileDataEnabled = 'Unknown';
         if (deviceRes.ok) {
             let rawText = await deviceRes.text();
-            try {
-                const parsed = JSON.parse(rawText);
-                if (typeof parsed === 'string') rawText = parsed;
-            } catch (e) {}
+            try { const parsed = JSON.parse(rawText); if (typeof parsed === 'string') rawText = parsed; } catch(e) {}
             const lines = rawText.split(/\r?\n/);
             for (const line of lines) {
                 const match = line.match(/^\[gsm.data.setenabled\]:\s*\[(.*?)\]$/);
-                if (match) {
-                    mobileDataEnabled = match[1] === 'true' ? 'Enabled' : 'Disabled';
-                    break;
-                }
+                if (match) { mobileDataEnabled = match[1] === 'true' ? 'Enabled' : 'Disabled'; break; }
             }
         }
 
-        // Build WiFi card
         let wifiHtml = '';
         if (wifiStatus && wifiStatus.wifi) {
             const w = wifiStatus.wifi;
-            wifiHtml = `
-                <div class="info-card">
-                    <div class="card-header"><i class="fas fa-wifi"></i> WiFi</div>
-                    <div class="card-grid">
-                        <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(w.ssid || 'Not connected')}</span></div>
-                        <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${w.rssi !== undefined ? w.rssi + ' dBm' : 'N/A'}</span></div>
-                        <div class="card-item"><span class="item-label">IP Address</span><span class="item-value">${escapeHtml(w.ipAddress || 'N/A')}</span></div>
-                        <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${w.linkSpeed ? w.linkSpeed + ' Mbps' : 'N/A'}</span></div>
-                    </div>
-                    <div class="card-actions">
-                        <button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button>
-                        <button class="btn-secondary fix-wifi" data-action="wifi_forget">Forget current network (not implemented)</button>
-                    </div>
-                </div>
-            `;
+            wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid">
+                <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(w.ssid || 'Not connected')}</span></div>
+                <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${w.rssi !== undefined ? w.rssi + ' dBm' : 'N/A'}</span></div>
+                <div class="card-item"><span class="item-label">IP Address</span><span class="item-value">${escapeHtml(w.ipAddress || 'N/A')}</span></div>
+                <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${w.linkSpeed ? w.linkSpeed + ' Mbps' : 'N/A'}</span></div>
+            </div><div class="card-actions"><button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button></div></div>`;
         } else {
             wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;
         }
 
-        // Build Bluetooth card
         let btHtml = '';
         if (btStatus && btStatus.bluetooth) {
             const bt = btStatus.bluetooth;
-            const enabled = bt.enabled ? '✅ Yes' : '❌ No';
-            const bondedCount = bt.summary?.bondedCount || 0;
-            const connectedCount = bt.summary?.connectedCount || 0;
-            btHtml = `
-                <div class="info-card">
-                    <div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div>
-                    <div class="card-grid">
-                        <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${enabled}</span></div>
-                        <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${bondedCount}</span></div>
-                        <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${connectedCount}</span></div>
-                    </div>
-                    <div class="card-actions">
-                        <button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth (off/on)</button>
-                        <button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button>
-                        <button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache & Reset</button>
-                    </div>
-                </div>
-            `;
+            btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid">
+                <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bt.enabled ? '✅ Yes' : '❌ No'}</span></div>
+                <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${bt.summary?.bondedCount || 0}</span></div>
+                <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${bt.summary?.connectedCount || 0}</span></div>
+            </div><div class="card-actions"><button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth</button><button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button><button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache</button></div></div>`;
         } else {
             btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid"><div class="card-item">Unable to fetch Bluetooth status</div></div></div>`;
         }
 
-        // Build Mobile Data card
-        let mobileHtml = `
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div>
-                <div class="card-grid">
-                    <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(mobileDataEnabled)}</span></div>
-                </div>
-                <div class="card-actions">
-                    <button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data (off/on)</button>
-                </div>
-            </div>
-        `;
+        const mobileHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div><div class="card-grid"><div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(mobileDataEnabled)}</span></div></div><div class="card-actions"><button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data</button></div></div>`;
 
-        // Combine everything
-        const html = `
-            <div class="cards-container">
-                ${wifiHtml}
-                ${btHtml}
-                ${mobileHtml}
-            </div>
-            <div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>
-        `;
+        const html = `<div class="cards-container">${wifiHtml}${btHtml}${mobileHtml}</div><div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>`;
         document.getElementById('pageContent').innerHTML = html;
-
-        // Attach event listeners for WiFi fixes (note: WiFi reset not yet implemented in backend; we'll add a simple toggle using svc wifi)
-        document.querySelectorAll('.fix-wifi').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
-                if (action === 'wifi_reset') {
-                    try {
-                        // Simple WiFi toggle via ADB (not in existing routes)
-                        const res = await fetch(`${BACKEND_URL}/wifi/toggle`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ deviceId: currentDeviceId, enable: false })
-                        });
-                        await res.json();
-                        await new Promise(r => setTimeout(r, 1000));
-                        await fetch(`${BACKEND_URL}/wifi/toggle`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ deviceId: currentDeviceId, enable: true })
-                        });
-                        showFixResult('WiFi reset completed. Refresh status to see changes.');
-                    } catch (err) {
-                        showFixResult(`WiFi reset failed: ${err.message}`, true);
-                    }
-                } else {
-                    showFixResult('Action not yet implemented', true);
-                }
-            });
-        });
-
-        // Bluetooth fixes using existing endpoint
-        document.querySelectorAll('.fix-bluetooth').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
-                try {
-                    const result = await callFix('bluetooth', action);
-                    showFixResult(`Bluetooth fix '${action}' completed. Steps: ${JSON.stringify(result.steps)}`);
-                    // Refresh Bluetooth status after 2 seconds
-                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
-                } catch (err) {
-                    showFixResult(`Bluetooth fix failed: ${err.message}`, true);
-                }
-            });
-        });
-
-        // Mobile data fix
-        document.querySelectorAll('.fix-mobile').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
-                try {
-                    const result = await callFix('mobile', action);
-                    showFixResult(`Mobile data reset completed. Steps: ${JSON.stringify(result.steps)}`);
-                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
-                } catch (err) {
-                    showFixResult(`Mobile data reset failed: ${err.message}`, true);
-                }
-            });
-        });
 
         function showFixResult(message, isError = false) {
             const resultDiv = document.getElementById('fixResult');
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = `<div style="color: ${isError ? '#d32f2f' : '#2e7d32'};">${escapeHtml(message)}</div>`;
-            setTimeout(() => {
-                resultDiv.style.display = 'none';
-            }, 5000);
+            setTimeout(() => resultDiv.style.display = 'none', 5000);
         }
 
+        document.querySelectorAll('.fix-wifi').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (btn.getAttribute('data-action') === 'wifi_reset') {
+                    try {
+                        await fetch(`${BACKEND_URL}/wifi/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: currentDeviceId, enable: false }) });
+                        await new Promise(r => setTimeout(r, 1000));
+                        await fetch(`${BACKEND_URL}/wifi/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: currentDeviceId, enable: true }) });
+                        showFixResult('WiFi reset completed. Refresh status to see changes.');
+                    } catch (err) { showFixResult(`WiFi reset failed: ${err.message}`, true); }
+                } else showFixResult('Action not yet implemented', true);
+            });
+        });
+        document.querySelectorAll('.fix-bluetooth').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.getAttribute('data-action');
+                try {
+                    await callFix('bluetooth', action);
+                    showFixResult(`Bluetooth fix '${action}' completed.`);
+                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                } catch (err) { showFixResult(`Bluetooth fix failed: ${err.message}`, true); }
+            });
+        });
+        document.querySelectorAll('.fix-mobile').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                try {
+                    await callFix('mobile', 'mobile_data_reset');
+                    showFixResult('Mobile data reset completed.');
+                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                } catch (err) { showFixResult(`Mobile data reset failed: ${err.message}`, true); }
+            });
+        });
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading troubleshoot page: ${err.message}</div>`;
     }
 }
 
-// ==================== AI DIAGNOSIS ====================
-async function renderAIDiagnosis() {
-    if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
-        return;
-    }
-    try {
-        const response = await fetch(`${BACKEND_URL}/ai-no-debug-suggest`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ connection: { deviceId: currentDeviceId } })
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const suggestion = data.humanSummary || data.top?.label || 'Run a full diagnostic for personalized insights.';
-        document.getElementById('pageContent').innerHTML = `<div class="card"><h3>AI Suggestion</h3><p>${escapeHtml(suggestion)}</p></div>`;
-    } catch (err) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">AI diagnosis unavailable: ${err.message}</div>`;
-    }
-}
-
 // ==================== BSOD DIAGNOSIS ====================
-// In js/ui.js
 async function renderBsodDiagnosis() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
-
-    // Initial UI with a button
-    const startHtml = `
-        <div class="info-card" style="text-align: center;">
-            <div class="card-header"><i class="fas fa-skull-crosswalk"></i> BSOD / Black Screen Analysis</div>
-            <div class="card-content">
-                <p>Click the button below to start a full diagnostic. This will check for OS corruption, unexpected reboots, kernel panics, and other crash indicators.</p>
-                <button id="startBsodBtn" class="btn-primary" style="font-size: 18px;">🔍 Diagnose Now</button>
-            </div>
-        </div>
-        <div id="bsodResult" style="display: none;"></div>
-    `;
+    const startHtml = `<div class="info-card" style="text-align: center;"><div class="card-header"><i class="fas fa-skull-crosswalk"></i> BSOD / Black Screen Analysis</div><div class="card-content"><p>Click the button below to start a full diagnostic.</p><button id="startBsodBtn" class="btn-primary" style="font-size: 18px;">🔍 Diagnose Now</button></div></div><div id="bsodResult" style="display: none;"></div>`;
     document.getElementById('pageContent').innerHTML = startHtml;
-
     const startBtn = document.getElementById('startBsodBtn');
     const resultDiv = document.getElementById('bsodResult');
-
     startBtn?.addEventListener('click', async () => {
-        // Show loading state
         resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `<div class="info-card"><div class="card-header"><i class="fas fa-spinner fa-pulse"></i> Analyzing...</div><div class="card-content"><p>Please wait while we check for crash signatures and instability signs.</p></div></div>`;
-
+        resultDiv.innerHTML = `<div class="info-card"><div class="card-header"><i class="fas fa-spinner fa-pulse"></i> Analyzing...</div><div class="card-content"><p>Please wait while we check for crash signatures.</p></div></div>`;
         try {
-            const response = await fetch(`${BACKEND_URL}/api/bsod/diagnose`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adbDeviceId: currentDeviceId })
-            });
+            const response = await fetch(`${BACKEND_URL}/api/bsod/diagnose`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adbDeviceId: currentDeviceId }) });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error);
-
             const diag = data.diagnosis;
             const cause = diag.cause;
-            let severityColor = '#2e7d32'; // green for normal
-            let icon = 'fa-check-circle';
-            if (cause.includes("corruption") || cause.includes("crash")) {
-                severityColor = '#c62828';
-                icon = 'fa-exclamation-triangle';
-            } else if (cause.includes("instability")) {
-                severityColor = '#ed6c02';
-                icon = 'fa-exclamation-circle';
-            }
-
-            // Build signals list
+            let severityColor = '#2e7d32', icon = 'fa-check-circle';
+            if (cause.includes("corruption") || cause.includes("crash")) { severityColor = '#c62828'; icon = 'fa-exclamation-triangle'; }
+            else if (cause.includes("instability")) { severityColor = '#ed6c02'; icon = 'fa-exclamation-circle'; }
             let signalsHtml = '';
             if (diag.signals && diag.signals.length > 0) {
-                signalsHtml = `<div class="card-header"><i class="fas fa-list"></i> Detected Signals</div><div class="card-content"><ul style="margin:0; padding-left:20px;">` +
-                    diag.signals.map(s => `<li><strong>${s.title}</strong> (${s.severity}) - ${s.points} points</li>`).join('') +
-                    `</ul></div>`;
+                signalsHtml = `<div class="card-header"><i class="fas fa-list"></i> Detected Signals</div><div class="card-content"><ul style="margin:0; padding-left:20px;">` + diag.signals.map(s => `<li><strong>${s.title}</strong> (${s.severity}) - ${s.points} points</li>`).join('') + `</ul></div>`;
             }
-
-            const html = `
-                <div class="info-card">
-                    <div class="card-header"><i class="fas ${icon}" style="color:${severityColor}"></i> Diagnosis Result</div>
-                    <div class="card-content">
-                        <div class="card-item"><span class="item-label">Conclusion</span><span class="item-value">${cause}</span></div>
-                        <div class="card-item"><span class="item-label">Confidence</span><span class="item-value">${diag.confidence} (Score: ${diag.score}/100)</span></div>
-                        <div class="card-item"><span class="item-label">Details</span><span class="item-value">${diag.detail || 'No additional details.'}</span></div>
-                    </div>
-                </div>
-                ${signalsHtml}
-                <div class="info-card">
-                    <div class="card-header"><i class="fas fa-lightbulb"></i> Next Steps</div>
-                    <div class="card-content">
-                        <p>${getRecommendation(cause)}</p>
-                    </div>
-                </div>
-            `;
+            const html = `<div class="info-card"><div class="card-header"><i class="fas ${icon}" style="color:${severityColor}"></i> Diagnosis Result</div><div class="card-content"><div class="card-item"><span class="item-label">Conclusion</span><span class="item-value">${cause}</span></div><div class="card-item"><span class="item-label">Confidence</span><span class="item-value">${diag.confidence} (Score: ${diag.score}/100)</span></div><div class="card-item"><span class="item-label">Details</span><span class="item-value">${diag.detail || 'No additional details.'}</span></div></div></div>${signalsHtml}<div class="info-card"><div class="card-header"><i class="fas fa-lightbulb"></i> Next Steps</div><div class="card-content"><p>${getRecommendation(cause)}</p></div></div>`;
             resultDiv.innerHTML = html;
         } catch (err) {
             resultDiv.innerHTML = `<div class="info-card"><div class="card-header"><i class="fas fa-times-circle"></i> Error</div><div class="card-content"><p>Failed to diagnose: ${err.message}</p></div></div>`;
@@ -1370,23 +1119,21 @@ async function renderBsodDiagnosis() {
 }
 
 function getRecommendation(cause) {
-    if (cause.includes("corruption") || cause.includes("crash")) {
-        return "📱 Consider re-flashing the stock firmware. Back up your data if possible. If the issue persists, it may point to a hardware problem with the storage chip.";
-    } else if (cause.includes("instability")) {
-        return "🔧 Boot into Safe Mode (if possible) and uninstall recently added apps. Check for system updates or perform a factory reset as a last resort.";
-    }
+    if (cause.includes("corruption") || cause.includes("crash")) return "📱 Consider re-flashing the stock firmware. Back up your data if possible. If the issue persists, it may point to a hardware problem with the storage chip.";
+    else if (cause.includes("instability")) return "🔧 Boot into Safe Mode (if possible) and uninstall recently added apps. Check for system updates or perform a factory reset as a last resort.";
     return "✅ Your phone shows no clear signs of OS corruption. If the screen remains black, the issue is likely hardware-related (display cable, motherboard, or power).";
 }
+
 // ==================== USB DEBUGGING WIZARD ====================
-const modal = document.getElementById('wizardModal');
-const closeModal = document.querySelector('.close-button');
+const modalEl = document.getElementById('wizardModal');
+const closeModalBtn = document.querySelector('.close-button');
 const prevBtn = document.getElementById('wizardPrevBtn');
 const nextBtn = document.getElementById('wizardNextBtn');
 const cancelBtn = document.getElementById('wizardCancelBtn');
 
 function openWizard() {
     wizardStep = 0;
-    modal.style.display = 'flex';
+    modalEl.style.display = 'flex';
     updateWizardUI();
 }
 
@@ -1398,12 +1145,7 @@ function updateWizardUI() {
         { title: 'Connect via USB', content: 'Plug your phone into the PC. Accept the RSA key fingerprint on the phone.' },
         { title: 'Verify Connection', content: 'Click "Test Connection" below.' }
     ];
-    body.innerHTML = `
-        <div class="progress-step">Step ${wizardStep+1} of ${steps.length}</div>
-        <h4>${steps[wizardStep].title}</h4>
-        <p>${steps[wizardStep].content}</p>
-        ${wizardStep === 3 ? '<button id="testConnBtn" class="btn-primary">Test Connection</button><div id="connResult"></div>' : ''}
-    `;
+    body.innerHTML = `<div class="progress-step">Step ${wizardStep+1} of ${steps.length}</div><h4>${steps[wizardStep].title}</h4><p>${steps[wizardStep].content}</p>${wizardStep === 3 ? '<button id="testConnBtn" class="btn-primary">Test Connection</button><div id="connResult"></div>' : ''}`;
     prevBtn.disabled = wizardStep === 0;
     if (wizardStep === 3) {
         document.getElementById('testConnBtn')?.addEventListener('click', async () => {
@@ -1425,22 +1167,10 @@ function updateWizardUI() {
     }
 }
 
-nextBtn.onclick = () => {
-    if (wizardStep < 3) {
-        wizardStep++;
-        updateWizardUI();
-    } else {
-        modal.style.display = 'none';
-    }
-};
-prevBtn.onclick = () => {
-    if (wizardStep > 0) {
-        wizardStep--;
-        updateWizardUI();
-    }
-};
-cancelBtn.onclick = () => modal.style.display = 'none';
-if (closeModal) closeModal.onclick = () => modal.style.display = 'none';
+nextBtn.onclick = () => { if (wizardStep < 3) { wizardStep++; updateWizardUI(); } else { modalEl.style.display = 'none'; } };
+prevBtn.onclick = () => { if (wizardStep > 0) { wizardStep--; updateWizardUI(); } };
+cancelBtn.onclick = () => modalEl.style.display = 'none';
+if (closeModalBtn) closeModalBtn.onclick = () => modalEl.style.display = 'none';
 
 // ==================== NAVIGATION ====================
 function initNavigation() {

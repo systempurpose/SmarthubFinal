@@ -211,20 +211,55 @@ app.get('/api/suspicious-apps', async (req, res) => {
         }
         const installerMap = await getInstallerMap(deviceId);
         const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
-        
-        // Add risky permissions for each suspicious app
-        const enrichedApps = suspiciousApps.map(app => {
-            const perms = permsByPkg[app.packageName] || [];
-            const riskDetails = assessAppRisk(perms); // returns { riskyPermissions, moderatePermissions, risk }
-            return {
-                ...app,
-                threatTypes: classifyThreatTypes(app.packageName, permsByPkg[app.packageName] || []),
-                riskyPermissions: riskDetails.riskyPermissions || [],
-                moderatePermissions: riskDetails.moderatePermissions || []
-            };
+
+        // Collect debug statistics
+        let totalApps = allApps.length;
+        let skippedByTrustedPrefix = 0;
+        let skippedByTrustedExact = 0;
+        let skippedByLegitStore = 0;
+        let evaluatedSideloaded = 0;
+        let sampleSkippedTrustedPrefix: string[] = [];
+        let sampleSkippedTrustedExact: string[] = [];
+        let sampleSkippedLegitStore: string[] = [];
+
+        for (const app of allApps) {
+            const pkg = app.packageName;
+            if (!pkg) continue;
+            // Check if trusted prefix
+            if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
+                skippedByTrustedPrefix++;
+                if (sampleSkippedTrustedPrefix.length < 5) sampleSkippedTrustedPrefix.push(pkg);
+                continue;
+            }
+            if (TRUSTED_EXACT_PACKAGES.includes(pkg)) {
+                skippedByTrustedExact++;
+                if (sampleSkippedTrustedExact.length < 5) sampleSkippedTrustedExact.push(pkg);
+                continue;
+            }
+            // Check if from legit store
+            const installer = installerMap && installerMap[pkg];
+            const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
+            if (fromLegitStore) {
+                skippedByLegitStore++;
+                if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
+                continue;
+            }
+            evaluatedSideloaded++;
+        }
+
+        res.json({
+            suspiciousApps,
+            debug: {
+                totalApps,
+                skippedByTrustedPrefix,
+                skippedByTrustedExact,
+                skippedByLegitStore,
+                evaluatedSideloaded,
+                sampleSkippedTrustedPrefix,
+                sampleSkippedTrustedExact,
+                sampleSkippedLegitStore
+            }
         });
-        
-        res.json({ suspiciousApps: enrichedApps });
     } catch (err) {
         res.status(500).json({ error: String(err) });
     }
