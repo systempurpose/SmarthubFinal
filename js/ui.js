@@ -4,13 +4,28 @@ let wizardStep = 0;
 
 // ==================== API HELPER ====================
 const BACKEND_URL = 'http://127.0.0.1:3333';
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 async function apiCall(endpoint, options = {}) {
-    const res = await fetch(`${BACKEND_URL}/api${endpoint}`, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    const { timeoutMs = 6000, ...fetchOptions } = options;
+    const response = await fetchWithTimeout(`${BACKEND_URL}/api${endpoint}`, {
+        headers: { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) },
+        ...fetchOptions,
+    }, timeoutMs);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
 }
 
 function escapeHtml(str) {
@@ -106,6 +121,7 @@ function formatWifiStatus(wifi) {
 async function updateConnectionStatus() {
     const statusSpan = document.querySelector('#connectionStatus span');
     if (!statusSpan) return;
+    const previousDeviceId = currentDeviceId;
     try {
         const data = await apiCall('/devices');
         if (data.devices && data.devices.length) {
@@ -119,8 +135,14 @@ async function updateConnectionStatus() {
             statusSpan.style.color = '#d83b01';
         }
     } catch (err) {
+        currentDeviceId = null;
         statusSpan.innerText = 'ADB error';
         statusSpan.style.color = '#d83b01';
+    }
+
+    const activePage = document.querySelector('.nav-item.active')?.dataset.page;
+    if (activePage === 'dashboard' && currentDeviceId && currentDeviceId !== previousDeviceId) {
+        await renderDashboard();
     }
 }
 
@@ -203,6 +225,8 @@ async function testSuspiciousScan() {
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
+    if (!container) return;
+
     if (!currentDeviceId) {
         container.innerHTML = `<div class="card" style="text-align: center; padding: 40px;">
             <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
@@ -220,6 +244,7 @@ async function renderDashboard() {
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading battery...</div>
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading storage...</div>
             <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading RAM...</div>
+            <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading temperature...</div>
         </div>
         <div class="card">
             <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
@@ -244,14 +269,14 @@ async function renderDashboard() {
     await new Promise(r => setTimeout(r, 50));
 
     try {
-        // Fetch all data
+        // Fetch all data with timeouts so one slow device call does not block the whole dashboard.
         const [battery, storage, ram, deviceText, wifiStatus, tempData] = await Promise.all([
-            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: 'unknown' })),
-            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?', free: '?' })),
-            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?' })),
-            fetch(`${BACKEND_URL}/device/${currentDeviceId}`).then(r => r.text()).catch(() => ''),
-            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null),
-            fetch(`${BACKEND_URL}/api/hardware/temperature?deviceId=${currentDeviceId}`).then(r => r.json()).catch(() => ({ temperature: 'Unknown' }))
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ level: '?', health: 'unknown' })),
+            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ total: '?', used: '?', free: '?' })),
+            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ total: '?', used: '?' })),
+            fetchWithTimeout(`${BACKEND_URL}/device/${currentDeviceId}`, {}, 7000).then(r => r.text()).catch(() => ''),
+            fetchWithTimeout(`${BACKEND_URL}/wifi/status/${currentDeviceId}`, {}, 7000).then(r => r.json()).catch(() => null),
+            apiCall(`/hardware/temperature?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ temperature: 'Unknown' }))
         ]);
 
         let model = 'Unknown', androidVer = '?', securityPatch = '?';
@@ -270,6 +295,7 @@ async function renderDashboard() {
         }
 
         const healthDiv = document.getElementById('healthCards');
+        const temperatureValue = tempData && typeof tempData.temperature !== 'undefined' ? tempData.temperature : 'Unknown';
         if (healthDiv) {
             healthDiv.innerHTML = `
                 <div class="status-card clickable" data-card="battery">
@@ -282,13 +308,12 @@ async function renderDashboard() {
                     <i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}
                 </div>
                 <div class="status-card clickable" data-card="temperature">
-                    <i class="fas fa-thermometer-half"></i> Temp: ${tempData.temperature || 'Unknown'}
+                    <i class="fas fa-thermometer-half"></i> Temp: ${temperatureValue}
                 </div>
             `;
 
-            // Add click listeners
             document.querySelectorAll('.status-card.clickable').forEach(card => {
-                card.addEventListener('click', (e) => {
+                card.addEventListener('click', () => {
                     const type = card.dataset.card;
                     if (type === 'battery') showBatteryModal();
                     else if (type === 'storage') showStorageModal();
@@ -408,12 +433,12 @@ function ensureInfoModal(modalId, title) {
 function renderPieChart(svgElement, segments) {
     if (!svgElement) return;
     const total = segments.reduce((sum, segment) => sum + (segment.value || 0), 0);
+    if (total === 0) return;
     let startAngle = 0;
     const center = 110;
     const radius = 100;
     let paths = '';
     for (const segment of segments) {
-        if (!segment.value || segment.value <= 0) continue;
         const slice = segment.value / total;
         const endAngle = startAngle + slice * Math.PI * 2;
         const x1 = center + radius * Math.cos(startAngle);
@@ -428,115 +453,221 @@ function renderPieChart(svgElement, segments) {
     svgElement.innerHTML = paths;
 }
 
+// ==================== MODALS ====================
+
+// Battery modal – only apps draining battery (no temperature)
 async function showBatteryModal() {
     const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App');
     const body = document.getElementById('batteryModalBody');
-    body.innerHTML = '<div class="spinner"></div><p>Loading battery stats...</p>';
+    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading battery stats...</p></div>';
+    modal.style.display = 'flex';
     try {
-        const data = await apiCall(`/hardware/battery-usage?deviceId=${currentDeviceId}`);
-        let html = `<p><strong>Current temperature:</strong> ${escapeHtml(data.temperature || 'Unknown')}</p>`;
+        const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/battery-usage?deviceId=${currentDeviceId}`, {}, 15000);
+        const data = await response.json();
+        let html = '';
         if (Array.isArray(data.usage) && data.usage.length) {
-            html += '<ul style="list-style:none; padding-left:0;">';
-            for (const item of data.usage.slice(0, 15)) {
-                html += `<li><strong>${escapeHtml(item.package)}</strong> — ${item.drain.toFixed(1)} mAh</li>`;
+            html = '<div class="list-group list-group-flush" style="max-height:400px; overflow-y:auto;">';
+            for (const item of data.usage.slice(0, 20)) {
+                html += `<div class="list-group-item d-flex justify-content-between align-items-center">
+                            <strong>${escapeHtml(item.package)}</strong>
+                            <span class="badge bg-danger rounded-pill">${item.drain.toFixed(1)} mAh</span>
+                         </div>`;
             }
-            html += '</ul>';
-            html += '<p style="font-size:12px; color:#555;">Data is a best-effort extract from batterystats. For freshest numbers, reset stats on the device and re-check.</p>';
+            html += '</div><div class="alert alert-info mt-2 mb-0 small">Data from dumpsys batterystats. For fresh numbers, reset stats and use the phone.</div>';
         } else {
-            html += '<p>No package battery usage data could be parsed.</p>';
+            html = '<div class="alert alert-warning">No battery usage data available. Please use the phone for a while and try again.</div>';
         }
         body.innerHTML = html;
-        modal.style.display = 'flex';
     } catch (err) {
-        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
-        modal.style.display = 'flex';
+        body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
 
+// Storage modal – pie chart using canvas (simple, no external lib)
 async function showStorageModal() {
     const modal = ensureInfoModal('storageModal', '💾 Storage Details');
     const body = document.getElementById('storageModalBody');
-    body.innerHTML = '<div class="spinner"></div><p>Loading storage information...</p>';
+    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading storage...</p></div>';
+    modal.style.display = 'flex';
     try {
-        const data = await apiCall(`/hardware/storage-details?deviceId=${currentDeviceId}`);
-        const breakdown = data.breakdown || {};
-        const segments = [
-            { key: 'apps', label: 'Apps', value: breakdown.apps?.bytes || 0, human: breakdown.apps?.human || '?', color: '#4a90e2' },
-            { key: 'media', label: 'Media', value: breakdown.media?.bytes || 0, human: breakdown.media?.human || '?', color: '#f5a623' },
-            { key: 'system', label: 'System', value: breakdown.system?.bytes || 0, human: breakdown.system?.human || '?', color: '#7b8a8b' },
-            { key: 'emulated', label: 'Emulated', value: breakdown.emulated?.bytes || 0, human: breakdown.emulated?.human || '?', color: '#50e3c2' }
-        ].filter(s => s.value > 0);
+        const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
+        const data = await response.json();
+        const b = data.breakdown || {};
+        const total = b.total?.human || '?';
+        const used = b.used?.human || '?';
+        const free = b.free?.human || '?';
+        const apps = b.apps || { percent: 0, human: '0 KB' };
+        const media = b.media || { percent: 0, human: '0 KB' };
+        const other = b.other || { percent: 0, human: '0 KB' };
 
-        let html = '<div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">';
-        html += '<div><svg id="storagePieSvg" width="220" height="220"></svg></div>';
-        html += '<div style="min-width:220px;">';
-        for (const segment of segments) {
-            html += `<div style="margin-bottom:8px;"><strong>${escapeHtml(segment.label)}:</strong> ${escapeHtml(segment.human)}</div>`;
-        }
-        html += '</div></div>';
-        html += '<div style="margin-top:18px;"><h4>Largest app storage items</h4><ul style="list-style:none; padding-left:0;">';
-        if (Array.isArray(data.largeItems) && data.largeItems.length) {
-            for (const item of data.largeItems.slice(0, 20)) {
-                html += `<li>${escapeHtml(item.sizeHuman)} — ${escapeHtml(item.path)}</li>`;
-            }
-        } else {
-            html += '<li>No large item detail available.</li>';
-        }
-        html += '</ul></div>';
+        const html = `
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6 text-center">
+                        <canvas id="storagePieCanvas" width="200" height="200" style="max-width:100%; height:auto;"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light mb-2">
+                            <div class="card-body p-2">
+                                <h6 class="card-title">Overview</h6>
+                                <div><strong>Total:</strong> ${escapeHtml(total)}</div>
+                                <div><strong>Used:</strong> ${escapeHtml(used)}</div>
+                                <div><strong>Free:</strong> ${escapeHtml(free)}</div>
+                            </div>
+                        </div>
+                        <div class="card bg-light">
+                            <div class="card-body p-2">
+                                <h6 class="card-title">Breakdown</h6>
+                                <div class="progress mb-2" style="height:20px;">
+                                    <div class="progress-bar bg-primary" style="width:${apps.percent}%">📱 Apps ${apps.percent.toFixed(0)}%</div>
+                                    <div class="progress-bar bg-warning" style="width:${media.percent}%">🎬 Media ${media.percent.toFixed(0)}%</div>
+                                    <div class="progress-bar bg-secondary" style="width:${other.percent}%">📦 Other ${other.percent.toFixed(0)}%</div>
+                                </div>
+                                <div><span class="text-primary">📱 Apps</span> – ${escapeHtml(apps.human)} (${apps.percent.toFixed(1)}%)</div>
+                                <div><span class="text-warning">🎬 Media</span> – ${escapeHtml(media.human)} (${media.percent.toFixed(1)}%)</div>
+                                <div><span class="text-secondary">📦 Other</span> – ${escapeHtml(other.human)} (${other.percent.toFixed(1)}%)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
         body.innerHTML = html;
-        const svg = document.getElementById('storagePieSvg');
-        if (svg) renderPieChart(svg, segments);
-        modal.style.display = 'flex';
+
+        // Draw pie chart on canvas
+        const canvas = document.getElementById('storagePieCanvas');
+        if (canvas && apps.percent + media.percent + other.percent > 0) {
+            const ctx = canvas.getContext('2d');
+            const w = 200, h = 200, cx = 100, cy = 100, r = 80;
+            ctx.clearRect(0, 0, w, h);
+            let start = 0;
+            const segments = [
+                { percent: apps.percent, color: '#0d6efd' },
+                { percent: media.percent, color: '#ffc107' },
+                { percent: other.percent, color: '#6c757d' }
+            ];
+            for (const seg of segments) {
+                const angle = (seg.percent / 100) * 2 * Math.PI;
+                const end = start + angle;
+                ctx.beginPath();
+                ctx.fillStyle = seg.color;
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, start, end);
+                ctx.fill();
+                start = end;
+            }
+        }
     } catch (err) {
-        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
-        modal.style.display = 'flex';
+        body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
+}
+
+// RAM modal – list apps by RSS memory descending
+function simplifyAppName(pkg) {
+    const map = {
+        'com.android.chrome': 'Chrome',
+        'com.google.android.gms': 'Google Play Services',
+        'com.google.android.gms.persistent': 'Play Services (persistent)',
+        'com.google.android.apps.messaging': 'Messages',
+        'com.instagram.android': 'Instagram',
+        'com.whatsapp': 'WhatsApp',
+        'com.facebook.katana': 'Facebook',
+        'com.transsion.phonemaster': 'Phone Master',
+        'com.transsion.itel.launcher': 'Launcher',
+        'com.rlk.weathers': 'Weather',
+        'com.transsnet.store': 'App Store',
+        'com.hoffnung': 'Hoffnung'
+    };
+    if (map[pkg]) return map[pkg];
+    // Remove common prefixes
+    let name = pkg.replace(/^com\.(android|google|transsion|transsnet)\./, '');
+    name = name.replace(/\.android$/, '');
+    // Capitalize first letter
+    return name.charAt(0).toUpperCase() + name.slice(1).substring(0, 20);
 }
 
 async function showRamModal() {
     const modal = ensureInfoModal('ramModal', '🧠 RAM Usage by App');
     const body = document.getElementById('ramModalBody');
-    body.innerHTML = '<div class="spinner"></div><p>Loading RAM usage...</p>';
+    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading RAM usage...</p></div>';
+    modal.style.display = 'flex';
     try {
-        const processes = await apiCall(`/hardware/ram-usage?deviceId=${currentDeviceId}`);
-        let html = '<ul style="list-style:none; padding-left:0;">';
-        if (Array.isArray(processes) && processes.length) {
-            for (const proc of processes.slice(0, 30)) {
-                html += `<li><strong>${escapeHtml(proc.name)}</strong> — ${parseFloat(proc.rssMB).toFixed(1)} MB</li>`;
+        const [processes, ramInfo] = await Promise.all([
+            fetchWithTimeout(`${BACKEND_URL}/api/hardware/ram-usage?deviceId=${currentDeviceId}`, {}, 15000).then(r => r.json()),
+            fetchWithTimeout(`${BACKEND_URL}/api/hardware/ram?deviceId=${currentDeviceId}`, {}, 8000).then(r => r.json())
+        ]);
+        const totalRam = ramInfo.total || '?';
+        const usedRam = ramInfo.used || '?';
+        let ramBarHtml = '';
+        if (totalRam !== '?' && usedRam !== '?') {
+            const usedGB = parseFloat(usedRam);
+            const totalGB = parseFloat(totalRam);
+            if (!isNaN(usedGB) && !isNaN(totalGB) && totalGB > 0) {
+                const percent = (usedGB / totalGB) * 100;
+                ramBarHtml = `
+                    <div class="card bg-light mb-3">
+                        <div class="card-body p-2">
+                            <strong>RAM Usage:</strong> ${escapeHtml(usedRam)} / ${escapeHtml(totalRam)} (${percent.toFixed(1)}%)
+                            <div class="progress mt-1" style="height:10px;">
+                                <div class="progress-bar bg-primary" style="width:${percent}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
             }
-        } else {
-            html += '<li>No RAM usage entries available.</li>';
         }
-        html += '</ul>';
-        body.innerHTML = html;
-        modal.style.display = 'flex';
+        let listHtml = '<div class="list-group list-group-flush" style="max-height:350px; overflow-y:auto;">';
+        if (Array.isArray(processes) && processes.length) {
+            for (const proc of processes.slice(0, 25)) {
+                const displayName = simplifyAppName(proc.name);
+                listHtml += `<div class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                <strong>${escapeHtml(displayName)}</strong>
+                                <span class="badge bg-primary rounded-pill">${escapeHtml(proc.rssMB)} MB</span>
+                             </div>`;
+            }
+            listHtml += '</div>';
+        } else {
+            listHtml = '<p class="text-muted">No RAM usage data available.</p>';
+        }
+        body.innerHTML = ramBarHtml + listHtml;
     } catch (err) {
-        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
-        modal.style.display = 'flex';
+        body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
 
+// Temperature modal – show temperature + top CPU-consuming apps
 async function showTemperatureModal() {
-    const modal = ensureInfoModal('temperatureModal', '🌡️ Phone Temperature Details');
+    const modal = ensureInfoModal('temperatureModal', '🌡️ Phone Temperature & Heat Contributors');
     const body = document.getElementById('temperatureModalBody');
-    body.innerHTML = '<div class="spinner"></div><p>Loading temperature and heat contributors...</p>';
+    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading data...</p></div>';
+    modal.style.display = 'flex';
     try {
-        const data = await apiCall(`/hardware/cpu-usage?deviceId=${currentDeviceId}`);
-        let html = `<p><strong>Current temperature:</strong> ${escapeHtml(data.currentTemp || 'Unknown')}</p>`;
+        const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/cpu-usage?deviceId=${currentDeviceId}`, {}, 15000);
+        const data = await response.json();
+        let html = `
+            <div class="card bg-light mb-3">
+                <div class="card-body p-2 text-center">
+                    <h5 class="card-title">Current Temperature</h5>
+                    <p class="display-6">${escapeHtml(data.currentTemp || 'Unknown')}</p>
+                </div>
+            </div>
+        `;
         if (Array.isArray(data.topApps) && data.topApps.length) {
-            html += '<h4>Top CPU-consuming apps</h4><ul style="list-style:none; padding-left:0;">';
-            for (const app of data.topApps.slice(0, 15)) {
-                html += `<li><strong>${escapeHtml(app.name)}</strong> — ${escapeHtml(app.cpu)}%</li>`;
+            html += `<div class="card"><div class="card-header">🔥 Apps consuming CPU</div><div class="list-group list-group-flush">`;
+            for (const app of data.topApps.slice(0, 10)) {
+                const displayName = simplifyAppName(app.name);
+                html += `<div class="list-group-item d-flex justify-content-between align-items-center">
+                            <strong>${escapeHtml(displayName)}</strong>
+                            <span class="badge bg-warning text-dark">${escapeHtml(app.cpu)}% CPU</span>
+                         </div>`;
             }
-            html += '</ul>';
+            html += `</div></div>`;
         } else {
-            html += '<p>No CPU usage contributors found.</p>';
+            html += '<p class="text-muted">No high CPU usage detected.</p>';
         }
         body.innerHTML = html;
-        modal.style.display = 'flex';
     } catch (err) {
-        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
-        modal.style.display = 'flex';
+        body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
 
