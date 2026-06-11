@@ -47,6 +47,7 @@ import {
   TRUSTED_EXACT_PACKAGES,
   LEGITIMATE_INSTALLERS,
 } from './heuristics';
+import { classifyMalware } from './malwareClassifier';
 
 import { type SavedRun } from './lib/historyStore';
 import {
@@ -1058,11 +1059,21 @@ app.post('/api/scan-apk', async (req, res) => {
       { timeout: 120_000, maxBuffer: 50 * 1024 * 1024 }
     );
 
-    let analysis = {};
+    let analysis: any = {};
     try {
       analysis = JSON.parse(stdout);
     } catch {
       analysis = { error: 'Failed to parse analyzer output', raw: stdout };
+    }
+
+    // Classify malware types based on analysis signals
+    if (analysis && !analysis.error) {
+      const malwareTypes = classifyMalware({
+        dangerousPermissions: analysis.dangerous_permissions || [],
+        suspiciousIndicators: analysis.suspicious_indicators || [],
+        riskScore: analysis.risk_score || 0
+      });
+      analysis.malware_types = malwareTypes;
     }
 
     // Optional VirusTotal integration (requires API key)

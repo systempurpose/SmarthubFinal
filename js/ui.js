@@ -388,7 +388,6 @@ async function runDeepDiagnostic() {
             console.error('Failed to fetch suspicious apps:', err);
         }
 
-        // Helper to escape HTML
         const escape = (str) => escapeHtml(str);
 
         // Build initial apps HTML with loading placeholders
@@ -396,14 +395,14 @@ async function runDeepDiagnostic() {
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
-            appsHtml = `<div><h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>`;
+            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer">`;
             for (const app of suspiciousAppsList) {
                 appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
                             <div>
                                 <strong>${escape(app.displayName)}</strong> (${escape(app.packageName)})
-                                <br><span style="font-size: 12px;">Risk: ${escape(app.threatLevel)} - ${escape(app.reason)}</span>
+                                <br><span id="risk-text-${escape(app.packageName)}" style="font-size: 12px;">Risk: ${escape(app.threatLevel)} - ${escape(app.reason)}</span>
                             </div>
                             <button onclick="uninstallPackage('${escape(app.packageName)}')" 
                                     style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; cursor: pointer;">
@@ -416,12 +415,12 @@ async function runDeepDiagnostic() {
                     </div>
                 `;
             }
-            appsHtml += `</div>`;
+            appsHtml += `</div></div>`;
         }
 
         modalBody.innerHTML = hardwareHtml + appsHtml;
 
-        // 3. Perform deep scans for each suspicious app (in parallel)
+        // 3. Perform deep scans and REMOVE safe apps (riskScore <= 29)
         const scanPromises = suspiciousAppsList.map(async (app) => {
             try {
                 const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
@@ -431,22 +430,95 @@ async function runDeepDiagnostic() {
                 });
                 const data = await response.json();
                 const container = document.getElementById(`deep-${app.packageName}`);
-                if (!container) return;
+                const appCard = document.getElementById(`app-card-${app.packageName}`);
+                if (!container || !appCard) return;
+
                 if (data.ok) {
                     const analysis = data.staticAnalysis;
-                    let html = '';
-                    if (analysis.error) {
-                        html = `<p style="color: #d32f2f;">Deep scan failed: ${analysis.error}</p>`;
-                    } else {
-                        html = `
-                            <strong>Deep Scan Results:</strong><br>
-                            <span style="font-size: 12px;">Risk Score: ${analysis.risk_score || 0}/100</span><br>
-                            <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
-                            ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${analysis.suspicious_indicators.join(', ')}</span><br>` : ''}
-                            ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
-                        `;
+                    const riskScore = analysis.risk_score || 0;
+
+                    // If riskScore <= 29, remove the entire app card from UI
+                    if (riskScore <= 29) {
+                        appCard.remove();
+                        // Update the heading count
+                        const remainingCards = document.querySelectorAll('.app-card-item').length;
+                        const heading = document.getElementById('suspiciousAppsHeading');
+                        if (heading) {
+                            heading.textContent = `⚠️ Suspicious Apps Found (${remainingCards})`;
+                            if (remainingCards === 0) {
+                                heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
+                            }
+                        }
+                        return; // No need to show deep scan results for removed app
                     }
+
+                    // --- Malware type descriptions for user-friendly output ---
+                    const malwareDescriptions = {
+                        'Spyware': '📷 Can read contacts, location, camera, microphone, or SMS without your knowledge.',
+                        'Ransomware': '💰 Can lock your device or encrypt files and demand payment to unlock them.',
+                        'Adware': '📢 Displays aggressive ads, may redirect you to malicious websites.',
+                        'Banking Trojan': '🏦 Targets banking/financial apps to steal login credentials and money.',
+                        'Data Stealer': '📁 Extracts personal files, messages, or photos and sends them to a remote server.',
+                        'Backdoor': '🚪 Allows remote control of your device without your permission.',
+                        'Fake App': '🎭 Pretends to be a legitimate app but may steal info or display ads.',
+                        'Riskware': '⚠️ Legitimate but can be exploited by malware; review its behavior.',
+                        'Information Stealer': '🔐 Collects passwords, emails, and personal data for theft.',
+                        'Premium Dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
+                        'Trojan': '🐴 Disguised as a normal app; performs malicious actions like data theft or backdoor.'
+                    };
+
+                    // Build malware types display with explanations
+                    let malwareHtml = '';
+                    if (analysis.malware_types && analysis.malware_types.length > 0) {
+                        const typeDescriptions = analysis.malware_types.map(type => {
+                            const desc = malwareDescriptions[type] || 'Potentially harmful behavior detected.';
+                            return `<span style="font-size: 12px;"><strong>${type}</strong> – ${desc}</span>`;
+                        }).join('<br>');
+                        malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ What it can do:</strong><br>${typeDescriptions}</div>`;
+                    }
+
+                    // Build deep scan results HTML
+                    let html = `
+                        <strong>Deep Scan Results:</strong><br>
+                        <span style="font-size: 12px;">Risk Score: ${riskScore}/100</span><br>
+                        <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
+                        ${malwareHtml}
+                        ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${analysis.suspicious_indicators.join(', ')}</span><br>` : ''}
+                        ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
+                    `;
                     container.innerHTML = html;
+
+                    // Fetch and display app behavior history
+                    try {
+                        const behaviorRes = await fetch(`${BACKEND_URL}/api/app-behavior/${app.packageName}?deviceId=${currentDeviceId}`);
+                        const behaviorData = await behaviorRes.json();
+                        if (behaviorData.ok && behaviorData.behavior) {
+                            const b = behaviorData.behavior;
+                            let behaviorHtml = `
+                                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ccc;">
+                                <strong style="font-size: 13px;">📜 What this app has done:</strong><br>
+                                <span style="font-size: 12px;">📅 Installed: ${b.installTime}</span><br>
+                                <span style="font-size: 12px;">🔄 Last updated: ${b.updateTime}</span><br>
+                                <span style="font-size: 12px;">⏱️ Last used: ${b.lastUsed}</span><br>
+                                <span style="font-size: 12px;">🧠 Total foreground time: ${b.totalForegroundTime}</span>
+                            `;
+                            if (b.permissionAccesses && b.permissionAccesses.length > 0) {
+                                behaviorHtml += `<br><strong style="font-size: 12px;">🔐 Recent permission accesses:</strong><br>`;
+                                for (const acc of b.permissionAccesses.slice(0, 8)) {
+                                    behaviorHtml += `<span style="font-size: 11px;">• ${acc.permission} – ${acc.lastAccessTime}</span><br>`;
+                                }
+                                if (b.permissionAccesses.length > 8) {
+                                    behaviorHtml += `<span style="font-size: 11px; color: #999;">... and ${b.permissionAccesses.length - 8} more</span>`;
+                                }
+                            } else {
+                                behaviorHtml += `<br><span style="font-size: 12px;">✅ No recent permission accesses recorded.</span>`;
+                            }
+                            behaviorHtml += `</div>`;
+                            container.innerHTML += behaviorHtml;
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch app behavior:', err);
+                    }
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
                 }

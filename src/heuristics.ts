@@ -889,9 +889,18 @@ export function scoreAppRisk(perms: string[], path?: string): AppRiskScore {
   if (score < 0) score = 0;
   if (score > 100) score = 100;
 
-  return { score, level: risk };
-}
+  // NEW: Determine level based on score threshold (0-29 safe, 30-69 moderate, 70-100 risky)
+  let level: RiskLevel;
+  if (score <= 29) {
+    level = 'safe';
+  } else if (score <= 69) {
+    level = 'moderate';
+  } else {
+    level = 'risky';
+  }
 
+  return { score, level };
+}
 // Known suspicious package patterns and adware signatures
 const SUSPICIOUS_PACKAGE_PATTERNS = [
   // Common adware/malware patterns

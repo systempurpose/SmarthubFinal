@@ -304,4 +304,23 @@ export function registerAppBehaviorRoutes(app: Express) {
       res.status(500).json({ ok: false, error: e?.message || 'App behavior scan failed' });
     }
   });
+
+  // Individual app behavior endpoint
+  app.get('/api/app-behavior/:packageName', async (req: Request, res: Response) => {
+    const deviceId = req.query.deviceId as string;
+    const packageName = req.params.packageName as string;
+
+    if (!deviceId || !packageName) {
+      return res.status(400).json({ error: 'Missing deviceId or packageName' });
+    }
+
+    try {
+      const { getAppBehavior } = await import('../appBehavior');
+      const behavior = await getAppBehavior(deviceId, packageName);
+      res.json({ ok: true, behavior });
+    } catch (err: any) {
+      console.error('App behavior error:', err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 }
