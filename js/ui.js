@@ -23,6 +23,35 @@ function escapeHtml(str) {
     });
 }
 
+// Produce a very short one-line summary of what the app has actually done
+function summarizeAppBehavior(behavior) {
+    let parts = [];
+    if (behavior.installTime && behavior.installTime !== 'Unknown') {
+        parts.push(`📅 Installed ${behavior.installTime}`);
+    }
+    const accesses = Array.isArray(behavior.permissionAccesses) ? behavior.permissionAccesses : [];
+    const anyRequested = accesses.some(p =>
+        typeof p.lastAccessTime === 'string' &&
+        !p.lastAccessTime.includes('Never') &&
+        !p.lastAccessTime.toLowerCase().includes('ignore')
+    );
+    if (anyRequested) {
+        const requested = accesses
+            .filter(p => !p.lastAccessTime.includes('Never') && !p.lastAccessTime.toLowerCase().includes('ignore'))
+            .map(p => p.permission)
+            .slice(0, 3);
+        parts.push(`⚠️ requested ${requested.join(', ')}${requested.length >= 3 ? '…' : ''}`);
+    } else {
+        parts.push(`✅ never requested dangerous permissions`);
+    }
+    const used = behavior.lastUsed;
+    if (used === 'Never' || used === 'Not available') {
+        parts.push(`⏱️ never launched`);
+    } else if (used && used !== 'Unknown') {
+        parts.push(`⏱️ last used ${used}`);
+    }
+    return parts.join(' · ');
+}
 // Convert RSSI dBm to a short user-friendly label and simple bar indicator
 function rssiToLabel(rssi) {
     // Treat invalid sentinel values as no signal
@@ -452,7 +481,7 @@ async function runDeepDiagnostic() {
                         return; // No need to show deep scan results for removed app
                     }
 
-                    // --- Malware type descriptions for user-friendly output ---
+                    // --- Malware type descriptions (full explanations) ---
                     const malwareDescriptions = {
                         'Spyware': '📷 Can read contacts, location, camera, microphone, or SMS without your knowledge.',
                         'Ransomware': '💰 Can lock your device or encrypt files and demand payment to unlock them.',
@@ -467,62 +496,26 @@ async function runDeepDiagnostic() {
                         'Trojan': '🐴 Disguised as a normal app; performs malicious actions like data theft or backdoor.'
                     };
 
-                    // Build malware types display with explanations
+                    // Build malware display with full descriptions
                     let malwareHtml = '';
                     if (analysis.malware_types && analysis.malware_types.length > 0) {
                         const typeDescriptions = analysis.malware_types.map(type => {
                             const desc = malwareDescriptions[type] || 'Potentially harmful behavior detected.';
-                            return `<span style="font-size: 12px;"><strong>${type}</strong> – ${desc}</span>`;
-                        }).join('<br>');
-                        malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ What it can do:</strong><br>${typeDescriptions}</div>`;
+                            return `<div style="font-size:12px;"><strong>${escapeHtml(type)}</strong> – ${escapeHtml(desc)}</div>`;
+                        }).join('');
+                        malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Why it may be malicious:</strong>${typeDescriptions}</div>`;
                     }
 
-                    // Build deep scan results HTML
+                    // Build deep scan results HTML (no behavior section)
                     let html = `
                         <strong>Deep Scan Results:</strong><br>
                         <span style="font-size: 12px;">Risk Score: ${riskScore}/100</span><br>
                         <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
                         ${malwareHtml}
-                        ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${analysis.suspicious_indicators.join(', ')}</span><br>` : ''}
+                        ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}</span><br>` : ''}
                         ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
                     `;
                     container.innerHTML = html;
-
-                    // Fetch and display app behavior history
-                    try {
-                        const behaviorRes = await fetch(`${BACKEND_URL}/api/app-behavior/${encodeURIComponent(app.packageName)}?deviceId=${encodeURIComponent(currentDeviceId)}`);
-                        const behaviorData = await behaviorRes.json();
-                        if (behaviorData.ok && behaviorData.behavior) {
-                            const b = behaviorData.behavior;
-                            let behaviorHtml = `
-                                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ccc;">
-                                <strong style="font-size: 13px;">📜 What this app has done:</strong><br>
-                                <span style="font-size: 12px;">📅 Installed: ${escapeHtml(b.installTime)}</span><br>
-                                <span style="font-size: 12px;">🔄 Last updated: ${escapeHtml(b.updateTime)}</span><br>
-                                <span style="font-size: 12px;">⏱️ Last used: ${escapeHtml(b.lastUsed)}</span><br>
-                                <span style="font-size: 12px;">🧠 Total foreground time: ${escapeHtml(b.totalForegroundTime)}</span>
-                            `;
-                            if (b.permissionAccesses && b.permissionAccesses.length > 0) {
-                                behaviorHtml += `<br><strong style="font-size: 12px;">🔐 Recent permission accesses:</strong><br>`;
-                                for (const acc of b.permissionAccesses.slice(0, 8)) {
-                                    behaviorHtml += `<span style="font-size: 11px;">• ${escapeHtml(acc.permission)} – ${escapeHtml(acc.lastAccessTime)}</span><br>`;
-                                }
-                                if (b.permissionAccesses.length > 8) {
-                                    behaviorHtml += `<span style="font-size: 11px; color: #999;">... and ${b.permissionAccesses.length - 8} more</span>`;
-                                }
-                            } else {
-                                behaviorHtml += `<br><span style="font-size: 12px;">✅ No permission accesses recorded in appops.</span>`;
-                            }
-                            behaviorHtml += `</div>`;
-                            container.innerHTML += behaviorHtml;
-                        } else {
-                            console.warn('Behavior data missing:', behaviorData);
-                        }
-                    } catch (err) {
-                        console.error('Failed to fetch app behavior:', err);
-                        // Optionally show a fallback message
-                        container.insertAdjacentHTML('afterend', '<div style="font-size: 11px; color: #ff9800; margin-top: 6px;">⚠️ Could not retrieve historical behavior data.</div>');
-                    }
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
                 }
