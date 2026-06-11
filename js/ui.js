@@ -242,10 +242,11 @@ async function renderDashboard() {
     `;
 
     try {
-        const [battery, storage, ram, deviceText, wifiStatus] = await Promise.all([
+        const [battery, storage, ram, temperature, deviceText, wifiStatus] = await Promise.all([
             apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: '?' })),
             apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?', free: '?' })),
             apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?' })),
+            apiCall(`/hardware/temperature?deviceId=${currentDeviceId}`).catch(() => ({ temperature: 'Unknown' })),
             fetch(`${BACKEND_URL}/device/${currentDeviceId}`).then(r => r.text()).catch(() => ''),
             fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null)
         ]);
@@ -268,10 +269,20 @@ async function renderDashboard() {
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
-                <div class="status-card"><i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})</div>
-                <div class="status-card"><i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}</div>
-                <div class="status-card"><i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}</div>
+                <div class="status-card clickable" data-card="battery"><i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})</div>
+                <div class="status-card clickable" data-card="storage"><i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}</div>
+                <div class="status-card clickable" data-card="ram"><i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}</div>
+                <div class="status-card clickable" data-card="temperature"><i class="fas fa-thermometer-half"></i> Temp: ${temperature.temperature || 'Unknown'}</div>
             `;
+            healthDiv.querySelectorAll('.status-card.clickable').forEach(card => {
+                card.addEventListener('click', () => {
+                    const type = card.dataset.card;
+                    if (type === 'battery') showBatteryModal();
+                    else if (type === 'storage') showStorageModal();
+                    else if (type === 'ram') showRamModal();
+                    else if (type === 'temperature') showTemperatureModal();
+                });
+            });
         }
 
         document.getElementById('deviceOverview').innerHTML = `
@@ -344,6 +355,168 @@ async function renderDashboard() {
     document.getElementById('openWizard')?.addEventListener('click', openWizard);
     document.getElementById('helpBtn')?.addEventListener('click', showHelpModal);
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
+}
+
+function ensureInfoModal(modalId, title) {
+    let modal = document.getElementById(modalId);
+    if (!modal) {
+        const modalHtml = `
+            <div id="${modalId}" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 620px;">
+                    <div class="modal-header">
+                        <h3>${title}</h3>
+                        <span class="close-button">&times;</span>
+                    </div>
+                    <div class="modal-body" id="${modalId}Body"></div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary close-button">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById(modalId);
+        modal.querySelectorAll('.close-button').forEach(el => el.addEventListener('click', () => modal.style.display = 'none'));
+        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    } else {
+        modal.querySelector('.modal-header h3').textContent = title;
+    }
+    return modal;
+}
+
+function renderPieChart(svgElement, segments) {
+    if (!svgElement) return;
+    const total = segments.reduce((sum, segment) => sum + (segment.value || 0), 0);
+    let startAngle = 0;
+    const center = 110;
+    const radius = 100;
+    let paths = '';
+    for (const segment of segments) {
+        if (!segment.value || segment.value <= 0) continue;
+        const slice = segment.value / total;
+        const endAngle = startAngle + slice * Math.PI * 2;
+        const x1 = center + radius * Math.cos(startAngle);
+        const y1 = center + radius * Math.sin(startAngle);
+        const x2 = center + radius * Math.cos(endAngle);
+        const y2 = center + radius * Math.sin(endAngle);
+        const largeArc = slice > 0.5 ? 1 : 0;
+        const d = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        paths += `<path d="${d}" fill="${segment.color}" stroke="#fff" stroke-width="1"></path>`;
+        startAngle = endAngle;
+    }
+    svgElement.innerHTML = paths;
+}
+
+async function showBatteryModal() {
+    const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App');
+    const body = document.getElementById('batteryModalBody');
+    body.innerHTML = '<div class="spinner"></div><p>Loading battery stats...</p>';
+    try {
+        const data = await apiCall(`/hardware/battery-usage?deviceId=${currentDeviceId}`);
+        let html = `<p><strong>Current temperature:</strong> ${escapeHtml(data.temperature || 'Unknown')}</p>`;
+        if (Array.isArray(data.usage) && data.usage.length) {
+            html += '<ul style="list-style:none; padding-left:0;">';
+            for (const item of data.usage.slice(0, 15)) {
+                html += `<li><strong>${escapeHtml(item.package)}</strong> — ${item.drain.toFixed(1)} mAh</li>`;
+            }
+            html += '</ul>';
+            html += '<p style="font-size:12px; color:#555;">Data is a best-effort extract from batterystats. For freshest numbers, reset stats on the device and re-check.</p>';
+        } else {
+            html += '<p>No package battery usage data could be parsed.</p>';
+        }
+        body.innerHTML = html;
+        modal.style.display = 'flex';
+    } catch (err) {
+        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
+        modal.style.display = 'flex';
+    }
+}
+
+async function showStorageModal() {
+    const modal = ensureInfoModal('storageModal', '💾 Storage Details');
+    const body = document.getElementById('storageModalBody');
+    body.innerHTML = '<div class="spinner"></div><p>Loading storage information...</p>';
+    try {
+        const data = await apiCall(`/hardware/storage-details?deviceId=${currentDeviceId}`);
+        const breakdown = data.breakdown || {};
+        const segments = [
+            { key: 'apps', label: 'Apps', value: breakdown.apps?.bytes || 0, human: breakdown.apps?.human || '?', color: '#4a90e2' },
+            { key: 'media', label: 'Media', value: breakdown.media?.bytes || 0, human: breakdown.media?.human || '?', color: '#f5a623' },
+            { key: 'system', label: 'System', value: breakdown.system?.bytes || 0, human: breakdown.system?.human || '?', color: '#7b8a8b' },
+            { key: 'emulated', label: 'Emulated', value: breakdown.emulated?.bytes || 0, human: breakdown.emulated?.human || '?', color: '#50e3c2' }
+        ].filter(s => s.value > 0);
+
+        let html = '<div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">';
+        html += '<div><svg id="storagePieSvg" width="220" height="220"></svg></div>';
+        html += '<div style="min-width:220px;">';
+        for (const segment of segments) {
+            html += `<div style="margin-bottom:8px;"><strong>${escapeHtml(segment.label)}:</strong> ${escapeHtml(segment.human)}</div>`;
+        }
+        html += '</div></div>';
+        html += '<div style="margin-top:18px;"><h4>Largest app storage items</h4><ul style="list-style:none; padding-left:0;">';
+        if (Array.isArray(data.largeItems) && data.largeItems.length) {
+            for (const item of data.largeItems.slice(0, 20)) {
+                html += `<li>${escapeHtml(item.sizeHuman)} — ${escapeHtml(item.path)}</li>`;
+            }
+        } else {
+            html += '<li>No large item detail available.</li>';
+        }
+        html += '</ul></div>';
+        body.innerHTML = html;
+        const svg = document.getElementById('storagePieSvg');
+        if (svg) renderPieChart(svg, segments);
+        modal.style.display = 'flex';
+    } catch (err) {
+        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
+        modal.style.display = 'flex';
+    }
+}
+
+async function showRamModal() {
+    const modal = ensureInfoModal('ramModal', '🧠 RAM Usage by App');
+    const body = document.getElementById('ramModalBody');
+    body.innerHTML = '<div class="spinner"></div><p>Loading RAM usage...</p>';
+    try {
+        const processes = await apiCall(`/hardware/ram-usage?deviceId=${currentDeviceId}`);
+        let html = '<ul style="list-style:none; padding-left:0;">';
+        if (Array.isArray(processes) && processes.length) {
+            for (const proc of processes.slice(0, 30)) {
+                html += `<li><strong>${escapeHtml(proc.name)}</strong> — ${parseFloat(proc.rssMB).toFixed(1)} MB</li>`;
+            }
+        } else {
+            html += '<li>No RAM usage entries available.</li>';
+        }
+        html += '</ul>';
+        body.innerHTML = html;
+        modal.style.display = 'flex';
+    } catch (err) {
+        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
+        modal.style.display = 'flex';
+    }
+}
+
+async function showTemperatureModal() {
+    const modal = ensureInfoModal('temperatureModal', '🌡️ Phone Temperature Details');
+    const body = document.getElementById('temperatureModalBody');
+    body.innerHTML = '<div class="spinner"></div><p>Loading temperature and heat contributors...</p>';
+    try {
+        const data = await apiCall(`/hardware/cpu-usage?deviceId=${currentDeviceId}`);
+        let html = `<p><strong>Current temperature:</strong> ${escapeHtml(data.currentTemp || 'Unknown')}</p>`;
+        if (Array.isArray(data.topApps) && data.topApps.length) {
+            html += '<h4>Top CPU-consuming apps</h4><ul style="list-style:none; padding-left:0;">';
+            for (const app of data.topApps.slice(0, 15)) {
+                html += `<li><strong>${escapeHtml(app.name)}</strong> — ${escapeHtml(app.cpu)}%</li>`;
+            }
+            html += '</ul>';
+        } else {
+            html += '<p>No CPU usage contributors found.</p>';
+        }
+        body.innerHTML = html;
+        modal.style.display = 'flex';
+    } catch (err) {
+        body.innerHTML = `<p style="color:red">Error: ${escapeHtml(err.message)}</p>`;
+        modal.style.display = 'flex';
+    }
 }
 
 // ==================== QUICK DIAGNOSTIC ====================

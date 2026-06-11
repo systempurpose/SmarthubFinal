@@ -141,6 +141,15 @@ body {
     border-left: 4px solid #0078d4;
 }
 
+.status-card.clickable {
+    cursor: pointer;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.status-card.clickable:hover {
+    transform: translateY(-1px) scale(1.01);
+    background-color: #f5f7fb;
+}
+
 /* Buttons */
 .btn-primary, .btn-secondary {
     padding: 8px 20px;

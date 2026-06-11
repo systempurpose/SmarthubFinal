@@ -44,6 +44,26 @@ function parseSizeToHuman(sizeStr: string): string {
     return sizeStr;
 }
 
+async function getDeviceTemperature(deviceId: string): Promise<string> {
+    try {
+        const thermalOutput = await adbShellOnDevice(deviceId, 'dumpsys thermalservice');
+        const match = thermalOutput.match(/Temperature:\s*([\d.]+)°C/i);
+        if (match) return `${match[1]}°C`;
+    } catch (e) {
+        // ignore and fallback
+    }
+
+    try {
+        const tempRaw = await adbShellOnDevice(deviceId, 'sh -c "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1"');
+        const tempVal = parseInt(tempRaw.trim(), 10);
+        if (!isNaN(tempVal)) return `${(tempVal / 1000).toFixed(1)}°C`;
+    } catch (e) {
+        // ignore fallback failure
+    }
+
+    return 'Unknown';
+}
+
 router.get('/battery', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
@@ -217,6 +237,164 @@ router.get('/ram', async (req, res) => {
                 res.json({ total: '?', used: '?', free: '?', raw: output.substring(0, 500) });
             }
         }
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/battery-usage', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const output = await adbShellOnDevice(deviceId, 'dumpsys batterystats --checkin');
+        const usage: { package: string; drain: number }[] = [];
+        for (const line of output.split(/\r?\n/)) {
+            const match = line.match(/^pkg,([^,]+).*?power=([\d.]+)/i);
+            if (match) {
+                usage.push({ package: match[1], drain: parseFloat(match[2]) });
+            }
+        }
+
+        if (usage.length === 0) {
+            const packagesOutput = await adbShellOnDevice(deviceId, 'dumpsys batterystats --packages');
+            for (const line of packagesOutput.split(/\r?\n/)) {
+                const match = line.match(/^\s*m\s+([\w.]+).*?power=([\d.]+)/i);
+                if (match) {
+                    usage.push({ package: match[1], drain: parseFloat(match[2]) });
+                }
+            }
+        }
+
+        usage.sort((a, b) => b.drain - a.drain);
+        const temperature = await getDeviceTemperature(deviceId);
+        res.json({ temperature, usage: usage.slice(0, 20) });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/storage-details', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const breakdownOutput = await adbShellOnDevice(deviceId, 'sh -c "du -s /data/data 2>/dev/null; echo __SEP__; du -s /data/media 2>/dev/null; echo __SEP__; du -s /system 2>/dev/null; echo __SEP__; du -s /storage/emulated/0 2>/dev/null"');
+        const parts = breakdownOutput.split('__SEP__');
+        const breakdown: Record<string, { bytes: number; human: string }> = {
+            apps: { bytes: 0, human: '?' },
+            media: { bytes: 0, human: '?' },
+            system: { bytes: 0, human: '?' },
+            emulated: { bytes: 0, human: '?' }
+        };
+
+        if (parts[0]) {
+            const match = parts[0].trim().match(/^(\d+)\s+/);
+            if (match) {
+                const bytes = parseInt(match[1], 10) * 1024;
+                breakdown.apps = { bytes, human: parseSizeToHuman(bytes.toString()) };
+            }
+        }
+        if (parts[1]) {
+            const match = parts[1].trim().match(/^(\d+)\s+/);
+            if (match) {
+                const bytes = parseInt(match[1], 10) * 1024;
+                breakdown.media = { bytes, human: parseSizeToHuman(bytes.toString()) };
+            }
+        }
+        if (parts[2]) {
+            const match = parts[2].trim().match(/^(\d+)\s+/);
+            if (match) {
+                const bytes = parseInt(match[1], 10) * 1024;
+                breakdown.system = { bytes, human: parseSizeToHuman(bytes.toString()) };
+            }
+        }
+        if (parts[3]) {
+            const match = parts[3].trim().match(/^(\d+)\s+/);
+            if (match) {
+                const bytes = parseInt(match[1], 10) * 1024;
+                breakdown.emulated = { bytes, human: parseSizeToHuman(bytes.toString()) };
+            }
+        }
+
+        const largeItemsOutput = await adbShellOnDevice(deviceId, 'sh -c "du -a /data/data 2>/dev/null | sort -rn | head -20"');
+        const largeItems: { path: string; sizeBytes: number; sizeHuman: string }[] = [];
+        for (const line of largeItemsOutput.split(/\r?\n/)) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 2) {
+                const size = parseInt(parts[0], 10);
+                if (!Number.isNaN(size)) {
+                    const path = parts.slice(1).join(' ');
+                    const sizeBytes = size * 1024;
+                    largeItems.push({ path, sizeBytes, sizeHuman: parseSizeToHuman(sizeBytes.toString()) });
+                }
+            }
+        }
+
+        res.json({ breakdown, largeItems });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/ram-usage', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const output = await adbShellOnDevice(deviceId, 'sh -c "top -b -n 1 -s 6 | head -n 100"');
+        const processes: { name: string; rssMB: number }[] = [];
+        for (const line of output.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\s+/);
+            const name = parts[parts.length - 1];
+            if (!name || !name.includes('.') || name.startsWith('[')) continue;
+
+            for (let i = parts.length - 2; i >= 0; i--) {
+                const token = parts[i];
+                const match = token.match(/^(\d+(?:\.\d+)?)([KMG])?$/i);
+                if (match) {
+                    let size = parseFloat(match[1]);
+                    const unit = match[2]?.toUpperCase() || '';
+                    let rssMB = size;
+                    if (unit === 'G') rssMB = size * 1024;
+                    else if (unit === 'M') rssMB = size;
+                    else if (unit === 'K') rssMB = size / 1024;
+                    else rssMB = size / 1024;
+                    if (rssMB > 0) {
+                        processes.push({ name, rssMB: parseFloat(rssMB.toFixed(1)) });
+                    }
+                    break;
+                }
+            }
+        }
+        processes.sort((a, b) => b.rssMB - a.rssMB);
+        res.json(processes.slice(0, 30));
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/temperature', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const temperature = await getDeviceTemperature(deviceId);
+        res.json({ temperature });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/cpu-usage', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        const output = await adbShellOnDevice(deviceId, 'sh -c "top -b -n 1 -s 9 | head -n 120"');
+        const topApps: { name: string; cpu: string }[] = [];
+        for (const line of output.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const match = trimmed.match(/([\d.]+)%\s+(\S+)$/);
+            if (match && match[2].includes('.') && !match[2].startsWith('[')) {
+                topApps.push({ name: match[2], cpu: match[1] });
+            }
+        }
+        const currentTemp = await getDeviceTemperature(deviceId);
+        res.json({ topApps: topApps.slice(0, 15), currentTemp });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
