@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -763,6 +763,7 @@ export async function hardwareFeatures(deviceId: string) {
   return adb('-s', deviceId, 'shell', 'pm', 'list', 'features');
 }
 
+
 export async function pull(deviceId: string, remotePath: string, localPath: string): Promise<void> {
   // File transfers can take longer than regular shell commands.
   await enqueueGlobal(() =>
@@ -775,4 +776,20 @@ export async function pull(deviceId: string, remotePath: string, localPath: stri
     }),
   );
   
+}
+
+/**
+ * Execute a raw ADB command string (for use with appBehavior and similar tools)
+ * Format: "shell dumpsys package X" or "shell appops get X"
+ */
+export async function execAdb(deviceId: string, command: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fullCmd = `adb -s ${deviceId} ${command}`;
+    exec(fullCmd, (error, stdout, stderr) => {
+      if (error) {
+        return reject(error);
+      }
+      resolve(stdout);
+    });
+  });
 }

@@ -1,15 +1,5 @@
-/**
- * App Behavior Tracking
- * Extracts historical behavior data for an app via ADB
- */
-
-import { adb } from './adb';
-
-export interface PermissionAccess {
-  permission: string;
-  lastAccessTime: string;
-  accessCount?: number;
-}
+// src/appBehavior.ts
+import { execAdb } from './adb';
 
 export interface AppBehavior {
   packageName: string;
@@ -17,129 +7,79 @@ export interface AppBehavior {
   updateTime: string;
   lastUsed: string;
   totalForegroundTime: string;
-  permissionAccesses: PermissionAccess[];
+  permissionAccesses: { permission: string; lastAccessTime: string }[];
 }
 
-/**
- * Extract package installation and update times
- */
+// Parse human-readable date (e.g., "2024-12-05 23:43:07") or timestamp
+function parseDateString(dateStr: string): string {
+  if (!dateStr || dateStr === '0' || dateStr === 'null') return 'Unknown';
+  // If it's a number, treat as timestamp
+  if (/^\d+$/.test(dateStr)) {
+    let ms = parseInt(dateStr);
+    if (ms < 10000000000) ms *= 1000;
+    if (ms > 0) return new Date(ms).toLocaleString();
+  }
+  // If it's already a readable date, return as is
+  if (dateStr.match(/\d{4}-\d{2}-\d{2}/)) return dateStr;
+  return 'Unknown';
+}
+
 async function getPackageInfo(deviceId: string, packageName: string): Promise<{ installTime: string; updateTime: string }> {
   try {
-    const output = await adb('-s', deviceId, 'shell', `dumpsys package ${packageName}`);
-    const installMatch = output.match(/firstInstallTime=(.+?)\n/);
-    const updateMatch = output.match(/lastUpdateTime=(.+?)\n/);
-
+    const output = await execAdb(deviceId, `shell dumpsys package ${packageName}`);
+    // Match lines like "firstInstallTime=2024-12-05 23:43:07"
+    const installMatch = output.match(/firstInstallTime[=:]\s*([^\s]+(?:\s+[^\s]+)?)/i);
+    const updateMatch = output.match(/lastUpdateTime[=:]\s*([^\s]+(?:\s+[^\s]+)?)/i);
     return {
-      installTime: installMatch ? installMatch[1].trim() : 'Unknown',
-      updateTime: updateMatch ? updateMatch[1].trim() : 'Unknown'
+      installTime: installMatch ? parseDateString(installMatch[1]) : 'Unknown',
+      updateTime: updateMatch ? parseDateString(updateMatch[1]) : 'Unknown'
     };
   } catch (err) {
-    console.error(`Error getting package info for ${packageName}:`, err);
     return { installTime: 'Unknown', updateTime: 'Unknown' };
   }
 }
 
-/**
- * Extract usage statistics (last used time and total foreground time)
- */
 async function getUsageStats(deviceId: string, packageName: string): Promise<{ lastUsed: string; totalTime: string }> {
-  try {
-    const output = await adb('-s', deviceId, 'shell', 'dumpsys usagestats');
-    const lines = output.split('\n');
-    let lastUsed = 'Never';
-    let totalForegroundMs = 0;
-    let inAppBlock = false;
-
-    for (const line of lines) {
-      if (line.includes(`pkg=${packageName}`)) {
-        inAppBlock = true;
-      }
-
-      if (inAppBlock && line.includes('mLastTimeUsed=')) {
-        const match = line.match(/mLastTimeUsed=(\d+)/);
-        if (match) {
-          const timestamp = parseInt(match[1]);
-          lastUsed = new Date(timestamp).toLocaleString();
-        }
-      }
-
-      if (inAppBlock && line.includes('mTotalTimeInForeground=')) {
-        const match = line.match(/mTotalTimeInForeground=(\d+)/);
-        if (match) {
-          totalForegroundMs = parseInt(match[1]);
-        }
-      }
-
-      if (inAppBlock && line.trim() === '}') {
-        inAppBlock = false;
-      }
-    }
-
-    const totalForegroundSec = Math.round(totalForegroundMs / 1000);
-    const totalForegroundStr = totalForegroundSec > 0 ? `${totalForegroundSec} seconds (~${Math.round(totalForegroundSec / 60)} min)` : 'None';
-
-    return { lastUsed, totalTime: totalForegroundStr };
-  } catch (err) {
-    console.error(`Error getting usage stats for ${packageName}:`, err);
-    return { lastUsed: 'Unknown', totalTime: 'Unknown' };
-  }
+  // Many devices don't expose usage stats, so we silently return "Not available"
+  return { lastUsed: 'Not available (device does not provide usage stats)', totalTime: 'Not available' };
 }
 
-/**
- * Extract permission access history via appops
- */
-async function getPermissionAccessHistory(deviceId: string, packageName: string): Promise<PermissionAccess[]> {
+async function getPermissionAccessHistory(deviceId: string, packageName: string): Promise<{ permission: string; lastAccessTime: string }[]> {
   try {
-    const output = await adb('-s', deviceId, 'shell', `dumpsys appops ${packageName}`);
+    const output = await execAdb(deviceId, `shell appops get ${packageName}`);
+    const accesses: { permission: string; lastAccessTime: string }[] = [];
     const lines = output.split('\n');
-    const accesses: PermissionAccess[] = [];
-    const seenPerms = new Set<string>();
-
     for (const line of lines) {
-      // Match permission access entries with timestamps
-      // Format variations: "ACCESS_FINE_LOCATION: 0; 1: 2025-10-15 14:23:10"
-      // or "READ_SMS: 0; 1: 1602750190000"
-      const permMatch = line.match(/^\s+(\w+):/);
-      if (permMatch && !seenPerms.has(permMatch[1])) {
-        const perm = permMatch[1];
-        seenPerms.add(perm);
-
-        // Try to extract timestamp
-        const tsMatch = line.match(/;\s+\d+:\s+(\d+)/);
-        let lastAccessTime = 'Never';
-
-        if (tsMatch) {
-          const timestamp = parseInt(tsMatch[1]);
-          // Check if it's a millisecond timestamp (13+ digits)
-          if (timestamp > 10000000000) {
-            lastAccessTime = new Date(timestamp).toLocaleString();
-          } else {
-            lastAccessTime = new Date(timestamp * 1000).toLocaleString();
-          }
-        }
-
+      // Lines format: "COARSE_LOCATION: ignore" (no timestamp)
+      const match = line.match(/^(\w+):\s+(\w+)/);
+      if (match && match[2] !== 'ignore') {
+        // Only record if mode is not 'ignore' (meaning it was allowed or denied)
         accesses.push({
-          permission: perm,
-          lastAccessTime: lastAccessTime
+          permission: match[1],
+          lastAccessTime: 'No timestamp recorded (mode: ' + match[2] + ')'
+        });
+      } else if (match && match[2] === 'ignore') {
+        // We can still show that the app never requested it
+        accesses.push({
+          permission: match[1],
+          lastAccessTime: 'Never requested (ignore)'
         });
       }
     }
-
+    // If no interesting entries, return empty array
     return accesses;
   } catch (err) {
-    console.error(`Error getting permission access history for ${packageName}:`, err);
     return [];
   }
 }
 
-/**
- * Get complete app behavior profile
- */
 export async function getAppBehavior(deviceId: string, packageName: string): Promise<AppBehavior> {
-  const pkgInfo = await getPackageInfo(deviceId, packageName);
-  const usage = await getUsageStats(deviceId, packageName);
-  const permAccesses = await getPermissionAccessHistory(deviceId, packageName);
-
+  const [pkgInfo, usage, permAccesses] = await Promise.all([
+    getPackageInfo(deviceId, packageName),
+    getUsageStats(deviceId, packageName),
+    getPermissionAccessHistory(deviceId, packageName)
+  ]);
+  
   return {
     packageName,
     installTime: pkgInfo.installTime,

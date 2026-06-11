@@ -490,34 +490,38 @@ async function runDeepDiagnostic() {
 
                     // Fetch and display app behavior history
                     try {
-                        const behaviorRes = await fetch(`${BACKEND_URL}/api/app-behavior/${app.packageName}?deviceId=${currentDeviceId}`);
+                        const behaviorRes = await fetch(`${BACKEND_URL}/api/app-behavior/${encodeURIComponent(app.packageName)}?deviceId=${encodeURIComponent(currentDeviceId)}`);
                         const behaviorData = await behaviorRes.json();
                         if (behaviorData.ok && behaviorData.behavior) {
                             const b = behaviorData.behavior;
                             let behaviorHtml = `
                                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ccc;">
                                 <strong style="font-size: 13px;">📜 What this app has done:</strong><br>
-                                <span style="font-size: 12px;">📅 Installed: ${b.installTime}</span><br>
-                                <span style="font-size: 12px;">🔄 Last updated: ${b.updateTime}</span><br>
-                                <span style="font-size: 12px;">⏱️ Last used: ${b.lastUsed}</span><br>
-                                <span style="font-size: 12px;">🧠 Total foreground time: ${b.totalForegroundTime}</span>
+                                <span style="font-size: 12px;">📅 Installed: ${escapeHtml(b.installTime)}</span><br>
+                                <span style="font-size: 12px;">🔄 Last updated: ${escapeHtml(b.updateTime)}</span><br>
+                                <span style="font-size: 12px;">⏱️ Last used: ${escapeHtml(b.lastUsed)}</span><br>
+                                <span style="font-size: 12px;">🧠 Total foreground time: ${escapeHtml(b.totalForegroundTime)}</span>
                             `;
                             if (b.permissionAccesses && b.permissionAccesses.length > 0) {
                                 behaviorHtml += `<br><strong style="font-size: 12px;">🔐 Recent permission accesses:</strong><br>`;
                                 for (const acc of b.permissionAccesses.slice(0, 8)) {
-                                    behaviorHtml += `<span style="font-size: 11px;">• ${acc.permission} – ${acc.lastAccessTime}</span><br>`;
+                                    behaviorHtml += `<span style="font-size: 11px;">• ${escapeHtml(acc.permission)} – ${escapeHtml(acc.lastAccessTime)}</span><br>`;
                                 }
                                 if (b.permissionAccesses.length > 8) {
                                     behaviorHtml += `<span style="font-size: 11px; color: #999;">... and ${b.permissionAccesses.length - 8} more</span>`;
                                 }
                             } else {
-                                behaviorHtml += `<br><span style="font-size: 12px;">✅ No recent permission accesses recorded.</span>`;
+                                behaviorHtml += `<br><span style="font-size: 12px;">✅ No permission accesses recorded in appops.</span>`;
                             }
                             behaviorHtml += `</div>`;
                             container.innerHTML += behaviorHtml;
+                        } else {
+                            console.warn('Behavior data missing:', behaviorData);
                         }
                     } catch (err) {
                         console.error('Failed to fetch app behavior:', err);
+                        // Optionally show a fallback message
+                        container.insertAdjacentHTML('afterend', '<div style="font-size: 11px; color: #ff9800; margin-top: 6px;">⚠️ Could not retrieve historical behavior data.</div>');
                     }
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
