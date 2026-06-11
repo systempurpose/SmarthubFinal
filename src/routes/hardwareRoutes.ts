@@ -175,28 +175,44 @@ router.get('/storage', async (req, res) => {
 router.get('/ram', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
-        const output = await adbShellOnDevice(deviceId, 'dumpsys meminfo');
-        const totalMatch = output.match(/Total RAM:\s*([\d,]+)\s*kB/i);
-        const freeMatch = output.match(/Free RAM:\s*([\d,]+)\s*kB/i);
-        if (totalMatch && freeMatch) {
-            const totalKB = parseInt(totalMatch[1].replace(/,/g, ''));
-            const freeKB = parseInt(freeMatch[1].replace(/,/g, ''));
-            const usedKB = totalKB - freeKB;
+        // Use /proc/meminfo for MemAvailable (accurate free memory)
+        const meminfo = await adbShellOnDevice(deviceId, 'cat /proc/meminfo');
+        const memTotalMatch = meminfo.match(/MemTotal:\s*(\d+)\s*kB/i);
+        const memAvailableMatch = meminfo.match(/MemAvailable:\s*(\d+)\s*kB/i);
+        
+        if (memTotalMatch && memAvailableMatch) {
+            const totalKB = parseInt(memTotalMatch[1]);
+            const availableKB = parseInt(memAvailableMatch[1]);
+            const usedKB = totalKB - availableKB;
+            
             const toHuman = (kb: number) => {
-                const gb = kb / (1024 * 1024);
+                const mb = kb / 1024;
+                const gb = mb / 1024;
                 if (gb >= 1) return `${gb.toFixed(1)} GB`;
-                return `${(kb / 1024).toFixed(0)} MB`;
+                if (mb >= 1) return `${Math.round(mb)} MB`;
+                return `${kb} KB`;
             };
-            res.json({ total: toHuman(totalKB), used: toHuman(usedKB), free: toHuman(freeKB) });
+            
+            res.json({
+                total: toHuman(totalKB),
+                used: toHuman(usedKB),
+                free: toHuman(availableKB)
+            });
         } else {
-            const meminfo = await adbShellOnDevice(deviceId, 'cat /proc/meminfo');
-            const memTotalMatch = meminfo.match(/MemTotal:\s*(\d+)\s*kB/i);
-            const memFreeMatch = meminfo.match(/MemFree:\s*(\d+)\s*kB/i);
-            if (memTotalMatch && memFreeMatch) {
-                const totalKB = parseInt(memTotalMatch[1]);
-                const freeKB = parseInt(memFreeMatch[1]);
+            // Fallback to dumpsys meminfo (less accurate but works)
+            const output = await adbShellOnDevice(deviceId, 'dumpsys meminfo');
+            const totalMatch = output.match(/Total RAM:\s*([\d,]+)\s*kB/i);
+            const freeMatch = output.match(/Free RAM:\s*([\d,]+)\s*kB/i);
+            if (totalMatch && freeMatch) {
+                const totalKB = parseInt(totalMatch[1].replace(/,/g, ''));
+                const freeKB = parseInt(freeMatch[1].replace(/,/g, ''));
                 const usedKB = totalKB - freeKB;
-                res.json({ total: `${(totalKB / 1024).toFixed(0)} MB`, used: `${(usedKB / 1024).toFixed(0)} MB`, free: `${(freeKB / 1024).toFixed(0)} MB` });
+                const toHuman = (kb: number) => {
+                    const gb = kb / (1024 * 1024);
+                    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+                    return `${(kb / 1024).toFixed(0)} MB`;
+                };
+                res.json({ total: toHuman(totalKB), used: toHuman(usedKB), free: toHuman(freeKB) });
             } else {
                 res.json({ total: '?', used: '?', free: '?', raw: output.substring(0, 500) });
             }
