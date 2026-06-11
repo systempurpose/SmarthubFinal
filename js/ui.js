@@ -487,103 +487,160 @@ async function showBatteryModal() {
 async function showStorageModal() {
     const modal = ensureInfoModal('storageModal', '💾 Storage Details');
     const body = document.getElementById('storageModalBody');
-    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading storage...</p></div>';
+    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading storage...</p></div>';
     modal.style.display = 'flex';
     try {
-        const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
+        const url = `${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`;
+        console.log('Fetching storage details from:', url);
+        const response = await fetchWithTimeout(url, {}, 15000);
         const data = await response.json();
+        console.log('Storage details response:', data);
         const b = data.breakdown || {};
         const total = b.total?.human || '?';
         const used = b.used?.human || '?';
+        const usedBytes = Number(b.used?.bytes) || 0;
         const free = b.free?.human || '?';
-        const apps = b.apps || { percent: 0, human: '0 KB' };
-        const media = b.media || { percent: 0, human: '0 KB' };
-        const other = b.other || { percent: 0, human: '0 KB' };
+        const apps = b.apps || { percent: 0, human: '0 KB', bytes: 0 };
+        const media = b.media || { percent: 0, human: '0 KB', bytes: 0 };
+        const system = b.system || { percent: 0, human: '0 KB', bytes: 0 };
+        const other = b.other || { percent: 0, human: '0 KB', bytes: 0 };
+        const segments = [
+            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: '#0d6efd', icon: '📱' },
+            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: '#198754', icon: '🎬' },
+            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: '#0dcaf0', icon: '⚙️' },
+            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: '#6c757d', icon: '📦' }
+        ].map(segment => {
+            const rawValue = Number(segment.percent) || 0;
+            const computedValue = rawValue > 0 ? rawValue : (usedBytes > 0 ? (Number(segment.bytes) / usedBytes) * 100 : 0);
+            return { ...segment, value: computedValue };
+        });
 
         const html = `
-            <div class="container">
-                <div class="row">
-                    <div class="col-md-6 text-center">
-                        <canvas id="storagePieCanvas" width="200" height="200" style="max-width:100%; height:auto;"></canvas>
+            <div class="storage-details-grid">
+                <div class="storage-chart-panel">
+                    <div class="storage-chart-shell">
+                        <canvas id="storagePieCanvas" width="220" height="220"></canvas>
                     </div>
-                    <div class="col-md-6">
-                        <div class="card bg-light mb-2">
-                            <div class="card-body p-2">
-                                <h6 class="card-title">Overview</h6>
-                                <div><strong>Total:</strong> ${escapeHtml(total)}</div>
-                                <div><strong>Used:</strong> ${escapeHtml(used)}</div>
-                                <div><strong>Free:</strong> ${escapeHtml(free)}</div>
-                            </div>
-                        </div>
-                        <div class="card bg-light">
-                            <div class="card-body p-2">
-                                <h6 class="card-title">Breakdown</h6>
-                                <div class="progress mb-2" style="height:20px;">
-                                    <div class="progress-bar bg-primary" style="width:${apps.percent}%">📱 Apps ${apps.percent.toFixed(0)}%</div>
-                                    <div class="progress-bar bg-warning" style="width:${media.percent}%">🎬 Media ${media.percent.toFixed(0)}%</div>
-                                    <div class="progress-bar bg-secondary" style="width:${other.percent}%">📦 Other ${other.percent.toFixed(0)}%</div>
+                    <div class="storage-legend">
+                        ${segments.map(segment => `
+                            <div class="storage-legend-item">
+                                <span class="storage-legend-badge" style="background:${segment.color}"></span>
+                                <div>
+                                    <div class="legend-label">${segment.icon} ${segment.label}</div>
+                                    <div class="legend-detail">${escapeHtml(segment.human)} • ${segment.value.toFixed(1)}%</div>
                                 </div>
-                                <div><span class="text-primary">📱 Apps</span> – ${escapeHtml(apps.human)} (${apps.percent.toFixed(1)}%)</div>
-                                <div><span class="text-warning">🎬 Media</span> – ${escapeHtml(media.human)} (${media.percent.toFixed(1)}%)</div>
-                                <div><span class="text-secondary">📦 Other</span> – ${escapeHtml(other.human)} (${other.percent.toFixed(1)}%)</div>
                             </div>
-                        </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="storage-summary-panel">
+                    <div class="storage-summary-card">
+                        <div class="storage-summary-header">Overview</div>
+                        <div class="storage-summary-item"><span>Total</span><strong>${escapeHtml(total)}</strong></div>
+                        <div class="storage-summary-item"><span>Used</span><strong>${escapeHtml(used)}</strong></div>
+                        <div class="storage-summary-item"><span>Free</span><strong>${escapeHtml(free)}</strong></div>
+                    </div>
+                    <div class="storage-breakdown-card">
+                        <div class="storage-summary-header">Detailed Usage</div>
+                        ${segments.map(segment => `
+                            <div class="breakdown-row">
+                                <div class="breakdown-row-title"><span>${segment.icon}</span>${segment.label}</div>
+                                <div class="breakdown-row-meta">${escapeHtml(segment.human)} • ${segment.value.toFixed(1)}%</div>
+                                <div class="breakdown-track"><div class="breakdown-fill" style="width:${Math.max(1, segment.value)}%; background:${segment.color}"></div></div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
             </div>
         `;
+
         body.innerHTML = html;
 
-        // Draw pie chart on canvas
         const canvas = document.getElementById('storagePieCanvas');
-        if (canvas && apps.percent + media.percent + other.percent > 0) {
+        const totalPercent = segments.reduce((sum, segment) => sum + segment.value, 0);
+        if (canvas) {
             const ctx = canvas.getContext('2d');
-            const w = 200, h = 200, cx = 100, cy = 100, r = 80;
+            const w = 220, h = 220, cx = 110, cy = 110, r = 90;
             ctx.clearRect(0, 0, w, h);
-            let start = 0;
-            const segments = [
-                { percent: apps.percent, color: '#0d6efd' },
-                { percent: media.percent, color: '#ffc107' },
-                { percent: other.percent, color: '#6c757d' }
-            ];
-            for (const seg of segments) {
-                const angle = (seg.percent / 100) * 2 * Math.PI;
-                const end = start + angle;
+            
+            if (totalPercent > 0.05) {
+                // Draw pie chart with actual data
+                let start = -0.5 * Math.PI;
+                for (const segment of segments) {
+                    const angle = (segment.value / 100) * 2 * Math.PI;
+                    if (angle <= 0) continue;
+                    const end = start + angle;
+                    ctx.beginPath();
+                    ctx.fillStyle = segment.color;
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, r, start, end);
+                    ctx.closePath();
+                    ctx.fill();
+                    start = end;
+                }
                 ctx.beginPath();
-                ctx.fillStyle = seg.color;
-                ctx.moveTo(cx, cy);
-                ctx.arc(cx, cy, r, start, end);
+                ctx.fillStyle = '#ffffff';
+                ctx.arc(cx, cy, 40, 0, 2 * Math.PI);
                 ctx.fill();
-                start = end;
+                ctx.fillStyle = '#1f1f1f';
+                ctx.font = '14px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Storage', cx, cy - 10);
+                ctx.font = '13px Segoe UI';
+                ctx.fillText(`${total}`, cx, cy + 12);
+            } else {
+                // Draw placeholder donut when no data
+                ctx.fillStyle = '#e5e7eb';
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 60, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#9ca3af';
+                ctx.font = '13px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('No breakdown', cx, cy - 5);
+                ctx.fillText('data yet', cx, cy + 10);
             }
         }
     } catch (err) {
+        console.error('Storage modal error:', err);
         body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
 
 // RAM modal – list apps by RSS memory descending
 function simplifyAppName(pkg) {
-    const map = {
-        'com.android.chrome': 'Chrome',
-        'com.google.android.gms': 'Google Play Services',
-        'com.google.android.gms.persistent': 'Play Services (persistent)',
-        'com.google.android.apps.messaging': 'Messages',
-        'com.instagram.android': 'Instagram',
-        'com.whatsapp': 'WhatsApp',
-        'com.facebook.katana': 'Facebook',
-        'com.transsion.phonemaster': 'Phone Master',
-        'com.transsion.itel.launcher': 'Launcher',
-        'com.rlk.weathers': 'Weather',
-        'com.transsnet.store': 'App Store',
-        'com.hoffnung': 'Hoffnung'
-    };
-    if (map[pkg]) return map[pkg];
     // Remove common prefixes
-    let name = pkg.replace(/^com\.(android|google|transsion|transsnet)\./, '');
-    name = name.replace(/\.android$/, '');
-    // Capitalize first letter
-    return name.charAt(0).toUpperCase() + name.slice(1).substring(0, 20);
+    let name = pkg
+        .replace(/^com\.(android|google|transsion|transsnet|facebook|whatsapp|instagram)\./i, '')
+        .replace(/^android\./i, '')
+        .replace(/\.android$/, '')
+        .replace(/[.:]/g, ' ');
+    // Map known long names
+    const map = {
+        'chrome': 'Chrome',
+        'gms': 'Play Services',
+        'messaging': 'Messages',
+        'phonemaster': 'Phone Master',
+        'phonemanager': 'Phone Manager',
+        'launcher': 'Launcher',
+        'weathers': 'Weather',
+        'store': 'App Store',
+        'instagram': 'Instagram',
+        'facebook': 'Facebook',
+        'whatsapp': 'WhatsApp'
+    };
+    const lower = name.toLowerCase();
+    for (const [key, val] of Object.entries(map)) {
+        if (lower.includes(key)) return val;
+    }
+    // Capitalize first letter of each word
+    return name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').substring(0, 25);
 }
 
 async function showRamModal() {
@@ -598,6 +655,11 @@ async function showRamModal() {
         ]);
         const totalRam = ramInfo.total || '?';
         const usedRam = ramInfo.used || '?';
+        let totalBytes = 0;
+        if (totalRam !== '?') {
+            const match = totalRam.match(/(\d+(?:\.\d+)?)/);
+            if (match) totalBytes = parseFloat(match[1]) * (totalRam.includes('GB') ? 1024 : 1);
+        }
         let ramBarHtml = '';
         if (totalRam !== '?' && usedRam !== '?') {
             const usedGB = parseFloat(usedRam);
@@ -618,11 +680,14 @@ async function showRamModal() {
         }
         let listHtml = '<div class="list-group list-group-flush" style="max-height:350px; overflow-y:auto;">';
         if (Array.isArray(processes) && processes.length) {
-            for (const proc of processes.slice(0, 25)) {
+            for (const proc of processes.slice(0, 30)) {
                 const displayName = simplifyAppName(proc.name);
+                const mb = parseFloat(proc.rssMB);
+                let percent = 0;
+                if (!isNaN(mb) && totalBytes > 0) percent = (mb / totalBytes) * 100;
                 listHtml += `<div class="list-group-item d-flex justify-content-between align-items-center py-1">
                                 <strong>${escapeHtml(displayName)}</strong>
-                                <span class="badge bg-primary rounded-pill">${escapeHtml(proc.rssMB)} MB</span>
+                                <span class="badge bg-primary rounded-pill">${percent.toFixed(1)}%</span>
                              </div>`;
             }
             listHtml += '</div>';
@@ -634,7 +699,6 @@ async function showRamModal() {
         body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
-
 // Temperature modal – show temperature + top CPU-consuming apps
 async function showTemperatureModal() {
     const modal = ensureInfoModal('temperatureModal', '🌡️ Phone Temperature & Heat Contributors');
