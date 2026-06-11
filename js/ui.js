@@ -228,7 +228,6 @@ async function renderDashboard() {
                 <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
                 <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
                 <button id="helpBtn" class="btn-secondary">❓ Help</button>
-                
             </div>
         </div>
         <div id="deviceOverview" class="card" style="display: none;"></div>
@@ -241,14 +240,18 @@ async function renderDashboard() {
         <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
+    // Wait a tiny bit for DOM to update
+    await new Promise(r => setTimeout(r, 50));
+
     try {
-        const [battery, storage, ram, temperature, deviceText, wifiStatus] = await Promise.all([
-            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: '?' })),
+        // Fetch all data
+        const [battery, storage, ram, deviceText, wifiStatus, tempData] = await Promise.all([
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: '?', health: 'unknown' })),
             apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?', free: '?' })),
             apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '?', used: '?' })),
-            apiCall(`/hardware/temperature?deviceId=${currentDeviceId}`).catch(() => ({ temperature: 'Unknown' })),
             fetch(`${BACKEND_URL}/device/${currentDeviceId}`).then(r => r.text()).catch(() => ''),
-            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null)
+            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).then(r => r.json()).catch(() => null),
+            fetch(`${BACKEND_URL}/api/hardware/temperature?deviceId=${currentDeviceId}`).then(r => r.json()).catch(() => ({ temperature: 'Unknown' }))
         ]);
 
         let model = 'Unknown', androidVer = '?', securityPatch = '?';
@@ -269,13 +272,23 @@ async function renderDashboard() {
         const healthDiv = document.getElementById('healthCards');
         if (healthDiv) {
             healthDiv.innerHTML = `
-                <div class="status-card clickable" data-card="battery"><i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})</div>
-                <div class="status-card clickable" data-card="storage"><i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}</div>
-                <div class="status-card clickable" data-card="ram"><i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}</div>
-                <div class="status-card clickable" data-card="temperature"><i class="fas fa-thermometer-half"></i> Temp: ${temperature.temperature || 'Unknown'}</div>
+                <div class="status-card clickable" data-card="battery">
+                    <i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})
+                </div>
+                <div class="status-card clickable" data-card="storage">
+                    <i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}
+                </div>
+                <div class="status-card clickable" data-card="ram">
+                    <i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}
+                </div>
+                <div class="status-card clickable" data-card="temperature">
+                    <i class="fas fa-thermometer-half"></i> Temp: ${tempData.temperature || 'Unknown'}
+                </div>
             `;
-            healthDiv.querySelectorAll('.status-card.clickable').forEach(card => {
-                card.addEventListener('click', () => {
+
+            // Add click listeners
+            document.querySelectorAll('.status-card.clickable').forEach(card => {
+                card.addEventListener('click', (e) => {
                     const type = card.dataset.card;
                     if (type === 'battery') showBatteryModal();
                     else if (type === 'storage') showStorageModal();
@@ -283,6 +296,8 @@ async function renderDashboard() {
                     else if (type === 'temperature') showTemperatureModal();
                 });
             });
+        } else {
+            console.error('healthCards element not found');
         }
 
         document.getElementById('deviceOverview').innerHTML = `
@@ -305,16 +320,18 @@ async function renderDashboard() {
         document.getElementById('networkStatus').style.display = 'block';
 
         const summaryGrid = document.querySelector('#phoneSummary .phone-summary-grid');
-        summaryGrid.innerHTML = `
-            <div><span class="item-label">Phone Name</span><span class="item-value">${escapeHtml(model)}</span></div>
-            <div><span class="item-label">Android Version</span><span class="item-value">${escapeHtml(androidVer)}</span></div>
-            <div><span class="item-label">ADB Active</span><span class="item-value">${currentDeviceId ? '✅ Active' : '❌ Inactive'}</span></div>
-        `;
-        document.getElementById('phoneSummary').style.display = 'block';
+        if (summaryGrid) {
+            summaryGrid.innerHTML = `
+                <div><span class="item-label">Phone Name</span><span class="item-value">${escapeHtml(model)}</span></div>
+                <div><span class="item-label">Android Version</span><span class="item-value">${escapeHtml(androidVer)}</span></div>
+                <div><span class="item-label">ADB Active</span><span class="item-value">${currentDeviceId ? '✅ Active' : '❌ Inactive'}</span></div>
+            `;
+            document.getElementById('phoneSummary').style.display = 'block';
+        }
 
         let alerts = [];
-        if (battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
-        else if (battery.level < 30) alerts.push('⚠️ Battery level low (<30%)');
+        if (battery.level && battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
+        else if (battery.level && battery.level < 30) alerts.push('⚠️ Battery level low (<30%)');
         if (alerts.length) {
             document.getElementById('alertsCard').innerHTML = `
                 <div class="card-title"><i class="fas fa-exclamation-triangle"></i> Alerts</div>
@@ -324,6 +341,10 @@ async function renderDashboard() {
         }
     } catch (err) {
         console.error('Dashboard data error:', err);
+        const healthDiv = document.getElementById('healthCards');
+        if (healthDiv) {
+            healthDiv.innerHTML = `<div class="status-card">⚠️ Failed to load hardware data</div>`;
+        }
     }
 
     document.getElementById('startDiagnosticBtn')?.addEventListener('click', runDeepDiagnostic);
