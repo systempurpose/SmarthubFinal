@@ -457,28 +457,78 @@ function renderPieChart(svgElement, segments) {
 
 // Battery modal – only apps draining battery (no temperature)
 async function showBatteryModal() {
-    const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App');
+    const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App & System');
     const body = document.getElementById('batteryModalBody');
-    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading battery stats...</p></div>';
+    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading battery stats...</p></div>';
     modal.style.display = 'flex';
     try {
         const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/battery-usage?deviceId=${currentDeviceId}`, {}, 15000);
         const data = await response.json();
-        let html = '';
-        if (Array.isArray(data.usage) && data.usage.length) {
-            html = '<div class="list-group list-group-flush" style="max-height:400px; overflow-y:auto;">';
-            for (const item of data.usage.slice(0, 20)) {
-                html += `<div class="list-group-item d-flex justify-content-between align-items-center">
-                            <strong>${escapeHtml(item.package)}</strong>
-                            <span class="badge bg-danger rounded-pill">${item.drain.toFixed(1)} mAh</span>
-                         </div>`;
-            }
-            html += '</div><div class="alert alert-info mt-2 mb-0 small">Data from dumpsys batterystats. For fresh numbers, reset stats and use the phone.</div>';
-        } else {
-            html = '<div class="alert alert-warning">No battery usage data available. Please use the phone for a while and try again.</div>';
+        const usage = data.usage || [];
+        
+        if (!usage.length) {
+            body.innerHTML = `
+                <div class="alert alert-warning" style="text-align:center;">
+                    <strong>No battery usage data available.</strong><br>
+                    Please use the phone for a while, then reset battery stats:<br>
+                    <code>adb shell dumpsys batterystats --reset</code>
+                </div>
+            `;
+            return;
         }
+        
+        // Calculate total drain for percentage
+        const totalDrain = usage.reduce((sum, item) => sum + item.drain, 0);
+        
+        const html = `
+            <div style="margin-bottom: 16px;">
+                <input type="text" id="batterySearchInput" placeholder="🔍 Filter items..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
+            </div>
+            <div id="batteryProcessList" class="battery-process-list-container" style="max-height: 380px; overflow-y: auto; padding-right: 6px;">
+                ${usage.map(item => {
+                    const percent = (item.drain / totalDrain) * 100;
+                    const icon = item.type === 'app' ? '📱' : '🔧';
+                    const name = item.type === 'app' ? simplifyAppName(item.name) : item.name;
+                    return `
+                        <div class="battery-process-item" data-name="${escapeHtml(item.name.toLowerCase())}" style="margin-bottom: 12px; background: #ffffff; border-radius: 10px; padding: 8px 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="font-weight: 600; font-size: 13px;">${icon} ${escapeHtml(name)}</span>
+                                <span style="font-size: 12px; color: #555;">${item.drain.toFixed(1)} mAh (${percent.toFixed(1)}%)</span>
+                            </div>
+                            <div style="background: #e9ecef; border-radius: 4px; height: 4px; overflow: hidden;">
+                                <div style="width: ${percent}%; background: #dc3545; height: 100%; border-radius: 4px;"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
+                Percentages are based on estimated power drain (mAh).  
+                System components (screen, Wi‑Fi, cellular) are shown when available.
+            </div>
+        `;
+        
         body.innerHTML = html;
+        
+        // Search filter
+        const searchInput = document.getElementById('batterySearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const items = document.querySelectorAll('.battery-process-item');
+                items.forEach(item => {
+                    const name = item.getAttribute('data-name');
+                    if (name && name.includes(query)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+        
     } catch (err) {
+        console.error('Battery modal error:', err);
         body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }

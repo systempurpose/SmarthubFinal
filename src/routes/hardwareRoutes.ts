@@ -20,22 +20,42 @@ async function adbShell(deviceId: string, command: string): Promise<string> {
 }
 
 // ------------------- BATTERY USAGE (only mAh per package) -------------------
-// ------------------- BATTERY USAGE -------------------
-// ------------------- BATTERY USAGE -------------------
 router.get('/battery-usage', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
-        const output = await adbShell(deviceId, 'dumpsys batterystats --packages');
-        const usage: { package: string; drain: number }[] = [];
+        const output = await adbShell(deviceId, 'dumpsys batterystats');
+        const usage: { name: string; drain: number; type: 'app' | 'system' }[] = [];
+
+        // 1) Parse app entries (m lines with power=)
         for (const line of output.split('\n')) {
             const match = line.match(/^\s*m\s+([\w.]+).*?power=([\d.]+)/i);
             if (match && parseFloat(match[2]) > 0) {
-                usage.push({ package: match[1], drain: parseFloat(match[2]) });
+                usage.push({ name: match[1], drain: parseFloat(match[2]), type: 'app' });
             }
         }
+
+        // 2) Parse system components (Screen, Wifi, Cell, Audio, Bluetooth)
+        const systemPatterns = [
+            { regex: /Screen.*?power=([\d.]+)/i, name: '📱 Screen (brightness)' },
+            { regex: /Wifi.*?power=([\d.]+)/i, name: '📶 Wi-Fi' },
+            { regex: /Cell.*?power=([\d.]+)/i, name: '📡 Cellular' },
+            { regex: /Audio.*?power=([\d.]+)/i, name: '🔊 Audio/Sound' },
+            { regex: /Bluetooth.*?power=([\d.]+)/i, name: '🎧 Bluetooth' },
+            { regex: /Camera.*?power=([\d.]+)/i, name: '📸 Camera' },
+            { regex: /GPS.*?power=([\d.]+)/i, name: '📍 GPS' },
+            { regex: /Idle.*?power=([\d.]+)/i, name: '💤 Idle (background)' }
+        ];
+        for (const pattern of systemPatterns) {
+            const match = output.match(pattern.regex);
+            if (match && parseFloat(match[1]) > 0) {
+                usage.push({ name: pattern.name, drain: parseFloat(match[1]), type: 'system' });
+            }
+        }
+
         usage.sort((a, b) => b.drain - a.drain);
-        res.json({ usage: usage.slice(0, 20) });
+        res.json({ usage: usage.slice(0, 30) });
     } catch (err: any) {
+        console.error('[battery-usage] error:', err);
         res.status(500).json({ error: err.message });
     }
 });
