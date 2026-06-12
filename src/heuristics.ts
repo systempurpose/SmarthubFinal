@@ -1182,8 +1182,7 @@ export function detectSuspiciousApps(
     const lower = app.path.toLowerCase();
     return lower.startsWith('/system/') || lower.startsWith('/vendor/') ||
            lower.startsWith('/product/') || lower.startsWith('/odm/') ||
-           lower.startsWith('/system_ext/') || lower.includes('/system/') ||
-           lower.includes('/vendor/');
+           lower.startsWith('/system_ext/');
   }
 
   // Known safe sideloaded apps – never flag these
@@ -1210,21 +1209,14 @@ export function detectSuspiciousApps(
     if (!pkg) continue;
 
     // Skip system apps (by path)
-    if (isSystemApp(app)) {
-      console.log(`[SKIP system path] ${pkg} at ${app.path}`);
-      continue;
-    }
-
+    if (isSystemApp(app)) continue;
     // Skip system package name prefixes
-    if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
-      console.log(`[SKIP system prefix] ${pkg}`);
-      continue;
-    }
-
-    // Skip known trusted trusted prefixes and exact packages
+    if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
+    // Skip trusted prefixes and exact packages
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
-    if (TRUSTED_SIDELOADED.has(pkg)) continue; // 👈 new
+    // Skip trusted sideloaded apps
+    if (TRUSTED_SIDELOADED.has(pkg)) continue;
 
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
@@ -1233,15 +1225,16 @@ export function detectSuspiciousApps(
     const riskScore = risk.score;
     const highRiskScore = riskScore >= 40;
 
-    // Dangerous permissions list (exclude normal storage)
+    // Dangerous permissions list
     const dangerousPermsList = [
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
       'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
       'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN',
       'REQUEST_INSTALL_PACKAGES', 'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS',
-      'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE'
+      'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE',
+      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'  // keep storage as dangerous for now
     ];
-    const trulyDangerous = dangerousPermsList.some(d => upper.includes(d));
+    const hasDangerous = dangerousPermsList.some(d => upper.includes(d));
     const totalPerms = perms.length;
     const manyPerms = totalPerms > 15;
 
@@ -1254,45 +1247,40 @@ export function detectSuspiciousApps(
     }
     const isSideloaded = !fromLegitStore;
 
-    // Flag only when:
-    // - sideloaded AND (high risk OR truly dangerous OR many permissions)
-    // - official store app AND high risk
-    const shouldFlag = (isSideloaded && (highRiskScore || trulyDangerous || manyPerms)) ||
-                       (!isSideloaded && highRiskScore);
+    // Original working condition: flag if sideloaded OR high risk OR manyPerms OR hasDangerous
+    if (isSideloaded || highRiskScore || manyPerms || hasDangerous) {
+      let reason = '';
+      let threatLevel: 'high' | 'medium' | 'low' = 'medium';
 
-    if (!shouldFlag) continue;
+      if (highRiskScore) {
+        reason += `High risk score (${riskScore}/100). `;
+        threatLevel = riskScore >= 70 ? 'high' : 'medium';
+      }
+      if (manyPerms) {
+        reason += `Asks for unusually many permissions (${totalPerms}). `;
+        threatLevel = 'medium';
+      }
+      if (hasDangerous && !highRiskScore && !manyPerms) {
+        const dangerousFound = dangerousPermsList.filter(d => upper.includes(d));
+        reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
+        threatLevel = 'high';
+      }
+      if (isSideloaded && !highRiskScore && !manyPerms && !hasDangerous) {
+        reason += `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}. `;
+        threatLevel = 'low';
+      }
 
-    let reason = '';
-    let threatLevel: 'high' | 'medium' | 'low' = 'medium';
-
-    if (highRiskScore) {
-      reason += `High risk score (${riskScore}/100). `;
-      threatLevel = riskScore >= 70 ? 'high' : 'medium';
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason: reason.trim(),
+        threatLevel,
+        suggestedAction: threatLevel === 'high'
+          ? `Uninstall ${displayNameFromPackage(pkg)} immediately. Check Settings → Apps → ${displayNameFromPackage(pkg)} → Uninstall.`
+          : `Review ${displayNameFromPackage(pkg)}. If you don't need it, uninstall.`,
+        threatTypes: classifyThreatTypes(pkg, perms),
+      });
     }
-    if (manyPerms) {
-      reason += `Asks for unusually many permissions (${totalPerms}). `;
-      threatLevel = 'medium';
-    }
-    if (trulyDangerous && !highRiskScore && !manyPerms) {
-      const dangerousFound = dangerousPermsList.filter(d => upper.includes(d));
-      reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
-      threatLevel = 'high';
-    }
-    if (isSideloaded && !highRiskScore && !manyPerms && !trulyDangerous) {
-      reason += `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}. `;
-      threatLevel = 'low';
-    }
-
-    suspicious.push({
-      packageName: pkg,
-      displayName: displayNameFromPackage(pkg),
-      reason: reason.trim(),
-      threatLevel,
-      suggestedAction: threatLevel === 'high'
-        ? `Uninstall ${displayNameFromPackage(pkg)} immediately. Check Settings → Apps → ${displayNameFromPackage(pkg)} → Uninstall.`
-        : `Review ${displayNameFromPackage(pkg)}. If you don't need it, uninstall.`,
-      threatTypes: classifyThreatTypes(pkg, perms),
-    });
   }
 
   return suspicious;
