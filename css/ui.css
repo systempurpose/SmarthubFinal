@@ -741,3 +741,40 @@ pre {
     width: min(98vw, 1100px);
     max-width: 98vw;
 }
+/* Custom scrollbar for RAM modal and other scrollable areas */
+.ram-process-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+.ram-process-list-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+.ram-process-list-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+.ram-process-list-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* For Firefox */
+.ram-process-list-container {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Also style the main content scrollbar if needed */
+.main-content::-webkit-scrollbar {
+    width: 8px;
+}
+.main-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+.main-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+.main-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

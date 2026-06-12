@@ -669,13 +669,14 @@ function simplifyAppName(pkg) {
 async function showRamModal() {
     const modal = ensureInfoModal('ramModal', '🧠 RAM Usage by App');
     const body = document.getElementById('ramModalBody');
-    body.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p>Loading RAM usage...</p></div>';
+    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading RAM usage...</p></div>';
     modal.style.display = 'flex';
     try {
         const [processes, ramInfo] = await Promise.all([
             fetchWithTimeout(`${BACKEND_URL}/api/hardware/ram-usage?deviceId=${currentDeviceId}`, {}, 15000).then(r => r.json()),
             fetchWithTimeout(`${BACKEND_URL}/api/hardware/ram?deviceId=${currentDeviceId}`, {}, 8000).then(r => r.json())
         ]);
+
         const totalRam = ramInfo.total || '?';
         const usedRam = ramInfo.used || '?';
         let totalBytes = 0;
@@ -683,6 +684,8 @@ async function showRamModal() {
             const match = totalRam.match(/(\d+(?:\.\d+)?)/);
             if (match) totalBytes = parseFloat(match[1]) * (totalRam.includes('GB') ? 1024 : 1);
         }
+
+        // Overall RAM usage bar
         let ramBarHtml = '';
         if (totalRam !== '?' && usedRam !== '?') {
             const usedGB = parseFloat(usedRam);
@@ -690,38 +693,90 @@ async function showRamModal() {
             if (!isNaN(usedGB) && !isNaN(totalGB) && totalGB > 0) {
                 const percent = (usedGB / totalGB) * 100;
                 ramBarHtml = `
-                    <div class="card bg-light mb-3">
-                        <div class="card-body p-2">
-                            <strong>RAM Usage:</strong> ${escapeHtml(usedRam)} / ${escapeHtml(totalRam)} (${percent.toFixed(1)}%)
-                            <div class="progress mt-1" style="height:10px;">
-                                <div class="progress-bar bg-primary" style="width:${percent}%"></div>
-                            </div>
+                    <div style="background: #f8f9fa; border-radius: 16px; padding: 16px; margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-weight: 600;">📊 RAM Usage</span>
+                            <span>${escapeHtml(usedRam)} / ${escapeHtml(totalRam)} (${percent.toFixed(1)}%)</span>
+                        </div>
+                        <div style="background: #e9ecef; border-radius: 10px; height: 10px; overflow: hidden;">
+                            <div style="width: ${percent}%; background: #0d6efd; height: 100%; border-radius: 10px;"></div>
                         </div>
                     </div>
                 `;
             }
         }
-        let listHtml = '<div class="list-group list-group-flush" style="max-height:350px; overflow-y:auto;">';
-        if (Array.isArray(processes) && processes.length) {
-            for (const proc of processes.slice(0, 30)) {
-                const displayName = simplifyAppName(proc.name);
-                const mb = parseFloat(proc.rssMB);
-                let percent = 0;
-                if (!isNaN(mb) && totalBytes > 0) percent = (mb / totalBytes) * 100;
-                listHtml += `<div class="list-group-item d-flex justify-content-between align-items-center py-1">
-                                <strong>${escapeHtml(displayName)}</strong>
-                                <span class="badge bg-primary rounded-pill">${percent.toFixed(1)}%</span>
-                             </div>`;
-            }
-            listHtml += '</div>';
-        } else {
-            listHtml = '<p class="text-muted">No RAM usage data available.</p>';
+
+        // Prepare ALL processes (no slice)
+        let processList = (Array.isArray(processes) ? processes : []).map(proc => {
+            const mb = parseFloat(proc.rssMB);
+            let percent = 0;
+            if (!isNaN(mb) && totalBytes > 0) percent = (mb / totalBytes) * 100;
+            return {
+                originalName: proc.name,
+                displayName: simplifyAppName(proc.name),
+                percent: percent,
+                mb: mb
+            };
+        }).filter(p => p.percent > 0.01 || p.mb > 0).sort((a, b) => b.percent - a.percent);
+
+        // Fallback if no percentages calculated
+        if (processList.length === 0 && Array.isArray(processes) && processes.length) {
+            processList = processes.map(proc => ({
+                originalName: proc.name,
+                displayName: simplifyAppName(proc.name),
+                percent: 0,
+                mb: parseFloat(proc.rssMB) || 0
+            }));
         }
-        body.innerHTML = ramBarHtml + listHtml;
+
+        const listId = 'ramProcessList';
+
+        const html = `
+            ${ramBarHtml}
+            <div style="margin-bottom: 16px;">
+                <input type="text" id="ramSearchInput" placeholder="🔍 Filter apps..." style="width:100%; padding:10px 14px; border:1px solid #ddd; border-radius:24px; font-size:14px; outline:none; transition:0.2s;">
+            </div>
+            <div id="${listId}" class="ram-process-list-container" style="max-height: 420px; overflow-y: auto; padding-right: 6px;">
+                ${processList.map(proc => `
+                    <div class="ram-process-item" data-name="${escapeHtml(proc.originalName.toLowerCase())}" style="margin-bottom: 16px; background: #ffffff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <span style="font-weight: 600; font-size: 14px;">${escapeHtml(proc.displayName)}</span>
+                            <span style="font-size: 13px; color: #555;">${proc.percent.toFixed(1)}% (${proc.mb.toFixed(0)} MB)</span>
+                        </div>
+                        <div style="background: #e9ecef; border-radius: 6px; height: 6px; overflow: hidden;">
+                            <div style="width: ${proc.percent}%; background: #0d6efd; height: 100%; border-radius: 6px;"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            ${processList.length === 0 ? '<p class="text-muted" style="text-align:center;">No RAM usage data available.</p>' : ''}
+        `;
+
+        body.innerHTML = html;
+
+        // Search filter
+        const searchInput = document.getElementById('ramSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const items = document.querySelectorAll('.ram-process-item');
+                items.forEach(item => {
+                    const name = item.getAttribute('data-name');
+                    if (name && name.includes(query)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+
     } catch (err) {
+        console.error('RAM modal error:', err);
         body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
+
 // Temperature modal – show temperature + top CPU-consuming apps
 async function showTemperatureModal() {
     const modal = ensureInfoModal('temperatureModal', '🌡️ Phone Temperature & Heat Contributors');
