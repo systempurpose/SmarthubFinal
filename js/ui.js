@@ -679,13 +679,17 @@ async function showRamModal() {
 
         const totalRam = ramInfo.total || '?';
         const usedRam = ramInfo.used || '?';
-        let totalBytes = 0;
-        if (totalRam !== '?') {
-            const match = totalRam.match(/(\d+(?:\.\d+)?)/);
-            if (match) totalBytes = parseFloat(match[1]) * (totalRam.includes('GB') ? 1024 : 1);
+        
+        let usedMB = 0;
+        if (usedRam !== '?') {
+            const match = usedRam.match(/(\d+(?:\.\d+)?)/);
+            if (match) {
+                usedMB = parseFloat(match[1]);
+                if (usedRam.includes('GB')) usedMB *= 1024;
+            }
         }
-
-        // Overall RAM usage bar
+        
+        // Overall RAM usage bar – reduced top margin/padding
         let ramBarHtml = '';
         if (totalRam !== '?' && usedRam !== '?') {
             const usedGB = parseFloat(usedRam);
@@ -693,12 +697,12 @@ async function showRamModal() {
             if (!isNaN(usedGB) && !isNaN(totalGB) && totalGB > 0) {
                 const percent = (usedGB / totalGB) * 100;
                 ramBarHtml = `
-                    <div style="background: #f8f9fa; border-radius: 16px; padding: 16px; margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <div style="background: #f8f9fa; border-radius: 16px; padding: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                             <span style="font-weight: 600;">📊 RAM Usage</span>
                             <span>${escapeHtml(usedRam)} / ${escapeHtml(totalRam)} (${percent.toFixed(1)}%)</span>
                         </div>
-                        <div style="background: #e9ecef; border-radius: 10px; height: 10px; overflow: hidden;">
+                        <div style="background: #e9ecef; border-radius: 10px; height: 8px; overflow: hidden;">
                             <div style="width: ${percent}%; background: #0d6efd; height: 100%; border-radius: 10px;"></div>
                         </div>
                     </div>
@@ -706,50 +710,60 @@ async function showRamModal() {
             }
         }
 
-        // Prepare ALL processes (no slice)
+        // Prepare process list with percentages based on used RAM
         let processList = (Array.isArray(processes) ? processes : []).map(proc => {
             const mb = parseFloat(proc.rssMB);
-            let percent = 0;
-            if (!isNaN(mb) && totalBytes > 0) percent = (mb / totalBytes) * 100;
+            let percentOfUsed = 0;
+            if (!isNaN(mb) && usedMB > 0) percentOfUsed = (mb / usedMB) * 100;
             return {
                 originalName: proc.name,
                 displayName: simplifyAppName(proc.name),
-                percent: percent,
+                percent: percentOfUsed,
                 mb: mb
             };
-        }).filter(p => p.percent > 0.01 || p.mb > 0).sort((a, b) => b.percent - a.percent);
+        }).filter(p => p.percent > 0.01 || p.mb > 0);
 
-        // Fallback if no percentages calculated
-        if (processList.length === 0 && Array.isArray(processes) && processes.length) {
-            processList = processes.map(proc => ({
-                originalName: proc.name,
-                displayName: simplifyAppName(proc.name),
-                percent: 0,
-                mb: parseFloat(proc.rssMB) || 0
-            }));
+        // Calculate total accounted percentage
+        const accountedPercent = processList.reduce((sum, p) => sum + p.percent, 0);
+        const remainingPercent = Math.max(0, 100 - accountedPercent);
+        
+        // Add "System & Kernel" entry if unaccounted memory exists
+        if (remainingPercent > 0.5) {
+            processList.push({
+                originalName: 'system_kernel',
+                displayName: '🖥️ System & Kernel',
+                percent: remainingPercent,
+                mb: (remainingPercent / 100) * usedMB
+            });
         }
+
+        // Sort ALL entries (including kernel) by percentage descending
+        processList.sort((a, b) => b.percent - a.percent);
 
         const listId = 'ramProcessList';
 
         const html = `
             ${ramBarHtml}
-            <div style="margin-bottom: 16px;">
-                <input type="text" id="ramSearchInput" placeholder="🔍 Filter apps..." style="width:100%; padding:10px 14px; border:1px solid #ddd; border-radius:24px; font-size:14px; outline:none; transition:0.2s;">
+            <div style="margin-bottom: 12px;">
+                <input type="text" id="ramSearchInput" placeholder="🔍 Filter apps..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
             </div>
-            <div id="${listId}" class="ram-process-list-container" style="max-height: 420px; overflow-y: auto; padding-right: 6px;">
+            <div id="${listId}" class="ram-process-list-container" style="max-height: 320px; overflow-y: auto; padding-right: 6px;">
                 ${processList.map(proc => `
-                    <div class="ram-process-item" data-name="${escapeHtml(proc.originalName.toLowerCase())}" style="margin-bottom: 16px; background: #ffffff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                            <span style="font-weight: 600; font-size: 14px;">${escapeHtml(proc.displayName)}</span>
-                            <span style="font-size: 13px; color: #555;">${proc.percent.toFixed(1)}% (${proc.mb.toFixed(0)} MB)</span>
+                    <div class="ram-process-item" data-name="${escapeHtml(proc.originalName.toLowerCase())}" style="margin-bottom: 12px; background: #ffffff; border-radius: 10px; padding: 8px 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-weight: 600; font-size: 13px;">${escapeHtml(proc.displayName)}</span>
+                            <span style="font-size: 12px; color: #555;">${proc.percent.toFixed(1)}% (${proc.mb.toFixed(0)} MB)</span>
                         </div>
-                        <div style="background: #e9ecef; border-radius: 6px; height: 6px; overflow: hidden;">
-                            <div style="width: ${proc.percent}%; background: #0d6efd; height: 100%; border-radius: 6px;"></div>
+                        <div style="background: #e9ecef; border-radius: 4px; height: 4px; overflow: hidden;">
+                            <div style="width: ${proc.percent}%; background: #0d6efd; height: 100%; border-radius: 4px;"></div>
                         </div>
                     </div>
                 `).join('')}
             </div>
-            ${processList.length === 0 ? '<p class="text-muted" style="text-align:center;">No RAM usage data available.</p>' : ''}
+            <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
+                Percentages shown are of <strong>used RAM</strong> (${escapeHtml(usedRam)}).  
+                "System & Kernel" includes drivers, caches, and kernel memory.
+            </div>
         `;
 
         body.innerHTML = html;
