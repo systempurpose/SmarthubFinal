@@ -889,7 +889,7 @@ async function runDeepDiagnostic() {
                         <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
                     </div>
-                    <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
+                    <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
                         <div class="spinner"></div>
                         <p style="text-align: center;">Analyzing system...</p>
                     </div>
@@ -903,6 +903,9 @@ async function runDeepDiagnostic() {
         modal = document.getElementById('quickDiagModal');
     }
 
+    // Ensure modal is hidden before opening (fixes unclickable button)
+    modal.style.display = 'none';
+
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
     
@@ -910,7 +913,9 @@ async function runDeepDiagnostic() {
     modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
     modal.style.display = 'flex';
 
-    const closeModal = () => modal.style.display = 'none';
+    const closeModal = () => {
+        modal.style.display = 'none';
+    };
     document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
@@ -950,26 +955,25 @@ async function runDeepDiagnostic() {
 
         const escape = (str) => escapeHtml(str);
 
-        // Build initial apps HTML with loading placeholders
-        // Build initial apps HTML with loading placeholders – compact design
+        // Build initial apps HTML with compact design
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 16px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 5px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
             for (const app of suspiciousAppsList) {
                 appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px;">
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
                             <div style="flex: 1;">
                                 <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
                                     <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
                                     <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
-                                    <span class="risk-badge low" style="background:#fed7aa; color:#9b4a00;">Risk: low</span>
+                                    <span class="risk-badge low" style="background:#fed7aa; color:#9b4a00; padding:2px 8px; border-radius:12px; font-size:11px;">Risk: low</span>
                                 </div>
                                 <div style="font-size: 11px; color: #555; margin-top: 4px;">${escape(app.reason)}</div>
                             </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app">Delete</button>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 12px; cursor:pointer;">Delete</button>
                         </div>
                         <div id="deep-${escape(app.packageName)}" style="margin-top: 10px;">
                             <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
@@ -983,7 +987,7 @@ async function runDeepDiagnostic() {
 
         modalBody.innerHTML = hardwareHtml + appsHtml;
 
-        // 3. Perform deep scans and REMOVE safe apps (riskScore <= 29)
+        // 3. Perform deep scans and remove safe apps (riskScore <= 29)
         const scanPromises = suspiciousAppsList.map(async (app) => {
             try {
                 const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
@@ -1000,10 +1004,9 @@ async function runDeepDiagnostic() {
                     const analysis = data.staticAnalysis;
                     const riskScore = analysis.risk_score || 0;
 
-                    // If riskScore <= 29, remove the entire app card from UI
+                    // Remove if score <= 29
                     if (riskScore <= 29) {
                         appCard.remove();
-                        // Update the heading count
                         const remainingCards = document.querySelectorAll('.app-card-item').length;
                         const heading = document.getElementById('suspiciousAppsHeading');
                         if (heading) {
@@ -1012,10 +1015,10 @@ async function runDeepDiagnostic() {
                                 heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
                             }
                         }
-                        return; // No need to show deep scan results for removed app
+                        return;
                     }
 
-                    // --- Malware type descriptions (full explanations) ---
+                    // Malware descriptions
                     const malwareDescriptions = {
                         'Spyware': '📷 Can read contacts, location, camera, microphone, or SMS without your knowledge.',
                         'Ransomware': '💰 Can lock your device or encrypt files and demand payment to unlock them.',
@@ -1030,7 +1033,6 @@ async function runDeepDiagnostic() {
                         'Trojan': '🐴 Disguised as a normal app; performs malicious actions like data theft or backdoor.'
                     };
 
-                    // Build malware display with full descriptions
                     let malwareHtml = '';
                     if (analysis.malware_types && analysis.malware_types.length > 0) {
                         const typeDescriptions = analysis.malware_types.map(type => {
@@ -1040,7 +1042,6 @@ async function runDeepDiagnostic() {
                         malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Why it may be malicious:</strong>${typeDescriptions}</div>`;
                     }
 
-                    // Build deep scan results HTML (no behavior section)
                     let html = `
                         <strong>Deep Scan Results:</strong><br>
                         <span style="font-size: 12px;">Risk Score: ${riskScore}/100</span><br>
