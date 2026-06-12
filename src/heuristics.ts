@@ -23,6 +23,12 @@ export type Finding = {
 };
 
 export type RiskLevel = 'safe' | 'moderate' | 'risky';
+const DANGEROUS_PERMISSIONS_LIST = [
+  'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION',
+  'CAMERA', 'RECORD_AUDIO', 'READ_SMS', 'SEND_SMS',
+  'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE',
+  'READ_PHONE_STATE', 'SYSTEM_ALERT_WINDOW'
+];
 
 export function analyzeBattery(batteryDump: string): Finding[] {
   const findings: Finding[] = [];
@@ -1185,6 +1191,11 @@ export function detectSuspiciousApps(
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
 
+    // Get risk score and level using the existing scoreAppRisk function
+    const risk = scoreAppRisk(perms);  // returns { score: number, level: RiskLevel }
+    const riskScore = risk.score;
+    const highRiskScore = riskScore >= 40;   // medium or high risk
+
     const dangerousPerms = [
       'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE',
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
@@ -1194,15 +1205,15 @@ export function detectSuspiciousApps(
     ];
     const hasDangerous = dangerousPerms.some(d => upper.some(p => p.includes(d)));
 
-    // Check if installed from a trusted store. Keep legitimate store apps if they request dangerous permissions.
+    // Check if installed from a trusted store. Keep legitimate store apps if they request dangerous permissions OR have high risk score.
     const installer = installerMap?.[pkg];
     const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
-    if (fromLegitStore && !hasDangerous) continue;
+    if (fromLegitStore && !hasDangerous && !highRiskScore) continue;
 
     // Define highRiskPerms using the existing isHighRiskByPermissions function
     const highRiskPerms = isHighRiskByPermissions(upper);
 
-    // ----- NEW: Suspicious patterns for unknown-source apps -----
+    // Suspicious patterns for unknown-source apps
     const suspiciousPatternsForUnknownSource = [
       /\broot\b/, /\bsu\b/, /\bmagisk\b/, /\bxposed\b/, /\bexploit\b/, /\bbypass\b/,
       /\bunlock\b/, /\bfrida\b/, /\binject\b/, /\bhook\b/
@@ -1311,7 +1322,7 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // 5. NEW: Flag dangerous unknown‑source apps by name pattern
+    // 5. Flag dangerous unknown‑source apps by name pattern
     if (hasDangerousNameForUnknownSource && !fromLegitStore) {
       reason = `Sideloaded app with a name that suggests rooting, hacking, or system modification (${pkg}). May be used to bypass security or modify system behaviour.`;
       threatLevel = 'high';
@@ -1358,7 +1369,22 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // 7. Sideloaded app without dangerous permissions but still from unknown source
+    // 7. NEW: High risk score (≥40) even if no dangerous permissions
+    if (highRiskScore) {
+      reason = `App has a high risk score (${riskScore}/100) based on permission analysis, indicating potentially harmful behavior.`;
+      threatLevel = riskScore >= 70 ? 'high' : 'medium';
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason,
+        threatLevel,
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}. Consider uninstalling if you don't recognise it or if it doesn't need many permissions.`,
+        threatTypes: classifyThreatTypes(pkg, perms),
+      });
+      continue;
+    }
+
+    // 8. Sideloaded app without dangerous permissions but still from unknown source
     if (!fromLegitStore) {
       reason = `Sideloaded app — not installed from any official app store. Installer: ${installer || 'Unknown'}. Verify this app is from a trusted developer.`;
       threatLevel = 'low';
@@ -1375,7 +1401,9 @@ export function detectSuspiciousApps(
 
   return suspicious;
 }
+
 // src/heuristics.ts
+// Add to src/heuristics.ts
 export function hasDangerousPermissions(perms: string[]): boolean {
     const dangerousList = [
         'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION',
