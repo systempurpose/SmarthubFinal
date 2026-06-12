@@ -1171,232 +1171,128 @@ export function detectSuspiciousApps(
 ): SuspiciousApp[] {
   const suspicious: SuspiciousApp[] = [];
 
-  // Helper to generate a display name from a package name
   function displayNameFromPackage(pkg: string): string {
     let name = pkg.split('.').pop() || pkg;
     return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
+  // Skip system apps by APK path (pre-installed)
+  function isSystemApp(app: AppWithPerms): boolean {
+    if (!app.path) return false;
+    const lower = app.path.toLowerCase();
+    return lower.startsWith('/system/') || lower.startsWith('/vendor/') ||
+           lower.startsWith('/product/') || lower.startsWith('/odm/') ||
+           lower.startsWith('/system_ext/') || lower.includes('/system/') ||
+           lower.includes('/vendor/');
+  }
+
+  // Known safe sideloaded apps – never flag these
+  const TRUSTED_SIDELOADED = new Set([
+    'cyou.joiplay.joiplay',
+    'cyou.joiplay.runtime.rpgmaker',
+    'cyou.joiplay.runtime.renpy.v8d4d1',
+    'org.fdroid.fdroid',
+    'com.termux',
+  ]);
+
+  // System package name prefixes to skip
+  const SYSTEM_PACKAGE_PREFIXES = [
+    'android.', 'com.android.', 'com.google.android.', 'com.unisoc.', 'com.sprd.',
+    'com.mediatek.', 'com.qualcomm.', 'com.samsung.', 'com.huawei.', 'com.xiaomi.',
+    'com.oplus.', 'com.vivo.', 'com.oneplus.', 'com.lge.', 'com.sony.', 'com.nokia.',
+    'com.sec.android.', 'com.cyanogenmod.', 'com.lineageos.', 'com.spreadtrum.',
+    'com.sprd.engineermode', 'com.sprd.validationtools', 'com.sprd.logmanager',
+    'com.unisoc.silent.reboot', 'android.overlay.', 'com.silent.reboot'
+  ];
+
   for (const app of apps) {
     const pkg = app.packageName;
     if (!pkg) continue;
 
-    // Skip if installerMap missing (should not happen)
-    if (installerMap && !(pkg in installerMap)) continue;
+    // Skip system apps (by path)
+    if (isSystemApp(app)) {
+      console.log(`[SKIP system path] ${pkg} at ${app.path}`);
+      continue;
+    }
 
-    // Skip trusted system apps by prefix
+    // Skip system package name prefixes
+    if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) {
+      console.log(`[SKIP system prefix] ${pkg}`);
+      continue;
+    }
+
+    // Skip known trusted trusted prefixes and exact packages
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
+    if (TRUSTED_SIDELOADED.has(pkg)) continue; // 👈 new
 
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
 
-    // Get risk score and level using the existing scoreAppRisk function
-    const risk = scoreAppRisk(perms);  // returns { score: number, level: RiskLevel }
+    const risk = scoreAppRisk(perms);
     const riskScore = risk.score;
-    const highRiskScore = riskScore >= 40;   // medium or high risk
+    const highRiskScore = riskScore >= 40;
 
-    const dangerousPerms = [
-      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE',
+    // Dangerous permissions list (exclude normal storage)
+    const dangerousPermsList = [
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
       'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
-      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN', 'REQUEST_INSTALL_PACKAGES',
-      'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS', 'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS'
+      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN',
+      'REQUEST_INSTALL_PACKAGES', 'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS',
+      'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE'
     ];
-    const hasDangerous = dangerousPerms.some(d => upper.some(p => p.includes(d)));
+    const trulyDangerous = dangerousPermsList.some(d => upper.includes(d));
+    const totalPerms = perms.length;
+    const manyPerms = totalPerms > 15;
 
-    // Check if installed from a trusted store. Keep legitimate store apps if they request dangerous permissions OR have high risk score.
-    const installer = installerMap?.[pkg];
-    const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
-    if (fromLegitStore && !hasDangerous && !highRiskScore) continue;
+    // Determine installer
+    let installer: string | null = null;
+    let fromLegitStore = false;
+    if (installerMap && pkg in installerMap) {
+      installer = installerMap[pkg];
+      fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer);
+    }
+    const isSideloaded = !fromLegitStore;
 
-    // Define highRiskPerms using the existing isHighRiskByPermissions function
-    const highRiskPerms = isHighRiskByPermissions(upper);
+    // Flag only when:
+    // - sideloaded AND (high risk OR truly dangerous OR many permissions)
+    // - official store app AND high risk
+    const shouldFlag = (isSideloaded && (highRiskScore || trulyDangerous || manyPerms)) ||
+                       (!isSideloaded && highRiskScore);
 
-    // Suspicious patterns for unknown-source apps
-    const suspiciousPatternsForUnknownSource = [
-      /\broot\b/, /\bsu\b/, /\bmagisk\b/, /\bxposed\b/, /\bexploit\b/, /\bbypass\b/,
-      /\bunlock\b/, /\bfrida\b/, /\binject\b/, /\bhook\b/
-    ];
-    const hasDangerousNameForUnknownSource = suspiciousPatternsForUnknownSource.some(r => r.test(pkg));
-    
+    if (!shouldFlag) continue;
+
     let reason = '';
     let threatLevel: 'high' | 'medium' | 'low' = 'medium';
 
-    // 1. Known fake/modded apps
-    if (KNOWN_FAKE_APPS[pkg]) {
-      suspicious.push({
-        packageName: pkg,
-        displayName: KNOWN_FAKE_APPS[pkg],
-        reason: 'Unofficial/modified version of popular app. May contain ads, malware, or spyware.',
-        threatLevel: 'high',
-        suggestedAction: `Uninstall ${KNOWN_FAKE_APPS[pkg]} and install the official version from Google Play Store.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // 2. Check for suspicious package name patterns (original)
-    const matchedPattern = SUSPICIOUS_PACKAGE_PATTERNS.find(pattern => pattern.test(pkg));
-    const nameLooksLikeSystemUpdate = /systemupdate|system_update|\bfota\b|\bota\b/i.test(pkg);
-
-    if (matchedPattern && nameLooksLikeSystemUpdate) {
-      if (!installerMap || !(pkg in installerMap)) {
-        if (!highRiskPerms) continue;
-      } else {
-        const installer = installerMap[pkg];
-        const sideloaded = !(installer !== null && LEGITIMATE_INSTALLERS.includes(installer));
-        if (!sideloaded && !highRiskPerms) continue;
-      }
-    }
-
-    if (matchedPattern) {
-      const hasOverlay = upper.some(p => p.includes('SYSTEM_ALERT_WINDOW'));
-      const hasAccessibility = upper.some(p => p.includes('BIND_ACCESSIBILITY_SERVICE'));
-      const hasAdminRights = upper.some(p => p.includes('DEVICE_ADMIN'));
-
-      reason = `Suspicious package name pattern detected (${matchedPattern.source.slice(0, 30)}...)`;
-      threatLevel = 'medium';
-
-      if (hasOverlay) {
-        reason += '. Has screen overlay permission (can show ads over other apps or steal input).';
-        threatLevel = 'high';
-      }
-      if (hasAccessibility) {
-        reason += '. Has accessibility service access (can control device and read all screen content).';
-        threatLevel = 'high';
-      }
-      if (hasAdminRights) {
-        reason += '. Has device admin rights (difficult to uninstall).';
-        threatLevel = 'high';
-      }
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: threatLevel === 'high'
-          ? `Immediately uninstall ${displayNameFromPackage(pkg)}. If uninstall fails, disable Device Admin first: Settings → Security → Device Admins.`
-          : `Review and uninstall ${displayNameFromPackage(pkg)} if you didn't intentionally install it.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // 3. Adware signature: overlay + internet + background persistence
-    const hasOverlay = upper.some(p => p.includes('SYSTEM_ALERT_WINDOW'));
-    const hasInternet = upper.some(p => p.includes('INTERNET'));
-    const hasWakeLock = upper.some(p => p.includes('WAKE_LOCK'));
-    const hasBootReceiver = upper.some(p => p.includes('RECEIVE_BOOT_COMPLETED'));
-
-    if (hasOverlay && hasInternet && (hasWakeLock || hasBootReceiver) && !fromLegitStore) {
-      const permsCount = perms.length;
-      if (permsCount > 10) {
-        reason = 'App has adware signature: screen overlay + internet access + background persistence. Likely causes automatic ads or popup notifications.';
-        threatLevel = 'high';
-        suspicious.push({
-          packageName: pkg,
-          displayName: displayNameFromPackage(pkg),
-          reason,
-          threatLevel,
-          suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} to stop automatic ads and popups.`,
-          threatTypes: classifyThreatTypes(pkg, perms),
-        });
-        continue;
-      }
-    }
-
-    // 4. Accessibility service (high risk)
-    const hasAccessibility = upper.some(p => p.includes('BIND_ACCESSIBILITY_SERVICE'));
-    if (hasAccessibility && !fromLegitStore) {
-      reason = 'App has accessibility service permission. This allows full device control and can read all screen content including passwords.';
-      threatLevel = 'high';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)} carefully. Uninstall if you don't trust it or didn't intentionally grant accessibility access.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // 5. Flag dangerous unknown‑source apps by name pattern
-    if (hasDangerousNameForUnknownSource && !fromLegitStore) {
-      reason = `Sideloaded app with a name that suggests rooting, hacking, or system modification (${pkg}). May be used to bypass security or modify system behaviour.`;
-      threatLevel = 'high';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Immediately uninstall ${displayNameFromPackage(pkg)} unless you intentionally installed it for advanced development.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // 6. Detect apps with dangerous permissions
-    const totalPerms = perms.length;
-
-    if (hasDangerous) {
-      const dangerousFound = dangerousPerms.filter(d => upper.some(p => p.includes(d)));
-      reason = fromLegitStore
-        ? `App has dangerous permissions: ${dangerousFound.join(', ')}.`
-        : `Sideloaded app with dangerous permissions: ${dangerousFound.join(', ')}.`;
-      threatLevel = 'high';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If you didn't intentionally grant these permissions, uninstall it.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    } else if (totalPerms > 15) {
-      reason = `Sideloaded app with unusually high number of permissions (${totalPerms}). This is often seen in adware or spyware.`;
-      threatLevel = 'medium';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If unrecognized, uninstall.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
-    }
-
-    // 7. NEW: High risk score (≥40) even if no dangerous permissions
     if (highRiskScore) {
-      reason = `App has a high risk score (${riskScore}/100) based on permission analysis, indicating potentially harmful behavior.`;
+      reason += `High risk score (${riskScore}/100). `;
       threatLevel = riskScore >= 70 ? 'high' : 'medium';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)}. Consider uninstalling if you don't recognise it or if it doesn't need many permissions.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-      continue;
+    }
+    if (manyPerms) {
+      reason += `Asks for unusually many permissions (${totalPerms}). `;
+      threatLevel = 'medium';
+    }
+    if (trulyDangerous && !highRiskScore && !manyPerms) {
+      const dangerousFound = dangerousPermsList.filter(d => upper.includes(d));
+      reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
+      threatLevel = 'high';
+    }
+    if (isSideloaded && !highRiskScore && !manyPerms && !trulyDangerous) {
+      reason += `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}. `;
+      threatLevel = 'low';
     }
 
-    // 8. Sideloaded app without dangerous permissions but still from unknown source
-    if (!fromLegitStore) {
-      reason = `Sideloaded app — not installed from any official app store. Installer: ${installer || 'Unknown'}. Verify this app is from a trusted developer.`;
-      threatLevel = 'low';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If unrecognized, uninstall via Settings → Apps → ${displayNameFromPackage(pkg)} → Uninstall.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
-      });
-    }
+    suspicious.push({
+      packageName: pkg,
+      displayName: displayNameFromPackage(pkg),
+      reason: reason.trim(),
+      threatLevel,
+      suggestedAction: threatLevel === 'high'
+        ? `Uninstall ${displayNameFromPackage(pkg)} immediately. Check Settings → Apps → ${displayNameFromPackage(pkg)} → Uninstall.`
+        : `Review ${displayNameFromPackage(pkg)}. If you don't need it, uninstall.`,
+      threatTypes: classifyThreatTypes(pkg, perms),
+    });
   }
 
   return suspicious;
