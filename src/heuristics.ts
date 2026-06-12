@@ -873,40 +873,55 @@ export function scoreAppRisk(perms: string[], path?: string): AppRiskScore {
   const { risk, riskyPermissions, moderatePermissions } = assessAppRisk(perms);
 
   let score = 0;
+  const riskyCount = riskyPermissions.length;
+  const moderateCount = moderatePermissions.length;
 
   if (risk === 'risky') {
-    score += 60 + Math.min(20, Math.max(0, (riskyPermissions.length - 1) * 5));
+    // Base 60 + up to 30 extra for multiple risky permissions
+    score = 60 + Math.min(30, riskyCount * 8);
   } else if (risk === 'moderate') {
-    score += 30 + Math.min(20, Math.max(0, (moderatePermissions.length - 1) * 2));
+    // Base 30 + up to 20 extra for multiple moderate permissions
+    score = 30 + Math.min(20, moderateCount * 3);
   } else {
-    if (perms.length > 0) {
-      score += 5;
-    }
+    // Safe apps with some permissions get a small base (5)
+    score = perms.length > 0 ? 5 : 0;
   }
 
-  if (path) {
-    if (/^\/(data|mnt\/asec)/.test(path)) {
-      score += 10;
-    } else if (/^\/(system|product|system_ext)/.test(path)) {
-      score -= 5;
-    }
+  // Penalize apps installed in user data (not system) – they are more likely to be suspicious
+  if (path && /^\/(data|mnt\/asec)/.test(path)) {
+    score += 10;
+  } else if (path && /^\/(system|product|system_ext)/.test(path)) {
+    score -= 5;
   }
 
-  if (score < 0) score = 0;
-  if (score > 100) score = 100;
+  // New: Penalize obfuscated package names (e.g., com.a.b.cd, random strings)
+  // This is a heuristic; can be refined.
+  // We'll apply this penalty only if the app is not from a legit store.
+  // For now, we add a small extra to score if the package name looks suspicious.
+  // (We'll handle the package name check outside this function for simplicity.)
 
-  // NEW: Determine level based on score threshold (0-29 safe, 30-69 moderate, 70-100 risky)
+  score = Math.min(100, Math.max(0, score));
   let level: RiskLevel;
-  if (score <= 29) {
-    level = 'safe';
-  } else if (score <= 69) {
-    level = 'moderate';
-  } else {
-    level = 'risky';
-  }
+  if (score <= 29) level = 'safe';
+  else if (score <= 69) level = 'moderate';
+  else level = 'risky';
 
   return { score, level };
 }
+
+export function isObfuscatedPackageName(pkg: string): boolean {
+  // Too many dots (e.g., > 4) or segments like "a", "b", "c"
+  const parts = pkg.split('.');
+  if (parts.length > 5) return true;
+  // Many parts that are single letters or very short
+  const shortParts = parts.filter(p => p.length <= 2).length;
+  if (shortParts >= 3) return true;
+  // Contains random-looking hex or base64 patterns
+  if (/[0-9a-f]{8,}/i.test(pkg)) return true;
+  // Contains keywords like "clean", "boost", "root", "hack" (already in suspicious patterns, but we add a penalty)
+  return false;
+}
+
 // Known suspicious package patterns and adware signatures
 const SUSPICIOUS_PACKAGE_PATTERNS = [
   // Common adware/malware patterns
@@ -1029,11 +1044,13 @@ function isHighRiskByPermissions(upperPerms: string[]): boolean {
 }
 export function classifyThreatTypes(packageName: string, permissions: string[]): ThreatInfo[] {
   const threats: ThreatInfo[] = [];
-  
+  // Normalise permissions: strip 'android.permission.' prefix
+  const permsShort = permissions.map(p => p.replace(/^android\.permission\./, ''));
+
   // Banking trojan indicators
   const bankingKeywords = ['bank', 'pay', 'cash', 'wallet', 'credit', 'debit', 'finance', 'vbv', 'otp', 'secure'];
-  const hasSmsPerm = permissions.includes('android.permission.READ_SMS') || permissions.includes('android.permission.SEND_SMS');
-  const hasInternet = permissions.includes('android.permission.INTERNET');
+  const hasSmsPerm = permsShort.includes('READ_SMS') || permsShort.includes('SEND_SMS');
+  const hasInternet = permsShort.includes('INTERNET');
   if (hasSmsPerm && hasInternet && bankingKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
     threats.push({
       type: 'banking_trojan',
@@ -1041,16 +1058,10 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'critical'
     });
   }
-  
+
   // Spyware indicators
-  const spyPerms = [
-    'android.permission.RECORD_AUDIO',
-    'android.permission.CAMERA',
-    'android.permission.READ_CONTACTS',
-    'android.permission.ACCESS_FINE_LOCATION',
-    'android.permission.READ_CALL_LOG'
-  ];
-  const spyCount = spyPerms.filter(p => permissions.includes(p)).length;
+  const spyPerms = ['RECORD_AUDIO', 'CAMERA', 'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'READ_CALL_LOG'];
+  const spyCount = spyPerms.filter(p => permsShort.includes(p)).length;
   if (spyCount >= 3) {
     threats.push({
       type: 'spyware',
@@ -1058,14 +1069,10 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'critical'
     });
   }
-  
+
   // RAT (Remote Access Trojan) indicators
-  const ratPerms = [
-    'android.permission.SYSTEM_ALERT_WINDOW',
-    'android.permission.BIND_ACCESSIBILITY_SERVICE',
-    'android.permission.REQUEST_INSTALL_PACKAGES'
-  ];
-  const ratCount = ratPerms.filter(p => permissions.includes(p)).length;
+  const ratPerms = ['SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'REQUEST_INSTALL_PACKAGES'];
+  const ratCount = ratPerms.filter(p => permsShort.includes(p)).length;
   if (ratCount >= 2) {
     threats.push({
       type: 'rat',
@@ -1073,10 +1080,10 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'critical'
     });
   }
-  
+
   // Adware / click fraud indicators
   const adwareKeywords = ['ad', 'push', 'notification', 'click', 'reward', 'offer', 'ads', 'advert'];
-  const hasOverlay = permissions.includes('android.permission.SYSTEM_ALERT_WINDOW');
+  const hasOverlay = permsShort.includes('SYSTEM_ALERT_WINDOW');
   if (adwareKeywords.some(kw => packageName.toLowerCase().includes(kw)) || hasOverlay) {
     threats.push({
       type: 'adware',
@@ -1084,7 +1091,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'medium'
     });
   }
-  
+
   // Cryptominer indicators
   const minerKeywords = ['miner', 'crypto', 'bitcoin', 'eth', 'monero', 'mine'];
   if (minerKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
@@ -1094,7 +1101,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'high'
     });
   }
-  
+
   // Ransomware indicators
   const ransomKeywords = ['ransom', 'lock', 'encrypt', 'decrypt', 'unlock'];
   if (ransomKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
@@ -1104,8 +1111,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'critical'
     });
   }
-  
-  // If no specific threat but still flagged as suspicious by heuristics
+
   if (threats.length === 0) {
     threats.push({
       type: 'generic_risk',
@@ -1113,7 +1119,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
       severity: 'medium'
     });
   }
-  
+
   return threats;
 }
 
@@ -1176,7 +1182,6 @@ export function detectSuspiciousApps(
     return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
-  // Skip system apps by APK path (pre-installed)
   function isSystemApp(app: AppWithPerms): boolean {
     if (!app.path) return false;
     const lower = app.path.toLowerCase();
@@ -1185,7 +1190,6 @@ export function detectSuspiciousApps(
            lower.startsWith('/system_ext/');
   }
 
-  // Known safe sideloaded apps – never flag these
   const TRUSTED_SIDELOADED = new Set([
     'cyou.joiplay.joiplay',
     'cyou.joiplay.runtime.rpgmaker',
@@ -1194,7 +1198,6 @@ export function detectSuspiciousApps(
     'com.termux',
   ]);
 
-  // System package name prefixes to skip
   const SYSTEM_PACKAGE_PREFIXES = [
     'android.', 'com.android.', 'com.google.android.', 'com.unisoc.', 'com.sprd.',
     'com.mediatek.', 'com.qualcomm.', 'com.samsung.', 'com.huawei.', 'com.xiaomi.',
@@ -1208,37 +1211,16 @@ export function detectSuspiciousApps(
     const pkg = app.packageName;
     if (!pkg) continue;
 
-    // Skip system apps (by path)
     if (isSystemApp(app)) continue;
-    // Skip system package name prefixes
     if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
-    // Skip trusted prefixes and exact packages
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
-    // Skip trusted sideloaded apps
     if (TRUSTED_SIDELOADED.has(pkg)) continue;
 
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
 
-    const risk = scoreAppRisk(perms);
-    const riskScore = risk.score;
-    const highRiskScore = riskScore >= 40;
-
-    // Dangerous permissions list
-    const dangerousPermsList = [
-      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
-      'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
-      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN',
-      'REQUEST_INSTALL_PACKAGES', 'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS',
-      'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE',
-      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'  // keep storage as dangerous for now
-    ];
-    const hasDangerous = dangerousPermsList.some(d => upper.includes(d));
-    const totalPerms = perms.length;
-    const manyPerms = totalPerms > 15;
-
-    // Determine installer
+    // Determine installer FIRST (so fromLegitStore is available)
     let installer: string | null = null;
     let fromLegitStore = false;
     if (installerMap && pkg in installerMap) {
@@ -1247,11 +1229,35 @@ export function detectSuspiciousApps(
     }
     const isSideloaded = !fromLegitStore;
 
-    // Original working condition: flag if sideloaded OR high risk OR manyPerms OR hasDangerous
+    const risk = scoreAppRisk(perms);
+    let riskScore = risk.score;
+
+    // Apply obfuscated name penalty (now fromLegitStore is known)
+    if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
+      riskScore = Math.min(100, riskScore + 15);
+    }
+
+    const highRiskScore = riskScore >= 40;
+
+    const dangerousPermsList = [
+      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
+      'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
+      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN',
+      'REQUEST_INSTALL_PACKAGES', 'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS',
+      'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE',
+      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'
+    ];
+    const hasDangerous = dangerousPermsList.some(d => upper.includes(d));
+    const totalPerms = perms.length;
+    const manyPerms = totalPerms > 15;
+
     if (isSideloaded || highRiskScore || manyPerms || hasDangerous) {
       let reason = '';
       let threatLevel: 'high' | 'medium' | 'low' = 'medium';
 
+      if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
+        reason += `Obfuscated package name (often used by malware). `;
+      }
       if (highRiskScore) {
         reason += `High risk score (${riskScore}/100). `;
         threatLevel = riskScore >= 70 ? 'high' : 'medium';
