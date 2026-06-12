@@ -884,16 +884,16 @@ async function runDeepDiagnostic() {
     if (!modal) {
         const modalHTML = `
             <div id="quickDiagModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 750px;">
-                    <div class="modal-header">
+                <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+                    <div class="modal-header" style="padding: 12px 20px;">
                         <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
                     </div>
-                    <div class="modal-body" id="quickDiagModalBody" style="max-height: 600px; overflow-y: auto;">
+                    <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
                         <div class="spinner"></div>
                         <p style="text-align: center;">Analyzing system...</p>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer" style="padding: 8px 20px;">
                         <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
                     </div>
                 </div>
@@ -951,26 +951,29 @@ async function runDeepDiagnostic() {
         const escape = (str) => escapeHtml(str);
 
         // Build initial apps HTML with loading placeholders
+        // Build initial apps HTML with loading placeholders – compact design
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer">`;
+            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 16px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
             for (const app of suspiciousAppsList) {
                 appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 20px; padding: 16px; background: #fff3e0; border-radius: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-                            <div>
-                                <strong>${escape(app.displayName)}</strong> (${escape(app.packageName)})
-                                <br><span id="risk-text-${escape(app.packageName)}" style="font-size: 12px;">Risk: ${escape(app.threatLevel)} - ${escape(app.reason)}</span>
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                                    <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
+                                    <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
+                                    <span class="risk-badge low" style="background:#fed7aa; color:#9b4a00;">Risk: low</span>
+                                </div>
+                                <div style="font-size: 11px; color: #555; margin-top: 4px;">${escape(app.reason)}</div>
                             </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')" 
-                                    style="background: #d32f2f; color: white; border: none; border-radius: 20px; padding: 6px 16px; cursor: pointer;">
-                                Delete
-                            </button>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app">Delete</button>
                         </div>
-                        <div id="deep-${escape(app.packageName)}" style="margin-top: 12px;">
-                            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div> <span style="font-size: 12px;">Running deep scan...</span>
+                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px;">
+                            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
+                            <span style="font-size: 11px; margin-left: 8px;">Running deep scan...</span>
                         </div>
                     </div>
                 `;
