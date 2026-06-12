@@ -515,38 +515,60 @@ async function showStorageModal() {
             return { ...segment, value: computedValue };
         });
 
+        // Build HTML with explicit width styles
         const html = `
-            <div class="storage-details-grid">
-                <div class="storage-chart-panel">
-                    <div class="storage-chart-shell">
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <!-- Left column: Pie chart + legend -->
+                <div style="flex: 1; min-width: 220px;">
+                    <div style="text-align: center;">
                         <canvas id="storagePieCanvas" width="220" height="220"></canvas>
                     </div>
-                    <div class="storage-legend">
+                    <div style="margin-top: 16px;">
                         ${segments.map(segment => `
-                            <div class="storage-legend-item">
-                                <span class="storage-legend-badge" style="background:${segment.color}"></span>
-                                <div>
-                                    <div class="legend-label">${segment.icon} ${segment.label}</div>
-                                    <div class="legend-detail">${escapeHtml(segment.human)} • ${segment.value.toFixed(1)}%</div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <span style="width: 16px; height: 16px; background: ${segment.color}; border-radius: 4px;"></span>
+                                <div style="flex:1;">
+                                    <strong>${segment.icon} ${segment.label}</strong><br>
+                                    <span style="font-size:12px; color:#666;">${escapeHtml(segment.human)} (${segment.value.toFixed(1)}%)</span>
                                 </div>
                             </div>
                         `).join('')}
                     </div>
                 </div>
-                <div class="storage-summary-panel">
-                    <div class="storage-summary-card">
-                        <div class="storage-summary-header">Overview</div>
-                        <div class="storage-summary-item"><span>Total</span><strong>${escapeHtml(total)}</strong></div>
-                        <div class="storage-summary-item"><span>Used</span><strong>${escapeHtml(used)}</strong></div>
-                        <div class="storage-summary-item"><span>Free</span><strong>${escapeHtml(free)}</strong></div>
+
+                <!-- Right column: Overview + Detailed Usage -->
+                <div style="flex: 2; min-width: 280px;">
+                    <!-- Overview card -->
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                        <h4 style="margin-top:0; margin-bottom:12px;">Overview</h4>
+                        <div style="display: flex; justify-content: space-between; gap: 16px;">
+                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
+                                <div style="font-size:13px; color:#666;">Total</div>
+                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(total)}</div>
+                            </div>
+                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
+                                <div style="font-size:13px; color:#666;">Used</div>
+                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(used)}</div>
+                            </div>
+                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
+                                <div style="font-size:13px; color:#666;">Free</div>
+                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(free)}</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="storage-breakdown-card">
-                        <div class="storage-summary-header">Detailed Usage</div>
+
+                    <!-- Detailed Usage -->
+                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px;">
+                        <h4 style="margin-top:0; margin-bottom:12px;">Detailed Usage</h4>
                         ${segments.map(segment => `
-                            <div class="breakdown-row">
-                                <div class="breakdown-row-title"><span>${segment.icon}</span>${segment.label}</div>
-                                <div class="breakdown-row-meta">${escapeHtml(segment.human)} • ${segment.value.toFixed(1)}%</div>
-                                <div class="breakdown-track"><div class="breakdown-fill" style="width:${Math.max(1, segment.value)}%; background:${segment.color}"></div></div>
+                            <div style="margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <span><strong>${segment.icon} ${segment.label}</strong></span>
+                                    <span>${escapeHtml(segment.human)} (${segment.value.toFixed(1)}%)</span>
+                                </div>
+                                <div style="background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden;">
+                                    <div style="width: ${Math.max(1, segment.value)}%; background: ${segment.color}; height: 100%;"></div>
+                                </div>
                             </div>
                         `).join('')}
                     </div>
@@ -556,6 +578,7 @@ async function showStorageModal() {
 
         body.innerHTML = html;
 
+        // Draw pie chart
         const canvas = document.getElementById('storagePieCanvas');
         const totalPercent = segments.reduce((sum, segment) => sum + segment.value, 0);
         if (canvas) {
@@ -564,7 +587,6 @@ async function showStorageModal() {
             ctx.clearRect(0, 0, w, h);
             
             if (totalPercent > 0.05) {
-                // Draw pie chart with actual data
                 let start = -0.5 * Math.PI;
                 for (const segment of segments) {
                     const angle = (segment.value / 100) * 2 * Math.PI;
@@ -574,23 +596,24 @@ async function showStorageModal() {
                     ctx.fillStyle = segment.color;
                     ctx.moveTo(cx, cy);
                     ctx.arc(cx, cy, r, start, end);
-                    ctx.closePath();
                     ctx.fill();
                     start = end;
                 }
+                // Inner circle for donut style
                 ctx.beginPath();
                 ctx.fillStyle = '#ffffff';
-                ctx.arc(cx, cy, 40, 0, 2 * Math.PI);
+                ctx.arc(cx, cy, 45, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.fillStyle = '#1f1f1f';
-                ctx.font = '14px Segoe UI';
+                ctx.font = 'bold 14px "Segoe UI"';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('Storage', cx, cy - 10);
-                ctx.font = '13px Segoe UI';
-                ctx.fillText(`${total}`, cx, cy + 12);
+                ctx.fillText('Storage', cx, cy - 8);
+                ctx.font = '13px "Segoe UI"';
+                ctx.fillStyle = '#555';
+                ctx.fillText(`${total}`, cx, cy + 10);
             } else {
-                // Draw placeholder donut when no data
+                // Fallback: gray circle with message
                 ctx.fillStyle = '#e5e7eb';
                 ctx.beginPath();
                 ctx.arc(cx, cy, r, 0, 2 * Math.PI);
@@ -600,7 +623,7 @@ async function showStorageModal() {
                 ctx.arc(cx, cy, 60, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.fillStyle = '#9ca3af';
-                ctx.font = '13px Segoe UI';
+                ctx.font = '12px "Segoe UI"';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('No breakdown', cx, cy - 5);

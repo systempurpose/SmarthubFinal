@@ -669,3 +669,75 @@ pre {
 .help-tab-content.active {
     display: block;
 }
+/* Add to your ui.css */
+.modal-content .storage-overview {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.modal-content .storage-overview-item {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+}
+
+.modal-content .breakdown-section {
+    margin-top: 15px;
+}
+
+.modal-content .progress-container {
+    margin: 10px 0;
+}
+/* Ensure storage overview numbers are clearly visible */
+.storage-summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f5f9;
+    width: 100%;
+}
+
+.storage-summary-item span {
+    font-size: 14px;
+    color: #5a6874;
+    white-space: nowrap;
+}
+
+.storage-summary-item strong {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f1f1f;
+    white-space: nowrap;
+}
+
+/* Give the summary card more breathing room */
+.storage-summary-card {
+    padding: 18px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Prevent text from wrapping on small screens */
+@media (max-width: 640px) {
+    .storage-summary-item {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .storage-summary-item span,
+    .storage-summary-item strong {
+        white-space: normal;
+    }
+}
+
+/* Slightly widen the modal on larger screens */
+#storageModal .modal-content {
+    width: min(98vw, 1100px);
+    max-width: 98vw;
+}
