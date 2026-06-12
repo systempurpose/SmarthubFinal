@@ -1185,10 +1185,19 @@ export function detectSuspiciousApps(
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
 
-    // Check if installed from a trusted store
+    const dangerousPerms = [
+      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE',
+      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
+      'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
+      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN', 'REQUEST_INSTALL_PACKAGES',
+      'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS', 'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS'
+    ];
+    const hasDangerous = dangerousPerms.some(d => upper.some(p => p.includes(d)));
+
+    // Check if installed from a trusted store. Keep legitimate store apps if they request dangerous permissions.
     const installer = installerMap?.[pkg];
     const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
-    if (fromLegitStore) continue;
+    if (fromLegitStore && !hasDangerous) continue;
 
     // Define highRiskPerms using the existing isHighRiskByPermissions function
     const highRiskPerms = isHighRiskByPermissions(upper);
@@ -1317,27 +1326,21 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // 6. Detect sideloaded apps with dangerous permissions
-    const dangerousPerms = [
-      'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE',
-      'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
-      'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
-      'SYSTEM_ALERT_WINDOW', 'BIND_ACCESSIBILITY_SERVICE', 'DEVICE_ADMIN', 'REQUEST_INSTALL_PACKAGES',
-      'INSTALL_PACKAGES', 'PACKAGE_USAGE_STATS', 'WRITE_SETTINGS', 'WRITE_SECURE_SETTINGS'
-    ];
-    const hasDangerous = dangerousPerms.some(d => upper.some(p => p.includes(d)));
+    // 6. Detect apps with dangerous permissions
     const totalPerms = perms.length;
 
     if (hasDangerous) {
       const dangerousFound = dangerousPerms.filter(d => upper.some(p => p.includes(d)));
-      reason = `Sideloaded app with dangerous permissions: ${dangerousFound.join(', ')}.`;
+      reason = fromLegitStore
+        ? `App has dangerous permissions: ${dangerousFound.join(', ')}.`
+        : `Sideloaded app with dangerous permissions: ${dangerousFound.join(', ')}.`;
       threatLevel = 'high';
       suspicious.push({
         packageName: pkg,
         displayName: displayNameFromPackage(pkg),
         reason,
         threatLevel,
-        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} if not trusted.`,
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If you didn't intentionally grant these permissions, uninstall it.`,
         threatTypes: classifyThreatTypes(pkg, perms),
       });
       continue;
@@ -1372,6 +1375,17 @@ export function detectSuspiciousApps(
 
   return suspicious;
 }
+// src/heuristics.ts
+export function hasDangerousPermissions(perms: string[]): boolean {
+    const dangerousList = [
+        'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION',
+        'CAMERA', 'RECORD_AUDIO', 'READ_SMS', 'SEND_SMS',
+        'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE',
+        'READ_PHONE_STATE', 'SYSTEM_ALERT_WINDOW'
+    ];
+    return perms.some(p => dangerousList.includes(p));
+}
+
 
 export function analyzeApps(apps: AppWithPerms[], permsByPkg: Record<string, string[]>): Finding[] {
   const findings: Finding[] = [];
@@ -1399,5 +1413,6 @@ export function analyzeApps(apps: AppWithPerms[], permsByPkg: Record<string, str
       });
     }
   }
+  
   return findings;
 }

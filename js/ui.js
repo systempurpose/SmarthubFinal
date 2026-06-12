@@ -1017,7 +1017,25 @@ async function runDeepDiagnostic() {
                         }
                         return;
                     }
-
+                    // Update risk badge with correct level
+                    const riskSpan = document.getElementById(`risk-text-${app.packageName}`);
+                    if (riskSpan) {
+                        let riskLevel = 'low';
+                        let bgColor = '#fed7aa';
+                        let textColor = '#9b4a00';
+                        if (riskScore >= 70) {
+                            riskLevel = 'high';
+                            bgColor = '#f8d7da';
+                            textColor = '#721c24';
+                        } else if (riskScore >= 40) {
+                            riskLevel = 'medium';
+                            bgColor = '#fff3cd';
+                            textColor = '#856404';
+                        }
+                        riskSpan.innerHTML = `Risk: ${riskLevel}`;
+                        riskSpan.style.backgroundColor = bgColor;
+                        riskSpan.style.color = textColor;
+                    }
                     // Malware descriptions
                     const malwareDescriptions = {
                         'Spyware': '📷 Can read contacts, location, camera, microphone, or SMS without your knowledge.',
@@ -1050,6 +1068,22 @@ async function runDeepDiagnostic() {
                         ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}</span><br>` : ''}
                         ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
                     `;
+
+                    // Update risk badge based on riskScore
+                    const riskBadge = document.getElementById(`risk-text-${app.packageName}`);
+                    if (riskBadge) {
+                        let riskLevel = 'low';
+                        let riskColor = '#fed7aa';
+                        if (riskScore >= 70) {
+                            riskLevel = 'high';
+                            riskColor = '#f8d7da';
+                        } else if (riskScore >= 40) {
+                            riskLevel = 'medium';
+                            riskColor = '#fff3cd';
+                        }
+                        riskBadge.innerHTML = `Risk: ${riskLevel} - Score: ${riskScore}/100. ${app.reason}`;
+                        riskBadge.style.backgroundColor = riskColor;
+                    }
                     container.innerHTML = html;
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;

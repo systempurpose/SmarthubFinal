@@ -42,6 +42,7 @@ import {
   scoreAppRisk,
   detectSuspiciousApps,
   classifyThreatTypes,
+  hasDangerousPermissions,
   RiskLevel,
   TRUSTED_PREFIXES,
   TRUSTED_EXACT_PACKAGES,
@@ -180,6 +181,7 @@ app.get('/api/suspicious-apps', async (req, res) => {
         let skippedByTrustedExact = 0;
         let skippedByLegitStore = 0;
         let evaluatedSideloaded = 0;
+        let evaluatedLegitStoreDangerous = 0;
         let sampleSkippedTrustedPrefix: string[] = [];
         let sampleSkippedTrustedExact: string[] = [];
         let sampleSkippedLegitStore: string[] = [];
@@ -199,7 +201,13 @@ app.get('/api/suspicious-apps', async (req, res) => {
             }
             const installer = installerMap?.[pkg];
             const fromLegitStore = installer !== null && LEGITIMATE_INSTALLERS.includes(installer || '');
+            const perms = permsByPkg[pkg] || [];
+            const hasDangerous = hasDangerousPermissions(perms);
             if (fromLegitStore) {
+                if (hasDangerous) {
+                    evaluatedLegitStoreDangerous++;
+                    continue;
+                }
                 skippedByLegitStore++;
                 if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
                 continue;
@@ -215,6 +223,7 @@ app.get('/api/suspicious-apps', async (req, res) => {
                 skippedByTrustedExact,
                 skippedByLegitStore,
                 evaluatedSideloaded,
+                evaluatedLegitStoreDangerous,
                 sampleSkippedTrustedPrefix,
                 sampleSkippedTrustedExact,
                 sampleSkippedLegitStore
