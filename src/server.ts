@@ -134,6 +134,19 @@ async function scanWithYara(apkPath: string): Promise<{ rule: string; matches: s
         return [];
     }
 }
+ // ----- ENTROPY & POLYMORPHIC CODE DETECTION -----
+    async function calculateEntropy(filePath: string): Promise<number> {
+      const buffer = await fs.readFile(filePath);
+      const byteCounts = new Array(256).fill(0);
+      for (const byte of buffer) byteCounts[byte]++;
+      let entropy = 0;
+      for (let i = 0; i < 256; i++) {
+        if (byteCounts[i] === 0) continue;
+        const p = byteCounts[i] / buffer.length;
+        entropy -= p * Math.log2(p);
+      }
+      return entropy / 8; // normalized 0..1
+    }
 async function pullApk(deviceId: string, packageName: string): Promise<string> {
   const tmpDir = os.tmpdir();
   const safePkg = packageName.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -1133,19 +1146,7 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis.packerReason = packer.reason;
     }
 
-    // ----- ENTROPY & POLYMORPHIC CODE DETECTION -----
-    async function calculateEntropy(filePath: string): Promise<number> {
-      const buffer = await fs.readFile(filePath);
-      const byteCounts = new Array(256).fill(0);
-      for (const byte of buffer) byteCounts[byte]++;
-      let entropy = 0;
-      for (let i = 0; i < 256; i++) {
-        if (byteCounts[i] === 0) continue;
-        const p = byteCounts[i] / buffer.length;
-        entropy -= p * Math.log2(p);
-      }
-      return entropy / 8; // normalized 0..1
-    }
+   
     const entropy = await calculateEntropy(apkPath);
     analysis.entropy = entropy;
     if (entropy > 0.85) {
