@@ -11,6 +11,8 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import overlayRoutes from './routes/overlayRoutes';
 import fridaRoutes from './routes/fridaRoutes';
+// At the top with other imports
+import { detectPackerIndicators } from './heuristics';
 const execAsync = promisify(exec);
 
 
@@ -1079,6 +1081,14 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis = { error: 'Failed to parse analyzer output', raw: stdout };
     }
 
+    // ----- PACKER DETECTION (added) -----
+    if (apkPath) {
+      const packer = detectPackerIndicators(packageName, apkPath);
+      analysis.isPacked = packer.isPacked;
+      analysis.packerReason = packer.reason;
+    }
+    // ---------------------------------
+
     // Classify malware types based on analysis signals
     if (analysis && !analysis.error) {
       const malwareTypes = classifyMalware({
@@ -1089,7 +1099,7 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis.malware_types = malwareTypes;
     }
 
-    // Optional VirusTotal integration (requires API key)
+    // Optional VirusTotal integration
     let vtResult = null;
     const vtApiKey = process.env.VIRUSTOTAL_API_KEY;
     if (vtApiKey) {

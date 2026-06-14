@@ -1231,7 +1231,7 @@ export function detectSuspiciousApps(
 
     const risk = scoreAppRisk(perms);
     let riskScore = risk.score;
-
+    
     // Apply obfuscated name penalty (now fromLegitStore is known)
     if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
       riskScore = Math.min(100, riskScore + 15);
@@ -1292,6 +1292,27 @@ export function detectSuspiciousApps(
   return suspicious;
 }
 
+export function detectPackerIndicators(packageName: string, apkPath?: string): { isPacked: boolean; reason: string } {
+    if (!apkPath) return { isPacked: false, reason: '' };
+    try {
+        // Quick check for known packer libraries in APK (using `aapt` or `unzip -l`)
+        const { execSync } = require('child_process');
+        const output = execSync(`unzip -l "${apkPath}" | grep -i "lib.*\\.so"`, { encoding: 'utf8', timeout: 5000 });
+        const libs = output.split('\n');
+        const packerLibs = ['libupx', 'libthemida', 'libmpress', 'libvmprotect', 'libenigma', 'libobsidium'];
+        for (const lib of libs) {
+            const lower = lib.toLowerCase();
+            for (const p of packerLibs) {
+                if (lower.includes(p)) {
+                    return { isPacked: true, reason: `Contains known packer library: ${p}` };
+                }
+            }
+        }
+        // Also check for high entropy in certain sections (quick approximation)
+        // For simplicity, we skip full entropy; can add later.
+    } catch (e) {}
+    return { isPacked: false, reason: '' };
+}
 // src/heuristics.ts
 // Add to src/heuristics.ts
 export function hasDangerousPermissions(perms: string[]): boolean {
