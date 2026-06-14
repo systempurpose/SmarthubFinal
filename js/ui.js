@@ -903,12 +903,12 @@ async function runDeepDiagnostic() {
         modal = document.getElementById('quickDiagModal');
     }
 
-    // Ensure modal is hidden before opening (fixes unclickable button)
+    // Ensure modal is hidden before opening
     modal.style.display = 'none';
 
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
-    
+
     modalTitle.textContent = 'Running Deep Diagnostic';
     modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
     modal.style.display = 'flex';
@@ -928,7 +928,7 @@ async function runDeepDiagnostic() {
             await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 }) // 60 seconds
+                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
             });
             console.log('Overlay monitoring started');
         } catch (err) {
@@ -944,6 +944,23 @@ async function runDeepDiagnostic() {
             overlayEvents = data.events || [];
         } catch (err) {
             console.warn('Could not fetch overlay events:', err);
+        }
+    }
+    // =============================================
+
+    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
+    async function runFridaOnPackage(packageName) {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId, packageName, timeoutMs: 30000 })
+            });
+            const data = await response.json();
+            return data.events || [];
+        } catch (err) {
+            console.warn('Frida scan failed:', err);
+            return [];
         }
     }
     // =============================================
@@ -1018,6 +1035,9 @@ async function runDeepDiagnostic() {
         modalBody.innerHTML = hardwareHtml + appsHtml;
 
         // 3. Perform deep scans and remove safe apps (riskScore <= 29)
+        // Also collect risk scores for later Frida selection
+        const appRiskMap = new Map(); // package -> { riskScore, displayName }
+
         const scanPromises = suspiciousAppsList.map(async (app) => {
             try {
                 const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
@@ -1033,6 +1053,7 @@ async function runDeepDiagnostic() {
                 if (data.ok) {
                     const analysis = data.staticAnalysis;
                     const riskScore = analysis.risk_score || 0;
+                    appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName });
 
                     // Remove if score <= 29
                     if (riskScore <= 29) {
@@ -1098,7 +1119,6 @@ async function runDeepDiagnostic() {
                         ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}</span><br>` : ''}
                         ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
                     `;
-
                     container.innerHTML = html;
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
@@ -1112,6 +1132,31 @@ async function runDeepDiagnostic() {
 
         // Stop overlay monitoring and fetch events
         await stopAndFetchOverlayEvents();
+
+        // ========== FRIDA DYNAMIC ANALYSIS (on highest risk app) ==========
+        let fridaEvents = [];
+        // Find app with highest risk score (only among those that remain, i.e., riskScore > 29)
+        const highestRiskApp = suspiciousAppsList
+            .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
+            .filter(app => app.riskScore >= 40) // only medium/high
+            .sort((a, b) => b.riskScore - a.riskScore)[0];
+        if (highestRiskApp) {
+            modalBody.insertAdjacentHTML('beforeend', '<div style="margin-top: 20px;"><div class="spinner" style="width: 30px; height: 30px;"></div><p>Running dynamic analysis (Frida) on highest‑risk app...</p></div>');
+            fridaEvents = await runFridaOnPackage(highestRiskApp.packageName);
+            // Remove the loading indicator
+            const loadingDiv = modalBody.querySelector('.spinner, .loading-indicator')?.parentElement;
+            if (loadingDiv) loadingDiv.remove();
+            if (fridaEvents.length > 0) {
+                let fridaHtml = `<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🔬 Dynamic Analysis (Frida) – ${escapeHtml(highestRiskApp.displayName)}</h3><ul>`;
+                for (const ev of fridaEvents.slice(0, 15)) {
+                    fridaHtml += `<li>${escapeHtml(JSON.stringify(ev))}</li>`;
+                }
+                if (fridaEvents.length > 15) fridaHtml += `<li>... and ${fridaEvents.length - 15} more</li>`;
+                fridaHtml += '</ul><p class="text-muted" style="font-size: 12px;">API calls detected at runtime (SMS, location, camera, file access, dex loading).</p></div>';
+                modalBody.insertAdjacentHTML('beforeend', fridaHtml);
+            }
+        }
+        // ===============================================================
 
         // Append overlay events to modal body if any
         if (overlayEvents.length > 0) {
