@@ -1145,6 +1145,37 @@ async function runDeepDiagnostic() {
         }
 
         modalTitle.textContent = 'Deep Diagnostic Complete';
+        // ========== ROOTKIT / KERNEL DETECTION ==========
+        try {
+            const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
+            const rootkitData = await rootkitRes.json();
+            if (rootkitData.rootkitIndicators) {
+                let rootkitHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🔒 Rootkit / Kernel Anomalies Detected</h3>';
+                if (rootkitData.dmesgAnomalies?.length) {
+                    rootkitHtml += '<div><strong>⚠️ Kernel log anomalies:</strong><ul>';
+                    for (const line of rootkitData.dmesgAnomalies.slice(0, 5)) {
+                        rootkitHtml += `<li>${escapeHtml(line)}</li>`;
+                    }
+                    if (rootkitData.dmesgAnomalies.length > 5) rootkitHtml += `<li>... and ${rootkitData.dmesgAnomalies.length - 5} more</li>`;
+                    rootkitHtml += '</ul></div>';
+                }
+                if (rootkitData.suspiciousModules?.length) {
+                    rootkitHtml += '<div><strong>⚠️ Suspicious kernel modules loaded:</strong><ul>';
+                    for (const mod of rootkitData.suspiciousModules.slice(0, 10)) {
+                        rootkitHtml += `<li>${escapeHtml(mod)}</li>`;
+                    }
+                    rootkitHtml += '</ul></div>';
+                }
+                if (rootkitData.hiddenProcesses?.length) {
+                    rootkitHtml += `<div><strong>⚠️ Hidden processes (PID not in ps):</strong> ${rootkitData.hiddenProcesses.join(', ')}</div>`;
+                }
+                rootkitHtml += '<p class="text-muted" style="font-size:12px;">Possible kernel‑level compromise – requires advanced removal.</p></div>';
+                modalBody.insertAdjacentHTML('beforeend', rootkitHtml);
+            }
+        } catch (err) {
+            console.warn('Rootkit scan failed:', err);
+        }
+// =============================================
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';

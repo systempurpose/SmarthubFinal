@@ -11,6 +11,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import overlayRoutes from './routes/overlayRoutes';
 import fridaRoutes from './routes/fridaRoutes';
+import rootkitRoutes from './routes/rootkitRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 const execAsync = promisify(exec);
@@ -402,6 +403,7 @@ app.use((req: Request, res: Response, next) => {
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
 
+app.use('/api', rootkitRoutes);
 app.use('/api', fridaRoutes);
 app.use('/api', overlayRoutes);
 app.use('/api/hardware', hardwareRoutes);
