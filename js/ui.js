@@ -903,7 +903,7 @@ async function runDeepDiagnostic() {
         modal = document.getElementById('quickDiagModal');
     }
 
-    // Ensure modal is hidden before opening
+    // Ensure modal is hidden before opening (fixes unclickable button)
     modal.style.display = 'none';
 
     const modalTitle = document.getElementById('quickDiagModalTitle');
