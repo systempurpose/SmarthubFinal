@@ -939,19 +939,25 @@ async function runDeepDiagnostic() {
 
     // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
     async function runFridaOnPackage(packageName, timeoutMs = 300000) {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, packageName, timeoutMs })
-            });
-            const data = await response.json();
-            return data.events || [];
-        } catch (err) {
-            console.warn('Frida scan failed:', err);
-            return [];
-        }
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                deviceId: currentDeviceId, 
+                packageName, 
+                timeoutMs,
+                stealth: true,           // enable stealth mode
+                scriptName: 'full_monitor.js'  // combined script
+            })
+        });
+        const data = await response.json();
+        return data.events || [];
+    } catch (err) {
+        console.warn('Frida scan failed:', err);
+        return [];
     }
+}
     // =============================================
 
     try {
