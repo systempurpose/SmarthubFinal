@@ -1093,6 +1093,11 @@ async function runDeepDiagnostic() {
                         malwareHtml += `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Packed/obfuscated code detected:</strong> ${analysis.packerReason || 'Unknown packer'}. Often used by malware to hide payload.</div>`;
                     }
 
+                    // ----- POLYMORPHIC / HIGH ENTROPY DETECTION -----
+                    if (analysis.isPolymorphic) {
+                        malwareHtml += `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Polymorphic/obfuscated code detected:</strong> ${analysis.polymorphicReason || 'High entropy suggests packed/encrypted code.'}. This technique is often used by advanced malware to evade signature detection.</div>`;
+                    }
+
                     // ----- YARA MATCHES -----
                     let yaraHtml = '';
                     if (analysis.yara_matches && analysis.yara_matches.length > 0) {

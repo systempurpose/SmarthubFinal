@@ -12,6 +12,7 @@ import { promisify } from 'node:util';
 import overlayRoutes from './routes/overlayRoutes';
 import fridaRoutes from './routes/fridaRoutes';
 import rootkitRoutes from './routes/rootkitRoutes';
+import straceRoutes from './routes/straceRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -437,6 +438,7 @@ app.use((req: Request, res: Response, next) => {
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
 
+app.use('/api', straceRoutes);
 app.use('/api', rootkitRoutes);
 app.use('/api', fridaRoutes);
 app.use('/api', overlayRoutes);
@@ -1098,7 +1100,6 @@ app.post('/api/scan-apk', async (req, res) => {
   if (!deviceId || !packageName) {
     return res.status(400).json({ error: 'Missing deviceId or packageName' });
   }
-  
 
   let apkPath: string | null = null;
   try {
@@ -1117,24 +1118,42 @@ app.post('/api/scan-apk', async (req, res) => {
     } catch {
       analysis = { error: 'Failed to parse analyzer output', raw: stdout };
     }
-    // ----- YARA SCAN (added) -----
+
+    // ----- YARA SCAN -----
     let yaraMatches: { rule: string; matches: string[] }[] = [];
     if (apkPath) {
-        yaraMatches = await scanWithYara(apkPath);
+      yaraMatches = await scanWithYara(apkPath);
     }
     analysis.yara_matches = yaraMatches.map(m => ({ rule: m.rule, count: m.matches.length }));
-// -----------------------------
-    // ----- PACKER DETECTION (added) -----
-    // ----- PACKER DETECTION (added) -----
-    if (apkPath) {
-        const packer = detectPackerIndicators(packageName, apkPath);
-        analysis.isPacked = packer.isPacked;
-        analysis.packerReason = packer.reason;
-    }
-// ---------------------------------
-    // ---------------------------------
 
-    // Classify malware types based on analysis signals
+    // ----- PACKER DETECTION -----
+    if (apkPath) {
+      const packer = detectPackerIndicators(packageName, apkPath);
+      analysis.isPacked = packer.isPacked;
+      analysis.packerReason = packer.reason;
+    }
+
+    // ----- ENTROPY & POLYMORPHIC CODE DETECTION -----
+    async function calculateEntropy(filePath: string): Promise<number> {
+      const buffer = await fs.readFile(filePath);
+      const byteCounts = new Array(256).fill(0);
+      for (const byte of buffer) byteCounts[byte]++;
+      let entropy = 0;
+      for (let i = 0; i < 256; i++) {
+        if (byteCounts[i] === 0) continue;
+        const p = byteCounts[i] / buffer.length;
+        entropy -= p * Math.log2(p);
+      }
+      return entropy / 8; // normalized 0..1
+    }
+    const entropy = await calculateEntropy(apkPath);
+    analysis.entropy = entropy;
+    if (entropy > 0.85) {
+      analysis.isPolymorphic = true;
+      analysis.polymorphicReason = `High entropy (${entropy.toFixed(3)}) suggests packed/polymorphic code.`;
+    }
+
+    // ----- MALWARE TYPE CLASSIFICATION -----
     if (analysis && !analysis.error) {
       const malwareTypes = classifyMalware({
         dangerousPermissions: analysis.dangerous_permissions || [],
@@ -1144,7 +1163,7 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis.malware_types = malwareTypes;
     }
 
-    // Optional VirusTotal integration
+    // ----- VIRUSTOTAL INTEGRATION (optional) -----
     let vtResult = null;
     const vtApiKey = process.env.VIRUSTOTAL_API_KEY;
     if (vtApiKey) {
