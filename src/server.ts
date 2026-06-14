@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { registerBsodRoutes } from './routes/bsodRoutes';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import overlayRoutes from './routes/overlayRoutes';
 const execAsync = promisify(exec);
 
 
@@ -398,6 +399,7 @@ app.use((req: Request, res: Response, next) => {
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
 
+app.use('/api', overlayRoutes);
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/repair', repairRoutes);
 app.use(express.static('html'));

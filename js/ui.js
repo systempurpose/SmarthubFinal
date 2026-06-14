@@ -920,7 +920,38 @@ async function runDeepDiagnostic() {
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
+    // ========== OVERLAY MONITORING HELPERS ==========
+    let overlayEvents = [];
+
+    async function startOverlayMonitoring() {
+        try {
+            await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 }) // 60 seconds
+            });
+            console.log('Overlay monitoring started');
+        } catch (err) {
+            console.warn('Could not start overlay monitoring:', err);
+        }
+    }
+
+    async function stopAndFetchOverlayEvents() {
+        try {
+            await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
+            const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
+            const data = await res.json();
+            overlayEvents = data.events || [];
+        } catch (err) {
+            console.warn('Could not fetch overlay events:', err);
+        }
+    }
+    // =============================================
+
     try {
+        // Start overlay monitoring (non‑blocking)
+        startOverlayMonitoring();
+
         // 1. Hardware checks
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
@@ -955,33 +986,32 @@ async function runDeepDiagnostic() {
 
         const escape = (str) => escapeHtml(str);
 
-        // Build initial apps HTML with compact design
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
             appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 5px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
             for (const app of suspiciousAppsList) {
-    appsHtml += `
-        <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                <div style="flex: 1;">
-                    <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
-                        <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
-                        <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
-                        <span id="risk-text-${escape(app.packageName)}" class="risk-badge" style="background:#fed7aa; color:#9b4a00; padding:2px 8px; border-radius:12px; font-size:11px;">Risk: low</span>
+                appsHtml += `
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                                    <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
+                                    <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
+                                    <span id="risk-text-${escape(app.packageName)}" class="risk-badge" style="background:#fed7aa; color:#9b4a00; padding:2px 8px; border-radius:12px; font-size:11px;">Risk: low</span>
+                                </div>
+                                <div style="font-size: 11px; color: #555; margin-top: 4px;">${escape(app.reason)}</div>
+                            </div>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 12px; cursor:pointer;">Delete</button>
+                        </div>
+                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px;">
+                            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
+                            <span style="font-size: 11px; margin-left: 8px;">Running deep scan...</span>
+                        </div>
                     </div>
-                    <div style="font-size: 11px; color: #555; margin-top: 4px;">${escape(app.reason)}</div>
-                </div>
-                <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 12px; cursor:pointer;">Delete</button>
-            </div>
-            <div id="deep-${escape(app.packageName)}" style="margin-top: 10px;">
-                <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
-                <span style="font-size: 11px; margin-left: 8px;">Running deep scan...</span>
-            </div>
-        </div>
-    `;
-}
+                `;
+            }
             appsHtml += `</div></div>`;
         }
 
@@ -1069,21 +1099,6 @@ async function runDeepDiagnostic() {
                         ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
                     `;
 
-                    // Update risk badge based on riskScore
-                    const riskBadge = document.getElementById(`risk-text-${app.packageName}`);
-                    if (riskBadge) {
-                        let riskLevel = 'low';
-                        let riskColor = '#fed7aa';
-                        if (riskScore >= 70) {
-                            riskLevel = 'high';
-                            riskColor = '#f8d7da';
-                        } else if (riskScore >= 40) {
-                            riskLevel = 'medium';
-                            riskColor = '#fff3cd';
-                        }
-                        riskBadge.innerHTML = `Risk: ${riskLevel} - Score: ${riskScore}/100. ${app.reason}`;
-                        riskBadge.style.backgroundColor = riskColor;
-                    }
                     container.innerHTML = html;
                 } else {
                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
@@ -1094,6 +1109,21 @@ async function runDeepDiagnostic() {
             }
         });
         await Promise.all(scanPromises);
+
+        // Stop overlay monitoring and fetch events
+        await stopAndFetchOverlayEvents();
+
+        // Append overlay events to modal body if any
+        if (overlayEvents.length > 0) {
+            let overlayHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🕵️ Overlay / Popup Events Detected</h3><ul>';
+            for (const ev of overlayEvents.slice(0, 15)) {
+                overlayHtml += `<li><strong>${new Date(ev.timestamp).toLocaleTimeString()}</strong> - Package: ${escapeHtml(ev.package)}</li>`;
+            }
+            if (overlayEvents.length > 15) overlayHtml += `<li>... and ${overlayEvents.length - 15} more</li>`;
+            overlayHtml += '</ul><p class="text-muted" style="font-size: 12px;">Apps that draw overlays (popups) during the scan are often adware or malicious.</p></div>';
+            modalBody.insertAdjacentHTML('beforeend', overlayHtml);
+        }
+
         modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
