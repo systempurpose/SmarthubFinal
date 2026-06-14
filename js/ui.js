@@ -939,25 +939,25 @@ async function runDeepDiagnostic() {
 
     // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
     async function runFridaOnPackage(packageName, timeoutMs = 300000) {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                deviceId: currentDeviceId, 
-                packageName, 
-                timeoutMs,
-                stealth: true,           // enable stealth mode
-                scriptName: 'full_monitor.js'  // combined script
-            })
-        });
-        const data = await response.json();
-        return data.events || [];
-    } catch (err) {
-        console.warn('Frida scan failed:', err);
-        return [];
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    deviceId: currentDeviceId, 
+                    packageName, 
+                    timeoutMs,
+                    stealth: true,
+                    scriptName: 'full_monitor.js'
+                })
+            });
+            const data = await response.json();
+            return data.events || [];
+        } catch (err) {
+            console.warn('Frida scan failed:', err);
+            return [];
+        }
     }
-}
     // =============================================
 
     try {
@@ -1088,17 +1088,28 @@ async function runDeepDiagnostic() {
                         malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Why it may be malicious:</strong>${typeDescriptions}</div>`;
                     }
 
-                    // ----- PACKER WARNING (added) -----
+                    // ----- PACKER WARNING -----
                     if (analysis.isPacked) {
                         malwareHtml += `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Packed/obfuscated code detected:</strong> ${analysis.packerReason || 'Unknown packer'}. Often used by malware to hide payload.</div>`;
                     }
-                    // --------------------------------
+
+                    // ----- YARA MATCHES -----
+                    let yaraHtml = '';
+                    if (analysis.yara_matches && analysis.yara_matches.length > 0) {
+                        yaraHtml = '<div style="margin-top: 8px;"><strong>🔍 YARA Rule Matches:</strong><ul>';
+                        for (const match of analysis.yara_matches.slice(0, 5)) {
+                            yaraHtml += `<li>${escapeHtml(match.rule)} (${match.count} matches)</li>`;
+                        }
+                        if (analysis.yara_matches.length > 5) yaraHtml += `<li>... and ${analysis.yara_matches.length - 5} more</li>`;
+                        yaraHtml += '</ul></div>';
+                    }
 
                     let html = `
                         <strong>Deep Scan Results:</strong><br>
                         <span style="font-size: 12px;">Risk Score: ${riskScore}/100</span><br>
                         <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
                         ${malwareHtml}
+                        ${yaraHtml}
                         ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}</span><br>` : ''}
                         ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
                     `;
@@ -1115,7 +1126,7 @@ async function runDeepDiagnostic() {
 
         await stopAndFetchOverlayEvents();
 
-        // Frida on high-risk apps (skip if you already have it, but here it's a loop)
+        // Frida on high-risk apps
         const highRiskApps = suspiciousAppsList
             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
             .filter(app => app.riskScore >= 40)
@@ -1150,7 +1161,6 @@ async function runDeepDiagnostic() {
             modalBody.insertAdjacentHTML('beforeend', overlayHtml);
         }
 
-        modalTitle.textContent = 'Deep Diagnostic Complete';
         // ========== ROOTKIT / KERNEL DETECTION ==========
         try {
             const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
@@ -1181,7 +1191,9 @@ async function runDeepDiagnostic() {
         } catch (err) {
             console.warn('Rootkit scan failed:', err);
         }
-// =============================================
+        // =============================================
+
+        modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';

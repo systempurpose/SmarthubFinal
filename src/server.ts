@@ -14,6 +14,9 @@ import fridaRoutes from './routes/fridaRoutes';
 import rootkitRoutes from './routes/rootkitRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
+
+
+
 const execAsync = promisify(exec);
 
 
@@ -99,6 +102,37 @@ import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
 
+// YARA scan using official yara64.exe
+async function scanWithYara(apkPath: string): Promise<{ rule: string; matches: string[] }[]> {
+    const yaraExe = path.join(process.cwd(), 'tools', 'yara64.exe');
+    const rulesDir = path.join(process.cwd(), 'yara-rules');
+    // Check if executable and rules directory exist
+    try {
+        await fs.access(yaraExe);
+        await fs.access(rulesDir);
+    } catch {
+        console.warn('YARA executable or rules directory not found, skipping YARA scan');
+        return [];
+    }
+    try {
+        // Run: yara64.exe -r rulesDir apkPath
+        const { stdout } = await execAsync(`"${yaraExe}" -r "${rulesDir}" "${apkPath}"`);
+        const lines = stdout.split('\n').filter(l => l.trim());
+        const results: { rule: string; matches: string[] }[] = [];
+        for (const line of lines) {
+            const match = line.match(/^(\S+)\s+(.+)$/);
+            if (match) {
+                results.push({ rule: match[1], matches: match[2].split(',') });
+            }
+        }
+        return results;
+    } catch (err: any) {
+        // yara returns exit code 1 when no matches; ignore that.
+        if (err.message.includes('exit code 1')) return [];
+        console.warn('YARA scan error:', err.message);
+        return [];
+    }
+}
 async function pullApk(deviceId: string, packageName: string): Promise<string> {
   const tmpDir = os.tmpdir();
   const safePkg = packageName.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -1064,6 +1098,7 @@ app.post('/api/scan-apk', async (req, res) => {
   if (!deviceId || !packageName) {
     return res.status(400).json({ error: 'Missing deviceId or packageName' });
   }
+  
 
   let apkPath: string | null = null;
   try {
@@ -1082,13 +1117,21 @@ app.post('/api/scan-apk', async (req, res) => {
     } catch {
       analysis = { error: 'Failed to parse analyzer output', raw: stdout };
     }
-
+    // ----- YARA SCAN (added) -----
+    let yaraMatches: { rule: string; matches: string[] }[] = [];
+    if (apkPath) {
+        yaraMatches = await scanWithYara(apkPath);
+    }
+    analysis.yara_matches = yaraMatches.map(m => ({ rule: m.rule, count: m.matches.length }));
+// -----------------------------
+    // ----- PACKER DETECTION (added) -----
     // ----- PACKER DETECTION (added) -----
     if (apkPath) {
-      const packer = detectPackerIndicators(packageName, apkPath);
-      analysis.isPacked = packer.isPacked;
-      analysis.packerReason = packer.reason;
+        const packer = detectPackerIndicators(packageName, apkPath);
+        analysis.isPacked = packer.isPacked;
+        analysis.packerReason = packer.reason;
     }
+// ---------------------------------
     // ---------------------------------
 
     // Classify malware types based on analysis signals
