@@ -14,6 +14,7 @@ import fridaRoutes from './routes/fridaRoutes';
 import rootkitRoutes from './routes/rootkitRoutes';
 import straceRoutes from './routes/straceRoutes';
 import fileMonitorRoutes from './routes/fileMonitorRoutes';
+import WebSocket from 'ws';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -350,6 +351,42 @@ function isReadOnlyEnabled(): boolean {
 
 app.get('/read-only', (_req: Request, res: Response) => {
   res.json({ ok: true, enabled: isReadOnlyEnabled(), forced: !!readOnlyForced });
+});
+
+      let androidWebSocket: WebSocket | null = null;
+
+async function connectToAndroidRealTime(deviceId: string) {
+  // Ensure ADB forward is set
+  await execAsync(`adb -s ${deviceId} forward tcp:12345 tcp:8080`);
+  return new Promise<void>((resolve, reject) => {
+    const ws = new WebSocket('ws://localhost:12345');
+    ws.on('open', () => {
+      console.log('Connected to Android real‑time service');
+      androidWebSocket = ws;
+      resolve();
+    });
+    ws.on('error', (err) => {
+      console.error('WebSocket connection failed:', err);
+      reject(err);
+    });
+    ws.on('message', (data) => {
+      const event = JSON.parse(data.toString());
+      console.log('[RealTime]', event);
+      // Store event in a global queue for the diagnostic modal
+      // (e.g., push to an array that runDeepDiagnostic can later read)
+    });
+  });
+}
+app.post('/api/adb-forward', async (req, res) => {
+  const { deviceId } = req.body;
+  if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+  try {
+    await execAsync(`adb -s ${deviceId} forward tcp:12345 tcp:8080`);
+    res.json({ ok: true });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: errorMessage });
+  }
 });
 
 app.post('/api/install-apk', async (req, res) => {

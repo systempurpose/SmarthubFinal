@@ -915,6 +915,44 @@ async function runDeepDiagnostic() {
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
+    // ========== REAL‑TIME SYNC HELPERS ==========
+    let realTimeWs = null;
+    let realTimeEvents = [];
+
+    async function setupAdbForward(deviceId) {
+        const res = await fetch(`${BACKEND_URL}/api/adb-forward`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId })
+        });
+        if (!res.ok) throw new Error('Failed to set up ADB forward');
+        return res.json();
+    }
+
+    async function connectRealTime(deviceId) {
+        await setupAdbForward(deviceId);
+        return new Promise((resolve, reject) => {
+            const ws = new WebSocket('ws://localhost:12345');
+            ws.onopen = () => {
+                console.log('Real‑time WebSocket connected');
+                realTimeWs = ws;
+                resolve();
+            };
+            ws.onerror = (err) => {
+                console.error('WebSocket error', err);
+                reject(err);
+            };
+            ws.onmessage = (msg) => {
+                try {
+                    const event = JSON.parse(msg.data);
+                    console.log('[RealTime]', event);
+                    realTimeEvents.push(event);
+                } catch (e) {}
+            };
+        });
+    }
+    // =============================================
+
     // ========== OVERLAY MONITORING HELPERS ==========
     let overlayEvents = [];
     async function startOverlayMonitoring() {
@@ -961,6 +999,10 @@ async function runDeepDiagnostic() {
     // =============================================
 
     try {
+        // ---- STEP 0: Establish real‑time sync (must succeed) ----
+        await connectRealTime(currentDeviceId);
+        console.log('Real‑time sync active');
+
         startOverlayMonitoring();
 
         // 1. Hardware checks
@@ -1216,12 +1258,26 @@ async function runDeepDiagnostic() {
         }
         // =============================================
 
+        // ========== REAL‑TIME EVENTS SUMMARY ==========
+        if (realTimeEvents.length > 0) {
+            let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
+            for (const ev of realTimeEvents.slice(0, 20)) {
+                realTimeHtml += `<li>[${new Date(ev.timestamp).toLocaleTimeString()}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
+            }
+            if (realTimeEvents.length > 20) realTimeHtml += `<li>... and ${realTimeEvents.length - 20} more</li>`;
+            realTimeHtml += '</ul><p class="text-muted">Live events captured during the diagnostic – proves real‑time synchronization.</p></div>';
+            modalBody.insertAdjacentHTML('beforeend', realTimeHtml);
+        }
+        // =============================================
+
         modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';
         const errorMessage = err instanceof Error ? err.message : String(err);
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
+    } finally {
+        if (realTimeWs) realTimeWs.close();
     }
 }
 
