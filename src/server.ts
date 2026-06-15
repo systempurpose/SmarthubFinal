@@ -13,6 +13,7 @@ import overlayRoutes from './routes/overlayRoutes';
 import fridaRoutes from './routes/fridaRoutes';
 import rootkitRoutes from './routes/rootkitRoutes';
 import straceRoutes from './routes/straceRoutes';
+import fileMonitorRoutes from './routes/fileMonitorRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -451,6 +452,7 @@ app.use((req: Request, res: Response, next) => {
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
 
+app.use('/api', fileMonitorRoutes);
 app.use('/api', straceRoutes);
 app.use('/api', rootkitRoutes);
 app.use('/api', fridaRoutes);

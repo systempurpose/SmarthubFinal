@@ -1198,6 +1198,24 @@ async function runDeepDiagnostic() {
         }
         // =============================================
 
+        // ========== FILE SYSTEM MONITORING ==========
+        try {
+            const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
+            const filesData = await filesRes.json();
+            if (filesData.suspicious && filesData.suspicious.length > 0) {
+                let fileHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
+                for (const f of filesData.suspicious.slice(0, 20)) {
+                    fileHtml += `<li>${escapeHtml(f)}</li>`;
+                }
+                if (filesData.suspicious.length > 20) fileHtml += `<li>... and ${filesData.suspicious.length - 20} more</li>`;
+                fileHtml += '</ul><p class="text-muted" style="font-size: 12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
+                modalBody.insertAdjacentHTML('beforeend', fileHtml);
+            }
+        } catch (err) {
+            console.warn('File monitor failed:', err);
+        }
+        // =============================================
+
         modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
         console.error('[DeepDiag] Error:', err);

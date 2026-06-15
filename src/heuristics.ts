@@ -1024,6 +1024,44 @@ export const TRUSTED_PREFIXES = [
   'com.brave.',
   'com.opera.',
 ];
+// Packages that are known legitimate (e.g., popular social, banking, utility apps)
+// These will never be flagged as suspicious.
+export const TRUSTED_LEGITIMATE_PACKAGES = new Set([
+  // Messaging & social
+  'org.telegram.messenger',
+  'org.telegram.messenger.web',
+  'com.discord',
+  'com.discord.app',
+  // E‑commerce & banking
+  'com.shopee.ph',
+  'com.lazada.android',
+  'com.globe.gcash.android',
+  'com.paypal.android.p2pmobile',
+  'ph.com.gotyme',
+  'com.paymaya',
+  // Productivity & utility
+  'com.dubox.drive',
+  'com.azure.authenticator',
+  'com.avast.android.mobilesecurity',
+  'com.excelliance.multiaccounts',
+  'com.dsemu.drastic',
+  // Media & entertainment
+  'com.tv.loklok',
+  'com.taptap.global',
+  'com.radio.pocketfm',
+  'com.funbase.xradio',
+  'com.intsig.camscanner',
+  'com.mobilechess.gp',
+  'com.lemon.lvoverseas',
+  // Others from your list
+  'mydiary.journal.diary.diarywithlock.diaryjournal.secretdiary',
+  'cz.master.lois',
+  'com.real.launcher.wp.ten',
+  'com.ss.android.ugc.trill',
+  'us.zoom.videomeetings',
+  'com.arkgames.ggplay.tlonglobal',
+  'mega.privacy.android.app',
+]);
 
 export const TRUSTED_EXACT_PACKAGES = [
   'com.wssyncmldm',
@@ -1177,11 +1215,13 @@ export function detectSuspiciousApps(
 ): SuspiciousApp[] {
   const suspicious: SuspiciousApp[] = [];
 
+  // Helper: Generate display name from package name
   function displayNameFromPackage(pkg: string): string {
     let name = pkg.split('.').pop() || pkg;
     return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
+  // Helper: Detect system apps by path
   function isSystemApp(app: AppWithPerms): boolean {
     if (!app.path) return false;
     const lower = app.path.toLowerCase();
@@ -1190,12 +1230,47 @@ export function detectSuspiciousApps(
            lower.startsWith('/system_ext/');
   }
 
+  // Trusted sideloaded apps (never flag)
   const TRUSTED_SIDELOADED = new Set([
     'cyou.joiplay.joiplay',
     'cyou.joiplay.runtime.rpgmaker',
     'cyou.joiplay.runtime.renpy.v8d4d1',
     'org.fdroid.fdroid',
     'com.termux',
+  ]);
+
+  // Known legitimate apps (never flag – prevents false positives)
+  const TRUSTED_LEGITIMATE = new Set([
+    'org.telegram.messenger',
+    'org.telegram.messenger.web',
+    'com.discord',
+    'com.shopee.ph',
+    'com.lazada.android',
+    'com.globe.gcash.android',
+    'com.paypal.android.p2pmobile',
+    'ph.com.gotyme',
+    'com.paymaya',
+    'com.dubox.drive',
+    'com.azure.authenticator',
+    'com.avast.android.mobilesecurity',
+    'com.excelliance.multiaccounts',
+    'com.dsemu.drastic',
+    'com.tv.loklok',
+    'com.taptap.global',
+    'com.radio.pocketfm',
+    'com.funbase.xradio',
+    'com.intsig.camscanner',
+    'com.mobilechess.gp',
+    'com.lemon.lvoverseas',
+    'mydiary.journal.diary.diarywithlock.diaryjournal.secretdiary',
+    'cz.master.lois',
+    'com.real.launcher.wp.ten',
+    'com.ss.android.ugc.trill',
+    'us.zoom.videomeetings',
+    'com.arkgames.ggplay.tlonglobal',
+    'mega.privacy.android.app',
+    'com.transsnet.store',      // if this is actually legitimate? keep as is or remove
+    'com.transsnet.store.gs',
   ]);
 
   const SYSTEM_PACKAGE_PREFIXES = [
@@ -1207,15 +1282,22 @@ export function detectSuspiciousApps(
     'com.unisoc.silent.reboot', 'android.overlay.', 'com.silent.reboot'
   ];
 
+  const spywareKeywords = ['cam', 'silent', 'hidden', 'spy', 'stealth', 'invisible', 'ghost', 'camera'];
+
   for (const app of apps) {
     const pkg = app.packageName;
     if (!pkg) continue;
 
+    // Skip system apps
     if (isSystemApp(app)) continue;
+    // Skip known system package prefixes
     if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
+    // Skip trusted prefixes (Google, Microsoft, etc.)
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
     if (TRUSTED_SIDELOADED.has(pkg)) continue;
+    // Skip known legitimate apps (false positives)
+    if (TRUSTED_LEGITIMATE.has(pkg)) continue;
 
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
@@ -1228,27 +1310,9 @@ export function detectSuspiciousApps(
     }
     const isSideloaded = !fromLegitStore;
 
-    // ----- SIDELOADED APPS – flag for review even if permissions are missing -----
-    if (isSideloaded) {
-      const reason = `Sideloaded app — not installed from an official store. Installer: ${installer || 'Unknown'}. Review if necessary.`;
-      // Give it at least medium threat so it appears in the list
-      const threatLevel: 'high' | 'medium' | 'low' = 'medium';
-      suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
-        threatLevel,
-        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If you didn't install it manually, uninstall.`,
-        threatTypes: classifyThreatTypes(pkg, perms)
-      });
-      continue;
-    }
-
-    // ----- CAMERA + INTERNET (spyware) -----
-    const hasCamera = upper.some(p => p.includes('CAMERA'));
-    const hasInternet = upper.some(p => p.includes('INTERNET'));
-    if (hasCamera && hasInternet) {
-      const reason = "App requests both camera and internet permissions – commonly used by spyware to capture and exfiltrate images/video.";
+    // ----- RULE 1: Sideloaded + spyware keyword (high risk) -----
+    if (isSideloaded && spywareKeywords.some(kw => pkg.toLowerCase().includes(kw))) {
+      const reason = "Sideloaded app with suspicious package name – possible hidden camera/spyware.";
       suspicious.push({
         packageName: pkg,
         displayName: displayNameFromPackage(pkg),
@@ -1260,13 +1324,43 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // ----- Other heuristics (risk score >= 30, many permissions, dangerous permissions, obfuscated name) -----
+    // ----- RULE 2: Camera + Internet permissions (high risk) -----
+    const hasCamera = upper.some(p => p.includes('CAMERA'));
+    const hasInternet = upper.some(p => p.includes('INTERNET'));
+    if (hasCamera && hasInternet) {
+      const reason = "App requests both camera and internet permissions – classic spyware pattern.";
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ----- RULE 3: Sideloaded apps (low risk, catch‑all) -----
+    if (isSideloaded) {
+      const reason = `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}.`;
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason,
+        threatLevel: "low",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ----- RULE 4: Other heuristics (risk score, many permissions, etc.) -----
     const risk = scoreAppRisk(perms);
     let riskScore = risk.score;
     if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
       riskScore = Math.min(100, riskScore + 15);
     }
-    const highRiskScore = riskScore >= 30;
+    const moderateRisk = riskScore >= 30;
 
     const dangerousPermsList = [
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
@@ -1280,14 +1374,14 @@ export function detectSuspiciousApps(
     const totalPerms = perms.length;
     const manyPerms = totalPerms > 15;
 
-    if (highRiskScore || manyPerms || hasDangerous) {
+    if (moderateRisk || manyPerms || hasDangerous) {
       let reason = '';
       let threatLevel: 'high' | 'medium' | 'low' = 'medium';
 
       if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
         reason += `Obfuscated package name (often used by malware). `;
       }
-      if (highRiskScore) {
+      if (moderateRisk) {
         reason += `Risk score ${riskScore}/100. `;
         threatLevel = riskScore >= 70 ? 'high' : 'medium';
       }
@@ -1295,7 +1389,7 @@ export function detectSuspiciousApps(
         reason += `Asks for unusually many permissions (${totalPerms}). `;
         threatLevel = 'medium';
       }
-      if (hasDangerous && !highRiskScore && !manyPerms) {
+      if (hasDangerous && !moderateRisk && !manyPerms) {
         const dangerousFound = dangerousPermsList.filter(d => upper.includes(d));
         reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
         threatLevel = 'high';

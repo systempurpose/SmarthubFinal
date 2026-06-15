@@ -719,16 +719,22 @@ export async function listApps(deviceId: string): Promise<ListedApp[]> {
 }
 
 export async function packagePermissions(deviceId: string, packageName: string): Promise<string[]> {
-    const output = await adb(`-s ${deviceId} shell dumpsys package ${packageName}`);
-    if (!deviceId) throw new Error('Device ID missing');
-    const lines = output.split('\n');
-    const perms: string[] = [];
-    for (const line of lines) {
-        // Match: "android.permission.CAMERA: granted=true" or "android.permission.CAMERA: granted=true, flags=[...]"
-        const match = line.match(/android\.permission\.(\w+):\s*granted=true/);
-        if (match) perms.push(match[1]);
+    try {
+        const output = await adbWithOptions(
+            ['-s', deviceId, 'shell', 'dumpsys', 'package', packageName],
+            { attempts: 2, timeoutMs: 30_000, maxBufferBytes: 10 * 1024 * 1024 }
+        );
+        const lines = output.split('\n');
+        const perms: string[] = [];
+        for (const line of lines) {
+            const match = line.match(/android\.permission\.(\w+):\s*granted=true/);
+            if (match) perms.push(match[1]);
+        }
+        return perms;
+    } catch (err) {
+        console.error(`[packagePermissions] Failed for ${packageName}:`, err);
+        return [];
     }
-    return perms;
 }
 /**
  * Get installer info for all packages.
