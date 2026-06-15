@@ -915,7 +915,112 @@ async function runDeepDiagnostic() {
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-    // ========== REAL‑TIME SYNC HELPERS ==========
+    // ========== ANDROID APP HELPER ==========
+    async function ensureAndroidAppOpen() {
+        try {
+            const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
+            const state = await stateRes.json();
+            if (!state.installed) {
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>SmartHub Diagnostics App Required</h3>
+                            <span class="close-button">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p>The SmartHub Diagnostics app is not installed on your phone.</p>
+                            <p>Please install it using one of these methods:</p>
+                            <ul>
+                                <li>Click the "Install Android App" button in the SmartHub dashboard.</li>
+                                <li>Or manually install the APK from the SmartHub installation folder.</li>
+                            </ul>
+                            <button id="installAppBtn" class="btn-primary">Go to Install</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                modal.querySelector('.close-button').onclick = () => modal.remove();
+                modal.querySelector('#installAppBtn').onclick = () => {
+                    modal.remove();
+                    document.getElementById('installAppBtn')?.click();
+                };
+                return false;
+            }
+            if (state.running) return true;
+            const openRes = await fetch(`${BACKEND_URL}/mobile-app-open`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: currentDeviceId })
+            });
+            const openData = await openRes.json();
+            if (openData.ok) {
+                await new Promise(r => setTimeout(r, 3000));
+                return true;
+            }
+            alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
+            return false;
+        } catch (err) {
+            console.error('ensureAndroidAppOpen error:', err);
+            alert('Error communicating with the device. Make sure USB debugging is enabled.');
+            return false;
+        }
+    }
+
+    // ========== ENSURE ANDROID APP IS READY (abort if not) ==========
+    const appReady = await ensureAndroidAppOpen();
+    if (!appReady) {
+        modalTitle.textContent = 'Diagnostic Failed';
+        modalBody.innerHTML = '<div style="color: #d32f2f; text-align: center;">SmartHub Diagnostics app is required. Please install it and try again.</div>';
+        return;
+    }
+
+    // ========== OVERLAY MONITORING HELPERS ==========
+    let overlayEvents = [];
+    async function startOverlayMonitoring() {
+        try {
+            await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
+            });
+            console.log('Overlay monitoring started');
+        } catch (err) { console.warn('Could not start overlay monitoring:', err); }
+    }
+    async function stopAndFetchOverlayEvents() {
+        try {
+            await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
+            const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
+            const data = await res.json();
+            overlayEvents = data.events || [];
+        } catch (err) { console.warn('Could not fetch overlay events:', err); }
+    }
+
+    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
+    async function runFridaOnPackage(packageName, timeoutMs = 300000) {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    deviceId: currentDeviceId, 
+                    packageName, 
+                    timeoutMs,
+                    stealth: true,
+                    scriptName: 'full_monitor.js'
+                })
+            });
+            const data = await response.json();
+            return data.events || [];
+        } catch (err) {
+            console.warn('Frida scan failed:', err);
+            return [];
+        }
+    }
+
+    // ========== REAL‑TIME SYNC ==========
     let realTimeWs = null;
     let realTimeEvents = [];
 
@@ -945,61 +1050,18 @@ async function runDeepDiagnostic() {
             ws.onmessage = (msg) => {
                 try {
                     const event = JSON.parse(msg.data);
-                    console.log('[RealTime]', event);
-                    realTimeEvents.push(event);
+                    // Only store events that are not heartbeat
+                    if (event.type !== 'heartbeat') {
+                        realTimeEvents.push(event);
+                        console.log('[RealTime]', event);
+                    }
                 } catch (e) {}
             };
         });
     }
-    // =============================================
-
-    // ========== OVERLAY MONITORING HELPERS ==========
-    let overlayEvents = [];
-    async function startOverlayMonitoring() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
-            });
-            console.log('Overlay monitoring started');
-        } catch (err) { console.warn('Could not start overlay monitoring:', err); }
-    }
-    async function stopAndFetchOverlayEvents() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
-            const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
-            const data = await res.json();
-            overlayEvents = data.events || [];
-        } catch (err) { console.warn('Could not fetch overlay events:', err); }
-    }
-    // =============================================
-
-    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
-    async function runFridaOnPackage(packageName, timeoutMs = 300000) {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    deviceId: currentDeviceId, 
-                    packageName, 
-                    timeoutMs,
-                    stealth: true,
-                    scriptName: 'full_monitor.js'
-                })
-            });
-            const data = await response.json();
-            return data.events || [];
-        } catch (err) {
-            console.warn('Frida scan failed:', err);
-            return [];
-        }
-    }
-    // =============================================
 
     try {
-        // ---- STEP 0: Establish real‑time sync (must succeed) ----
+        // ---- ESTABLISH REAL‑TIME SYNC (must succeed) ----
         await connectRealTime(currentDeviceId);
         console.log('Real‑time sync active');
 
@@ -1238,37 +1300,36 @@ async function runDeepDiagnostic() {
         } catch (err) {
             console.warn('Rootkit scan failed:', err);
         }
-        // =============================================
 
         // ========== FILE SYSTEM MONITORING ==========
         try {
             const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
             const filesData = await filesRes.json();
             if (filesData.suspicious && filesData.suspicious.length > 0) {
-                let fileHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
+                let fileHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
                 for (const f of filesData.suspicious.slice(0, 20)) {
                     fileHtml += `<li>${escapeHtml(f)}</li>`;
                 }
                 if (filesData.suspicious.length > 20) fileHtml += `<li>... and ${filesData.suspicious.length - 20} more</li>`;
-                fileHtml += '</ul><p class="text-muted" style="font-size: 12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
+                fileHtml += '</ul><p class="text-muted" style="font-size:12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
                 modalBody.insertAdjacentHTML('beforeend', fileHtml);
             }
         } catch (err) {
             console.warn('File monitor failed:', err);
         }
-        // =============================================
 
-        // ========== REAL‑TIME EVENTS SUMMARY ==========
-        if (realTimeEvents.length > 0) {
+        // ========== REAL‑TIME EVENTS (filtered, no heartbeat) ==========
+        const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
+        if (filteredEvents.length > 0) {
             let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
-            for (const ev of realTimeEvents.slice(0, 20)) {
-                realTimeHtml += `<li>[${new Date(ev.timestamp).toLocaleTimeString()}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
+            for (const ev of filteredEvents.slice(0, 20)) {
+                const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
+                realTimeHtml += `<li>[${time}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
             }
-            if (realTimeEvents.length > 20) realTimeHtml += `<li>... and ${realTimeEvents.length - 20} more</li>`;
+            if (filteredEvents.length > 20) realTimeHtml += `<li>... and ${filteredEvents.length - 20} more</li>`;
             realTimeHtml += '</ul><p class="text-muted">Live events captured during the diagnostic – proves real‑time synchronization.</p></div>';
             modalBody.insertAdjacentHTML('beforeend', realTimeHtml);
         }
-        // =============================================
 
         modalTitle.textContent = 'Deep Diagnostic Complete';
     } catch (err) {
