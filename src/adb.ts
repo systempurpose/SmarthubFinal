@@ -718,13 +718,18 @@ export async function listApps(deviceId: string): Promise<ListedApp[]> {
     });
 }
 
-export async function packagePermissions(deviceId: string, pkg: string) {
-  const out = await adb('-s', deviceId, 'shell', 'dumpsys', 'package', pkg);
-  const perms = Array.from(out.matchAll(/requested permissions:\s*([\s\S]*?)\n\n/gi))
-    .flatMap(m => m[1].split('\n').map(s => s.trim()).filter(Boolean));
-  return perms;
+export async function packagePermissions(deviceId: string, packageName: string): Promise<string[]> {
+    const output = await adb(`-s ${deviceId} shell dumpsys package ${packageName}`);
+    if (!deviceId) throw new Error('Device ID missing');
+    const lines = output.split('\n');
+    const perms: string[] = [];
+    for (const line of lines) {
+        // Match: "android.permission.CAMERA: granted=true" or "android.permission.CAMERA: granted=true, flags=[...]"
+        const match = line.match(/android\.permission\.(\w+):\s*granted=true/);
+        if (match) perms.push(match[1]);
+    }
+    return perms;
 }
-
 /**
  * Get installer info for all packages.
  * Returns a map of packageName -> installerPackageName.

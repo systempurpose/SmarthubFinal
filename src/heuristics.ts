@@ -1220,7 +1220,6 @@ export function detectSuspiciousApps(
     const perms = permsByPkg[pkg] || [];
     const upper = perms.map(p => p.toUpperCase());
 
-    // Determine installer FIRST (so fromLegitStore is available)
     let installer: string | null = null;
     let fromLegitStore = false;
     if (installerMap && pkg in installerMap) {
@@ -1229,15 +1228,45 @@ export function detectSuspiciousApps(
     }
     const isSideloaded = !fromLegitStore;
 
+    // ----- SIDELOADED APPS – flag for review even if permissions are missing -----
+    if (isSideloaded) {
+      const reason = `Sideloaded app — not installed from an official store. Installer: ${installer || 'Unknown'}. Review if necessary.`;
+      // Give it at least medium threat so it appears in the list
+      const threatLevel: 'high' | 'medium' | 'low' = 'medium';
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason,
+        threatLevel,
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}. If you didn't install it manually, uninstall.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ----- CAMERA + INTERNET (spyware) -----
+    const hasCamera = upper.some(p => p.includes('CAMERA'));
+    const hasInternet = upper.some(p => p.includes('INTERNET'));
+    if (hasCamera && hasInternet) {
+      const reason = "App requests both camera and internet permissions – commonly used by spyware to capture and exfiltrate images/video.";
+      suspicious.push({
+        packageName: pkg,
+        displayName: displayNameFromPackage(pkg),
+        reason,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ----- Other heuristics (risk score >= 30, many permissions, dangerous permissions, obfuscated name) -----
     const risk = scoreAppRisk(perms);
     let riskScore = risk.score;
-    
-    // Apply obfuscated name penalty (now fromLegitStore is known)
     if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
       riskScore = Math.min(100, riskScore + 15);
     }
-
-    const highRiskScore = riskScore >= 40;
+    const highRiskScore = riskScore >= 30;
 
     const dangerousPermsList = [
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
@@ -1251,7 +1280,7 @@ export function detectSuspiciousApps(
     const totalPerms = perms.length;
     const manyPerms = totalPerms > 15;
 
-    if (isSideloaded || highRiskScore || manyPerms || hasDangerous) {
+    if (highRiskScore || manyPerms || hasDangerous) {
       let reason = '';
       let threatLevel: 'high' | 'medium' | 'low' = 'medium';
 
@@ -1259,7 +1288,7 @@ export function detectSuspiciousApps(
         reason += `Obfuscated package name (often used by malware). `;
       }
       if (highRiskScore) {
-        reason += `High risk score (${riskScore}/100). `;
+        reason += `Risk score ${riskScore}/100. `;
         threatLevel = riskScore >= 70 ? 'high' : 'medium';
       }
       if (manyPerms) {
@@ -1271,10 +1300,6 @@ export function detectSuspiciousApps(
         reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
         threatLevel = 'high';
       }
-      if (isSideloaded && !highRiskScore && !manyPerms && !hasDangerous) {
-        reason += `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}. `;
-        threatLevel = 'low';
-      }
 
       suspicious.push({
         packageName: pkg,
@@ -1282,13 +1307,12 @@ export function detectSuspiciousApps(
         reason: reason.trim(),
         threatLevel,
         suggestedAction: threatLevel === 'high'
-          ? `Uninstall ${displayNameFromPackage(pkg)} immediately. Check Settings → Apps → ${displayNameFromPackage(pkg)} → Uninstall.`
-          : `Review ${displayNameFromPackage(pkg)}. If you don't need it, uninstall.`,
-        threatTypes: classifyThreatTypes(pkg, perms),
+          ? `Uninstall ${displayNameFromPackage(pkg)} immediately.`
+          : `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
       });
     }
   }
-
   return suspicious;
 }
 

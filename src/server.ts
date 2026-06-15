@@ -885,7 +885,12 @@ app.get('/apps/:id', async (req: Request, res: Response) => {
     const permsByPkg: Record<string, string[]> = {};
     for (const a of apps) {
       if (!a.packageName) continue;
-      permsByPkg[a.packageName] = await packagePermissions(id, a.packageName);
+      try {
+    permsByPkg[a.packageName] = await packagePermissions(id, a.packageName);
+} catch (err) {
+    console.error(`Failed to get permissions for ${a.packageName}:`, err);
+    permsByPkg[a.packageName] = [];
+}
     }
     const findings = analyzeApps(apps, permsByPkg);
     // Touch / ghost touch heuristics based on logs and charging state
