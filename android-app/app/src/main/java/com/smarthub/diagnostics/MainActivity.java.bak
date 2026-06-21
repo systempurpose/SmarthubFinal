@@ -7,26 +7,22 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.StatFs;
-import android.provider.Settings;
 import android.text.format.Formatter;
 import android.graphics.Color;
-import android.util.DisplayMetrics;
-import android.view.Display;
 import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ProgressBar;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -36,11 +32,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.FileOutputStream;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -75,7 +66,8 @@ public class MainActivity extends AppCompatActivity {
 
         connectionStatus.setText("Desktop connection: waiting for SmartHub…");
 
-        // Show license agreement once on first launch.
+        // Show license agreement once on first launch. Do not proceed with
+        // diagnostics/report generation unless the user agrees.
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         if (prefs.getBoolean(KEY_LICENSE_ACCEPTED, false)) {
             startDiagnosticsSession();
@@ -85,11 +77,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String loadLicenseText() {
-        // Default license text (no resource needed)
-        return "SmartHub Mobile Diagnostics - License Agreement\n\n" +
-               "This software is provided for diagnostic purposes only.\n" +
-               "By using this software, you agree that the developer is not liable for any damages.\n" +
-               "Data collected is used solely for device diagnostics.\n";
+        StringBuilder sb = new StringBuilder();
+        try {
+            Resources res = getResources();
+            InputStream in = res.openRawResource(R.raw.license);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            reader.close();
+        } catch (Exception e) {
+            sb.append("License text unavailable.");
+        }
+        return sb.toString();
     }
 
     private void showLicenseGate(SharedPreferences prefs) {
@@ -116,14 +117,20 @@ public class MainActivity extends AppCompatActivity {
             powerMonitor.reset();
         }
 
+        // Generate a fresh JSON report for the desktop companion as soon as
+        // the app opens so the PC can pull it over ADB without additional taps.
         saveJsonReport(false);
 
+        // After saving, update the timestamp hint so the technician knows
+        // that the desktop can now read a fresh report.
         long now = System.currentTimeMillis();
         String when = android.text.format.DateFormat.format("yyyy-MM-dd HH:mm", now).toString();
         if (lastUpdated != null) {
             lastUpdated.setText("Latest report generated: " + when + " (visible in SmartHub desktop)");
         }
 
+        // Listen for changes in power/USB state so we can reflect whether the
+        // phone is physically connected over USB (approximation of desktop link).
         powerReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -135,12 +142,17 @@ public class MainActivity extends AppCompatActivity {
             updateConnectionStatus(sticky);
         }
 
+        // Listen for desktop-controlled diagnostic start/stop broadcasts so the
+        // loading spinner only appears while the Windows/desktop app is
+        // actively running diagnostics.
         diagnosticStateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 String action = intent.getAction();
                 if (ACTION_DIAGNOSTIC_START.equals(action)) {
                     diagnosticActive = true;
+                    // Reset monitor at the start of each desktop-driven run so the
+                    // stability window reflects the current diagnostic session.
                     if (powerMonitor != null) powerMonitor.reset();
                     maybeWriteReport(true);
                 } else if (ACTION_DIAGNOSTIC_STOP.equals(action)) {
@@ -153,6 +165,8 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter diagFilter = new IntentFilter();
         diagFilter.addAction(ACTION_DIAGNOSTIC_START);
         diagFilter.addAction(ACTION_DIAGNOSTIC_STOP);
+        // Android 13+ requires specifying exported/not-exported for
+        // non-system broadcasts when registering a receiver.
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(diagnosticStateReceiver, diagFilter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -164,10 +178,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (powerReceiver != null) {
-            try { unregisterReceiver(powerReceiver); } catch (Exception ignored) {}
+            try {
+                unregisterReceiver(powerReceiver);
+            } catch (Exception ignored) {
+            }
         }
         if (diagnosticStateReceiver != null) {
-            try { unregisterReceiver(diagnosticStateReceiver); } catch (Exception ignored) {}
+            try {
+                unregisterReceiver(diagnosticStateReceiver);
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -181,25 +201,13 @@ public class MainActivity extends AppCompatActivity {
         }
         File outFile = new File(dir, "smarthub_diagnostics.json");
         try {
-            writeText(outFile, jsonString);
+            FileUtils.writeText(outFile, jsonString);
             if (showToast) {
                 Toast.makeText(this, "JSON report saved to " + outFile.getAbsolutePath(), Toast.LENGTH_SHORT).show();
             }
         } catch (Exception e) {
             if (showToast) {
                 Toast.makeText(this, "Failed to save JSON: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
-    private void writeText(File file, String contents) throws Exception {
-        FileOutputStream fos = null;
-        try {
-            fos = new FileOutputStream(file);
-            fos.write(contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        } finally {
-            if (fos != null) {
-                try { fos.close(); } catch (Exception ignored) {}
             }
         }
     }
@@ -271,176 +279,8 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "  Proximity: " + sensorSummary.hasProximity);
         appendLine(sb, "  Light: " + sensorSummary.hasLight);
 
-        // Add new hardware info to details
-        appendLine(sb, "\nCPU");
-        appendLine(sb, getCpuInfo());
-        appendLine(sb, "\nNETWORK");
-        appendLine(sb, getNetworkInfo());
-        appendLine(sb, "\nDISPLAY");
-        appendLine(sb, getDisplayInfo());
-        appendLine(sb, "\nGPU");
-        appendLine(sb, getGpuInfo());
-        appendLine(sb, "\nEXTERNAL STORAGE");
-        appendLine(sb, getExternalStorageInfo());
-
         return sb.toString().trim();
     }
-
-    // ==== NEW HARDWARE CHECK HELPERS ====
-
-    private String getCpuInfo() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("/proc/cpuinfo"));
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.startsWith("processor") || line.startsWith("Hardware") || line.startsWith("model name")) {
-                    sb.append(line.trim()).append("\n");
-                }
-            }
-            br.close();
-            int cores = Runtime.getRuntime().availableProcessors();
-            sb.append("Cores: ").append(cores).append("\n");
-            try {
-                BufferedReader freqBr = new BufferedReader(new FileReader("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"));
-                String freq = freqBr.readLine();
-                if (freq != null) {
-                    long freqKhz = Long.parseLong(freq);
-                    sb.append("Max frequency: ").append(freqKhz / 1000).append(" MHz\n");
-                }
-                freqBr.close();
-            } catch (Exception ignored) {}
-        } catch (Exception e) {
-            sb.append("Error reading CPU info: ").append(e.getMessage());
-        }
-        return sb.toString();
-    }
-
-    private String getNetworkInfo() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-            if (cm == null) return "ConnectivityManager not available";
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wm != null) {
-                WifiInfo wifiInfo = wm.getConnectionInfo();
-                if (wifiInfo != null) {
-                    String ssid = wifiInfo.getSSID();
-                    if (ssid != null && !ssid.equals("<unknown ssid>")) {
-                        sb.append("WiFi SSID: ").append(ssid).append("\n");
-                        int rssi = wifiInfo.getRssi();
-                        int level = WifiManager.calculateSignalLevel(rssi, 4);
-                        sb.append("WiFi signal: ").append(level + 1).append("/4 bars\n");
-                        int ip = wifiInfo.getIpAddress();
-                        if (ip != 0) {
-                            String ipStr = String.format("%d.%d.%d.%d", (ip & 0xff), (ip >> 8 & 0xff), (ip >> 16 & 0xff), (ip >> 24 & 0xff));
-                            sb.append("IP address: ").append(ipStr).append("\n");
-                        }
-                    }
-                }
-            }
-            NetworkInfo mobileNet = cm.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
-            if (mobileNet != null && mobileNet.isConnected()) {
-                sb.append("Mobile data: connected (").append(mobileNet.getSubtypeName()).append(")\n");
-            } else {
-                sb.append("Mobile data: not connected\n");
-            }
-        } catch (Exception e) {
-            sb.append("Error reading network info: ").append(e.getMessage());
-        }
-        return sb.toString();
-    }
-
-    private String getDisplayInfo() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-            if (wm == null) return "Display info not available";
-            Display display = wm.getDefaultDisplay();
-            DisplayMetrics metrics = new DisplayMetrics();
-            display.getMetrics(metrics);
-            int width = metrics.widthPixels;
-            int height = metrics.heightPixels;
-            sb.append("Resolution: ").append(width).append("x").append(height).append("\n");
-            sb.append("Density: ").append(metrics.densityDpi).append(" dpi\n");
-            float refreshRate = display.getRefreshRate();
-            sb.append("Refresh rate: ").append(refreshRate).append(" Hz\n");
-        } catch (Exception e) {
-            sb.append("Error reading display info: ").append(e.getMessage());
-        }
-        return sb.toString();
-    }
-
-    private String getGpuInfo() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            // Try reading from /system/build.prop
-            try {
-                BufferedReader br = new BufferedReader(new FileReader("/system/build.prop"));
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.startsWith("ro.hwui.renderer")) {
-                        sb.append("Renderer: ").append(line.split("=")[1]).append("\n");
-                    }
-                    if (line.startsWith("ro.gpu.driver")) {
-                        sb.append("GPU driver: ").append(line.split("=")[1]).append("\n");
-                    }
-                }
-                br.close();
-            } catch (Exception ignored) {}
-            // Also check /proc/cpuinfo for GPU lines
-            try {
-                BufferedReader br = new BufferedReader(new FileReader("/proc/cpuinfo"));
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.toLowerCase().contains("gpu")) {
-                        sb.append(line.trim()).append("\n");
-                    }
-                }
-                br.close();
-            } catch (Exception ignored) {}
-            if (sb.length() == 0) {
-                sb.append("GPU info not available (read from /proc/cpuinfo or build.prop)");
-            }
-        } catch (Exception e) {
-            sb.append("Error reading GPU info: ").append(e.getMessage());
-        }
-        return sb.toString();
-    }
-
-    private String getExternalStorageInfo() {
-        StringBuilder sb = new StringBuilder();
-        try {
-            File[] storages = getExternalFilesDirs(null);
-            if (storages != null && storages.length > 1) {
-                for (int i = 0; i < storages.length; i++) {
-                    if (storages[i] != null) {
-                        File path = storages[i];
-                        try {
-                            StatFs stat = new StatFs(path.getPath());
-                            long blockSize = stat.getBlockSizeLong();
-                            long totalBlocks = stat.getBlockCountLong();
-                            long availBlocks = stat.getAvailableBlocksLong();
-                            long totalBytes = blockSize * totalBlocks;
-                            long freeBytes = blockSize * availBlocks;
-                            long usedBytes = totalBytes - freeBytes;
-                            sb.append("External storage ").append(i).append(": ")
-                              .append(readableBytes(totalBytes)).append(" total, ")
-                              .append(readableBytes(usedBytes)).append(" used, ")
-                              .append(readableBytes(freeBytes)).append(" free\n");
-                        } catch (Exception ignored) {}
-                    }
-                }
-            } else {
-                sb.append("No external storage (SD card) detected.\n");
-            }
-        } catch (Exception e) {
-            sb.append("Error reading external storage: ").append(e.getMessage());
-        }
-        return sb.toString();
-    }
-
-    // ==== END NEW HELPERS ====
 
     private JSONObject buildJsonReport() {
         JSONObject root = new JSONObject();
@@ -495,28 +335,6 @@ public class MainActivity extends AppCompatActivity {
             sensorsJson.put("hasProximity", sensorSummary.hasProximity);
             sensorsJson.put("hasLight", sensorSummary.hasLight);
 
-            // ---- NEW FIELDS ----
-            JSONObject cpuJson = new JSONObject();
-            cpuJson.put("info", getCpuInfo());
-            root.put("cpu", cpuJson);
-
-            JSONObject networkJson = new JSONObject();
-            networkJson.put("info", getNetworkInfo());
-            root.put("network", networkJson);
-
-            JSONObject displayJson = new JSONObject();
-            displayJson.put("info", getDisplayInfo());
-            root.put("display", displayJson);
-
-            JSONObject gpuJson = new JSONObject();
-            gpuJson.put("info", getGpuInfo());
-            root.put("gpu", gpuJson);
-
-            JSONObject extStorageJson = new JSONObject();
-            extStorageJson.put("info", getExternalStorageInfo());
-            root.put("externalStorage", extStorageJson);
-            // ---- END NEW ----
-
             root.put("summary", buildSummary());
             root.put("battery", batteryJson);
             root.put("memory", memoryJson);
@@ -545,15 +363,18 @@ public class MainActivity extends AppCompatActivity {
 
         if (usbConnected) {
             connectionStatus.setText("USB cable connected – SmartHub desktop can read this phone.");
-            connectionStatus.setBackgroundColor(0xFFCCE8CF);
+            connectionStatus.setBackgroundColor(0xFFCCE8CF); // soft green
             connectionStatus.setTextColor(Color.BLACK);
         } else {
             connectionStatus.setText("USB cable not detected – connect to SmartHub desktop via USB.");
-            connectionStatus.setBackgroundColor(0xFFFDE0E0);
+            connectionStatus.setBackgroundColor(0xFFFDE0E0); // soft red
             connectionStatus.setTextColor(Color.BLACK);
         }
 
         applySpinnerState();
+
+        // While a desktop diagnostic is active, keep the JSON report reasonably fresh
+        // so the PC can pull a near-real-time stability snapshot.
         maybeWriteReport(false);
     }
 
@@ -571,14 +392,20 @@ public class MainActivity extends AppCompatActivity {
         if (diagnosticSpinner == null) return;
         if (usbConnected && diagnosticActive) {
             diagnosticSpinner.setVisibility(ProgressBar.VISIBLE);
+            // Prevent the screen from sleeping during an active desktop-driven
+            // diagnostic session. Some OEM builds aggressively power-manage USB
+            // when the device is idle/locked, which can look like repeated
+            // disconnect/reconnect on the PC.
             try {
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         } else {
             diagnosticSpinner.setVisibility(ProgressBar.GONE);
             try {
                 getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -591,9 +418,9 @@ public class MainActivity extends AppCompatActivity {
             long total = blockSize * totalBlocks;
             long free = blockSize * availBlocks;
             long used = total - free;
-            appendLine(sb, label + " total " + readableBytes(total) + ", used " + readableBytes(used) + ", free " + readableBytes(free));
+            appendLine(sb, label + "  total " + readableBytes(total) + ", used " + readableBytes(used) + ", free " + readableBytes(free));
         } catch (Exception e) {
-            appendLine(sb, label + " error reading stats: " + e.getMessage());
+            appendLine(sb, label + "  error reading stats: " + e.getMessage());
         }
     }
 
@@ -603,6 +430,23 @@ public class MainActivity extends AppCompatActivity {
 
     private void appendLine(StringBuilder sb, String text) {
         sb.append(text).append('\n');
+    }
+
+    private static class FileUtils {
+        static void writeText(File file, String contents) throws Exception {
+            java.io.FileOutputStream fos = null;
+            try {
+                fos = new java.io.FileOutputStream(file);
+                fos.write(contents.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } finally {
+                if (fos != null) {
+                    try {
+                        fos.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
     }
 
     private static class SensorSummary {
