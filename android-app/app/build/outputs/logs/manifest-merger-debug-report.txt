@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:12
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -123,6 +123,10 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xm
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:13-50
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:13-47
+uses-permission#android.permission.QUERY_ALL_PACKAGES
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:5-77
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:22-74
 uses-sdk
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml

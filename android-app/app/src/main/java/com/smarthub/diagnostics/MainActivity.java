@@ -34,6 +34,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileReader;
@@ -54,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private PowerStabilityMonitor powerMonitor;
     private long lastReportWriteAtMs = 0L;
     private static final long REPORT_WRITE_MIN_INTERVAL_MS = 12_000L;
+    private MalwareScanner malwareScanner;
 
     private static final String ACTION_DIAGNOSTIC_START = "com.smarthub.DIAGNOSTICS_START";
     private static final String ACTION_DIAGNOSTIC_STOP = "com.smarthub.DIAGNOSTICS_STOP";
@@ -74,8 +76,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         connectionStatus.setText("Desktop connection: waiting for SmartHub…");
+        malwareScanner = new MalwareScanner(this);
 
-        // Show license agreement once on first launch.
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         if (prefs.getBoolean(KEY_LICENSE_ACCEPTED, false)) {
             startDiagnosticsSession();
@@ -85,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String loadLicenseText() {
-        // Default license text (no resource needed)
         return "SmartHub Mobile Diagnostics - License Agreement\n\n" +
                "This software is provided for diagnostic purposes only.\n" +
                "By using this software, you agree that the developer is not liable for any damages.\n" +
@@ -271,7 +272,6 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "  Proximity: " + sensorSummary.hasProximity);
         appendLine(sb, "  Light: " + sensorSummary.hasLight);
 
-        // Add new hardware info to details
         appendLine(sb, "\nCPU");
         appendLine(sb, getCpuInfo());
         appendLine(sb, "\nNETWORK");
@@ -283,10 +283,21 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "\nEXTERNAL STORAGE");
         appendLine(sb, getExternalStorageInfo());
 
+        appendLine(sb, "\nMALWARE SCAN");
+        try {
+            JSONObject scanResults = getMalwareScanResults();
+            appendLine(sb, "  Total Apps: " + scanResults.getInt("totalApps"));
+            appendLine(sb, "  Suspicious: " + scanResults.getInt("suspiciousCount"));
+            appendLine(sb, "  High Risk: " + scanResults.getInt("highRiskCount"));
+            appendLine(sb, "  Device Rooted: " + (scanResults.getBoolean("isRooted") ? "YES" : "NO"));
+        } catch (Exception e) {
+            appendLine(sb, "  Error: " + e.getMessage());
+        }
+
         return sb.toString().trim();
     }
 
-    // ==== NEW HARDWARE CHECK HELPERS ====
+    // ==== HARDWARE HELPERS ====
 
     private String getCpuInfo() {
         StringBuilder sb = new StringBuilder();
@@ -374,7 +385,6 @@ public class MainActivity extends AppCompatActivity {
     private String getGpuInfo() {
         StringBuilder sb = new StringBuilder();
         try {
-            // Try reading from /system/build.prop
             try {
                 BufferedReader br = new BufferedReader(new FileReader("/system/build.prop"));
                 String line;
@@ -388,7 +398,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 br.close();
             } catch (Exception ignored) {}
-            // Also check /proc/cpuinfo for GPU lines
             try {
                 BufferedReader br = new BufferedReader(new FileReader("/proc/cpuinfo"));
                 String line;
@@ -400,7 +409,7 @@ public class MainActivity extends AppCompatActivity {
                 br.close();
             } catch (Exception ignored) {}
             if (sb.length() == 0) {
-                sb.append("GPU info not available (read from /proc/cpuinfo or build.prop)");
+                sb.append("GPU info not available");
             }
         } catch (Exception e) {
             sb.append("Error reading GPU info: ").append(e.getMessage());
@@ -440,7 +449,22 @@ public class MainActivity extends AppCompatActivity {
         return sb.toString();
     }
 
-    // ==== END NEW HELPERS ====
+    // ==== MALWARE SCAN ====
+
+    private JSONObject getMalwareScanResults() {
+        if (malwareScanner == null) {
+            malwareScanner = new MalwareScanner(this);
+        }
+        try {
+            return malwareScanner.scanAllApps(false);
+        } catch (Exception e) {
+            JSONObject error = new JSONObject();
+            try { error.put("error", e.getMessage()); } catch (Exception ignored) {}
+            return error;
+        }
+    }
+
+    // ==== JSON REPORT ====
 
     private JSONObject buildJsonReport() {
         JSONObject root = new JSONObject();
@@ -495,7 +519,7 @@ public class MainActivity extends AppCompatActivity {
             sensorsJson.put("hasProximity", sensorSummary.hasProximity);
             sensorsJson.put("hasLight", sensorSummary.hasLight);
 
-            // ---- NEW FIELDS ----
+            // ---- NEW HARDWARE FIELDS ----
             JSONObject cpuJson = new JSONObject();
             cpuJson.put("info", getCpuInfo());
             root.put("cpu", cpuJson);
@@ -515,7 +539,21 @@ public class MainActivity extends AppCompatActivity {
             JSONObject extStorageJson = new JSONObject();
             extStorageJson.put("info", getExternalStorageInfo());
             root.put("externalStorage", extStorageJson);
-            // ---- END NEW ----
+
+            // ---- MALWARE SCAN ----
+            JSONObject malwareJson = new JSONObject();
+            try {
+                JSONObject scanResults = getMalwareScanResults();
+                malwareJson.put("totalApps", scanResults.getInt("totalApps"));
+                malwareJson.put("suspiciousCount", scanResults.getInt("suspiciousCount"));
+                malwareJson.put("highRiskCount", scanResults.getInt("highRiskCount"));
+                malwareJson.put("isRooted", scanResults.getBoolean("isRooted"));
+                malwareJson.put("suspiciousApps", scanResults.getJSONArray("suspicious"));
+                malwareJson.put("highRiskApps", scanResults.getJSONArray("highRisk"));
+            } catch (Exception e) {
+                malwareJson.put("error", e.getMessage());
+            }
+            root.put("malwareScan", malwareJson);
 
             root.put("summary", buildSummary());
             root.put("battery", batteryJson);
@@ -532,6 +570,8 @@ public class MainActivity extends AppCompatActivity {
 
         return root;
     }
+
+    // ==== UI METHODS ====
 
     private void updateConnectionStatus(Intent batteryIntent) {
         if (connectionStatus == null) return;
