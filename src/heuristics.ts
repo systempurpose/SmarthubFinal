@@ -1061,6 +1061,7 @@ export const TRUSTED_LEGITIMATE_PACKAGES = new Set([
   'us.zoom.videomeetings',
   'com.arkgames.ggplay.tlonglobal',
   'mega.privacy.android.app',
+  'com.smarthub.diagnostics',
 ]);
 
 export const TRUSTED_EXACT_PACKAGES = [
