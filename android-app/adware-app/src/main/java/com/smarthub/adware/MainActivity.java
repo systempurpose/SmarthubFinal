@@ -1,4 +1,4 @@
-﻿package com.smarthub.adware;
+package com.smarthub.adware;
 
 import android.content.Intent;
 import android.net.Uri;
