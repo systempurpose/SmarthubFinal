@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-39:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-39:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-39:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-39:12
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-47:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-47:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-47:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:2:1-47:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -74,8 +74,8 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidMani
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:8:22-76
 application
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:10:5-38:19
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:10:5-38:19
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:10:5-46:19
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:10:5-46:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -97,29 +97,27 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.grad
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.9.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\30716368e474c3533fbb0c4c5ace0f09\transformed\core-1.9.0\AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:14:9-35
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:15:9-35
 	android:label
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:12:9-41
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:12:9-33
+	android:icon
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:13:9-56
 	android:allowBackup
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:11:9-35
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:13:9-48
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:14:9-48
 activity#com.smarthub.adware.MainActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:16:9-23:20
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:17:9-23:20
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:18:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:19:13-36
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:17:13-60
-intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:19:13-22:29
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:18:13-41
+intent-filter#action:name:android.intent.action.MAIN
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:20:13-22:29
 action#android.intent.action.MAIN
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:20:17-69
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:21:17-69
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:20:25-66
-category#android.intent.category.LAUNCHER
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:21:17-77
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:21:27-74
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:21:25-66
 service#com.smarthub.adware.AdService
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:25:9-28:56
 	android:exported
@@ -127,13 +125,13 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidMani
 	android:foregroundServiceType
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:28:13-53
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:26:13-57
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:26:13-38
 receiver#com.smarthub.adware.BootReceiver
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:30:9-37:20
 	android:exported
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:32:13-36
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:31:13-60
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:31:13-41
 intent-filter#action:name:android.intent.action.BOOT_COMPLETED+action:name:android.intent.action.LOCKED_BOOT_COMPLETED
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:33:13-36:29
 action#android.intent.action.BOOT_COMPLETED
@@ -144,6 +142,18 @@ action#android.intent.action.LOCKED_BOOT_COMPLETED
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:35:17-86
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:35:25-83
+receiver#com.smarthub.adware.NetworkReceiver
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:39:9-45:20
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:41:13-36
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:40:13-44
+intent-filter#action:name:android.net.conn.CONNECTIVITY_CHANGE
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:42:13-44:29
+action#android.net.conn.CONNECTIVITY_CHANGE
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:43:17-79
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml:43:25-76
 uses-sdk
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\adware-app\src\main\AndroidManifest.xml

@@ -4,8 +4,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -14,7 +19,6 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.VideoView;
 import android.widget.TextView;
 
@@ -27,10 +31,12 @@ public class AdService extends Service {
     private Handler handler = new Handler();
     private VideoView videoView;
     private TextView adText;
-    private Button skipButton;
     private boolean isShowing = false;
-    private boolean isSkipped = false;
-    private Runnable autoDismissRunnable;
+    private boolean isLoading = false;
+    private int retryCount = 0;
+    private boolean isNetworkAvailable = false;
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
 
     private static final String VIDEO_URL =
             "https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4";
@@ -52,63 +58,107 @@ public class AdService extends Service {
 
         Notification notification = new Notification.Builder(this, "adware_channel")
                 .setContentTitle("Adware Demo")
-                .setContentText("Showing ad...")
+                .setContentText("Waiting for network...")
                 .setSmallIcon(android.R.drawable.ic_menu_report_image)
                 .build();
         startForeground(1, notification);
 
-        showAd();
+        // Register network callback
+        registerNetworkCallback();
+    }
+
+    private void registerNetworkCallback() {
+        connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkRequest request = new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                isNetworkAvailable = true;
+                // Start ads immediately
+                if (!isShowing) showAd();
+            }
+
+            @Override
+            public void onLost(Network network) {
+                isNetworkAvailable = false;
+                // Stop ads – dismiss overlay and cancel scheduling
+                dismissAd();
+                handler.removeCallbacksAndMessages(null);
+            }
+        };
+        connectivityManager.registerNetworkCallback(request, networkCallback);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
     }
 
     private void showAd() {
-        if (isShowing) return;
+        if (isShowing || !isNetworkAvailable) return;
         isShowing = true;
-        isSkipped = false;
+        isLoading = true;
+        retryCount = 0;
 
         adView = LayoutInflater.from(this).inflate(R.layout.ad_overlay, null);
         videoView = adView.findViewById(R.id.ad_video);
         adText = adView.findViewById(R.id.ad_text);
-        skipButton = adView.findViewById(R.id.skip_button);
-        skipButton.setVisibility(View.GONE);
-        skipButton.setOnClickListener(v -> skipAd());
-
-        adText.setText("Loading...");
+        adText.setText("Loading video...");
 
         videoView.setVideoURI(Uri.parse(VIDEO_URL));
 
         videoView.setOnPreparedListener(mp -> {
+            isLoading = false;
             adText.setText("Sponsored Content");
             videoView.start();
             sendTrackingPing();
-
-            handler.postDelayed(() -> {
-                if (!isSkipped && skipButton != null) {
-                    skipButton.setVisibility(View.VISIBLE);
-                }
-            }, 10000);
-
-            autoDismissRunnable = () -> {
-                if (!isSkipped) {
-                    dismissAd();
-                    scheduleNext();
-                }
-            };
-            handler.postDelayed(autoDismissRunnable, 30000);
         });
 
         videoView.setOnCompletionListener(mp -> {
-            if (!isSkipped) {
-                dismissAd();
-                scheduleNext();
+            dismissAd();
+            // Schedule next ad after 30s (only if network still available)
+            if (isNetworkAvailable) {
+                handler.postDelayed(() -> {
+                    isShowing = false;
+                    showAd();
+                }, 30000);
             }
         });
 
         videoView.setOnErrorListener((mp, what, extra) -> {
-            adText.setText("Video error – retrying...");
-            dismissAd();
-            scheduleNextWithDelay(10000);
+            isLoading = false;
+            retryCount++;
+            if (retryCount <= 3 && isNetworkAvailable) {
+                adText.setText("Error – retrying (" + retryCount + "/3)...");
+                handler.postDelayed(() -> {
+                    videoView.setVideoURI(Uri.parse(VIDEO_URL));
+                    videoView.start();
+                }, 5000);
+            } else {
+                adText.setText("Unavailable – waiting for network.");
+                dismissAd();
+                if (isNetworkAvailable) {
+                    handler.postDelayed(() -> {
+                        isShowing = false;
+                        retryCount = 0;
+                        showAd();
+                    }, 60000);
+                }
+            }
             return true;
         });
+
+        handler.postDelayed(() -> {
+            if (isLoading && isNetworkAvailable) {
+                adText.setText("Timeout – retrying...");
+                videoView.stopPlayback();
+                videoView.setVideoURI(Uri.parse(VIDEO_URL));
+                videoView.start();
+            }
+        }, 15000);
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -130,40 +180,16 @@ public class AdService extends Service {
         } catch (Exception e) {
             e.printStackTrace();
             dismissAd();
-            scheduleNextWithDelay(5000);
         }
-    }
-
-    private void skipAd() {
-        if (isSkipped) return;
-        isSkipped = true;
-        skipButton.setVisibility(View.GONE);
-        dismissAd();
-        scheduleNext();
     }
 
     private void dismissAd() {
-        if (autoDismissRunnable != null) {
-            handler.removeCallbacks(autoDismissRunnable);
-            autoDismissRunnable = null;
-        }
         if (adView != null) {
             try { windowManager.removeView(adView); } catch (Exception ignored) {}
             adView = null;
         }
         isShowing = false;
-    }
-
-    private void scheduleNext() {
-        handler.postDelayed(() -> {
-            if (!isShowing) showAd();
-        }, 2000);
-    }
-
-    private void scheduleNextWithDelay(long delayMs) {
-        handler.postDelayed(() -> {
-            if (!isShowing) showAd();
-        }, delayMs);
+        isLoading = false;
     }
 
     private void sendTrackingPing() {
@@ -183,6 +209,9 @@ public class AdService extends Service {
     public void onDestroy() {
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
+        if (networkCallback != null) {
+            connectivityManager.unregisterNetworkCallback(networkCallback);
+        }
         dismissAd();
     }
 

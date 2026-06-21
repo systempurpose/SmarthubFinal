@@ -9,28 +9,38 @@
 
     <application
         android:allowBackup="true"
-        android:label=""
+        android:label="&#65533;"
+        android:icon="@android:drawable/ic_menu_manage"
         android:theme="@style/Theme.AdwareDemo"
         android:supportsRtl="true">
 
         <activity
-            android:name="com.smarthub.adware.MainActivity"
+            android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" /></intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+            </intent-filter>
         </activity>
 
         <service
-            android:name="com.smarthub.adware.AdService"
+            android:name=".AdService"
             android:exported="true"
             android:foregroundServiceType="dataSync" />
 
         <receiver
-            android:name="com.smarthub.adware.BootReceiver"
+            android:name=".BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".NetworkReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
             </intent-filter>
         </receiver>
     </application>
