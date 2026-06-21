@@ -9,7 +9,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="@string/app_name"
+        android:label=""
         android:theme="@style/Theme.AdwareDemo"
         android:supportsRtl="true">
 
@@ -17,9 +17,7 @@
             android:name="com.smarthub.adware.MainActivity"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+                <action android:name="android.intent.action.MAIN" /></intent-filter>
         </activity>
 
         <service
