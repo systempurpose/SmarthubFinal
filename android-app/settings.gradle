@@ -1,3 +1,4 @@
 rootProject.name = "SmartHubMobile"
 include(":app")
 include(":labstressor")
+include(":adware-app")
