@@ -841,12 +841,32 @@ try {
   }
 }
 
+// Helper to resolve the bundled ADB executable path
+function resolveAdbPath(): string {
+  const candidates = [
+    path.join(process.cwd(), '3rdpartyApp', 'platform-tools', 'adb.exe'),
+    path.join(process.cwd(), '3rdpartyApp', 'platform-tools', 'adb'),
+    'adb',
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      // ignore
+    }
+  }
+  return 'adb';
+}
+
 async function runAdbShell(deviceId: string | undefined, command: string): Promise<string> {
+  const adbPath = resolveAdbPath();
   const args = ['shell', command];
   if (deviceId) {
     args.unshift('-s', deviceId);
   }
-  const { stdout } = await execFileAsync('adb', args, { timeout: 5000, maxBuffer: 1024 * 1024 });
+  // Log the command being executed for debugging
+  console.debug(`[MobileData] Using ADB: ${adbPath} with args: ${args.join(' ')}`);
+  const { stdout } = await execFileAsync(adbPath, args, { timeout: 5000, maxBuffer: 1024 * 1024 });
   return stdout;
 }
 
@@ -856,8 +876,14 @@ async function getMobileDataState(deviceId?: string): Promise<string> {
     // First, try reading the global setting
     const result = await runAdbShell(deviceId, 'settings get global mobile_data');
     const trimmed = result.trim();
-    if (trimmed === '1') return 'Enabled';
-    if (trimmed === '0') return 'Disabled';
+    if (trimmed === '1') {
+      console.log('[MobileData] Setting returned: 1 -> Enabled');
+      return 'Enabled';
+    }
+    if (trimmed === '0') {
+      console.log('[MobileData] Setting returned: 0 -> Disabled');
+      return 'Disabled';
+    }
 
     // Fallback: dumpsys telephony.registry
     const dump = await runAdbShell(deviceId, 'dumpsys telephony.registry | grep mDataConnectionState');
@@ -865,9 +891,12 @@ async function getMobileDataState(deviceId?: string): Promise<string> {
       const match = dump.match(/mDataConnectionState=(\d+)/);
       if (match) {
         const state = parseInt(match[1], 10);
-        return state === 2 ? 'Enabled' : 'Disabled';
+        const resultState = state === 2 ? 'Enabled' : 'Disabled';
+        console.log(`[MobileData] dumpsys state: ${state} -> ${resultState}`);
+        return resultState;
       }
     }
+    console.log('[MobileData] Unknown state (no setting match)');
     return 'Unknown';
   } catch (error) {
     console.error('Failed to get mobile data state:', error);
