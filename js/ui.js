@@ -2230,9 +2230,16 @@ async function renderDeviceInfo() {
         return;
     }
     try {
-        const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        let rawText = await res.text();
+        // Fetch all data in parallel
+        const [propsRes, wifiStatus, btState, mobileState] = await Promise.all([
+            fetch(`${BACKEND_URL}/device/${currentDeviceId}`),
+            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null),
+            fetch(`${BACKEND_URL}/bluetooth/state/${currentDeviceId}`).catch(() => null),
+            fetch(`${BACKEND_URL}/mobile-data/state/${currentDeviceId}`).catch(() => null)
+        ]);
+
+        if (!propsRes.ok) throw new Error(`HTTP ${propsRes.status}`);
+        let rawText = await propsRes.text();
         try {
             const parsedJson = JSON.parse(rawText);
             if (typeof parsedJson === 'string') rawText = parsedJson;
@@ -2250,13 +2257,12 @@ async function renderDeviceInfo() {
             return;
         }
 
-        let wifiStatus = null;
-        try {
-            const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
-            if (wifiRes.ok) wifiStatus = await wifiRes.json();
-        } catch (err) {}
+        const wifiData = wifiStatus && wifiStatus.ok ? await wifiStatus.json() : null;
+        const btData = btState && btState.ok ? await btState.json() : null;
+        const mobileData = mobileState && mobileState.ok ? await mobileState.json() : null;
 
         const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
+
         const makeCard = (title, icon, items) => `
             <div class="info-card">
                 <div class="card-header"><i class="${icon}"></i> ${title}</div>
@@ -2267,6 +2273,8 @@ async function renderDeviceInfo() {
         `;
 
         const cards = [];
+
+        // Device Overview
         cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
             { label: 'Model', value: get('ro.product.model', 'Unknown') },
             { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
@@ -2277,17 +2285,29 @@ async function renderDeviceInfo() {
             { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
         ]));
 
-        const bluetoothEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
-        const bluetoothProfiles = ['a2dp.source', 'avrcp.target', 'bas.client', 'gatt', 'hfp.ag', 'hid.device', 'hid.host', 'map.server', 'opp', 'pan.nap', 'pan.panu', 'pbap.server'].filter(p => get(`bluetooth.profile.${p}.enabled`) === 'true').length;
+        // Bluetooth
+        let btEnabled = false;
+        let btStateText = 'Unknown';
+        let btBonded = 0;
+        if (btData) {
+            btEnabled = btData.enabled;
+            btStateText = btData.state || (btEnabled ? 'ON' : 'OFF');
+            btBonded = btData.bondedCount || 0;
+        } else {
+            // fallback to props
+            btEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
+            btStateText = btEnabled ? 'ON' : 'OFF';
+        }
         cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
-            { label: 'Enabled', value: bluetoothEnabled ? '✅ Yes' : '❌ No' },
-            { label: 'Active Profiles', value: `${bluetoothProfiles} / 12` },
-            { label: 'Adapter State', value: get('cache_key.bluetooth.bluetooth_adapter_get_state', 'N/A') }
+            { label: 'Enabled', value: btEnabled ? '✅ Yes' : '❌ No' },
+            { label: 'Adapter State', value: btStateText },
+            { label: 'Paired Devices', value: btBonded }
         ]));
 
+        // WiFi
         let wifiItems = [];
-        if (wifiStatus && wifiStatus.wifi) {
-            const info = formatWifiStatus(wifiStatus.wifi);
+        if (wifiData && wifiData.wifi) {
+            const info = formatWifiStatus(wifiData.wifi);
             wifiItems = [
                 { label: 'SSID', value: info.ssid },
                 { label: 'Status', value: info.status },
@@ -2300,17 +2320,24 @@ async function renderDeviceInfo() {
         }
         cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
 
+        // Network & SIM
+        const mobileEnabled = mobileData ? mobileData.enabled : (get('gsm.data.setenabled') === 'true');
+        const mobileConnected = mobileData ? mobileData.connected : false;
+        const networkType = mobileData ? mobileData.networkType : get('gsm.network.type', 'Unknown');
+        const operator = mobileData ? mobileData.operator : get('gsm.operator.alpha', 'Unknown');
+        const simState = get('gsm.sim.state', 'Unknown');
         const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
         const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
-        const mobileDataEnabled = get('gsm.data.setenabled') === 'true' ? '✅ Yes' : '❌ No';
+
         cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
-            { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
-            { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
-            { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
-            { label: 'Mobile Data', value: mobileDataEnabled },
+            { label: 'Operator', value: operator },
+            { label: 'Network Type', value: networkType },
+            { label: 'SIM State', value: simState },
+            { label: 'Mobile Data', value: mobileEnabled ? (mobileConnected ? '✅ On' : '⏳ Connecting') : '❌ Off' },
             { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
         ]));
 
+        // System & Build
         cards.push(makeCard('System & Build', 'fas fa-code-branch', [
             { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0,60)+'...' },
             { label: 'Build Date', value: get('ro.build.date', 'N/A') },
@@ -2318,6 +2345,7 @@ async function renderDeviceInfo() {
             { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
         ]));
 
+        // Hardware
         cards.push(makeCard('Hardware', 'fas fa-microchip', [
             { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
             { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
@@ -2325,6 +2353,7 @@ async function renderDeviceInfo() {
             { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
         ]));
 
+        // Special Features
         cards.push(makeCard('Special Features', 'fas fa-star', [
             { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
             { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
@@ -2332,6 +2361,7 @@ async function renderDeviceInfo() {
             { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
         ]));
 
+        // Security & Boot
         cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
             { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
             { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },

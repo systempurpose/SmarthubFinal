@@ -169,6 +169,72 @@ const app = express();
 app.get('/ping', (req, res) => {
     res.json({ ok: true, message: 'pong' });
 });
+
+// ---- Bluetooth state ----
+app.get('/bluetooth/state/:id', async (req, res) => {
+    const deviceId = req.params.id;
+    try {
+        const adb = require('./adb');
+        // Check if Bluetooth is enabled via settings
+        const setting = await adb('-s', deviceId, 'shell', 'settings get global bluetooth_on');
+        const enabled = setting.trim() === '1';
+
+        // Get adapter state from dumpsys (more reliable)
+        let state = 'unknown';
+        let bondedCount = 0;
+        try {
+            const dump = await adb('-s', deviceId, 'shell', 'dumpsys bluetooth');
+            const match = dump.match(/Adapter state: (\w+)/i);
+            if (match) state = match[1];
+            const bondMatch = dump.match(/Bonded devices: (\d+)/i);
+            if (bondMatch) bondedCount = parseInt(bondMatch[1]) || 0;
+        } catch (e) {
+            // fallback to setting
+            state = enabled ? 'ON' : 'OFF';
+        }
+        res.json({ enabled, state, bondedCount });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
+
+// ---- Mobile Data state ----
+app.get('/mobile-data/state/:id', async (req, res) => {
+    const deviceId = req.params.id;
+    try {
+        const adb = require('./adb');
+        // Get mobile data enabled state from settings
+        const setting = await adb('-s', deviceId, 'shell', 'settings get global mobile_data');
+        const enabled = setting.trim() === '1';
+
+        // Get network info from telephony registry
+        let networkType = 'Unknown';
+        let operator = 'Unknown';
+        let connected = false;
+        try {
+            const dump = await adb('-s', deviceId, 'shell', 'dumpsys telephony.registry');
+            const dataRegState = dump.match(/mDataRegState=(\d+)/)?.[1];
+            const networkTypeCode = dump.match(/mDataNetworkType=(\d+)/)?.[1];
+            const operatorMatch = dump.match(/mOperatorAlphaLong=(.+)/)?.[1];
+            if (operatorMatch) operator = operatorMatch.trim();
+            connected = dataRegState === '1'; // 1 = registered
+            // Map network type codes
+            const networkMap: Record<string, string> = {
+                '0': 'Unknown', '1': 'GPRS', '2': 'EDGE', '3': 'UMTS', '4': 'CDMA',
+                '5': 'EVDO_0', '6': 'EVDO_A', '7': '1xRTT', '8': 'HSDPA', '9': 'HSUPA',
+                '10': 'HSPA', '11': 'IDEN', '12': 'EVDO_B', '13': 'LTE', '14': 'EHRPD',
+                '15': 'HSPAP', '16': 'GSM', '17': 'TD_SCDMA', '18': 'IWLAN', '19': 'LTE_CA',
+                '20': 'NR'
+            };
+            networkType = networkMap[networkTypeCode || ''] || networkTypeCode || 'Unknown';
+        } catch (e) {
+            // fallback
+        }
+        res.json({ enabled, connected, networkType, operator });
+    } catch (err) {
+        res.status(500).json({ error: String(err) });
+    }
+});
 // TEMPORARY: Public endpoint for testing (no auth)
 app.get('/api/test-scan', async (req, res) => {
     console.log('✅ Test endpoint reached');
