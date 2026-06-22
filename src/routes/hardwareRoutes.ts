@@ -23,35 +23,55 @@ async function adbShell(deviceId: string, command: string): Promise<string> {
 router.get('/battery-usage', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
-        const output = await adbShell(deviceId, 'dumpsys batterystats');
-        const usage: { name: string; drain: number; type: 'app' | 'system' }[] = [];
-
-        // 1) Parse app entries (m lines with power=)
-        for (const line of output.split('\n')) {
-            const match = line.match(/^\s*m\s+([\w.]+).*?power=([\d.]+)/i);
-            if (match && parseFloat(match[2]) > 0) {
-                usage.push({ name: match[1], drain: parseFloat(match[2]), type: 'app' });
+        // Try checkin format first (more reliable)
+        let output = '';
+        let usage: { name: string; drain: number; type: 'app' | 'system' }[] = [];
+        try {
+            output = await adbShell(deviceId, 'dumpsys batterystats --checkin');
+            // Parse pkg lines
+            const lines = output.split('\n');
+            for (const line of lines) {
+                if (line.startsWith('pkg,')) {
+                    const parts = line.split(',');
+                    if (parts.length >= 5) {
+                        const pkg = parts[1];
+                        const drain = parseFloat(parts[4]); // power drain in mAh
+                        if (!isNaN(drain) && drain > 0) {
+                            usage.push({ name: pkg, drain, type: 'app' });
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            // Fallback to regular dumpsys
+            output = await adbShell(deviceId, 'dumpsys batterystats');
+            const lines = output.split('\n');
+            // Parse app entries (m lines with power=)
+            for (const line of lines) {
+                const match = line.match(/^\s*m\s+([\w.]+).*?power=([\d.]+)/i);
+                if (match && parseFloat(match[2]) > 0) {
+                    usage.push({ name: match[1], drain: parseFloat(match[2]), type: 'app' });
+                }
+            }
+            // Also parse system components (Screen, Wifi, Cell, etc.)
+            const systemPatterns = [
+                { regex: /Screen.*?power=([\d.]+)/i, name: '📱 Screen (brightness)' },
+                { regex: /Wifi.*?power=([\d.]+)/i, name: '📶 Wi-Fi' },
+                { regex: /Cell.*?power=([\d.]+)/i, name: '📡 Cellular' },
+                { regex: /Audio.*?power=([\d.]+)/i, name: '🔊 Audio/Sound' },
+                { regex: /Bluetooth.*?power=([\d.]+)/i, name: '🎧 Bluetooth' },
+                { regex: /Camera.*?power=([\d.]+)/i, name: '📸 Camera' },
+                { regex: /GPS.*?power=([\d.]+)/i, name: '📍 GPS' },
+                { regex: /Idle.*?power=([\d.]+)/i, name: '💤 Idle (background)' }
+            ];
+            for (const pattern of systemPatterns) {
+                const match = output.match(pattern.regex);
+                if (match && parseFloat(match[1]) > 0) {
+                    usage.push({ name: pattern.name, drain: parseFloat(match[1]), type: 'system' });
+                }
             }
         }
-
-        // 2) Parse system components (Screen, Wifi, Cell, Audio, Bluetooth)
-        const systemPatterns = [
-            { regex: /Screen.*?power=([\d.]+)/i, name: '📱 Screen (brightness)' },
-            { regex: /Wifi.*?power=([\d.]+)/i, name: '📶 Wi-Fi' },
-            { regex: /Cell.*?power=([\d.]+)/i, name: '📡 Cellular' },
-            { regex: /Audio.*?power=([\d.]+)/i, name: '🔊 Audio/Sound' },
-            { regex: /Bluetooth.*?power=([\d.]+)/i, name: '🎧 Bluetooth' },
-            { regex: /Camera.*?power=([\d.]+)/i, name: '📸 Camera' },
-            { regex: /GPS.*?power=([\d.]+)/i, name: '📍 GPS' },
-            { regex: /Idle.*?power=([\d.]+)/i, name: '💤 Idle (background)' }
-        ];
-        for (const pattern of systemPatterns) {
-            const match = output.match(pattern.regex);
-            if (match && parseFloat(match[1]) > 0) {
-                usage.push({ name: pattern.name, drain: parseFloat(match[1]), type: 'system' });
-            }
-        }
-
+        // Sort by drain descending
         usage.sort((a, b) => b.drain - a.drain);
         res.json({ usage: usage.slice(0, 30) });
     } catch (err: any) {
@@ -190,28 +210,35 @@ router.get('/ram-usage', async (req, res) => {
 router.get('/cpu-usage', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
-        const output = await adbShell(deviceId, 'top -n 1 -b');
-        const lines = output.split('\n');
-        const topApps = [];
+        const [topOutput, batteryOutput] = await Promise.all([
+            adbShell(deviceId, 'top -n 1 -b'),
+            adbShell(deviceId, 'dumpsys battery').catch(() => '')
+        ]);
+
+        // Parse temperature from battery output
+        let currentTemp = 'Unknown';
+        if (batteryOutput) {
+            const match = batteryOutput.match(/temperature:\s*(\d+)/);
+            if (match) currentTemp = (parseInt(match[1]) / 10).toFixed(1) + '°C';
+        }
+
+        const lines = topOutput.split('\n');
+        const topApps: { name: string; cpu: string }[] = [];
         for (const line of lines) {
             const parts = line.trim().split(/\s+/);
             if (parts.length < 9) continue;
             if (parts[0] === 'User' || parts[0] === 'Tasks:' || parts[0] === 'Mem:' || parts[0] === 'PID') continue;
-            let cpu = parts[8];
-            if (cpu && cpu.includes('%')) cpu = cpu.replace('%', '');
-            const cpuVal = parseFloat(cpu);
-            if (!isNaN(cpuVal) && cpuVal > 0) {
-                const name = parts[parts.length-1];
+            const cpu = parts[8];
+            const cpuVal = parseFloat(cpu.replace('%', ''));
+            if (!isNaN(cpuVal)) {
+                const name = parts[parts.length - 1];
                 if (name && name.includes('.')) {
-                    topApps.push({ name: name.substring(0, 50), cpu });
+                    topApps.push({ name: name.substring(0, 50), cpu: cpuVal.toFixed(1) + '%' });
                 }
             }
         }
-        const battery = await adbShell(deviceId, 'dumpsys battery');
-        const tempMatch = battery.match(/temperature: (\d+)/);
-        let currentTemp = 'Unknown';
-        if (tempMatch) currentTemp = (parseInt(tempMatch[1]) / 10).toFixed(1) + '°C';
-        res.json({ topApps: topApps.slice(0, 15), currentTemp });
+        topApps.sort((a, b) => parseFloat(b.cpu) - parseFloat(a.cpu));
+        res.json({ topApps: topApps.slice(0, 30), currentTemp });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
@@ -232,33 +259,99 @@ router.get('/temperature', async (req, res) => {
 });
 
 // ------------------- EXISTING ENDPOINTS (keep unchanged) -------------------
+// ---- BATTERY SUMMARY ----
 router.get('/battery', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
         const output = await adbShell(deviceId, 'dumpsys battery');
-        const levelMatch = output.match(/level: (\d+)/);
-        const healthMatch = output.match(/health: (\d+)/);
+        const lines = output.split('\n');
+        const data: Record<string, string> = {};
+        for (const line of lines) {
+            const parts = line.trim().split(':');
+            if (parts.length === 2) {
+                data[parts[0].trim()] = parts[1].trim();
+            }
+        }
+        const level = parseInt(data.level || '');
         const healthMap: Record<string, string> = {
             '1': 'unknown', '2': 'good', '3': 'overheat',
             '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold'
         };
-        const pluggedMatch = output.match(/plugged: (\d+)/);
-        const statusMatch = output.match(/status: (\d+)/);
-        const tempMatch = output.match(/temperature: (\d+)/);
-
-        const plugged = pluggedMatch ? parseInt(pluggedMatch[1]) : 0;
-        const status = statusMatch ? parseInt(statusMatch[1]) : -1;
-        const charging = (plugged !== 0 || status === 2 || status === 5); // 2=charging, 5=full
+        const health = healthMap[data.health] || 'unknown';
+        const plugged = parseInt(data['AC powered'] === 'true' ? '1' : data['USB powered'] === 'true' ? '2' : '0');
+        const status = parseInt(data.status || '-1');
+        const charging = (plugged !== 0 || status === 2 || status === 5);
+        const temperature = data.temperature ? (parseInt(data.temperature) / 10).toFixed(1) + '°C' : 'Unknown';
+        const voltage = data.voltage ? (parseInt(data.voltage) / 1000).toFixed(2) + 'V' : 'Unknown';
+        const technology = data.technology || 'Unknown';
 
         res.json({
-            level: levelMatch ? parseInt(levelMatch[1]) : null,
-            health: healthMap[healthMatch?.[1] || ''] || 'unknown',
+            level: isNaN(level) ? null : level,
+            health,
             charging,
-            plugged,
+            temperature,
+            voltage,
+            technology,
             status,
-            temperature: tempMatch ? (parseInt(tempMatch[1]) / 10).toFixed(1) + '°C' : 'Unknown'
+            plugged
         });
     } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ---- BATTERY USAGE ----
+router.get('/battery-usage', async (req, res) => {
+    try {
+        const deviceId = await getDeviceId(req);
+        // Get full batterystats dump
+        const output = await adbShell(deviceId, 'dumpsys batterystats');
+        const usage: { name: string; drain: number; type: 'app' | 'system' }[] = [];
+
+        // Parse app entries: look for lines starting with "m" and containing "power="
+        // Example: "  m com.example.app  ... power=12.5"
+        const lines = output.split('\n');
+        for (const line of lines) {
+            // App power consumption
+            const match = line.match(/^\s*m\s+([\w.]+).*?power=([\d.]+)/i);
+            if (match && parseFloat(match[2]) > 0) {
+                usage.push({ name: match[1], drain: parseFloat(match[2]), type: 'app' });
+            }
+        }
+
+        // If no app data, try to parse "estimated power" lines (some devices use different format)
+        if (usage.length === 0) {
+            for (const line of lines) {
+                const match = line.match(/^\s*Estimated power use:\s+([\w.]+)\s+([\d.]+)\s*mAh/i);
+                if (match && parseFloat(match[2]) > 0) {
+                    usage.push({ name: match[1], drain: parseFloat(match[2]), type: 'app' });
+                }
+            }
+        }
+
+        // Parse system components (Screen, Wifi, Cell, etc.)
+        const systemPatterns = [
+            { regex: /Screen.*?power=([\d.]+)/i, name: '📱 Screen (brightness)' },
+            { regex: /Wifi.*?power=([\d.]+)/i, name: '📶 Wi-Fi' },
+            { regex: /Cell.*?power=([\d.]+)/i, name: '📡 Cellular' },
+            { regex: /Audio.*?power=([\d.]+)/i, name: '🔊 Audio/Sound' },
+            { regex: /Bluetooth.*?power=([\d.]+)/i, name: '🎧 Bluetooth' },
+            { regex: /Camera.*?power=([\d.]+)/i, name: '📸 Camera' },
+            { regex: /GPS.*?power=([\d.]+)/i, name: '📍 GPS' },
+            { regex: /Idle.*?power=([\d.]+)/i, name: '💤 Idle (background)' }
+        ];
+        for (const pattern of systemPatterns) {
+            const match = output.match(pattern.regex);
+            if (match && parseFloat(match[1]) > 0) {
+                usage.push({ name: pattern.name, drain: parseFloat(match[1]), type: 'system' });
+            }
+        }
+
+        // Sort by drain descending and return top 30
+        usage.sort((a, b) => b.drain - a.drain);
+        res.json({ usage: usage.slice(0, 30) });
+    } catch (err: any) {
+        console.error('[battery-usage] error:', err);
         res.status(500).json({ error: err.message });
     }
 });

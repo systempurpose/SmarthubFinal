@@ -894,3 +894,11 @@ pre {
 .app-card-item .risk-badge {
     font-size: 10px;
 }
+.action-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.10);
+    border-color: #0EA5E9;
+}
+.action-card:active {
+    transform: scale(0.97);
+}

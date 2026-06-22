@@ -480,32 +480,74 @@ async function renderDashboard() {
         return;
     }
 
+    // ---- Quick Actions (cards) ----
     container.innerHTML = `
-    <h1 style="margin-bottom: 24px;">Dashboard</h1>
-    <div class="card">
-        <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <button id="startDiagnosticBtn" class="btn-primary">🔬 Deep Diagnostic</button>
-            <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
-            <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
-            <button id="helpBtn" class="btn-secondary">❓ Help</button>
+        <h1 style="margin-bottom: 24px;">Dashboard</h1>
+        <div class="action-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div class="action-card" data-action="diagnostic" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">🔬</div>
+                <div style="font-weight: 600; font-size: 15px;">Deep Diagnostic</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Full system scan</div>
+            </div>
+            <div class="action-card" data-action="install" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
+                <div style="font-weight: 600; font-size: 15px;">Install Android App</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Deploy companion app</div>
+            </div>
+            <div class="action-card" data-action="wizard" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">🔌</div>
+                <div style="font-weight: 600; font-size: 15px;">USB Debugging Wizard</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Connect your phone</div>
+            </div>
+            <div class="action-card" data-action="help" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">❓</div>
+                <div style="font-weight: 600; font-size: 15px;">Help</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Guides & support</div>
+            </div>
         </div>
-    </div>
-    <div id="deviceOverview" class="card" style="display: none;"></div>
-    <div id="networkStatus" class="card" style="display: none;"></div>
-    <div id="phoneSummary" class="card" style="display: none;">
-        <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
-        <div class="phone-summary-grid"></div>
-    </div>
-    <div id="alertsCard" class="card" style="display: none;"></div>
-    <div id="diagnosticResult" class="card" style="display: none;"></div>
+        <div id="deviceOverview" class="card" style="display: none;"></div>
+        <div id="networkStatus" class="card" style="display: none;"></div>
+        <div id="phoneSummary" class="card" style="display: none;">
+            <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
+            <div class="phone-summary-grid"></div>
+        </div>
+        <div id="alertsCard" class="card" style="display: none;"></div>
+        <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
-    // Wait a tiny bit for DOM to update
+    // ---- Attach event listeners to the new action cards ----
+    document.querySelector('.action-card[data-action="diagnostic"]')?.addEventListener('click', runDeepDiagnostic);
+    document.querySelector('.action-card[data-action="install"]')?.addEventListener('click', async () => {
+        if (!currentDeviceId) {
+            alert('No device connected. Please connect a phone first.');
+            return;
+        }
+        const btn = document.querySelector('.action-card[data-action="install"]');
+        const descEl = btn.querySelector('div:last-child');
+        const originalText = descEl?.innerHTML || 'Deploy companion app';
+        if (descEl) descEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Installing...';
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/install-apk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId })
+            });
+            const data = await response.json();
+            if (response.ok) alert('Android app installed successfully!');
+            else alert('Installation failed: ' + data.error);
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            if (descEl) descEl.innerHTML = originalText;
+        }
+    });
+    document.querySelector('.action-card[data-action="wizard"]')?.addEventListener('click', openWizard);
+    document.querySelector('.action-card[data-action="help"]')?.addEventListener('click', showHelpModal);
+
+    // ---- Fetch and display the rest of the dashboard data ----
     await new Promise(r => setTimeout(r, 50));
 
     try {
-        // Fetch all data with timeouts so one slow device call does not block the whole dashboard.
         const [battery, storage, ram, deviceText, wifiStatus, tempData] = await Promise.all([
             apiCall(`/hardware/battery?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ level: '?', health: 'unknown' })),
             apiCall(`/hardware/storage?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ total: '?', used: '?', free: '?' })),
@@ -530,37 +572,7 @@ async function renderDashboard() {
             securityPatch = props['ro.build.version.security_patch'] || '?';
         }
 
-        const healthDiv = document.getElementById('healthCards');
-        const temperatureValue = tempData && typeof tempData.temperature !== 'undefined' ? tempData.temperature : 'Unknown';
-        if (healthDiv) {
-            healthDiv.innerHTML = `
-                <div class="status-card clickable" data-card="battery">
-                    <i class="fas fa-battery-full"></i> Battery: ${battery.level || '?'}% (${battery.health || 'unknown'})
-                </div>
-                <div class="status-card clickable" data-card="storage">
-                    <i class="fas fa-hdd"></i> Storage: Free ${storage.free || '?'} / ${storage.total || '?'}
-                </div>
-                <div class="status-card clickable" data-card="ram">
-                    <i class="fas fa-memory"></i> RAM: Used ${ram.used || '?'} / ${ram.total || '?'}
-                </div>
-                <div class="status-card clickable" data-card="temperature">
-                    <i class="fas fa-thermometer-half"></i> Temp: ${temperatureValue}
-                </div>
-            `;
-
-            document.querySelectorAll('.status-card.clickable').forEach(card => {
-                card.addEventListener('click', () => {
-                    const type = card.dataset.card;
-                    if (type === 'battery') showBatteryModal();
-                    else if (type === 'storage') showStorageModal();
-                    else if (type === 'ram') showRamModal();
-                    else if (type === 'temperature') showTemperatureModal();
-                });
-            });
-        } else {
-            console.error('healthCards element not found');
-        }
-
+        // Device Overview
         document.getElementById('deviceOverview').innerHTML = `
             <div class="card-title"><i class="fas fa-info-circle"></i> Device Overview</div>
             <div><strong>Model:</strong> ${escapeHtml(model)}</div>
@@ -569,6 +581,7 @@ async function renderDashboard() {
         `;
         document.getElementById('deviceOverview').style.display = 'block';
 
+        // Network Status
         const wifiInfo = formatWifiStatus(wifiStatus?.wifi);
         document.getElementById('networkStatus').innerHTML = `
             <div class="card-title"><i class="fas fa-wifi"></i> Network Status</div>
@@ -580,6 +593,7 @@ async function renderDashboard() {
         `;
         document.getElementById('networkStatus').style.display = 'block';
 
+        // Phone Summary
         const summaryGrid = document.querySelector('#phoneSummary .phone-summary-grid');
         if (summaryGrid) {
             summaryGrid.innerHTML = `
@@ -590,6 +604,7 @@ async function renderDashboard() {
             document.getElementById('phoneSummary').style.display = 'block';
         }
 
+        // Alerts
         let alerts = [];
         if (battery.level && battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
         else if (battery.level && battery.level < 30) alerts.push('⚠️ Battery level low (<30%)');
@@ -602,40 +617,11 @@ async function renderDashboard() {
         }
     } catch (err) {
         console.error('Dashboard data error:', err);
-        
     }
 
-    document.getElementById('startDiagnosticBtn')?.addEventListener('click', runDeepDiagnostic);
-    document.getElementById('installAppBtn')?.addEventListener('click', async () => {
-        if (!currentDeviceId) {
-            alert('No device connected. Please connect a phone first.');
-            return;
-        }
-        const btn = document.getElementById('installAppBtn');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Installing...';
-        btn.disabled = true;
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/install-apk`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId })
-            });
-            const data = await response.json();
-            if (response.ok) alert('Android app installed successfully!');
-            else alert('Installation failed: ' + data.error);
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-    });
-    document.getElementById('openWizard')?.addEventListener('click', openWizard);
-    document.getElementById('helpBtn')?.addEventListener('click', showHelpModal);
+    // (Optional: if you still have a test scan button, re‑attach it)
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
 }
-
 function ensureInfoModal(modalId, title) {
     let modal = document.getElementById(modalId);
     if (!modal) {
@@ -690,138 +676,121 @@ function renderPieChart(svgElement, segments) {
 
 // Battery modal – only apps draining battery (no temperature)
 async function showBatteryModal() {
-    const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App & System');
+    const modal = ensureInfoModal('batteryModal', '🔋 Battery & CPU Usage');
     const body = document.getElementById('batteryModalBody');
     body.innerHTML = `
         <div style="text-align: center; padding: 20px;">
             <div class="spinner"></div>
-            <p>Loading battery stats...</p>
+            <p>Loading data...</p>
         </div>
     `;
     modal.style.display = 'flex';
 
     try {
-        const [batterySummaryRes, usageRes] = await Promise.all([
-            fetchWithTimeout(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`, {}, 8000),
-            fetchWithTimeout(`${BACKEND_URL}/hardware/battery-usage?deviceId=${currentDeviceId}`, {}, 15000)
+        const [battery, cpuData] = await Promise.all([
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({})),
+            apiCall(`/hardware/cpu-usage?deviceId=${currentDeviceId}`).catch(() => ({}))
         ]);
 
-        const battery = await batterySummaryRes.json().catch(() => ({}));
-        const usageData = await usageRes.json().catch(() => ({}));
-        const usage = usageData.usage || [];
+        const topApps = cpuData.topApps || [];
 
-        // ---- Battery Summary ----
-        const level = battery.level ?? '?';
+        // ---- Battery Summary (compact) ----
+        const level = battery.level !== undefined && battery.level !== null ? battery.level : '?';
         const health = battery.health ?? 'unknown';
         const healthEmoji = health === 'good' ? '✅' : health === 'overheat' ? '🌡️' : health === 'dead' ? '💀' : '⚠️';
         const charging = battery.charging !== undefined ? (battery.charging ? '⚡ Charging' : '🔌 Not charging') : '?';
+        const temperature = battery.temperature ?? 'Unknown';
+        const voltage = battery.voltage ?? 'Unknown';
+        const technology = battery.technology ?? 'Unknown';
 
+        // Compact grid with smaller cards
         let summaryHtml = `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
-                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Battery</div>
-                    <div style="font-size: 24px; font-weight: 600;">${level}%</div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;">
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Battery</div>
+                    <div style="font-size: 18px; font-weight: 600;">${level}%</div>
                 </div>
-                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Health</div>
-                    <div style="font-size: 18px; font-weight: 600;">${healthEmoji} ${health}</div>
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Health</div>
+                    <div style="font-size: 14px; font-weight: 600;">${healthEmoji} ${health}</div>
                 </div>
-                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Status</div>
-                    <div style="font-size: 16px; font-weight: 600;">${charging}</div>
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Status</div>
+                    <div style="font-size: 13px; font-weight: 600;">${charging}</div>
+                </div>
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Temp</div>
+                    <div style="font-size: 14px; font-weight: 600;">${temperature}</div>
+                </div>
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Voltage</div>
+                    <div style="font-size: 14px; font-weight: 600;">${voltage}</div>
+                </div>
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 6px 8px; text-align: center;">
+                    <div style="font-size: 10px; color: #6B7280;">Type</div>
+                    <div style="font-size: 13px; font-weight: 600;">${technology}</div>
                 </div>
             </div>
         `;
 
-        // ---- Usage Section ----
-        let usageHtml = '';
-        if (usage.length === 0) {
-            usageHtml = `
-                <div style="text-align: center; padding: 20px; background: #fef3c7; border-radius: 12px;">
-                    <p style="font-size: 16px; color: #92400e;">📊 No battery usage data yet.</p>
-                    <p style="font-size: 13px; color: #78350f;">
-                        Battery stats are collected after you use your phone for a while.  
-                        To get accurate data, do the following:
-                    </p>
-                    <ol style="text-align: left; margin: 12px auto; max-width: 360px; font-size: 13px; color: #78350f;">
-                        <li>Tap <strong>Reset Stats</strong> below to clear old data.</li>
-                        <li>Use your phone normally for 10–15 minutes.</li>
-                        <li>Tap <strong>Refresh</strong> to see the apps that drained the battery.</li>
-                    </ol>
-                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px;">
-                        <button id="refreshBatteryBtn" class="btn-primary">🔄 Refresh</button>
-                        <button id="resetBatteryBtn" class="btn-secondary">🗑️ Reset Stats</button>
-                    </div>
-                    <div style="margin-top: 12px; font-size: 11px; color: #6B7280;">
-                        <code>adb shell dumpsys batterystats --reset</code>
-                    </div>
+        // ---- Apps Section (compact) ----
+        let appsHtml = '';
+        if (topApps.length === 0) {
+            appsHtml = `
+                <div style="text-align: center; padding: 16px; background: #fef3c7; border-radius: 8px; font-size: 13px;">
+                    <p>📊 No app usage data available.</p>
+                    <p style="font-size: 12px; color: #78350f;">Run some apps and refresh.</p>
+                    <button id="refreshCpuBtn" class="btn-primary" style="margin-top: 8px; font-size: 12px; padding: 4px 12px;">🔄 Refresh</button>
                 </div>
             `;
         } else {
-            const totalDrain = usage.reduce((sum, item) => sum + item.drain, 0);
-            const itemsHtml = usage.map(item => {
-                const percent = (item.drain / totalDrain) * 100;
-                const icon = item.type === 'app' ? '📱' : '🔧';
-                const name = item.type === 'app' ? simplifyAppName(item.name) : item.name;
+            const itemsHtml = topApps.slice(0, 20).map(app => {
+                const cpu = parseFloat(app.cpu);
                 return `
-                    <div style="margin-bottom: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="font-weight: 500; font-size: 13px;">${icon} ${escapeHtml(name)}</span>
-                            <span style="font-size: 12px; color: #555;">${item.drain.toFixed(1)} mAh (${percent.toFixed(1)}%)</span>
+                    <div class="battery-process-item" data-name="${escapeHtml(app.name.toLowerCase())}" style="margin-bottom: 6px; background: #ffffff; border-radius: 6px; padding: 4px 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                            <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">📱 ${escapeHtml(app.name)}</span>
+                            <span style="font-size: 11px; color: #555;">${app.cpu} CPU</span>
                         </div>
-                        <div style="background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
-                            <div style="width: ${percent}%; background: #dc3545; height: 100%; border-radius: 4px;"></div>
+                        <div style="background: #e9ecef; border-radius: 2px; height: 3px; margin-top: 2px; overflow: hidden;">
+                            <div style="width: ${Math.min(100, cpu)}%; background: #f97316; height: 100%;"></div>
                         </div>
                     </div>
                 `;
             }).join('');
 
-            usageHtml = `
-                <div style="margin-bottom: 16px;">
-                    <input type="text" id="batterySearchInput" placeholder="🔍 Filter items..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
+            appsHtml = `
+                <div style="margin-bottom: 8px;">
+                    <input type="text" id="cpuSearchInput" placeholder="🔍 Filter apps..." style="width:100%; padding:4px 10px; border:1px solid #ddd; border-radius:20px; font-size:12px; outline:none;">
                 </div>
-                <div style="max-height: 320px; overflow-y: auto; padding-right: 6px;">
+                <div style="max-height: 220px; overflow-y: auto; padding-right: 4px;">
                     ${itemsHtml}
                 </div>
-                <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
-                    Percentages are based on estimated power drain (mAh). System components (screen, Wi‑Fi, cellular) are shown when available.
+                <div style="margin-top: 6px; font-size: 10px; color: #6c757d; text-align: center;">
+                    CPU usage as proxy for battery drain.
                 </div>
-                <div style="margin-top: 12px; text-align: right;">
-                    <button id="refreshBatteryBtn" class="btn-secondary" style="padding: 4px 12px; font-size: 12px;">🔄 Refresh</button>
-                    <button id="resetBatteryBtn" class="btn-secondary" style="padding: 4px 12px; font-size: 12px; margin-left: 8px;">🗑️ Reset Stats</button>
+                <div style="margin-top: 8px; text-align: right;">
+                    <button id="refreshCpuBtn" class="btn-secondary" style="padding: 2px 10px; font-size: 11px;">🔄 Refresh</button>
                 </div>
             `;
         }
 
-        body.innerHTML = summaryHtml + usageHtml;
+        body.innerHTML = summaryHtml + appsHtml;
 
         // ---- Event Listeners ----
-        document.getElementById('refreshBatteryBtn')?.addEventListener('click', showBatteryModal);
-        document.getElementById('resetBatteryBtn')?.addEventListener('click', async () => {
-            if (!confirm('Reset battery stats? This will clear all historical usage data. You’ll need to use the phone for a while before data reappears.')) return;
-            try {
-                const res = await fetch(`${BACKEND_URL}/adb-shell`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deviceId: currentDeviceId, command: 'dumpsys batterystats --reset' })
-                });
-                if (!res.ok) throw new Error('Reset failed');
-                alert('✅ Battery stats reset. Now use your phone for ~10 minutes and tap Refresh.');
-                showBatteryModal();
-            } catch (err) {
-                alert('❌ Failed to reset stats: ' + err.message);
-            }
-        });
-
-        // Search filter
-        const searchInput = document.getElementById('batterySearchInput');
+        document.getElementById('refreshCpuBtn')?.addEventListener('click', showBatteryModal);
+        const searchInput = document.getElementById('cpuSearchInput');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 const query = e.target.value.toLowerCase();
                 const items = document.querySelectorAll('.battery-process-item');
                 items.forEach(item => {
                     const name = item.getAttribute('data-name');
-                    item.style.display = (name && name.includes(query)) ? '' : 'none';
+                    if (name && name.includes(query)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
                 });
             });
         }
@@ -837,7 +806,6 @@ async function showBatteryModal() {
         document.getElementById('retryBatteryBtn')?.addEventListener('click', showBatteryModal);
     }
 }
-
 // Storage modal – pie chart using canvas (simple, no external lib)
 async function showStorageModal() {
     const modal = ensureInfoModal('storageModal', '💾 Storage Details');
@@ -1374,27 +1342,38 @@ async function runDeepDiagnostic() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ deviceId })
         });
-        if (!res.ok) throw new Error('Failed to set up ADB forward');
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`ADB forward failed: ${res.status} ${text}`);
+        }
         return res.json();
     }
 
     async function connectRealTime(deviceId) {
-        await setupAdbForward(deviceId);
+        try {
+            await setupAdbForward(deviceId);
+        } catch (err) {
+            throw new Error(`ADB forward failed: ${err.message}`);
+        }
         return new Promise((resolve, reject) => {
             const ws = new WebSocket('ws://localhost:12345');
+            const timeout = setTimeout(() => {
+                ws.close();
+                reject(new Error('WebSocket connection timeout (5s)'));
+            }, 5000);
             ws.onopen = () => {
+                clearTimeout(timeout);
                 console.log('Real‑time WebSocket connected');
                 realTimeWs = ws;
                 resolve();
             };
-            ws.onerror = (err) => {
-                console.error('WebSocket error', err);
-                reject(err);
+            ws.onerror = () => {
+                clearTimeout(timeout);
+                reject(new Error('WebSocket connection failed. Is the Android app running?'));
             };
             ws.onmessage = (msg) => {
                 try {
                     const event = JSON.parse(msg.data);
-                    // Only store events that are not heartbeat
                     if (event.type !== 'heartbeat') {
                         realTimeEvents.push(event);
                         console.log('[RealTime]', event);
@@ -1405,9 +1384,14 @@ async function runDeepDiagnostic() {
     }
 
     try {
-        // ---- ESTABLISH REAL‑TIME SYNC (must succeed) ----
-        await connectRealTime(currentDeviceId);
-        console.log('Real‑time sync active');
+        // ---- REAL‑TIME SYNC (optional) ----
+        try {
+            await connectRealTime(currentDeviceId);
+            console.log('Real‑time sync active');
+        } catch (err) {
+            console.warn('Real‑time sync unavailable:', err.message);
+            // Proceed without real‑time events
+        }
 
         startOverlayMonitoring();
 
@@ -1679,10 +1663,21 @@ async function runDeepDiagnostic() {
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        let errorMessage = 'Unknown error';
+        if (err instanceof Error) {
+            errorMessage = err.message;
+        } else if (err && typeof err === 'object' && err.message) {
+            errorMessage = err.message;
+        } else if (typeof err === 'string') {
+            errorMessage = err;
+        } else {
+            errorMessage = String(err);
+        }
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
     } finally {
-        if (realTimeWs) realTimeWs.close();
+        if (realTimeWs && realTimeWs.readyState === WebSocket.OPEN) {
+            realTimeWs.close();
+        }
     }
 }
 
