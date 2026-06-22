@@ -173,47 +173,21 @@ app.get('/ping', (req, res) => {
 // ---- Bluetooth state ----
 // ---- Bluetooth state ----
 // ---- Bluetooth state ----
-// ---- Bluetooth state ----
 app.get('/bluetooth/state/:id', async (req, res) => {
     const deviceId = req.params.id;
     try {
         const adb = require('./adb');
         const dump = await adb('-s', deviceId, 'shell', 'dumpsys bluetooth');
         
-        // Try multiple patterns to find the adapter state
-        let state = 'UNKNOWN';
-        const patterns = [
-            /Adapter state:\s*(\w+)/i,
-            /State:\s*(\w+)/i,
-            /mAdapterState\s*=\s*(\d+)/i,
-            /bluetooth state\s*=\s*(\w+)/i
-        ];
-        for (const pattern of patterns) {
-            const match = dump.match(pattern);
-            if (match) {
-                state = match[1];
-                // If it's a number, map it: 10 = OFF, 11 = TURNING_ON, 12 = ON, 13 = TURNING_OFF
-                if (!isNaN(parseInt(state))) {
-                    const num = parseInt(state);
-                    if (num === 10) state = 'OFF';
-                    else if (num === 11) state = 'TURNING_ON';
-                    else if (num === 12) state = 'ON';
-                    else if (num === 13) state = 'TURNING_OFF';
-                    else state = 'UNKNOWN';
-                }
-                break;
-            }
-        }
-        // Fallback: check if Bluetooth is enabled via settings
-        if (state === 'UNKNOWN' || state === '') {
-            try {
-                const setting = await adb('-s', deviceId, 'shell', 'settings get global bluetooth_on');
-                state = setting.trim() === '1' ? 'ON' : 'OFF';
-            } catch {}
-        }
+        // Parse adapter state from dumpsys
+        const stateMatch = dump.match(/Adapter state: (\w+)/i);
+        const state = stateMatch ? stateMatch[1] : 'UNKNOWN';
         const enabled = state === 'ON' || state === 'TURNING_ON' || state === 'BLE_ON';
-        const bondMatch = dump.match(/Bonded devices:\s*(\d+)/i);
+        
+        // Parse bonded devices count
+        const bondMatch = dump.match(/Bonded devices: (\d+)/i);
         const bondedCount = bondMatch ? parseInt(bondMatch[1]) || 0 : 0;
+        
         res.json({ enabled, state, bondedCount });
     } catch (err) {
         res.status(500).json({ error: String(err) });
@@ -221,34 +195,17 @@ app.get('/bluetooth/state/:id', async (req, res) => {
 });
 
 // ---- Mobile Data state ----
+// ---- Mobile Data state ----
+// ---- Mobile Data state ----
 app.get('/mobile-data/state/:id', async (req, res) => {
     const deviceId = req.params.id;
     try {
         const adb = require('./adb');
         const dump = await adb('-s', deviceId, 'shell', 'dumpsys telephony.registry');
         
-        // Parse data registration state: 0 = not registered, 1 = registered
-        let connected = false;
-        const regMatch = dump.match(/mDataRegState=(\d+)/);
-        if (regMatch) {
-            connected = regMatch[1] === '1';
-        } else {
-            // Fallback: check mDataConnectionState (0 = disconnected, 1 = connecting, 2 = connected)
-            const connMatch = dump.match(/mDataConnectionState=(\d+)/);
-            if (connMatch) {
-                connected = connMatch[1] === '2';
-            }
-        }
-        
-        // Check if mobile data is enabled (toggle)
-        let enabled = false;
-        try {
-            const setting = await adb('-s', deviceId, 'shell', 'settings get global mobile_data');
-            enabled = setting.trim() === '1';
-        } catch {}
-        
-        // If not found via settings, infer from connection state
-        if (!enabled && connected) enabled = true;
+        // Parse data registration state: 0 = not registered, 1 = registered (connected)
+        const dataRegState = dump.match(/mDataRegState=(\d+)/)?.[1];
+        const connected = dataRegState === '1';
         
         // Parse network type
         const networkTypeCode = dump.match(/mDataNetworkType=(\d+)/)?.[1];
@@ -264,6 +221,15 @@ app.get('/mobile-data/state/:id', async (req, res) => {
         // Parse operator name
         const operatorMatch = dump.match(/mOperatorAlphaLong=(.+)/)?.[1];
         const operator = operatorMatch ? operatorMatch.trim() : 'Unknown';
+        
+        // Also check if mobile data is enabled in settings (for the toggle state)
+        let enabled = false;
+        try {
+            const setting = await adb('-s', deviceId, 'shell', 'settings get global mobile_data');
+            enabled = setting.trim() === '1';
+        } catch {
+            enabled = connected;
+        }
         
         res.json({ enabled, connected, networkType, operator });
     } catch (err) {

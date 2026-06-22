@@ -2263,10 +2263,6 @@ async function renderDeviceInfo() {
 
         const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
 
-        // Define all variables before using them in the cards
-        const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
-        const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
-
         const makeCard = (title, icon, items) => `
             <div class="info-card">
                 <div class="card-header"><i class="${icon}"></i> ${title}</div>
@@ -2324,15 +2320,12 @@ async function renderDeviceInfo() {
         }
         cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
 
+        
         // Network & SIM
-        const mobileEnabled = mobileData ? mobileData.enabled : false;
-        const mobileConnected = mobileData ? mobileData.connected : false;
-        const networkType = mobileData ? mobileData.networkType : get('gsm.network.type', 'Unknown');
-        const operator = mobileData ? mobileData.operator : get('gsm.operator.alpha', 'Unknown');
-        const simState = get('gsm.sim.state', 'Unknown');
-
-        const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
-const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+const mobileEnabled = mobileData ? mobileData.enabled : false;
+const mobileConnected = mobileData ? mobileData.connected : false;
+const networkType = mobileData ? mobileData.networkType : get('gsm.network.type', 'Unknown');
+const operator = mobileData ? mobileData.operator : get('gsm.operator.alpha', 'Unknown');
 
 cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
     { label: 'Operator', value: operator },
@@ -2341,6 +2334,17 @@ cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
     { label: 'Mobile Data (Connected)', value: mobileConnected ? '✅ Connected' : '❌ Not Connected' },
     { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
 ]));
+        const simState = get('gsm.sim.state', 'Unknown');
+        const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
+        const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+
+        cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
+            { label: 'Operator', value: operator },
+            { label: 'Network Type', value: networkType },
+            { label: 'SIM State', value: simState },
+            { label: 'Mobile Data', value: mobileEnabled ? (mobileConnected ? '✅ On' : '⏳ Connecting') : '❌ Off' },
+            { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
+        ]));
 
         // System & Build
         cards.push(makeCard('System & Build', 'fas fa-code-branch', [
