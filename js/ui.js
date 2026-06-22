@@ -83,13 +83,10 @@ async function updateDeviceInfo() {
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let rawText = await res.text();
-        console.log('[DeviceInfo] Raw response length:', rawText.length);
-        
         try {
             const parsedJson = JSON.parse(rawText);
             if (typeof parsedJson === 'string') rawText = parsedJson;
         } catch (e) {}
-        
         const lines = rawText.split(/\r?\n/);
         const props = {};
         for (const line of lines) {
@@ -99,8 +96,6 @@ async function updateDeviceInfo() {
             if (match) props[match[1]] = match[2];
         }
 
-        console.log('[DeviceInfo] Props count:', Object.keys(props).length);
-
         const manufacturer = props['ro.product.manufacturer'] || 'Unknown';
         const model = props['ro.product.model'] || 'Device';
         const androidVersion = props['ro.build.version.release'] || '';
@@ -108,19 +103,35 @@ async function updateDeviceInfo() {
         const height = props['sys.logical.height'] || '';
         const resolution = (width && height) ? `${width} x ${height}` : '';
 
-        // Update brand icon
+        // ---- Brand Logo or Text Logo ----
         const brand = manufacturer;
         const icon = getBrandIcon(brand);
         const color = getBrandColor(brand);
         const brandEl = document.getElementById('brand-icon');
         if (brandEl) {
-            brandEl.innerHTML = `<i class="${icon}" style="color: ${color}; font-size: 48px;"></i>`;
+            // Check if the icon is a specific brand icon (not the generic fallback)
+            const isSpecificIcon = icon !== 'fas fa-mobile-alt';
+            let html = '';
+            if (isSpecificIcon) {
+                // Show brand icon + name (e.g., Samsung, Google)
+                html = `
+                    <i class="${icon}" style="color: ${color}; font-size: 36px; margin-right: 8px;" aria-hidden="true"></i>
+                    <span style="font-size: 20px; font-weight: 600; color: ${color};">${brand}</span>
+                `;
+            } else {
+                // No specific icon: show brand name as a text logo (e.g., Itel, Xiaomi)
+                html = `
+                    <span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${brand}</span>
+                `;
+            }
+            brandEl.innerHTML = html;
         }
 
+        // ---- Update other device details ----
         const modelEl = document.getElementById('device-model');
         if (modelEl) modelEl.textContent = model;
         const brandLabel = document.getElementById('device-brand');
-        if (brandLabel) brandLabel.textContent = brand;
+        if (brandLabel) brandLabel.textContent = brand; // optional, can be removed
         const androidEl = document.getElementById('device-android');
         if (androidEl) androidEl.textContent = `Android ${androidVersion}`;
         const resEl = document.getElementById('device-resolution');
@@ -370,8 +381,8 @@ async function updateConnectionStatus() {
     currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || String(firstDevice));
     statusSpan.innerText = `Connected: ${currentDeviceId}`;
     statusSpan.style.color = '#107c10';
-    updateDeviceInfo(); // <-- ADD THIS
-    } else {
+    updateDeviceInfo(); // This is present, good.
+} else {
             currentDeviceId = null;
             statusSpan.innerText = 'No device found';
             statusSpan.style.color = '#d83b01';
