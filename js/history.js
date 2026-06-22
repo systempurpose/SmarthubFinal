@@ -21,6 +21,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+
 function normalizeHistoryType(value) {
   const v = String(value || '').toLowerCase().trim();
   if (v === 'bsod') return 'bsod';

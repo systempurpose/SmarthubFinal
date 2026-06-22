@@ -1189,6 +1189,97 @@ async function showSecurityModal() {
         body.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
     }
 }
+// ==================== HUMAN-FRIENDLY THREAT SUMMARIES ====================
+
+function getThreatLevel(riskScore) {
+    if (riskScore >= 80) return { level: 'critical', label: '🔥 CRITICAL', color: '#c62828', bg: '#ffebee' };
+    if (riskScore >= 60) return { level: 'high', label: '⚠️ HIGH RISK', color: '#e65100', bg: '#fff3e0' };
+    if (riskScore >= 35) return { level: 'medium', label: '⚠️ MEDIUM RISK', color: '#e67e22', bg: '#fef9e7' };
+    return { level: 'low', label: 'ℹ️ LOW RISK', color: '#2e7d32', bg: '#e8f5e9' };
+}
+
+function getHumanReadableThreats(malwareTypes, suspiciousIndicators) {
+    const threats = [];
+    const typeDescriptions = {
+        'Spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
+        'Ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
+        'Adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
+        'Banking Trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
+        'Data Stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
+        'Backdoor': '🚪 Allows remote control of your device without your permission.',
+        'Fake App': '🎭 Pretends to be a legitimate app but may steal your information.',
+        'Riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
+        'Information Stealer': '🔐 Collects your passwords, emails, and personal data.',
+        'Premium Dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
+        'Trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.'
+    };
+    // Handle both array of strings and array of objects with .type
+    const types = Array.isArray(malwareTypes) ? malwareTypes.map(t => typeof t === 'string' ? t : t.type) : [];
+    for (const type of types) {
+        if (type && typeDescriptions[type]) {
+            threats.push(typeDescriptions[type]);
+        } else if (type) {
+            threats.push(`⚠️ Detected as "${type}" — potentially harmful.`);
+        }
+    }
+    if (suspiciousIndicators && suspiciousIndicators.length > 0) {
+        const hasObfuscation = suspiciousIndicators.some(i => i.toLowerCase().includes('packed') || i.toLowerCase().includes('polymorphic') || i.toLowerCase().includes('entropy'));
+        if (hasObfuscation) threats.push('🕵️ Uses advanced hiding techniques to avoid detection (packed/obfuscated code).');
+        const hasManyComponents = suspiciousIndicators.some(i => i.includes('Unusually many'));
+        if (hasManyComponents) threats.push('🧩 Has many background services — can run in the background without your knowledge.');
+        const hasBroadcastReceiver = suspiciousIndicators.some(i => i.includes('broadcast receivers'));
+        if (hasBroadcastReceiver) threats.push('📡 Can automatically start when certain events happen (e.g., boot, network change).');
+    }
+    if (threats.length === 0) threats.push('📋 No specific threats detected, but the app has suspicious characteristics.');
+    return threats;
+}
+
+function getHumanFriendlyRiskReasons(app) {
+    const reasons = [];
+    if (app.isSideloaded) {
+        const installer = app.installer || 'Unknown source';
+        reasons.push(`📦 Installed from: ${installer} (not from official app store)`);
+    }
+    if (app.dangerousPermCount > 0) {
+        const permLabels = [];
+        const perms = app.dangerousPermissions || [];
+        const permMap = {
+            'CAMERA': '📷 Camera',
+            'RECORD_AUDIO': '🎙️ Microphone',
+            'READ_CONTACTS': '📇 Contacts',
+            'READ_SMS': '📩 SMS messages',
+            'SEND_SMS': '📤 SMS sending',
+            'ACCESS_FINE_LOCATION': '📍 Location (GPS)',
+            'ACCESS_COARSE_LOCATION': '📍 Location (approximate)',
+            'READ_CALL_LOG': '📞 Call log',
+            'WRITE_CALL_LOG': '✏️ Call log (modify)',
+            'CALL_PHONE': '📞 Phone calls',
+            'SYSTEM_ALERT_WINDOW': '🖼️ Draw overlays on other apps',
+            'BIND_ACCESSIBILITY_SERVICE': '♿ Accessibility (control your screen)',
+            'DEVICE_ADMIN': '🔒 Device administration',
+            'REQUEST_INSTALL_PACKAGES': '📥 Install other apps',
+            'PACKAGE_USAGE_STATS': '📊 See which apps you use',
+            'WRITE_SETTINGS': '⚙️ Modify system settings',
+            'READ_EXTERNAL_STORAGE': '📂 Read files',
+            'WRITE_EXTERNAL_STORAGE': '📂 Write/delete files'
+        };
+        for (const p of perms) {
+            for (const [key, label] of Object.entries(permMap)) {
+                if (p.includes(key)) {
+                    if (!permLabels.includes(label)) permLabels.push(label);
+                }
+            }
+        }
+        if (permLabels.length > 0) {
+            reasons.push(`🔓 Can access: ${permLabels.join(', ')}`);
+        } else {
+            reasons.push(`🔓 Requests ${app.dangerousPermCount} dangerous permission(s)`);
+        }
+    }
+    if (app.riskScore >= 70) reasons.push('🚨 High risk — strongly recommended to uninstall.');
+    else if (app.riskScore >= 40) reasons.push('⚠️ Moderate risk — review carefully.');
+    return reasons;
+}
 // ==================== QUICK DIAGNOSTIC ====================
 async function runDeepDiagnostic() {
     // Get or create modal
@@ -1390,7 +1481,6 @@ async function runDeepDiagnostic() {
             console.log('Real‑time sync active');
         } catch (err) {
             console.warn('Real‑time sync unavailable:', err.message);
-            // Proceed without real‑time events
         }
 
         startOverlayMonitoring();
@@ -1430,24 +1520,55 @@ async function runDeepDiagnostic() {
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 5px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+            
             for (const app of suspiciousAppsList) {
+                const threat = getThreatLevel(app.riskScore || 0);
+                const humanReasons = getHumanFriendlyRiskReasons(app);
+                const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
+                    ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
+                    : [];
+
+                let summaryBullets = '';
+                if (threatSummary.length > 0) {
+                    summaryBullets = `<ul style="margin: 4px 0 8px 0; padding-left: 20px; font-size: 13px;">`;
+                    for (const t of threatSummary.slice(0, 3)) {
+                        summaryBullets += `<li>${t}</li>`;
+                    }
+                    if (threatSummary.length > 3) {
+                        summaryBullets += `<li>... and ${threatSummary.length - 3} more concerns</li>`;
+                    }
+                    summaryBullets += `</ul>`;
+                }
+
+                const riskLabel = threat.label;
+                const riskColor = threat.color;
+                const riskBg = threat.bg;
+
                 appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px;">
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 12px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: ${riskBg};">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
                             <div style="flex: 1;">
-                                <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-weight: 700; font-size: 14px; color: ${riskColor};">${riskLabel}</span>
                                     <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
                                     <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
-                                    <span id="risk-text-${escape(app.packageName)}" class="risk-badge" style="background:#fed7aa; color:#9b4a00; padding:2px 8px; border-radius:12px; font-size:11px;">Risk: low</span>
                                 </div>
-                                <div style="font-size: 11px; color: #555; margin-top: 4px;">${escape(app.reason)}</div>
+                                <div style="font-size: 12px; color: #555; margin-top: 4px;">
+                                    ${escape(app.reason || '')}
+                                </div>
+                                ${humanReasons.length > 0 ? `<div style="font-size: 13px; margin-top: 4px; color: #424242;">${humanReasons.join('; ')}</div>` : ''}
+                                ${summaryBullets}
+                                <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px; color: #666;">
+                                    <span>Heuristic Risk: ${app.riskScore || 0}/100</span>
+                                    ${app.installer ? `<span>Installed via: ${escape(app.installer)}</span>` : ''}
+                                </div>
                             </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 12px; cursor:pointer;">Delete</button>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 16px; cursor:pointer; font-size:12px; white-space:nowrap;">🗑️ Uninstall</button>
                         </div>
-                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px;">
-                            <div class="spinner" style="width: 20px; height: 20px; margin: 0;"></div>
-                            <span style="font-size: 11px; margin-left: 8px;">Running deep scan...</span>
+                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px;">
+                            <div class="spinner" style="width: 18px; height: 18px; margin: 0;"></div>
+                            <span style="font-size: 12px; margin-left: 8px;">Running deep scan...</span>
                         </div>
                     </div>
                 `;
@@ -1486,69 +1607,45 @@ async function runDeepDiagnostic() {
                         return;
                     }
 
+                    const threat = getThreatLevel(riskScore);
+                    const threatTypes = analysis.malware_types || [];
+                    const suspiciousIndicators = analysis.suspicious_indicators || [];
+                    const humanThreats = getHumanReadableThreats(threatTypes, suspiciousIndicators);
+
+                    let humanSummary = '';
+                    if (humanThreats.length > 0) {
+                        humanSummary = `<ul style="margin: 4px 0 8px 0; padding-left: 18px; font-size: 12px;">`;
+                        for (const t of humanThreats) {
+                            humanSummary += `<li>${t}</li>`;
+                        }
+                        humanSummary += `</ul>`;
+                    }
+
+                    const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
+
+                    // Update the risk badge in the card header (if exists)
                     const riskSpan = document.getElementById(`risk-text-${app.packageName}`);
                     if (riskSpan) {
-                        let riskLevel = 'low', bgColor = '#fed7aa', textColor = '#9b4a00';
-                        if (riskScore >= 70) { riskLevel = 'high'; bgColor = '#f8d7da'; textColor = '#721c24'; }
-                        else if (riskScore >= 40) { riskLevel = 'medium'; bgColor = '#fff3cd'; textColor = '#856404'; }
-                        riskSpan.innerHTML = `Risk: ${riskLevel}`;
-                        riskSpan.style.backgroundColor = bgColor;
-                        riskSpan.style.color = textColor;
-                    }
-
-                    // Malware descriptions
-                    const malwareDescriptions = {
-                        'Spyware': '📷 Can read contacts, location, camera, microphone, or SMS without your knowledge.',
-                        'Ransomware': '💰 Can lock your device or encrypt files and demand payment to unlock them.',
-                        'Adware': '📢 Displays aggressive ads, may redirect you to malicious websites.',
-                        'Banking Trojan': '🏦 Targets banking/financial apps to steal login credentials and money.',
-                        'Data Stealer': '📁 Extracts personal files, messages, or photos and sends them to a remote server.',
-                        'Backdoor': '🚪 Allows remote control of your device without your permission.',
-                        'Fake App': '🎭 Pretends to be a legitimate app but may steal info or display ads.',
-                        'Riskware': '⚠️ Legitimate but can be exploited by malware; review its behavior.',
-                        'Information Stealer': '🔐 Collects passwords, emails, and personal data for theft.',
-                        'Premium Dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
-                        'Trojan': '🐴 Disguised as a normal app; performs malicious actions like data theft or backdoor.'
-                    };
-
-                    let malwareHtml = '';
-                    if (analysis.malware_types && analysis.malware_types.length > 0) {
-                        const typeDescriptions = analysis.malware_types.map(type => {
-                            const desc = malwareDescriptions[type] || 'Potentially harmful behavior detected.';
-                            return `<div style="font-size:12px;"><strong>${escapeHtml(type)}</strong> – ${escapeHtml(desc)}</div>`;
-                        }).join('');
-                        malwareHtml = `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Why it may be malicious:</strong>${typeDescriptions}</div>`;
-                    }
-
-                    // ----- PACKER WARNING -----
-                    if (analysis.isPacked) {
-                        malwareHtml += `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Packed/obfuscated code detected:</strong> ${analysis.packerReason || 'Unknown packer'}. Often used by malware to hide payload.</div>`;
-                    }
-
-                    // ----- POLYMORPHIC / HIGH ENTROPY DETECTION -----
-                    if (analysis.isPolymorphic) {
-                        malwareHtml += `<div style="color: #c62828; margin-top: 8px;"><strong>⚠️ Polymorphic/obfuscated code detected:</strong> ${analysis.polymorphicReason || 'High entropy suggests packed/encrypted code.'}. This technique is often used by advanced malware to evade signature detection.</div>`;
-                    }
-
-                    // ----- YARA MATCHES -----
-                    let yaraHtml = '';
-                    if (analysis.yara_matches && analysis.yara_matches.length > 0) {
-                        yaraHtml = '<div style="margin-top: 8px;"><strong>🔍 YARA Rule Matches:</strong><ul>';
-                        for (const match of analysis.yara_matches.slice(0, 5)) {
-                            yaraHtml += `<li>${escapeHtml(match.rule)} (${match.count} matches)</li>`;
-                        }
-                        if (analysis.yara_matches.length > 5) yaraHtml += `<li>... and ${analysis.yara_matches.length - 5} more</li>`;
-                        yaraHtml += '</ul></div>';
+                        riskSpan.innerHTML = threat.label;
+                        riskSpan.style.backgroundColor = threat.bg;
+                        riskSpan.style.color = threat.color;
                     }
 
                     let html = `
-                        <strong>Deep Scan Results:</strong><br>
-                        <span style="font-size: 12px;">Risk Score: ${riskScore}/100</span><br>
-                        <span style="font-size: 12px;">Dangerous Permissions: ${analysis.dangerous_permissions?.length || 0}</span><br>
-                        ${malwareHtml}
-                        ${yaraHtml}
-                        ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `<span style="font-size: 12px;">Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}</span><br>` : ''}
-                        ${data.virusTotal && data.virusTotal.malicious > 0 ? `<span style="color: red; font-size: 12px;">⚠️ VirusTotal: ${data.virusTotal.malicious} engines flagged malicious</span>` : ''}
+                        <div style="margin-top: 8px;">
+                            ${riskBadge} &nbsp; Risk Score: <strong>${riskScore}/100</strong>
+                            ${humanSummary}
+                            <details style="font-size: 12px; color: #666; margin-top: 4px;">
+                                <summary style="cursor: pointer;">🔍 Technical details</summary>
+                                <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
+                                    <strong>Permissions:</strong> ${analysis.dangerous_permissions?.length || 0} dangerous<br>
+                                    ${analysis.isPacked ? '⚠️ Packed/obfuscated code detected<br>' : ''}
+                                    ${analysis.isPolymorphic ? '⚠️ Advanced evasion techniques detected<br>' : ''}
+                                    ${analysis.yara_matches && analysis.yara_matches.length > 0 ? `YARA matches: ${analysis.yara_matches.length}<br>` : ''}
+                                    ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}` : ''}
+                                </div>
+                            </details>
+                        </div>
                     `;
                     container.innerHTML = html;
                 } else {
