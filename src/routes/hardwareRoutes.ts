@@ -238,10 +238,25 @@ router.get('/battery', async (req, res) => {
         const output = await adbShell(deviceId, 'dumpsys battery');
         const levelMatch = output.match(/level: (\d+)/);
         const healthMatch = output.match(/health: (\d+)/);
-        const healthMap: Record<string, string> = { '2': 'good', '3': 'overheat', '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold' };
+        const healthMap: Record<string, string> = {
+            '1': 'unknown', '2': 'good', '3': 'overheat',
+            '4': 'dead', '5': 'over voltage', '6': 'failure', '7': 'cold'
+        };
+        const pluggedMatch = output.match(/plugged: (\d+)/);
+        const statusMatch = output.match(/status: (\d+)/);
+        const tempMatch = output.match(/temperature: (\d+)/);
+
+        const plugged = pluggedMatch ? parseInt(pluggedMatch[1]) : 0;
+        const status = statusMatch ? parseInt(statusMatch[1]) : -1;
+        const charging = (plugged !== 0 || status === 2 || status === 5); // 2=charging, 5=full
+
         res.json({
             level: levelMatch ? parseInt(levelMatch[1]) : null,
             health: healthMap[healthMatch?.[1] || ''] || 'unknown',
+            charging,
+            plugged,
+            status,
+            temperature: tempMatch ? (parseInt(tempMatch[1]) / 10).toFixed(1) + '°C' : 'Unknown'
         });
     } catch (err: any) {
         res.status(500).json({ error: err.message });

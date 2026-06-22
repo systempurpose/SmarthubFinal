@@ -135,19 +135,15 @@ async function updateDeviceInfo() {
 async function updateStatusBar() {
     try {
         console.log('[StatusBar] Fetching hardware data...');
-        // Use storage-details for reliable bytes
-        const [batteryRes, storageDetailsRes, ramRes] = await Promise.all([
-            fetch(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`),
-            fetch(`${BACKEND_URL}/hardware/storage-details?deviceId=${currentDeviceId}`),
-            fetch(`${BACKEND_URL}/hardware/ram?deviceId=${currentDeviceId}`)
+        // Use apiCall() which adds the /api prefix automatically
+        const [battery, storage, ram] = await Promise.all([
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({})),
+            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({})),
+            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({}))
         ]);
 
-        const battery = await batteryRes.json().catch(() => ({}));
-        const storageDetails = await storageDetailsRes.json().catch(() => ({}));
-        const ram = await ramRes.json().catch(() => ({}));
-
         console.log('[StatusBar] Battery raw:', battery);
-        console.log('[StatusBar] Storage details raw:', storageDetails);
+        console.log('[StatusBar] Storage raw:', storage);
         console.log('[StatusBar] RAM raw:', ram);
 
         // ---- BATTERY ----
@@ -157,50 +153,15 @@ async function updateStatusBar() {
         else if (battery && battery.percent !== undefined) batteryPct = parseFloat(battery.percent) || 0;
         batteryPct = Math.min(100, Math.max(0, batteryPct));
 
-        // ---- STORAGE (from storage-details) ----
+        // ---- STORAGE ----
         let storagePct = 0;
         let storageText = 'N/A';
-        const b = storageDetails?.breakdown || {};
-        if (b.total?.bytes && b.used?.bytes) {
-            const totalBytes = Number(b.total.bytes);
-            const usedBytes = Number(b.used.bytes);
-            if (totalBytes > 0) {
-                storagePct = (usedBytes / totalBytes) * 100;
-                storagePct = Math.min(100, Math.max(0, storagePct));
-                storageText = Math.round(storagePct) + '%';
-            }
-        }
-        // Fallback: if storage-details failed, try the simpler /storage endpoint
-        if (!b.total?.bytes) {
-            try {
-                const fallbackRes = await fetch(`${BACKEND_URL}/hardware/storage?deviceId=${currentDeviceId}`);
-                const fallback = await fallbackRes.json();
-                console.log('[StatusBar] Storage fallback raw:', fallback);
-                if (fallback.total && fallback.total !== '?' && fallback.used && fallback.used !== '?') {
-                    // Simple parsing: assume both in same unit and parse as numbers
-                    const totalNum = parseFloat(String(fallback.total).replace(/[^0-9.]/g, ''));
-                    const usedNum = parseFloat(String(fallback.used).replace(/[^0-9.]/g, ''));
-                    if (!isNaN(totalNum) && !isNaN(usedNum) && totalNum > 0) {
-                        storagePct = (usedNum / totalNum) * 100;
-                        storagePct = Math.min(100, Math.max(0, storagePct));
-                        storageText = Math.round(storagePct) + '%';
-                    }
-                }
-            } catch (e) { /* ignore */ }
-        }
-        storagePct = Math.min(100, Math.max(0, storagePct));
-        if (storagePct === 0 && storageText === 'N/A') {
-            storageText = 'N/A';
-        }
-
-        // ---- RAM ----
-        let ramPct = 0;
-        let ramText = 'N/A';
-        if (ram) {
-            // Parse "3.2 GB" -> bytes
-            function parseRamToBytes(str) {
+        if (storage) {
+            // Helper to parse "5.6G" or "3.2 GB" to bytes
+            function parseSizeToBytes(str) {
                 if (!str || str === '?') return 0;
-                const match = String(str).trim().match(/^([\d.]+)\s*([GMK]?)/i);
+                const trimmed = String(str).trim();
+                const match = trimmed.match(/^([\d.]+)\s*([GMK]?)/i);
                 if (!match) return 0;
                 let val = parseFloat(match[1]);
                 const unit = (match[2] || '').toUpperCase();
@@ -209,17 +170,44 @@ async function updateStatusBar() {
                 if (unit === 'K') return val * 1024;
                 return val; // assume bytes
             }
+            const totalBytes = parseSizeToBytes(storage.total);
+            const usedBytes = parseSizeToBytes(storage.used);
+            if (totalBytes > 0 && usedBytes > 0) {
+                storagePct = (usedBytes / totalBytes) * 100;
+                storagePct = Math.min(100, Math.max(0, storagePct));
+                storageText = Math.round(storagePct) + '%';
+            } else if (storage.percent !== undefined) {
+                storagePct = parseFloat(storage.percent) || 0;
+                storageText = Math.round(storagePct) + '%';
+            }
+        }
+
+        // ---- RAM ----
+        let ramPct = 0;
+        let ramText = 'N/A';
+        if (ram) {
+            function parseRamToBytes(str) {
+                if (!str || str === '?') return 0;
+                const trimmed = String(str).trim();
+                const match = trimmed.match(/^([\d.]+)\s*([GMK]?)/i);
+                if (!match) return 0;
+                let val = parseFloat(match[1]);
+                const unit = (match[2] || '').toUpperCase();
+                if (unit === 'G') return val * 1024 * 1024 * 1024;
+                if (unit === 'M') return val * 1024 * 1024;
+                if (unit === 'K') return val * 1024;
+                return val;
+            }
             const totalBytes = parseRamToBytes(ram.total);
             const usedBytes = parseRamToBytes(ram.used);
             if (totalBytes > 0 && usedBytes > 0) {
                 ramPct = (usedBytes / totalBytes) * 100;
                 ramPct = Math.min(100, Math.max(0, ramPct));
                 ramText = Math.round(ramPct) + '%';
+            } else if (ram.percent !== undefined) {
+                ramPct = parseFloat(ram.percent) || 0;
+                ramText = Math.round(ramPct) + '%';
             }
-        }
-        // Fallback: if ram.total is '?' or ram.used is '?', we keep N/A
-        if (ramText === 'N/A') {
-            ramPct = 0;
         }
 
         // ---- Update DOM ----
@@ -704,57 +692,127 @@ function renderPieChart(svgElement, segments) {
 async function showBatteryModal() {
     const modal = ensureInfoModal('batteryModal', '🔋 Battery Usage by App & System');
     const body = document.getElementById('batteryModalBody');
-    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading battery stats...</p></div>';
+    body.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <div class="spinner"></div>
+            <p>Loading battery stats...</p>
+        </div>
+    `;
     modal.style.display = 'flex';
+
     try {
-        const response = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/battery-usage?deviceId=${currentDeviceId}`, {}, 15000);
-        const data = await response.json();
-        const usage = data.usage || [];
-        
-        if (!usage.length) {
-            body.innerHTML = `
-                <div class="alert alert-warning" style="text-align:center;">
-                    <strong>No battery usage data available.</strong><br>
-                    Please use the phone for a while, then reset battery stats:<br>
-                    <code>adb shell dumpsys batterystats --reset</code>
+        const [batterySummaryRes, usageRes] = await Promise.all([
+            fetchWithTimeout(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`, {}, 8000),
+            fetchWithTimeout(`${BACKEND_URL}/hardware/battery-usage?deviceId=${currentDeviceId}`, {}, 15000)
+        ]);
+
+        const battery = await batterySummaryRes.json().catch(() => ({}));
+        const usageData = await usageRes.json().catch(() => ({}));
+        const usage = usageData.usage || [];
+
+        // ---- Battery Summary ----
+        const level = battery.level ?? '?';
+        const health = battery.health ?? 'unknown';
+        const healthEmoji = health === 'good' ? '✅' : health === 'overheat' ? '🌡️' : health === 'dead' ? '💀' : '⚠️';
+        const charging = battery.charging !== undefined ? (battery.charging ? '⚡ Charging' : '🔌 Not charging') : '?';
+
+        let summaryHtml = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 12px; color: #6B7280;">Battery</div>
+                    <div style="font-size: 24px; font-weight: 600;">${level}%</div>
                 </div>
-            `;
-            return;
-        }
-        
-        // Calculate total drain for percentage
-        const totalDrain = usage.reduce((sum, item) => sum + item.drain, 0);
-        
-        const html = `
-            <div style="margin-bottom: 16px;">
-                <input type="text" id="batterySearchInput" placeholder="🔍 Filter items..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
-            </div>
-            <div id="batteryProcessList" class="battery-process-list-container" style="max-height: 380px; overflow-y: auto; padding-right: 6px;">
-                ${usage.map(item => {
-                    const percent = (item.drain / totalDrain) * 100;
-                    const icon = item.type === 'app' ? '📱' : '🔧';
-                    const name = item.type === 'app' ? simplifyAppName(item.name) : item.name;
-                    return `
-                        <div class="battery-process-item" data-name="${escapeHtml(item.name.toLowerCase())}" style="margin-bottom: 12px; background: #ffffff; border-radius: 10px; padding: 8px 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-weight: 600; font-size: 13px;">${icon} ${escapeHtml(name)}</span>
-                                <span style="font-size: 12px; color: #555;">${item.drain.toFixed(1)} mAh (${percent.toFixed(1)}%)</span>
-                            </div>
-                            <div style="background: #e9ecef; border-radius: 4px; height: 4px; overflow: hidden;">
-                                <div style="width: ${percent}%; background: #dc3545; height: 100%; border-radius: 4px;"></div>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-            <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
-                Percentages are based on estimated power drain (mAh).  
-                System components (screen, Wi‑Fi, cellular) are shown when available.
+                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 12px; color: #6B7280;">Health</div>
+                    <div style="font-size: 18px; font-weight: 600;">${healthEmoji} ${health}</div>
+                </div>
+                <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 12px; color: #6B7280;">Status</div>
+                    <div style="font-size: 16px; font-weight: 600;">${charging}</div>
+                </div>
             </div>
         `;
-        
-        body.innerHTML = html;
-        
+
+        // ---- Usage Section ----
+        let usageHtml = '';
+        if (usage.length === 0) {
+            usageHtml = `
+                <div style="text-align: center; padding: 20px; background: #fef3c7; border-radius: 12px;">
+                    <p style="font-size: 16px; color: #92400e;">📊 No battery usage data yet.</p>
+                    <p style="font-size: 13px; color: #78350f;">
+                        Battery stats are collected after you use your phone for a while.  
+                        To get accurate data, do the following:
+                    </p>
+                    <ol style="text-align: left; margin: 12px auto; max-width: 360px; font-size: 13px; color: #78350f;">
+                        <li>Tap <strong>Reset Stats</strong> below to clear old data.</li>
+                        <li>Use your phone normally for 10–15 minutes.</li>
+                        <li>Tap <strong>Refresh</strong> to see the apps that drained the battery.</li>
+                    </ol>
+                    <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px;">
+                        <button id="refreshBatteryBtn" class="btn-primary">🔄 Refresh</button>
+                        <button id="resetBatteryBtn" class="btn-secondary">🗑️ Reset Stats</button>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 11px; color: #6B7280;">
+                        <code>adb shell dumpsys batterystats --reset</code>
+                    </div>
+                </div>
+            `;
+        } else {
+            const totalDrain = usage.reduce((sum, item) => sum + item.drain, 0);
+            const itemsHtml = usage.map(item => {
+                const percent = (item.drain / totalDrain) * 100;
+                const icon = item.type === 'app' ? '📱' : '🔧';
+                const name = item.type === 'app' ? simplifyAppName(item.name) : item.name;
+                return `
+                    <div style="margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="font-weight: 500; font-size: 13px;">${icon} ${escapeHtml(name)}</span>
+                            <span style="font-size: 12px; color: #555;">${item.drain.toFixed(1)} mAh (${percent.toFixed(1)}%)</span>
+                        </div>
+                        <div style="background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
+                            <div style="width: ${percent}%; background: #dc3545; height: 100%; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            usageHtml = `
+                <div style="margin-bottom: 16px;">
+                    <input type="text" id="batterySearchInput" placeholder="🔍 Filter items..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
+                </div>
+                <div style="max-height: 320px; overflow-y: auto; padding-right: 6px;">
+                    ${itemsHtml}
+                </div>
+                <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
+                    Percentages are based on estimated power drain (mAh). System components (screen, Wi‑Fi, cellular) are shown when available.
+                </div>
+                <div style="margin-top: 12px; text-align: right;">
+                    <button id="refreshBatteryBtn" class="btn-secondary" style="padding: 4px 12px; font-size: 12px;">🔄 Refresh</button>
+                    <button id="resetBatteryBtn" class="btn-secondary" style="padding: 4px 12px; font-size: 12px; margin-left: 8px;">🗑️ Reset Stats</button>
+                </div>
+            `;
+        }
+
+        body.innerHTML = summaryHtml + usageHtml;
+
+        // ---- Event Listeners ----
+        document.getElementById('refreshBatteryBtn')?.addEventListener('click', showBatteryModal);
+        document.getElementById('resetBatteryBtn')?.addEventListener('click', async () => {
+            if (!confirm('Reset battery stats? This will clear all historical usage data. You’ll need to use the phone for a while before data reappears.')) return;
+            try {
+                const res = await fetch(`${BACKEND_URL}/adb-shell`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId: currentDeviceId, command: 'dumpsys batterystats --reset' })
+                });
+                if (!res.ok) throw new Error('Reset failed');
+                alert('✅ Battery stats reset. Now use your phone for ~10 minutes and tap Refresh.');
+                showBatteryModal();
+            } catch (err) {
+                alert('❌ Failed to reset stats: ' + err.message);
+            }
+        });
+
         // Search filter
         const searchInput = document.getElementById('batterySearchInput');
         if (searchInput) {
@@ -763,18 +821,20 @@ async function showBatteryModal() {
                 const items = document.querySelectorAll('.battery-process-item');
                 items.forEach(item => {
                     const name = item.getAttribute('data-name');
-                    if (name && name.includes(query)) {
-                        item.style.display = '';
-                    } else {
-                        item.style.display = 'none';
-                    }
+                    item.style.display = (name && name.includes(query)) ? '' : 'none';
                 });
             });
         }
-        
+
     } catch (err) {
         console.error('Battery modal error:', err);
-        body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
+        body.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #d32f2f;">
+                <p>❌ Error: ${escapeHtml(err.message)}</p>
+                <button id="retryBatteryBtn" class="btn-primary" style="margin-top: 12px;">🔄 Retry</button>
+            </div>
+        `;
+        document.getElementById('retryBatteryBtn')?.addEventListener('click', showBatteryModal);
     }
 }
 
