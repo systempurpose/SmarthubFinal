@@ -841,6 +841,39 @@ try {
   }
 }
 
+async function runAdbShell(deviceId: string | undefined, command: string): Promise<string> {
+  const args = ['shell', command];
+  if (deviceId) {
+    args.unshift('-s', deviceId);
+  }
+  const { stdout } = await execFileAsync('adb', args, { timeout: 5000, maxBuffer: 1024 * 1024 });
+  return stdout;
+}
+
+// Add this helper function at the top of the file or in a separate adb utility
+async function getMobileDataState(deviceId?: string): Promise<string> {
+  try {
+    // First, try reading the global setting
+    const result = await runAdbShell(deviceId, 'settings get global mobile_data');
+    const trimmed = result.trim();
+    if (trimmed === '1') return 'Enabled';
+    if (trimmed === '0') return 'Disabled';
+
+    // Fallback: dumpsys telephony.registry
+    const dump = await runAdbShell(deviceId, 'dumpsys telephony.registry | grep mDataConnectionState');
+    if (dump.includes('CONNECTED') || dump.includes('DISCONNECTED')) {
+      const match = dump.match(/mDataConnectionState=(\d+)/);
+      if (match) {
+        const state = parseInt(match[1], 10);
+        return state === 2 ? 'Enabled' : 'Disabled';
+      }
+    }
+    return 'Unknown';
+  } catch (error) {
+    console.error('Failed to get mobile data state:', error);
+    return 'Unknown';
+  }
+}
 async function listFastbootDevices(timeoutMs: number): Promise<Array<{ id: string; state?: string }>> {
   const { stdout } = await execFileAsync('fastboot', ['devices'], { timeout: timeoutMs, maxBuffer: 512 * 1024 });
   const lines = String(stdout || '')
@@ -933,6 +966,20 @@ export function registerConnectionCheckRoutes(app: Express): void {
         result.adb = { ok: false, error: e?.message || 'Failed to list devices via adb', devices: [] };
       }
     }
+    // --- Mobile Data State ---
+let mobileDataState = 'Unknown';
+if (!skipAdb && result.adb.ok && Array.isArray(result.adb.devices)) {
+  const device = result.adb.devices.find((d: any) => d && d.state === 'device' && typeof d.id === 'string');
+  if (device) {
+    try {
+      mobileDataState = await getMobileDataState(device.id);
+    } catch (e) {
+      console.warn('Failed to get mobile data state:', e);
+      mobileDataState = 'Unknown';
+    }
+  }
+}
+result.mobileData = mobileDataState;
 
     // Fastboot
     if (skipFastboot) {
