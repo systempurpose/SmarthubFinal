@@ -2,11 +2,7 @@
 let currentDeviceId = null;
 let wizardStep = 0;
 
-updateDeviceInfo();
-if (currentDeviceId) {
-    selectDevice(currentDeviceId);
-    updateDeviceInfo(); // add this
-}
+// Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
 const BACKEND_URL = 'http://127.0.0.1:3333';
 
@@ -83,82 +79,195 @@ function getBrandColor(brand) {
 // ==================== UPDATE DEVICE INFO & STATUS BAR ====================
 async function updateDeviceInfo() {
     try {
-        const res = await fetch(`${BACKEND_URL}/device-info?deviceId=${currentDeviceId}`);
-        const data = await res.json();
-        if (data && data.manufacturer) {
-            const brand = data.manufacturer;
-            const icon = getBrandIcon(brand);
-            const color = getBrandColor(brand);
-            const brandEl = document.getElementById('brand-icon');
-            if (brandEl) {
-                brandEl.innerHTML = `<i class="${icon}" style="color: ${color}; font-size: 48px;"></i>`;
-            }
-            const modelEl = document.getElementById('device-model');
-            if (modelEl) modelEl.textContent = data.model || 'Device';
-            const brandLabel = document.getElementById('device-brand');
-            if (brandLabel) brandLabel.textContent = brand;
-            const androidEl = document.getElementById('device-android');
-            if (androidEl) androidEl.textContent = `Android ${data.androidVersion || ''}`;
-            const resEl = document.getElementById('device-resolution');
-            if (resEl && data.resolution) resEl.textContent = data.resolution;
+        console.log('[DeviceInfo] Fetching device data...');
+        const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        let rawText = await res.text();
+        console.log('[DeviceInfo] Raw response length:', rawText.length);
+        
+        try {
+            const parsedJson = JSON.parse(rawText);
+            if (typeof parsedJson === 'string') rawText = parsedJson;
+        } catch (e) {}
+        
+        const lines = rawText.split(/\r?\n/);
+        const props = {};
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const match = trimmed.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
+            if (match) props[match[1]] = match[2];
         }
+
+        console.log('[DeviceInfo] Props count:', Object.keys(props).length);
+
+        const manufacturer = props['ro.product.manufacturer'] || 'Unknown';
+        const model = props['ro.product.model'] || 'Device';
+        const androidVersion = props['ro.build.version.release'] || '';
+        const width = props['sys.logical.width'] || '';
+        const height = props['sys.logical.height'] || '';
+        const resolution = (width && height) ? `${width} x ${height}` : '';
+
+        // Update brand icon
+        const brand = manufacturer;
+        const icon = getBrandIcon(brand);
+        const color = getBrandColor(brand);
+        const brandEl = document.getElementById('brand-icon');
+        if (brandEl) {
+            brandEl.innerHTML = `<i class="${icon}" style="color: ${color}; font-size: 48px;"></i>`;
+        }
+
+        const modelEl = document.getElementById('device-model');
+        if (modelEl) modelEl.textContent = model;
+        const brandLabel = document.getElementById('device-brand');
+        if (brandLabel) brandLabel.textContent = brand;
+        const androidEl = document.getElementById('device-android');
+        if (androidEl) androidEl.textContent = `Android ${androidVersion}`;
+        const resEl = document.getElementById('device-resolution');
+        if (resEl) resEl.textContent = resolution;
+
         await updateStatusBar();
     } catch (err) {
-        console.warn('Failed to update device info:', err);
+        console.warn('[DeviceInfo] Failed:', err);
     }
 }
 
 async function updateStatusBar() {
     try {
-        const [battery, storage, ram] = await Promise.all([
-            fetch(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`).then(r => r.json()),
-            fetch(`${BACKEND_URL}/hardware/storage?deviceId=${currentDeviceId}`).then(r => r.json()),
-            fetch(`${BACKEND_URL}/hardware/ram?deviceId=${currentDeviceId}`).then(r => r.json())
+        console.log('[StatusBar] Fetching hardware data...');
+        // Use storage-details for reliable bytes
+        const [batteryRes, storageDetailsRes, ramRes] = await Promise.all([
+            fetch(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`),
+            fetch(`${BACKEND_URL}/hardware/storage-details?deviceId=${currentDeviceId}`),
+            fetch(`${BACKEND_URL}/hardware/ram?deviceId=${currentDeviceId}`)
         ]);
-        
-        // Battery
-        if (battery && battery.level !== undefined) {
-            const pct = battery.level;
-            const el = document.getElementById('status-battery');
-            const bar = document.getElementById('status-battery-bar');
-            const summary = document.getElementById('device-battery-summary');
-            if (el) el.textContent = pct + '%';
-            if (bar) {
-                bar.style.width = pct + '%';
-                bar.style.background = pct < 20 ? '#EF4444' : pct < 50 ? '#F59E0B' : '#10B981';
+
+        const battery = await batteryRes.json().catch(() => ({}));
+        const storageDetails = await storageDetailsRes.json().catch(() => ({}));
+        const ram = await ramRes.json().catch(() => ({}));
+
+        console.log('[StatusBar] Battery raw:', battery);
+        console.log('[StatusBar] Storage details raw:', storageDetails);
+        console.log('[StatusBar] RAM raw:', ram);
+
+        // ---- BATTERY ----
+        let batteryPct = 0;
+        if (battery && typeof battery.level === 'number') batteryPct = battery.level;
+        else if (battery && typeof battery.level === 'string') batteryPct = parseFloat(battery.level) || 0;
+        else if (battery && battery.percent !== undefined) batteryPct = parseFloat(battery.percent) || 0;
+        batteryPct = Math.min(100, Math.max(0, batteryPct));
+
+        // ---- STORAGE (from storage-details) ----
+        let storagePct = 0;
+        let storageText = 'N/A';
+        const b = storageDetails?.breakdown || {};
+        if (b.total?.bytes && b.used?.bytes) {
+            const totalBytes = Number(b.total.bytes);
+            const usedBytes = Number(b.used.bytes);
+            if (totalBytes > 0) {
+                storagePct = (usedBytes / totalBytes) * 100;
+                storagePct = Math.min(100, Math.max(0, storagePct));
+                storageText = Math.round(storagePct) + '%';
             }
-            if (summary) summary.textContent = `🔋 ${pct}%`;
         }
-        
-        // Storage
-        if (storage) {
-            const total = parseFloat(storage.total) || 1;
-            const used = parseFloat(storage.used) || 0;
-            const pct = Math.min(100, (used / total) * 100);
-            const el = document.getElementById('status-storage');
-            const bar = document.getElementById('status-storage-bar');
-            if (el) el.textContent = Math.round(pct) + '%';
-            if (bar) {
-                bar.style.width = pct + '%';
-                bar.style.background = pct > 90 ? '#EF4444' : pct > 75 ? '#F59E0B' : '#3B82F6';
-            }
+        // Fallback: if storage-details failed, try the simpler /storage endpoint
+        if (!b.total?.bytes) {
+            try {
+                const fallbackRes = await fetch(`${BACKEND_URL}/hardware/storage?deviceId=${currentDeviceId}`);
+                const fallback = await fallbackRes.json();
+                console.log('[StatusBar] Storage fallback raw:', fallback);
+                if (fallback.total && fallback.total !== '?' && fallback.used && fallback.used !== '?') {
+                    // Simple parsing: assume both in same unit and parse as numbers
+                    const totalNum = parseFloat(String(fallback.total).replace(/[^0-9.]/g, ''));
+                    const usedNum = parseFloat(String(fallback.used).replace(/[^0-9.]/g, ''));
+                    if (!isNaN(totalNum) && !isNaN(usedNum) && totalNum > 0) {
+                        storagePct = (usedNum / totalNum) * 100;
+                        storagePct = Math.min(100, Math.max(0, storagePct));
+                        storageText = Math.round(storagePct) + '%';
+                    }
+                }
+            } catch (e) { /* ignore */ }
         }
-        
-        // RAM
+        storagePct = Math.min(100, Math.max(0, storagePct));
+        if (storagePct === 0 && storageText === 'N/A') {
+            storageText = 'N/A';
+        }
+
+        // ---- RAM ----
+        let ramPct = 0;
+        let ramText = 'N/A';
         if (ram) {
-            const total = parseFloat(ram.total) || 1;
-            const used = parseFloat(ram.used) || 0;
-            const pct = Math.min(100, (used / total) * 100);
-            const el = document.getElementById('status-ram');
-            const bar = document.getElementById('status-ram-bar');
-            if (el) el.textContent = Math.round(pct) + '%';
-            if (bar) {
-                bar.style.width = pct + '%';
-                bar.style.background = pct > 85 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#8B5CF6';
+            // Parse "3.2 GB" -> bytes
+            function parseRamToBytes(str) {
+                if (!str || str === '?') return 0;
+                const match = String(str).trim().match(/^([\d.]+)\s*([GMK]?)/i);
+                if (!match) return 0;
+                let val = parseFloat(match[1]);
+                const unit = (match[2] || '').toUpperCase();
+                if (unit === 'G') return val * 1024 * 1024 * 1024;
+                if (unit === 'M') return val * 1024 * 1024;
+                if (unit === 'K') return val * 1024;
+                return val; // assume bytes
+            }
+            const totalBytes = parseRamToBytes(ram.total);
+            const usedBytes = parseRamToBytes(ram.used);
+            if (totalBytes > 0 && usedBytes > 0) {
+                ramPct = (usedBytes / totalBytes) * 100;
+                ramPct = Math.min(100, Math.max(0, ramPct));
+                ramText = Math.round(ramPct) + '%';
             }
         }
+        // Fallback: if ram.total is '?' or ram.used is '?', we keep N/A
+        if (ramText === 'N/A') {
+            ramPct = 0;
+        }
+
+        // ---- Update DOM ----
+        const batteryEl = document.getElementById('status-battery');
+        const batteryBar = document.getElementById('status-battery-bar');
+        const batterySummary = document.getElementById('device-battery-summary');
+        if (batteryEl) batteryEl.textContent = Math.round(batteryPct) + '%';
+        if (batteryBar) {
+            batteryBar.style.width = batteryPct + '%';
+            batteryBar.style.background = batteryPct < 20 ? '#EF4444' : batteryPct < 50 ? '#F59E0B' : '#10B981';
+        }
+        if (batterySummary) batterySummary.textContent = `🔋 ${Math.round(batteryPct)}%`;
+
+        const storageEl = document.getElementById('status-storage');
+        const storageBar = document.getElementById('status-storage-bar');
+        if (storageEl) storageEl.textContent = storageText;
+        if (storageBar) {
+            storageBar.style.width = (storagePct > 0 ? storagePct : 0) + '%';
+            storageBar.style.background = storagePct > 90 ? '#EF4444' : storagePct > 75 ? '#F59E0B' : '#3B82F6';
+        }
+
+        const ramEl = document.getElementById('status-ram');
+        const ramBar = document.getElementById('status-ram-bar');
+        if (ramEl) ramEl.textContent = ramText;
+        if (ramBar) {
+            ramBar.style.width = (ramPct > 0 ? ramPct : 0) + '%';
+            ramBar.style.background = ramPct > 85 ? '#EF4444' : ramPct > 70 ? '#F59E0B' : '#8B5CF6';
+        }
+
+        // ---- Make cards clickable ----
+        const statusCards = document.querySelectorAll('.status-card');
+        const cardActions = [
+            showBatteryModal,
+            showStorageModal,
+            showRamModal,
+            showSecurityModal
+        ];
+        statusCards.forEach((card, index) => {
+            card.removeEventListener('click', cardActions[index]);
+            if (cardActions[index]) {
+                card.addEventListener('click', cardActions[index]);
+                card.style.cursor = 'pointer';
+            }
+        });
+
+        console.log('[StatusBar] Updated: Battery', Math.round(batteryPct) + '%', 'Storage', storageText, 'RAM', ramText);
     } catch (err) {
-        console.warn('Failed to update status bar:', err);
+        console.error('[StatusBar] Error:', err);
     }
 }
 
@@ -269,11 +378,12 @@ async function updateConnectionStatus() {
     try {
         const data = await apiCall('/devices');
         if (data.devices && data.devices.length) {
-            const firstDevice = data.devices[0];
-            currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || String(firstDevice));
-            statusSpan.innerText = `Connected: ${currentDeviceId}`;
-            statusSpan.style.color = '#107c10';
-        } else {
+    const firstDevice = data.devices[0];
+    currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || String(firstDevice));
+    statusSpan.innerText = `Connected: ${currentDeviceId}`;
+    statusSpan.style.color = '#107c10';
+    updateDeviceInfo(); // <-- ADD THIS
+    } else {
             currentDeviceId = null;
             statusSpan.innerText = 'No device found';
             statusSpan.style.color = '#d83b01';
@@ -383,30 +493,24 @@ async function renderDashboard() {
     }
 
     container.innerHTML = `
-        <h1 style="margin-bottom: 24px;">Dashboard</h1>
-        <div class="dashboard-grid" id="healthCards">
-            <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading battery...</div>
-            <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading storage...</div>
-            <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading RAM...</div>
-            <div class="status-card"><i class="fas fa-spinner fa-spin"></i> Loading temperature...</div>
+    <h1 style="margin-bottom: 24px;">Dashboard</h1>
+    <div class="card">
+        <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button id="startDiagnosticBtn" class="btn-primary">🔬 Deep Diagnostic</button>
+            <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
+            <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
+            <button id="helpBtn" class="btn-secondary">❓ Help</button>
         </div>
-        <div class="card">
-            <div class="card-title"><i class="fas fa-chart-line"></i> Quick Actions</div>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <button id="startDiagnosticBtn" class="btn-primary">🔬 Deep Diagnostic</button>
-                <button id="installAppBtn" class="btn-secondary">📱 Install Android App</button>
-                <button id="openWizard" class="btn-secondary">🔌 USB Debugging Wizard</button>
-                <button id="helpBtn" class="btn-secondary">❓ Help</button>
-            </div>
-        </div>
-        <div id="deviceOverview" class="card" style="display: none;"></div>
-        <div id="networkStatus" class="card" style="display: none;"></div>
-        <div id="phoneSummary" class="card" style="display: none;">
-            <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
-            <div class="phone-summary-grid"></div>
-        </div>
-        <div id="alertsCard" class="card" style="display: none;"></div>
-        <div id="diagnosticResult" class="card" style="display: none;"></div>
+    </div>
+    <div id="deviceOverview" class="card" style="display: none;"></div>
+    <div id="networkStatus" class="card" style="display: none;"></div>
+    <div id="phoneSummary" class="card" style="display: none;">
+        <div class="card-title"><i class="fas fa-mobile-alt"></i> Phone Summary</div>
+        <div class="phone-summary-grid"></div>
+    </div>
+    <div id="alertsCard" class="card" style="display: none;"></div>
+    <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
     // Wait a tiny bit for DOM to update
@@ -510,10 +614,7 @@ async function renderDashboard() {
         }
     } catch (err) {
         console.error('Dashboard data error:', err);
-        const healthDiv = document.getElementById('healthCards');
-        if (healthDiv) {
-            healthDiv.innerHTML = `<div class="status-card">⚠️ Failed to load hardware data</div>`;
-        }
+        
     }
 
     document.getElementById('startDiagnosticBtn')?.addEventListener('click', runDeepDiagnostic);
@@ -1021,6 +1122,45 @@ async function showTemperatureModal() {
     }
 }
 
+// Security Modal – shows malware scan summary
+async function showSecurityModal() {
+    const modal = ensureInfoModal('securityModal', '🛡️ Security Overview');
+    const body = document.getElementById('securityModalBody');
+    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading security status...</p></div>';
+    modal.style.display = 'flex';
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
+        const data = await response.json();
+        const suspiciousApps = data.suspiciousApps || [];
+        let html = `
+            <div style="margin-bottom: 16px;">
+                <strong>Total Apps:</strong> ${data.totalApps || '?'}<br>
+                <strong>Suspicious Apps:</strong> ${suspiciousApps.length}<br>
+            </div>
+        `;
+        if (suspiciousApps.length === 0) {
+            html += `<p style="color: #2e7d32;">✅ No suspicious apps found.</p>`;
+        } else {
+            html += `<ul style="list-style: none; padding-left: 0;">`;
+            for (const app of suspiciousApps.slice(0, 10)) {
+                html += `
+                    <li style="margin-bottom: 12px; padding: 10px; background: #fff3e0; border-radius: 8px;">
+                        <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})<br>
+                        <span style="font-size: 12px;">Risk: ${app.threatLevel}</span><br>
+                        <span style="font-size: 12px;">${escapeHtml(app.reason)}</span>
+                    </li>
+                `;
+            }
+            if (suspiciousApps.length > 10) {
+                html += `<li>... and ${suspiciousApps.length - 10} more</li>`;
+            }
+            html += `</ul>`;
+        }
+        body.innerHTML = html;
+    } catch (err) {
+        body.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
+    }
+}
 // ==================== QUICK DIAGNOSTIC ====================
 async function runDeepDiagnostic() {
     // Get or create modal

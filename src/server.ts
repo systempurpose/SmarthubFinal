@@ -1442,14 +1442,16 @@ app.get('/history/:id', async (req: Request, res: Response) => {
   }
 });
 // Get device info (manufacturer, model, Android version, resolution)
+// Get device info (manufacturer, model, Android version, resolution)
+// Get device info (manufacturer, model, Android version, resolution)
 app.get('/device-info', async (req, res) => {
-    const deviceId = req.query.deviceId;
+    const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : undefined;
     if (!deviceId) return res.status(400).json({ error: 'Device ID required' });
     try {
-        const adb = require('./src/adb');
+        // Use the imported `adb` function (not `require`)
         const [props, wm] = await Promise.all([
-            adb.shell(deviceId, 'getprop'),
-            adb.shell(deviceId, 'wm size')
+            adb('-s', deviceId, 'shell', 'getprop'),
+            adb('-s', deviceId, 'shell', 'wm size')
         ]);
         const manufacturer = (props.match(/ro\.product\.manufacturer:\s*(.*)/) || [])[1]?.trim() || 'Unknown';
         const model = (props.match(/ro\.product\.model:\s*(.*)/) || [])[1]?.trim() || 'Unknown';
@@ -1458,6 +1460,7 @@ app.get('/device-info', async (req, res) => {
         res.json({ manufacturer, model, androidVersion, resolution });
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('[device-info] Error:', errorMessage);
         res.status(500).json({ error: errorMessage });
     }
 });
