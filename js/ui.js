@@ -103,40 +103,87 @@ async function updateDeviceInfo() {
         const height = props['sys.logical.height'] || '';
         const resolution = (width && height) ? `${width} x ${height}` : '';
 
-        // ---- Brand Logo or Text Logo ----
-        const brand = manufacturer;
-        const icon = getBrandIcon(brand);
-        const color = getBrandColor(brand);
+        // ---- Brand Logo Mapping ----
+        const brandKey = manufacturer.toLowerCase().trim();
+        const color = getBrandColor(brandKey) || '#6B7280';
+
+        // Map manufacturer to logo filename (exact filenames from android_logo folder)
+        const brandLogoMap = {
+            'alcatel': 'Alcatel-Logo.png',
+            'asus': 'Asus-Logo.png',
+            'blackberry': 'Blackberry-logo.png',
+            'cat': 'CAT-logo.png',
+            'doogee': 'Doogee-Logo.png',
+            'energizer': 'Energizer-logo.png',
+            'google': 'Google-Logo.png',
+            'htc': 'HTC-logo.png',
+            'honor': 'Honor-Logo.png',
+            'huawei': 'Huawei-Logo.png',
+            'infinix': 'Infinix-Logo.png',
+            'itel': 'Itel-Logo.png',
+            'lg': 'LG-Logo.png',
+            'lenovo': 'Lenovo-logo.png',
+            'meizu': 'Meizu-Logo.png',
+            'nokia': 'Nokia-Logo.png',
+            'oneplus': 'OnePlus-Logo.png',
+            'oppo': 'Oppo-logo.png',
+            'realme': 'Realme-Logo.png',
+            'samsung': 'Samsung-Logo-2.png',
+            'sharp': 'Sharp-logo.png',
+            'sony': 'Sony-logo.png',
+            'tcl': 'TCL-Logo.png',
+            'tecno': 'Tecno-Mobile-Logo.png',
+            'ulefone': 'Ulefone-Logo.png',
+            'vivo': 'Vivo-Logo.png',
+            'vodafone': 'Vodafone-logo.png',
+            'xiaomi': 'Xiaomi-logo.png',
+            'zte': 'ZTE-Logo.png'
+        };
+
+        // Update the brand icon container
         const brandEl = document.getElementById('brand-icon');
         if (brandEl) {
-            // Check if the icon is a specific brand icon (not the generic fallback)
-            const isSpecificIcon = icon !== 'fas fa-mobile-alt';
-            let html = '';
-            if (isSpecificIcon) {
-                // Show brand icon + name (e.g., Samsung, Google)
-                html = `
-                    <i class="${icon}" style="color: ${color}; font-size: 36px; margin-right: 8px;" aria-hidden="true"></i>
-                    <span style="font-size: 20px; font-weight: 600; color: ${color};">${brand}</span>
+            const logoFile = brandLogoMap[brandKey];
+            if (logoFile) {
+                // Build the image tag with a fallback to text on error
+                const imgSrc = `/android_logo/${logoFile}`;
+                brandEl.innerHTML = `
+                    <img src="${imgSrc}" alt="${manufacturer}" style="height: 48px; width: auto; max-width: 120px; object-fit: contain;"
+                         onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\\'font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;\\'>${manufacturer}</span>'">
                 `;
+                // Also set a timeout fallback in case the image loads very slowly or fails silently
+                const img = brandEl.querySelector('img');
+                if (img) {
+                    setTimeout(() => {
+                        if (img && !img.complete) {
+                            const parent = img.parentElement;
+                            if (parent) {
+                                parent.innerHTML = `<span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${manufacturer}</span>`;
+                            }
+                        }
+                    }, 3000);
+                }
+                console.log('[DeviceInfo] Using logo:', imgSrc);
             } else {
-                // No specific icon: show brand name as a text logo (e.g., Itel, Xiaomi)
-                html = `
-                    <span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${brand}</span>
-                `;
+                // No logo file: show text logo
+                brandEl.innerHTML = `<span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${manufacturer}</span>`;
+                console.log('[DeviceInfo] No logo found, using text');
             }
-            brandEl.innerHTML = html;
+        } else {
+            console.warn('[DeviceInfo] brand-icon element not found');
         }
 
         // ---- Update other device details ----
         const modelEl = document.getElementById('device-model');
         if (modelEl) modelEl.textContent = model;
         const brandLabel = document.getElementById('device-brand');
-        if (brandLabel) brandLabel.textContent = brand; // optional, can be removed
+        if (brandLabel) brandLabel.textContent = manufacturer;
         const androidEl = document.getElementById('device-android');
         if (androidEl) androidEl.textContent = `Android ${androidVersion}`;
         const resEl = document.getElementById('device-resolution');
         if (resEl) resEl.textContent = resolution;
 
+        // Update the status bar
         await updateStatusBar();
     } catch (err) {
         console.warn('[DeviceInfo] Failed:', err);

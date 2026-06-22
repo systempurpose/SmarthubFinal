@@ -325,6 +325,7 @@ app.use(
 );
 
 app.use('/api/network', networkRoutes);
+app.use('/android_logo', express.static('android_logo'));
 // Extra guard: block non-local Origins on mutating requests.
 app.use((req: Request, res: Response, next) => {
   if (allowRemote) return next();
