@@ -2,6 +2,11 @@
 let currentDeviceId = null;
 let wizardStep = 0;
 
+updateDeviceInfo();
+if (currentDeviceId) {
+    selectDevice(currentDeviceId);
+    updateDeviceInfo(); // add this
+}
 // ==================== API HELPER ====================
 const BACKEND_URL = 'http://127.0.0.1:3333';
 
@@ -15,6 +20,145 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
         });
     } finally {
         clearTimeout(timeoutId);
+    }
+}
+// ==================== BRAND ICON MAPPING ====================
+function getBrandIcon(brand) {
+    const brandMap = {
+        'samsung': 'fab fa-samsung',
+        'xiaomi': 'fas fa-mobile-alt',
+        'redmi': 'fas fa-mobile-alt',
+        'huawei': 'fas fa-mobile-alt',
+        'honor': 'fas fa-mobile-alt',
+        'oneplus': 'fas fa-mobile-alt',
+        'google': 'fab fa-google',
+        'pixel': 'fab fa-google',
+        'motorola': 'fas fa-mobile-alt',
+        'lenovo': 'fas fa-mobile-alt',
+        'nokia': 'fas fa-mobile-alt',
+        'sony': 'fab fa-sony',
+        'lg': 'fas fa-mobile-alt',
+        'htc': 'fas fa-mobile-alt',
+        'oppo': 'fas fa-mobile-alt',
+        'vivo': 'fas fa-mobile-alt',
+        'realme': 'fas fa-mobile-alt',
+        'tecno': 'fas fa-mobile-alt',
+        'infinix': 'fas fa-mobile-alt',
+        'itel': 'fas fa-mobile-alt',
+        'asus': 'fab fa-asus',
+        'acer': 'fas fa-mobile-alt'
+    };
+    const key = brand.toLowerCase().trim();
+    return brandMap[key] || 'fas fa-mobile-alt';
+}
+
+function getBrandColor(brand) {
+    const colorMap = {
+        'samsung': '#1428A0',
+        'xiaomi': '#FF6700',
+        'redmi': '#FF6700',
+        'huawei': '#FF0000',
+        'honor': '#000000',
+        'oneplus': '#EB0028',
+        'google': '#4285F4',
+        'pixel': '#4285F4',
+        'motorola': '#64B72C',
+        'lenovo': '#E2231A',
+        'nokia': '#124191',
+        'sony': '#000000',
+        'lg': '#A50034',
+        'oppo': '#008000',
+        'vivo': '#415FFF',
+        'realme': '#FF8000',
+        'tecno': '#00A3E0',
+        'infinix': '#00A3E0',
+        'itel': '#00A3E0',
+        'asus': '#0068B4',
+        'acer': '#83B81A'
+    };
+    const key = brand.toLowerCase().trim();
+    return colorMap[key] || '#6B7280';
+}
+
+// ==================== UPDATE DEVICE INFO & STATUS BAR ====================
+async function updateDeviceInfo() {
+    try {
+        const res = await fetch(`${BACKEND_URL}/device-info?deviceId=${currentDeviceId}`);
+        const data = await res.json();
+        if (data && data.manufacturer) {
+            const brand = data.manufacturer;
+            const icon = getBrandIcon(brand);
+            const color = getBrandColor(brand);
+            const brandEl = document.getElementById('brand-icon');
+            if (brandEl) {
+                brandEl.innerHTML = `<i class="${icon}" style="color: ${color}; font-size: 48px;"></i>`;
+            }
+            const modelEl = document.getElementById('device-model');
+            if (modelEl) modelEl.textContent = data.model || 'Device';
+            const brandLabel = document.getElementById('device-brand');
+            if (brandLabel) brandLabel.textContent = brand;
+            const androidEl = document.getElementById('device-android');
+            if (androidEl) androidEl.textContent = `Android ${data.androidVersion || ''}`;
+            const resEl = document.getElementById('device-resolution');
+            if (resEl && data.resolution) resEl.textContent = data.resolution;
+        }
+        await updateStatusBar();
+    } catch (err) {
+        console.warn('Failed to update device info:', err);
+    }
+}
+
+async function updateStatusBar() {
+    try {
+        const [battery, storage, ram] = await Promise.all([
+            fetch(`${BACKEND_URL}/hardware/battery?deviceId=${currentDeviceId}`).then(r => r.json()),
+            fetch(`${BACKEND_URL}/hardware/storage?deviceId=${currentDeviceId}`).then(r => r.json()),
+            fetch(`${BACKEND_URL}/hardware/ram?deviceId=${currentDeviceId}`).then(r => r.json())
+        ]);
+        
+        // Battery
+        if (battery && battery.level !== undefined) {
+            const pct = battery.level;
+            const el = document.getElementById('status-battery');
+            const bar = document.getElementById('status-battery-bar');
+            const summary = document.getElementById('device-battery-summary');
+            if (el) el.textContent = pct + '%';
+            if (bar) {
+                bar.style.width = pct + '%';
+                bar.style.background = pct < 20 ? '#EF4444' : pct < 50 ? '#F59E0B' : '#10B981';
+            }
+            if (summary) summary.textContent = `🔋 ${pct}%`;
+        }
+        
+        // Storage
+        if (storage) {
+            const total = parseFloat(storage.total) || 1;
+            const used = parseFloat(storage.used) || 0;
+            const pct = Math.min(100, (used / total) * 100);
+            const el = document.getElementById('status-storage');
+            const bar = document.getElementById('status-storage-bar');
+            if (el) el.textContent = Math.round(pct) + '%';
+            if (bar) {
+                bar.style.width = pct + '%';
+                bar.style.background = pct > 90 ? '#EF4444' : pct > 75 ? '#F59E0B' : '#3B82F6';
+            }
+        }
+        
+        // RAM
+        if (ram) {
+            const total = parseFloat(ram.total) || 1;
+            const used = parseFloat(ram.used) || 0;
+            const pct = Math.min(100, (used / total) * 100);
+            const el = document.getElementById('status-ram');
+            const bar = document.getElementById('status-ram-bar');
+            if (el) el.textContent = Math.round(pct) + '%';
+            if (bar) {
+                bar.style.width = pct + '%';
+                bar.style.background = pct > 85 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#8B5CF6';
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to update status bar:', err);
     }
 }
 

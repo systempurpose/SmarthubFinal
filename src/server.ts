@@ -1441,7 +1441,26 @@ app.get('/history/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: e.message ?? 'Unknown error' });
   }
 });
-
+// Get device info (manufacturer, model, Android version, resolution)
+app.get('/device-info', async (req, res) => {
+    const deviceId = req.query.deviceId;
+    if (!deviceId) return res.status(400).json({ error: 'Device ID required' });
+    try {
+        const adb = require('./src/adb');
+        const [props, wm] = await Promise.all([
+            adb.shell(deviceId, 'getprop'),
+            adb.shell(deviceId, 'wm size')
+        ]);
+        const manufacturer = (props.match(/ro\.product\.manufacturer:\s*(.*)/) || [])[1]?.trim() || 'Unknown';
+        const model = (props.match(/ro\.product\.model:\s*(.*)/) || [])[1]?.trim() || 'Unknown';
+        const androidVersion = (props.match(/ro\.build\.version\.release:\s*(.*)/) || [])[1]?.trim() || '';
+        const resolution = (wm.match(/Physical size:\s*(.*)/) || [])[1]?.trim() || '';
+        res.json({ manufacturer, model, androidVersion, resolution });
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        res.status(500).json({ error: errorMessage });
+    }
+});
 // Add a simple endpoint to get the list of connected devices
 app.get('/api/devices', async (_req, res) => {
   try {
@@ -1660,6 +1679,7 @@ app.get('/app-risk/:id/:pkg', async (req: Request, res: Response) => {
 
 const port = Number.parseInt(String(process.env.PORT ?? ''), 10) || 3333;
 const host = allowRemote ? '0.0.0.0' : '127.0.0.1';
+
 httpServer = app.listen(port, host, async () => {
   // eslint-disable-next-line no-console
   const shownHost = host === '0.0.0.0' ? 'localhost' : host;
