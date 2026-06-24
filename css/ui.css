@@ -1170,3 +1170,44 @@ pre {
     flex-wrap: wrap;
   }
 }
+/* App card hover effect */
+.app-card-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
+}
+
+/* Critical pulse animation */
+@keyframes pulse-critical {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(198, 40, 40, 0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(198, 40, 40, 0); }
+}
+.app-card-item[style*="border-left: 6px solid #c62828"] {
+    animation: pulse-critical 2.5s infinite;
+}
+
+/* Uninstall button hover */
+.delete-app {
+    transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    box-shadow: 0 2px 4px rgba(211, 47, 47, 0.2);
+}
+.delete-app:hover {
+    box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4);
+}
+
+/* Summary bar responsive */
+@media (max-width: 600px) {
+    .summary-bar {
+        gap: 8px;
+        font-size: 12px;
+    }
+}
+
+/* Dark mode (optional) */
+@media (prefers-color-scheme: dark) {
+    .app-card-item {
+        border-color: #444 !important;
+    }
+    .app-card-item .risk-badge {
+        color: #fff !important;
+    }
+}

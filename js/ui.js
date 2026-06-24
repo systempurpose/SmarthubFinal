@@ -1435,9 +1435,9 @@ async function runDeepDiagnostic() {
             const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    deviceId: currentDeviceId, 
-                    packageName, 
+                body: JSON.stringify({
+                    deviceId: currentDeviceId,
+                    packageName,
                     timeoutMs,
                     stealth: true,
                     scriptName: 'full_monitor.js'
@@ -1543,15 +1543,45 @@ async function runDeepDiagnostic() {
             }
         } catch (err) { console.error('Failed to fetch suspicious apps:', err); }
 
+        // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
+        suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+
+        // ===== DEDUPLICATE APPS (remove duplicates by packageName) =====
+        const seen = new Set();
+        suspiciousAppsList = suspiciousAppsList.filter(app => {
+            const key = app.packageName;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // ===== BUILD SUMMARY BAR (with ID) =====
+        const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
+        const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
+        const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
+        const initialLow = suspiciousAppsList.filter(a => (a.riskScore || 0) < 35).length;
+
+        let summaryBarHtml = `
+            <div id="summaryBar" style="display: flex; gap: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                <span><span style="color: #c62828; font-weight: bold;">🔴 ${initialCritical}</span> Critical</span>
+                <span><span style="color: #e65100; font-weight: bold;">🟠 ${initialHigh}</span> High</span>
+                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${initialMedium}</span> Medium</span>
+                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${initialLow}</span> Low</span>
+                <span style="margin-left: auto; color: #888;">Total: ${suspiciousAppsList.length} apps</span>
+            </div>
+        `;
+
+        // ===== BUILD APP CARDS (SORTED, DEDUPLICATED, with icon IDs) =====
         const escape = (str) => escapeHtml(str);
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
         } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3><div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
-            
+            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+
             for (const app of suspiciousAppsList) {
                 const threat = getThreatLevel(app.riskScore || 0);
+                const threatIcon = app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : app.riskScore >= 35 ? '🟡' : '🟢';
                 const humanReasons = getHumanFriendlyRiskReasons(app);
                 const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
                     ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
@@ -1574,29 +1604,61 @@ async function runDeepDiagnostic() {
                 const riskBg = threat.bg;
 
                 appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" style="margin-bottom: 12px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: ${riskBg};">
+                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
+                         style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
+                                border-left: 6px solid ${riskColor};
+                                background: ${riskBg};
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                                cursor: default;">
+
+                        <!-- Header: Threat Icon + App Name -->
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                            <div style="flex: 1;">
-                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="font-weight: 700; font-size: 14px; color: ${riskColor};">${riskLabel}</span>
-                                    <strong style="font-size: 14px;">${escape(app.displayName)}</strong>
-                                    <span style="font-size: 11px; color: #666;">(${escape(app.packageName)})</span>
-                                </div>
-                                <div style="font-size: 12px; color: #555; margin-top: 4px;">
-                                    ${escape(app.reason || '')}
-                                </div>
-                                ${humanReasons.length > 0 ? `<div style="font-size: 13px; margin-top: 4px; color: #424242;">${humanReasons.join('; ')}</div>` : ''}
-                                ${summaryBullets}
-                                <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 12px; color: #666;">
-                                    <span>Heuristic Risk: ${app.riskScore || 0}/100</span>
-                                    ${app.installer ? `<span>Installed via: ${escape(app.installer)}</span>` : ''}
-                                </div>
+                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                <span id="icon-${escape(app.packageName)}" style="font-size: 20px;">${threatIcon}</span>
+                                <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
+                                <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
                             </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')" class="delete-app" style="background:#d32f2f; color:white; border:none; border-radius:20px; padding:4px 16px; cursor:pointer; font-size:12px; white-space:nowrap;">🗑️ Uninstall</button>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')"
+                                    class="delete-app"
+                                    style="background: #d32f2f; color: white; border: none;
+                                           border-radius: 20px; padding: 4px 16px; cursor: pointer;
+                                           font-size: 12px; white-space: nowrap;
+                                           transition: background 0.2s ease, transform 0.15s ease;"
+                                    onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
+                                    onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
+                                🗑️ Uninstall
+                            </button>
                         </div>
-                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px;">
-                            <div class="spinner" style="width: 18px; height: 18px; margin: 0;"></div>
-                            <span style="font-size: 12px; margin-left: 8px;">Running deep scan...</span>
+
+                        <!-- Reason -->
+                        <div style="font-size: 13px; color: #555; margin-top: 6px;">
+                            ${escape(app.reason || '')}
+                        </div>
+
+                        <!-- Human-Friendly Risk Reasons -->
+                        ${humanReasons.length > 0 ? `
+                            <div style="font-size: 13px; margin-top: 6px; color: #424242;
+                                        background: rgba(255,255,255,0.5); padding: 6px 10px;
+                                        border-radius: 6px;">
+                                ${humanReasons.join('; ')}
+                            </div>
+                        ` : ''}
+
+                        <!-- Threat Summary Bullets -->
+                        ${summaryBullets}
+
+                        <!-- Meta Info -->
+                        <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
+                            <span>🎯 Risk Score: <strong>${app.riskScore || 0}/100</strong></span>
+                            ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
+                            ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
+                        </div>
+
+                        <!-- Deep Scan Area -->
+                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                            <div class="spinner" style="width: 18px; height: 18px; margin: 0; display: inline-block;"></div>
+                            <span style="font-size: 12px; margin-left: 8px; color: #888;">Running deep scan...</span>
                         </div>
                     </div>
                 `;
@@ -1635,6 +1697,16 @@ async function runDeepDiagnostic() {
                         return;
                     }
 
+                    // ----- Update card appearance based on new risk score -----
+                    const newThreat = getThreatLevel(riskScore);
+                    const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
+
+                    appCard.style.borderLeftColor = newThreat.color;
+                    const iconSpan = document.getElementById(`icon-${app.packageName}`);
+                    if (iconSpan) iconSpan.textContent = newIcon;
+                    appCard.style.background = newThreat.bg;
+
+                    // ---- Rest of the deep‑scan result HTML ----
                     const threat = getThreatLevel(riskScore);
                     const threatTypes = analysis.malware_types || [];
                     const suspiciousIndicators = analysis.suspicious_indicators || [];
@@ -1650,14 +1722,6 @@ async function runDeepDiagnostic() {
                     }
 
                     const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
-
-                    // Update the risk badge in the card header (if exists)
-                    const riskSpan = document.getElementById(`risk-text-${app.packageName}`);
-                    if (riskSpan) {
-                        riskSpan.innerHTML = threat.label;
-                        riskSpan.style.backgroundColor = threat.bg;
-                        riskSpan.style.color = threat.color;
-                    }
 
                     let html = `
                         <div style="margin-top: 8px;">
@@ -1686,9 +1750,35 @@ async function runDeepDiagnostic() {
         });
         await Promise.all(scanPromises);
 
+        // ===== UPDATE SUMMARY BAR – ONLY FOR REMAINING VISIBLE CARDS =====
+        const remainingCards = document.querySelectorAll('.app-card-item');
+        let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
+        for (const card of remainingCards) {
+            const pkg = card.dataset.package;
+            const info = appRiskMap.get(pkg);
+            if (info) {
+                const score = info.riskScore;
+                if (score >= 80) finalCritical++;
+                else if (score >= 60) finalHigh++;
+                else if (score >= 35) finalMedium++;
+                else finalLow++;
+            }
+        }
+
+        const summaryBar = document.getElementById('summaryBar');
+        if (summaryBar) {
+            summaryBar.innerHTML = `
+                <span><span style="color: #c62828; font-weight: bold;">🔴 ${finalCritical}</span> Critical</span>
+                <span><span style="color: #e65100; font-weight: bold;">🟠 ${finalHigh}</span> High</span>
+                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${finalMedium}</span> Medium</span>
+                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${finalLow}</span> Low</span>
+                <span style="margin-left: auto; color: #888;">Total: ${remainingCards.length} apps</span>
+            `;
+        }
+
         await stopAndFetchOverlayEvents();
 
-        // Frida on high-risk apps
+        // Frida on high-risk apps (unchanged)
         const highRiskApps = suspiciousAppsList
             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
             .filter(app => app.riskScore >= 40)
@@ -1805,7 +1895,6 @@ async function runDeepDiagnostic() {
         }
     }
 }
-
 async function uninstallPackage(packageName) {
     if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
     try {

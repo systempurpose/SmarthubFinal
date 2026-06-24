@@ -331,10 +331,11 @@ function generateDynamicAdvice(adviceKey, deviceId) {
 
     content += `
       <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid ${threatColor}; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-          <span style="color: ${threatColor}; font-weight: 700; font-size: 10px; letter-spacing: 0.1em;">${threatLabel}</span>
-          <span style="color: #e5e7eb; font-weight: 600; font-size: 13px;">${app.displayName}</span>
-        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+    <span style="font-size: 20px;">${threatIcon}</span>
+    <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
+    <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
+</div>
         <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">${app.reason}</div>
         <div style="font-size: 11px; color: #38bdf8; font-weight: 600;">
           📱 Package: <code style="background: rgba(56, 189, 248, 0.15); padding: 2px 6px; border-radius: 4px; font-size: 10px;">${app.packageName}</code>
