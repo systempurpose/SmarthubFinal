@@ -2009,7 +2009,17 @@ async function runDeepDiagnostic() {
 // ==================== STORAGE CATEGORY DETAILS ====================
 
 // ---- Show category details ----
+// ==================== STORAGE CATEGORY DETAILS ====================
+
+// ---- Show category details ----
+// ---- Show category details ----
 async function showCategoryDetails(category) {
+    // Validate device connection
+    if (!currentDeviceId) {
+        alert('No device connected. Please connect a phone first.');
+        return;
+    }
+
     const modalBody = document.getElementById('quickDiagModalBody');
     // Remove any existing details
     const existingDetails = modalBody.querySelector('.category-details');
@@ -2017,27 +2027,136 @@ async function showCategoryDetails(category) {
 
     // Insert loading indicator after the storage section
     const storageSection = modalBody.querySelector('.storage-section');
-    if (!storageSection) return;
+    if (!storageSection) {
+        console.warn('Storage section not found; cannot show details.');
+        return;
+    }
 
     const detailsDiv = document.createElement('div');
     detailsDiv.className = 'category-details';
     detailsDiv.innerHTML = `
         <div style="text-align: center; padding: 20px;">
             <div class="spinner"></div>
-            <p>Loading ${category} details...</p>
+            <p>Loading ${category} details... (may take up to 30 seconds)</p>
         </div>
     `;
     storageSection.after(detailsDiv);
 
     try {
-        const response = await fetch(`${BACKEND_URL}/api/storage-category-details?deviceId=${currentDeviceId}&category=${category}`);
-        if (!response.ok) throw new Error('Failed to fetch details');
+        const url = `${BACKEND_URL}/api/storage-category-details?deviceId=${encodeURIComponent(currentDeviceId)}&category=${encodeURIComponent(category)}`;
+        console.log(`[StorageDetails] Fetching: ${url}`);
+        
+        // Use a longer timeout: 30 seconds (30000 ms)
+        const response = await fetchWithTimeout(url, {}, 30000);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const data = await response.json();
-        renderCategoryDetails(category, data.items);
+        console.log(`[StorageDetails] Received ${data.items?.length || 0} items for ${category}`);
+        renderCategoryDetails(category, data.items || []);
     } catch (err) {
         console.error('Error fetching category details:', err);
-        detailsDiv.innerHTML = `<div style="color: #d32f2f; padding: 12px;">Error loading details: ${err.message}</div>`;
+        let errorMsg = err.message;
+        if (err.name === 'AbortError' || errorMsg.includes('aborted')) {
+            errorMsg = 'Request timed out. The backend may be taking too long to scan all apps. Please try again.';
+        }
+        detailsDiv.innerHTML = `<div style="color: #d32f2f; padding: 12px; background: #ffebee; border-radius: 6px;">
+            ❌ Error loading details: ${escapeHtml(errorMsg)}
+            <br><br>
+            <button onclick="showCategoryDetails('${category}')" class="btn-secondary" style="margin-top: 8px;">🔄 Retry</button>
+        </div>`;
     }
+}
+
+// ---- Render category details ----
+function renderCategoryDetails(category, items) {
+    const modalBody = document.getElementById('quickDiagModalBody');
+    const detailsDiv = modalBody.querySelector('.category-details');
+    if (!detailsDiv) return;
+
+    if (!items || items.length === 0) {
+        detailsDiv.innerHTML = `<div style="padding: 12px; color: #28a745; background: #e8f5e9; border-radius: 6px;">
+            ✅ No items ≥1GB found in ${category}.
+        </div>`;
+        return;
+    }
+
+    // Sort by size descending (already sorted, but ensure)
+    items.sort((a, b) => b.bytes - a.bytes);
+
+    // Build a table for better readability
+    let html = `
+        <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h4 style="margin: 0 0 8px 0; font-size: 15px;">
+                📁 ${category.charAt(0).toUpperCase() + category.slice(1)} Details
+                <span style="font-size: 12px; color: #888; font-weight: normal;">(${items.length} items)</span>
+            </h4>
+            <div style="max-height: 350px; overflow-y: auto; border: 1px solid #f1f3f5; border-radius: 6px;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead style="background: #f8f9fa; position: sticky; top: 0; z-index: 1;">
+                        <tr>
+                            <th style="padding: 6px 10px; text-align: left; border-bottom: 2px solid #e5e7eb;">Name</th>
+                            <th style="padding: 6px 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Size</th>
+                            <th style="padding: 6px 10px; text-align: center; border-bottom: 2px solid #e5e7eb;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+
+    for (const item of items) {
+        const displayName = item.name || item.packageName || 'Unknown';
+        const size = item.size || formatSize(item.bytes);
+        const pkg = item.packageName || '';
+        const path = item.path || '';
+
+        html += `
+            <tr style="border-bottom: 1px solid #f1f3f5;">
+                <td style="padding: 6px 10px; word-break: break-all;">${escapeHtml(displayName)}</td>
+                <td style="padding: 6px 10px; text-align: right; white-space: nowrap;">${escapeHtml(size)}</td>
+                <td style="padding: 6px 10px; text-align: center;">
+        `;
+
+        if (category === 'apps' && pkg) {
+            html += `<button onclick="uninstallPackage('${escapeHtml(pkg)}')" 
+                        style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;"
+                        onmouseover="this.style.background='#b71c1c'" 
+                        onmouseout="this.style.background='#dc3545'">
+                        🗑️ Uninstall
+                    </button>`;
+        } else if (category !== 'apps' && path) {
+            html += `<button onclick="deleteFile('${escapeHtml(path)}')" 
+                        style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;"
+                        onmouseover="this.style.background='#b71c1c'" 
+                        onmouseout="this.style.background='#dc3545'">
+                        🗑️ Delete
+                    </button>`;
+        } else {
+            html += `<span style="color: #888; font-size: 11px;">—</span>`;
+        }
+
+        html += `</td></tr>`;
+    }
+
+    html += `
+                    </tbody>
+                </table>
+            </div>
+            <div style="font-size: 12px; color: #6c757d; margin-top: 6px; text-align: right;">Total: ${items.length} items</div>
+        </div>
+    `;
+
+    detailsDiv.innerHTML = html;
+    detailsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ---- Helper: format size in bytes to human-readable ----
+function formatSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + units[i];
 }
 
 // ---- Render category details ----
