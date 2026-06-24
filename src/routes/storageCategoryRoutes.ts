@@ -6,19 +6,6 @@ const execFileAsync = promisify(execFile);
 const router = Router();
 
 const MIN_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
-
-function parseSizeToBytes(sizeStr: string): number {
-    const match = sizeStr.match(/^([\d.]+)\s*([GMK]?)/i);
-    if (!match) return 0;
-    let val = parseFloat(match[1]);
-    const unit = (match[2] || '').toUpperCase();
-    if (unit === 'G') return val * 1024 * 1024 * 1024;
-    if (unit === 'M') return val * 1024 * 1024;
-    if (unit === 'K') return val * 1024;
-    return val;
-}
-
-// BATCH_SIZE: number of apps to process in parallel
 const BATCH_SIZE = 5;
 
 router.get('/storage-category-details', async (req, res) => {
@@ -36,6 +23,7 @@ router.get('/storage-category-details', async (req, res) => {
 
         switch (category) {
             case 'apps': {
+                // ... (your existing apps logic – unchanged, works fine)
                 console.log('[storage] Apps scan started...');
                 const listCmd = 'pm list packages -3';
                 const args = ['shell', listCmd];
@@ -63,17 +51,13 @@ router.get('/storage-category-details', async (req, res) => {
                             if (!apkPath) return null;
                             const dir = apkPath.substring(0, apkPath.lastIndexOf('/'));
 
-                            // Fast pre‑check with du -sk (kilobytes)
                             const fastCmd = `du -sk ${dir} 2>/dev/null | awk '{print $1}'`;
                             const fastArgs = ['shell', fastCmd];
                             if (deviceId) fastArgs.unshift('-s', deviceId);
                             const { stdout: fastOut } = await execFileAsync('adb', fastArgs, { timeout: 5000 });
                             const sizeKB = parseInt(fastOut.trim());
-                            if (isNaN(sizeKB) || sizeKB < MIN_SIZE_BYTES / 1024) {
-                                return null;
-                            }
+                            if (isNaN(sizeKB) || sizeKB < MIN_SIZE_BYTES / 1024) return null;
 
-                            // Detailed size (bytes)
                             const sizeCmd = `du -sb ${dir} 2>/dev/null | awk '{print $1}'`;
                             const sizeArgs = ['shell', sizeCmd];
                             if (deviceId) sizeArgs.unshift('-s', deviceId);
@@ -81,7 +65,6 @@ router.get('/storage-category-details', async (req, res) => {
                             let bytes = parseInt(sizeOut.trim());
                             if (isNaN(bytes)) bytes = 0;
 
-                            // OBB folder
                             const obbPath = `/sdcard/Android/obb/${pkg}`;
                             const obbCmd = `du -sb ${obbPath} 2>/dev/null | awk '{print $1}'`;
                             const obbArgs = ['shell', obbCmd];
@@ -100,55 +83,63 @@ router.get('/storage-category-details', async (req, res) => {
                                     bytes: bytes
                                 };
                             }
-                        } catch {
-                            // skip on error
-                        }
+                        } catch { /* skip */ }
                         return null;
                     });
 
                     const batchResults = await Promise.all(batchPromises);
-                    for (const result of batchResults) {
-                        if (result) items.push(result);
-                    }
-
-                    if ((i + BATCH_SIZE) % (BATCH_SIZE * 10) === 0 || i + BATCH_SIZE >= packages.length) {
-                        console.log(`[storage] Processed ${Math.min(i + BATCH_SIZE, packages.length)}/${packages.length} apps`);
-                    }
+                    for (const result of batchResults) if (result) items.push(result);
                 }
-                console.log(`[storage] Apps scan complete, found ${items.length} items`);
+                console.log(`[storage] Apps complete, found ${items.length} items`);
                 break;
             }
 
             case 'media': {
                 console.log('[storage] Media scan started...');
-                const root = '/storage/emulated/0';
-                try {
-                    const cmd =
-                        `find ${root} -type f \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -size +500M -exec du -b {} \\; 2>/dev/null`;
-                    const args = ['shell', cmd];
-                    if (deviceId) args.unshift('-s', deviceId);
-                    const { stdout } = await execFileAsync('adb', args, { timeout: 30000, maxBuffer: 20 * 1024 * 1024 });
-                    console.log(`[storage] Media raw output length: ${stdout.length} chars`);
-                    const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
-                    for (const line of lines) {
-                        // Parse using regex: any whitespace between bytes and path
-                        const match = line.trim().match(/^(\d+)\s+(.*)/);
-                        if (!match) continue;
-                        const bytes = parseInt(match[1], 10);
-                        const path = match[2].trim();
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
-                            });
+                // Use `stat` which is more reliable than `du` on some devices
+                const statCmd = `stat -c "%s %n"`;
+                // We'll try both roots
+                const roots = ['/storage/emulated/0', '/sdcard'];
+                let found = false;
+                for (const root of roots) {
+                    try {
+                        // Use `find` with `-exec stat` to get size and path
+                        // The command is wrapped in `sh -c` to handle the complex quoting
+                        const cmd = `sh -c "find ${root} -type f \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -size +500M -exec ${statCmd} {} \\; 2>/dev/null"`;
+                        const args = ['shell', cmd];
+                        if (deviceId) args.unshift('-s', deviceId);
+                        const { stdout } = await execFileAsync('adb', args, { timeout: 90000, maxBuffer: 100 * 1024 * 1024 });
+                        console.log(`[storage] Media stdout from ${root} (${stdout.length} chars)`);
+                        const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                        console.log(`[storage] Media lines count: ${lines.length}`);
+                        if (lines.length > 0) {
+                            console.log('[storage] Media first 3 lines:', lines.slice(0, 3));
+                            for (const line of lines) {
+                                // Split on first space: first token is size (bytes), rest is path
+                                const firstSpace = line.indexOf(' ');
+                                if (firstSpace === -1) continue;
+                                const bytesStr = line.substring(0, firstSpace);
+                                const bytes = parseInt(bytesStr, 10);
+                                if (isNaN(bytes)) continue;
+                                const path = line.substring(firstSpace + 1).trim();
+                                if (bytes >= MIN_SIZE_BYTES) {
+                                    items.push({
+                                        name: path.split('/').pop() || path,
+                                        path: path,
+                                        size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                        bytes: bytes
+                                    });
+                                }
+                            }
+                            found = true;
+                            break;
                         }
+                    } catch (e: any) {
+                        console.error(`[storage] Media scan failed on ${root}:`, e.message);
+                        console.error(e.stack);
                     }
-                    console.log(`[storage] Media found ${items.length} items`);
-                } catch (e: any) {
-                    console.error('[storage] Media scan error:', e.message);
                 }
+                if (!found) console.log('[storage] No media files found on any root.');
                 break;
             }
 
@@ -159,39 +150,50 @@ router.get('/storage-category-details', async (req, res) => {
 
             case 'other': {
                 console.log('[storage] Other scan started...');
-                const root = '/storage/emulated/0';
-                try {
-                    const cmd =
-                        `find ${root} -type f -size +500M ! \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -exec du -b {} \\; 2>/dev/null`;
-                    const args = ['shell', cmd];
-                    if (deviceId) args.unshift('-s', deviceId);
-                    const { stdout } = await execFileAsync('adb', args, { timeout: 30000, maxBuffer: 20 * 1024 * 1024 });
-                    console.log(`[storage] Other raw output length: ${stdout.length} chars`);
-                    const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
-                    for (const line of lines) {
-                        const match = line.trim().match(/^(\d+)\s+(.*)/);
-                        if (!match) continue;
-                        const bytes = parseInt(match[1], 10);
-                        const path = match[2].trim();
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
-                            });
+                const statCmd = `stat -c "%s %n"`;
+                const roots = ['/storage/emulated/0', '/sdcard'];
+                let found = false;
+                for (const root of roots) {
+                    try {
+                        const cmd = `sh -c "find ${root} -type f -size +500M ! \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -exec ${statCmd} {} \\; 2>/dev/null"`;
+                        const args = ['shell', cmd];
+                        if (deviceId) args.unshift('-s', deviceId);
+                        const { stdout } = await execFileAsync('adb', args, { timeout: 90000, maxBuffer: 100 * 1024 * 1024 });
+                        console.log(`[storage] Other stdout from ${root} (${stdout.length} chars)`);
+                        const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                        console.log(`[storage] Other lines count: ${lines.length}`);
+                        if (lines.length > 0) {
+                            console.log('[storage] Other first 3 lines:', lines.slice(0, 3));
+                            for (const line of lines) {
+                                const firstSpace = line.indexOf(' ');
+                                if (firstSpace === -1) continue;
+                                const bytesStr = line.substring(0, firstSpace);
+                                const bytes = parseInt(bytesStr, 10);
+                                if (isNaN(bytes)) continue;
+                                const path = line.substring(firstSpace + 1).trim();
+                                if (bytes >= MIN_SIZE_BYTES) {
+                                    items.push({
+                                        name: path.split('/').pop() || path,
+                                        path: path,
+                                        size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                        bytes: bytes
+                                    });
+                                }
+                            }
+                            found = true;
+                            break;
                         }
+                    } catch (e: any) {
+                        console.error(`[storage] Other scan failed on ${root}:`, e.message);
+                        console.error(e.stack);
                     }
-                    console.log(`[storage] Other found ${items.length} items`);
-                } catch (e: any) {
-                    console.error('[storage] Other scan error:', e.message);
                 }
+                if (!found) console.log('[storage] No other files found on any root.');
                 break;
             }
 
-            default: {
+            default:
                 return res.status(400).json({ error: `Unknown category: ${category}` });
-            }
         }
 
         items.sort((a, b) => b.bytes - a.bytes);
