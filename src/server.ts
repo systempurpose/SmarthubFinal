@@ -15,6 +15,8 @@ import rootkitRoutes from './routes/rootkitRoutes';
 import straceRoutes from './routes/straceRoutes';
 import fileMonitorRoutes from './routes/fileMonitorRoutes';
 import WebSocket from 'ws';
+import largeFilesRoutes from './routes/largeFilesRoutes';
+import fileRoutes from './routes/fileRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -654,6 +656,9 @@ app.use('/api/repair', repairRoutes);
 app.use(express.static('html'));
 app.use('/css', express.static('css'));
 app.use('/js', express.static('js'));
+app.use('/api', largeFilesRoutes);
+app.use('/api', fileRoutes);
+
 
 ensureBaseDirs();
 registerBsodRoutes(app);

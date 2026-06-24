@@ -1513,27 +1513,124 @@ async function runDeepDiagnostic() {
 
         startOverlayMonitoring();
 
-        // 1. Hardware checks
+        // 1. Hardware checks – fetch data (only used for storage summary)
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
 
-        const totalGB = parseFloat(storage.total) || 0;
-        const usedGB = parseFloat(storage.used) || 0;
-        const storagePercent = totalGB > 0 ? (usedGB / totalGB) * 100 : 0;
-        const ramPercent = parseFloat(ram.total) > 0 ? (parseFloat(ram.used) / parseFloat(ram.total)) * 100 : 0;
+        // Fetch storage details for breakdown
+        let storageDetails = null;
+        try {
+            const detailsRes = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
+            if (detailsRes.ok) storageDetails = await detailsRes.json();
+        } catch (e) { console.warn('Could not fetch storage details:', e); }
 
-        const issues = [];
-        if (battery.level < 20) issues.push('Battery level is low.');
-        if (battery.health !== 'good') issues.push('Battery health is not optimal.');
-        if (storagePercent > 90) issues.push('Storage is nearly full.');
-        if (ramPercent > 85) issues.push('RAM usage is very high.');
+        // ---- Fetch large files (>= 1GB) ----
+        let largeFiles = [];
+        try {
+            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${currentDeviceId}&minSize=1`);
+            if (filesRes.ok) {
+                const filesData = await filesRes.json();
+                largeFiles = filesData.files || [];
+            }
+        } catch (e) { console.warn('Could not fetch large files:', e); }
 
-        let hardwareHtml = issues.length > 0
-            ? `<div style="margin-bottom: 20px;"><h3 style="color: #d32f2f;">⚠️ Hardware Issues</h3><ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul></div>`
-            : `<div style="margin-bottom: 20px;"><h3 style="color: #2e7d32;">✅ Hardware Check Passed</h3><p>All hardware metrics are within normal ranges.</p></div>`;
+        // ---- Helper functions ----
+        function formatSize(bytes) {
+            if (!bytes || bytes === '0') return '0 B';
+            const num = parseFloat(bytes);
+            if (isNaN(num)) return bytes;
+            if (num >= 1024 * 1024 * 1024) return (num / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+            if (num >= 1024 * 1024) return (num / (1024 * 1024)).toFixed(1) + ' MB';
+            if (num >= 1024) return (num / 1024).toFixed(1) + ' KB';
+            return num + ' B';
+        }
 
-        // 2. Fetch suspicious apps
+        function parseSize(str) {
+            if (!str || str === '?') return 0;
+            const trimmed = String(str).trim();
+            const match = trimmed.match(/^([\d.]+)\s*([GMK]?)/i);
+            if (!match) return 0;
+            let val = parseFloat(match[1]);
+            const unit = (match[2] || '').toUpperCase();
+            if (unit === 'G') return val * 1024 * 1024 * 1024;
+            if (unit === 'M') return val * 1024 * 1024;
+            if (unit === 'K') return val * 1024;
+            return val;
+        }
+
+        const storageTotalBytes = parseSize(storage.total);
+        const storageUsedBytes = parseSize(storage.used);
+        const storagePercent = storageTotalBytes > 0 ? (storageUsedBytes / storageTotalBytes) * 100 : 0;
+
+        // ---- Build storage summary (no bars) ----
+        let storageHtml = `
+            <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                    <span><strong>💾 Storage</strong> ${formatSize(storageUsedBytes)} / ${formatSize(storageTotalBytes)}</span>
+                    <span style="color: ${storagePercent > 90 ? '#dc3545' : '#28a745'};">${storagePercent.toFixed(1)}% used</span>
+                </div>
+                ${storagePercent > 90 ? `<div style="color: #d32f2f; font-size: 13px; margin-top: 4px;">⚠️ Storage is nearly full.</div>` : ''}
+            </div>
+        `;
+
+        // ---- Storage breakdown (categories) ----
+        if (storageDetails && storageDetails.breakdown) {
+            const b = storageDetails.breakdown;
+            const categories = [
+                { key: 'apps', label: '📱 Apps' },
+                { key: 'media', label: '🎬 Media' },
+                { key: 'system', label: '⚙️ System' },
+                { key: 'other', label: '📦 Other' }
+            ];
+            let breakdownHtml = `<div style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
+                <div style="display: grid; gap: 6px;">`;
+            for (const cat of categories) {
+                const data = b[cat.key] || { percent: 0, human: '0 KB', bytes: 0 };
+                const isApps = cat.key === 'apps';
+                breakdownHtml += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f1f3f5;">
+                        <span>${cat.label} <span style="color: #6c757d; font-size: 12px;">(${data.human})</span></span>
+                        ${isApps ? `<button onclick="openAppManager()" style="background: #0d6efd; color:white; border:none; border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer;">🗑️ Delete Apps</button>` : ''}
+                    </div>
+                `;
+            }
+            breakdownHtml += `</div></div>`;
+            storageHtml += breakdownHtml;
+        }
+
+        // ---- Large files list ----
+        let largeFilesHtml = '';
+        if (largeFiles.length > 0) {
+            largeFilesHtml = `
+                <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥1GB)</h4>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        ${largeFiles.map(file => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
+                                <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
+                                <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
+                                <button onclick="deleteFile('${escapeHtml(file.path)}')" 
+                                        style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">Total: ${largeFiles.length} large files</div>
+                </div>
+            `;
+        } else {
+            largeFilesHtml = `
+                <div style="margin-top: 12px; font-size: 13px; color: #28a745; padding: 8px; background: #e8f5e9; border-radius: 6px;">
+                    ✅ No large files (≥1GB) found.
+                </div>
+            `;
+        }
+        storageHtml += largeFilesHtml;
+
+        // ---- Fetch suspicious apps ----
         let suspiciousAppsList = [];
         try {
             const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
@@ -1665,7 +1762,8 @@ async function runDeepDiagnostic() {
             }
             appsHtml += `</div></div>`;
         }
-        modalBody.innerHTML = hardwareHtml + appsHtml;
+        // Combine storage and apps
+        modalBody.innerHTML = storageHtml + appsHtml;
 
         // 3. Perform deep scans
         const appRiskMap = new Map();
@@ -1697,7 +1795,7 @@ async function runDeepDiagnostic() {
                         return;
                     }
 
-                    // ----- Update card appearance based on new risk score -----
+                    // Update card appearance based on new risk score
                     const newThreat = getThreatLevel(riskScore);
                     const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
 
@@ -1706,7 +1804,7 @@ async function runDeepDiagnostic() {
                     if (iconSpan) iconSpan.textContent = newIcon;
                     appCard.style.background = newThreat.bg;
 
-                    // ---- Rest of the deep‑scan result HTML ----
+                    // Deep scan details
                     const threat = getThreatLevel(riskScore);
                     const threatTypes = analysis.malware_types || [];
                     const suspiciousIndicators = analysis.suspicious_indicators || [];
@@ -1778,7 +1876,7 @@ async function runDeepDiagnostic() {
 
         await stopAndFetchOverlayEvents();
 
-        // Frida on high-risk apps (unchanged)
+        // ---- Frida on high-risk apps (unchanged) ----
         const highRiskApps = suspiciousAppsList
             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
             .filter(app => app.riskScore >= 40)
@@ -1895,6 +1993,25 @@ async function runDeepDiagnostic() {
         }
     }
 }
+
+// ---- Helper function to open app manager (placeholder) ----
+function openAppManager() {
+    // This could open the device info page or a specific app list modal
+    // For now, we'll navigate to the "Device Info" page or show a modal.
+    alert('App Manager – you can uninstall apps from the Device Info page.');
+    // Optionally: navigate to the device info page programmatically
+    // document.querySelector('.nav-item[data-page="device-info"]')?.click();
+}
+
+// ---- Helper function to open app manager (placeholder) ----
+function openAppManager() {
+    // This could open the device info page or a specific app list modal
+    // For now, we'll navigate to the "Device Info" page or show a modal.
+    // You can implement a function to show all installed apps with sizes.
+    alert('App Manager – you can uninstall apps from the Device Info page.');
+    // Optionally: navigate to the device info page programmatically
+    // document.querySelector('.nav-item[data-page="device-info"]')?.click();
+}
 async function uninstallPackage(packageName) {
     if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
     try {
@@ -1915,6 +2032,25 @@ async function uninstallPackage(packageName) {
     }
 }
 
+async function deleteFile(filePath) {
+    if (!confirm(`Are you sure you want to delete:\n${filePath}?`)) return;
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/delete-file`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, filePath })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('File deleted successfully.');
+            runDeepDiagnostic(); // refresh results
+        } else {
+            alert('Failed to delete: ' + data.error);
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
 // ==================== HELP MODAL ====================
 function showHelpModal() {
     const modal = document.getElementById('helpModal');
