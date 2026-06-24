@@ -48,8 +48,9 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Device Info Card (button removed) -->
-            <div id="device-info-card" style="display: flex; align-items: center; gap: 16px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
+            <!-- Device Info Card (still used for quick device summary) -->
+            <!-- Device Info Card -->
+<div id="device-info-card" style="display: flex; align-items: center; gap: 16px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
     <div id="brand-icon" style="font-size: 48px; width: 60px; text-align: center;">
         <!-- logo or text -->
     </div>
@@ -58,15 +59,16 @@
             <span id="device-model" style="font-size: 20px; font-weight: 600;">Device</span>
             <span id="device-brand" style="font-size: 14px; color: #6B7280;"></span>
         </div>
-        <div style="display: flex; gap: 16px; margin-top: 4px; flex-wrap: wrap;">
-            <span id="device-android" style="font-size: 13px; color: #6B7280;">Android</span>
-            <span id="device-resolution" style="font-size: 13px; color: #6B7280;"></span>
-            <span id="device-battery-summary" style="font-size: 13px; color: #6B7280;">🔋 --%</span>
+        <div style="display: flex; gap: 16px; margin-top: 4px; flex-wrap: wrap; font-size: 13px; color: #6B7280;">
+            <span id="device-android">Android --</span>
+            <span id="device-security">Patch: --</span>
+            <span id="device-resolution">-- x --</span>
+            <span id="device-battery-summary">🔋 --%</span>
         </div>
     </div>
 </div>
 
-            <!-- Status Bar -->
+            <!-- Status Bar (Battery, Storage, RAM) -->
             <div id="status-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
                 <div class="status-card" style="background: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
                     <div style="font-size: 12px; color: #6B7280;">Battery</div>
@@ -87,13 +89,98 @@
 
             <!-- Dynamic Page Content -->
             <div id="pageContent" class="page-content">
-                <!-- JS will inject dashboard or other pages here -->
-                <div class="loader">Loading dashboard...</div>
+                <!-- Dashboard Page (default, hidden by JS) -->
+                <div id="page-dashboard" class="page">
+                    <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2>Dashboard</h2>
+                        <button id="quickScanBtn" class="btn btn-primary">⚡ Quick Scan</button>
+                    </div>
+                    <!-- Health Summary Card -->
+                    <div class="health-card" id="healthCard" style="background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div class="health-status" style="display: flex; align-items: center; gap: 0.75rem; font-size: 1.2rem; font-weight: 600;">
+                            <span class="status-icon" id="healthIcon" style="font-size: 2rem;">✅</span>
+                            <span class="status-label" id="healthLabel">Device Healthy</span>
+                        </div>
+                        <div class="health-details" style="color: #6B7280; font-size: 0.9rem;">
+                            <span id="lastScanLabel">Last scan: <span id="lastScanTime">Never</span></span>
+                            <span id="deviceModel" style="display: block; font-weight: 500;"></span>
+                        </div>
+                    </div>
+                    <!-- Metrics as Progress Bars -->
+                    <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                        <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">Battery</label>
+                            <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
+                                <div class="progress-fill" id="batteryFill" style="height: 100%; width: 0%; background: #28a745; border-radius: 20px; transition: width 0.5s ease;"></div>
+                            </div>
+                            <span id="batteryText">0%</span>
+                        </div>
+                        <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">Storage</label>
+                            <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
+                                <div class="progress-fill" id="storageFill" style="height: 100%; width: 0%; background: #3B82F6; border-radius: 20px; transition: width 0.5s ease;"></div>
+                            </div>
+                            <span id="storageText">0%</span>
+                        </div>
+                        <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">RAM</label>
+                            <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
+                                <div class="progress-fill" id="ramFill" style="height: 100%; width: 0%; background: #8B5CF6; border-radius: 20px; transition: width 0.5s ease;"></div>
+                            </div>
+                            <span id="ramText">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hardware Tests Page -->
+                <div id="page-hardware-tests" class="page" style="display: none;">
+                    <h2>Hardware Tests</h2>
+                    <div class="tests-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;">
+                        <div class="test-card" data-test="multitouch" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">Multi‑Touch</h3>
+                            <p style="color: #6B7280;">Test touch sensitivity and multiple points.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                        <div class="test-card" data-test="deadpixel" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">Dead Pixel</h3>
+                            <p style="color: #6B7280;">Display full‑screen RGB/white patterns.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                        <div class="test-card" data-test="camera" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">Camera</h3>
+                            <p style="color: #6B7280;">Test camera preview and capture.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                        <div class="test-card" data-test="speaker" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">Speaker / Mic</h3>
+                            <p style="color: #6B7280;">Record and play back audio.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                        <div class="test-card" data-test="wifi" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">WiFi / Bluetooth</h3>
+                            <p style="color: #6B7280;">Scan for networks and devices.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                        <div class="test-card" data-test="gps" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <h3 style="margin-top: 0;">GPS</h3>
+                            <p style="color: #6B7280;">Check satellite count and accuracy.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other pages (device-info, connection-troubleshoot, etc.) will be injected by JS if needed -->
             </div>
         </main>
     </div>
 
-    <!-- Modal: USB Debugging Wizard -->
+    <!-- Modal: USB Debugging Wizard (kept as is) -->
     <div id="wizardModal" class="modal">
         <div class="modal-content acrylic">
             <div class="modal-header">
@@ -107,6 +194,33 @@
                 <button id="wizardPrevBtn" class="btn-secondary" disabled>Previous</button>
                 <button id="wizardNextBtn" class="btn-primary">Next</button>
                 <button id="wizardCancelBtn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Modal: Diagnostic Results -->
+    <div id="diagnosticModal" class="modal">
+        <div class="modal-content acrylic" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-medical-alt"></i> Diagnostic Report</h3>
+                <span class="close-button" id="diagnosticModalClose">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                    <button class="tab-btn active" data-tab="hardware">Hardware</button>
+                    <button class="tab-btn" data-tab="security">Security</button>
+                    <button class="tab-btn" data-tab="apps">Apps</button>
+                    <button class="tab-btn" data-tab="network">Network</button>
+                    <button class="tab-btn" data-tab="events">Events</button>
+                </div>
+                <div id="tabContent" class="tab-content" style="min-height: 200px;">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 1rem;">
+                <button id="exportPdfBtn" class="btn-secondary">📄 Export PDF</button>
+                <button id="exportHtmlBtn" class="btn-secondary">📄 Export HTML</button>
+                <button id="shareBtn" class="btn-primary">📤 Share Report</button>
             </div>
         </div>
     </div>

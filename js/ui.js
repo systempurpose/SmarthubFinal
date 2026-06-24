@@ -630,37 +630,7 @@ async function renderDashboard() {
             securityPatch = props['ro.build.version.security_patch'] || '?';
         }
 
-        // Device Overview
-        document.getElementById('deviceOverview').innerHTML = `
-            <div class="card-title"><i class="fas fa-info-circle"></i> Device Overview</div>
-            <div><strong>Model:</strong> ${escapeHtml(model)}</div>
-            <div><strong>Android:</strong> ${escapeHtml(androidVer)}</div>
-            <div><strong>Security Patch:</strong> ${escapeHtml(securityPatch)}</div>
-        `;
-        document.getElementById('deviceOverview').style.display = 'block';
-
-        // Network Status
-        const wifiInfo = formatWifiStatus(wifiStatus?.wifi);
-        document.getElementById('networkStatus').innerHTML = `
-            <div class="card-title"><i class="fas fa-wifi"></i> Network Status</div>
-            <div><strong>WiFi SSID:</strong> ${escapeHtml(wifiInfo.ssid)}</div>
-            <div><strong>Status:</strong> ${escapeHtml(wifiInfo.status)}</div>
-            <div><strong>Signal:</strong> ${escapeHtml(wifiInfo.signal)}</div>
-            <div><strong>Link Speed:</strong> ${escapeHtml(wifiInfo.linkSpeed)}</div>
-            <div><strong>Frequency:</strong> ${escapeHtml(wifiInfo.frequency)}</div>
-        `;
-        document.getElementById('networkStatus').style.display = 'block';
-
-        // Phone Summary
-        const summaryGrid = document.querySelector('#phoneSummary .phone-summary-grid');
-        if (summaryGrid) {
-            summaryGrid.innerHTML = `
-                <div><span class="item-label">Phone Name</span><span class="item-value">${escapeHtml(model)}</span></div>
-                <div><span class="item-label">Android Version</span><span class="item-value">${escapeHtml(androidVer)}</span></div>
-                <div><span class="item-label">ADB Active</span><span class="item-value">${currentDeviceId ? '✅ Active' : '❌ Inactive'}</span></div>
-            `;
-            document.getElementById('phoneSummary').style.display = 'block';
-        }
+        
 
         // Alerts
         let alerts = [];
