@@ -5,7 +5,6 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const router = Router();
 
-// Helper to parse size strings
 function parseSizeToBytes(sizeStr: string): number {
     const match = sizeStr.match(/^([\d.]+)\s*([GMK]?)/i);
     if (!match) return 0;
@@ -19,58 +18,89 @@ function parseSizeToBytes(sizeStr: string): number {
 
 router.get('/storage-category-details', async (req, res) => {
     const deviceId = req.query.deviceId as string;
-    const category = req.query.category as string; // 'apps', 'media', 'system', 'other'
+    const category = req.query.category as string;
 
     if (!deviceId || !category) {
         return res.status(400).json({ error: 'deviceId and category required' });
     }
 
+    console.log(`[storage-category-details] deviceId: ${deviceId}, category: ${category}`);
+
     try {
         let items: any[] = [];
 
         switch (category) {
-            case 'apps':
-                // Get all installed apps with their sizes
-                const appsCommand = 'pm list packages -3 --show-versioncode';
-                const args = ['shell', appsCommand];
+            case 'apps': {
+                const listCmd = 'pm list packages -3';
+                const args = ['shell', listCmd];
                 if (deviceId) args.unshift('-s', deviceId);
-                const { stdout: appsOutput } = await execFileAsync('adb', args, { timeout: 15000, maxBuffer: 5 * 1024 * 1024 });
-                const packages = appsOutput.split(/\r?\n/).filter(line => line.startsWith('package:'));
-                
-                // For each package, get its size
-                for (const pkgLine of packages) {
-                    const packageName = pkgLine.replace('package:', '').trim();
-                    if (!packageName) continue;
+                const { stdout } = await execFileAsync('adb', args, { timeout: 15000, maxBuffer: 5 * 1024 * 1024 });
+                const packages = stdout
+                    .split(/\r?\n/)
+                    .filter(line => line.startsWith('package:'))
+                    .map(line => line.replace('package:', '').trim());
+
+                console.log(`[apps] Found ${packages.length} packages`);
+
+                for (const pkg of packages) {
+                    if (!pkg) continue;
                     try {
-                        const sizeArgs = ['shell', `du -s /data/app/${packageName}* 2>/dev/null | awk '{print $1}'`];
+                        // Get APK path
+                        const pathCmd = `pm path ${pkg}`;
+                        const pathArgs = ['shell', pathCmd];
+                        if (deviceId) pathArgs.unshift('-s', deviceId);
+                        const { stdout: pathOut } = await execFileAsync('adb', pathArgs, { timeout: 5000 });
+                        const apkLine = pathOut.split(/\r?\n/).find(line => line.startsWith('package:'));
+                        if (!apkLine) continue;
+                        const apkPath = apkLine.replace('package:', '').trim();
+                        if (!apkPath) continue;
+
+                        const dir = apkPath.substring(0, apkPath.lastIndexOf('/'));
+
+                        // Get directory size (bytes)
+                        const sizeCmd = `du -sb ${dir} 2>/dev/null | awk '{print $1}'`;
+                        const sizeArgs = ['shell', sizeCmd];
                         if (deviceId) sizeArgs.unshift('-s', deviceId);
-                        const { stdout: sizeOutput } = await execFileAsync('adb', sizeArgs, { timeout: 5000 });
-                        const sizeKB = parseInt(sizeOutput.trim());
-                        if (!isNaN(sizeKB) && sizeKB > 0) {
-                            const bytes = sizeKB * 1024;
-                            if (bytes >= 1024 * 1024 * 1024) { // >= 1GB
-                                items.push({
-                                    name: packageName,
-                                    packageName: packageName,
-                                    size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                    bytes: bytes
-                                });
-                            }
+                        const { stdout: sizeOut } = await execFileAsync('adb', sizeArgs, { timeout: 5000 });
+                        let bytes = parseInt(sizeOut.trim());
+                        if (isNaN(bytes)) bytes = 0;
+
+                        // Check OBB folder
+                        const obbPath = `/sdcard/Android/obb/${pkg}`;
+                        const obbCmd = `du -sb ${obbPath} 2>/dev/null | awk '{print $1}'`;
+                        const obbArgs = ['shell', obbCmd];
+                        if (deviceId) obbArgs.unshift('-s', deviceId);
+                        try {
+                            const { stdout: obbOut } = await execFileAsync('adb', obbArgs, { timeout: 5000 });
+                            const obbBytes = parseInt(obbOut.trim());
+                            if (!isNaN(obbBytes) && obbBytes > 0) bytes += obbBytes;
+                        } catch (e: any) {
+                            // OBB folder may not exist; ignore
+                            console.log(`[apps] OBB check for ${pkg}: ${e.message}`);
                         }
-                    } catch (e) {
-                        // Skip if we can't get size
+
+                        if (bytes >= 1024 * 1024 * 1024) {
+                            items.push({
+                                name: pkg,
+                                packageName: pkg,
+                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                bytes: bytes
+                            });
+                        }
+                    } catch (err: any) {
+                        console.log(`[apps] Skipping ${pkg}: ${err.message}`);
                     }
                 }
                 break;
+            }
 
-            case 'media':
-                // Find media files > 1GB in /sdcard
-                const mediaCommand = `find /sdcard -type f \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -size +1G -exec ls -lh {} \\; 2>/dev/null | awk '{print $5, $9}'`;
-                const mediaArgs = ['shell', mediaCommand];
-                if (deviceId) mediaArgs.unshift('-s', deviceId);
-                const { stdout: mediaOutput } = await execFileAsync('adb', mediaArgs, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 });
-                const mediaLines = mediaOutput.split(/\r?\n/).filter(line => line.trim() !== '');
-                for (const line of mediaLines) {
+            case 'media': {
+                const cmd = `find /sdcard -type f \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -size +1G -exec ls -lh {} \\; 2>/dev/null | awk '{print $5, $9}'`;
+                const args = ['shell', cmd];
+                if (deviceId) args.unshift('-s', deviceId);
+                const { stdout } = await execFileAsync('adb', args, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 });
+                const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                for (const line of lines) {
                     const parts = line.trim().split(/\s+/);
                     const sizeStr = parts[0];
                     const path = parts.slice(1).join(' ');
@@ -85,21 +115,20 @@ router.get('/storage-category-details', async (req, res) => {
                     }
                 }
                 break;
+            }
 
-            case 'system':
-                // System files are harder to list; we can show system apps or system partition usage
-                // For now, return a placeholder or use the same as 'other'
+            case 'system': {
                 items = [{ name: 'System data (not individually listed)', size: 'N/A', bytes: 0 }];
                 break;
+            }
 
-            case 'other':
-                // Other files: find all files > 1GB not in media categories
-                const otherCommand = `find /sdcard -type f -size +1G ! \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -exec ls -lh {} \\; 2>/dev/null | awk '{print $5, $9}'`;
-                const otherArgs = ['shell', otherCommand];
-                if (deviceId) otherArgs.unshift('-s', deviceId);
-                const { stdout: otherOutput } = await execFileAsync('adb', otherArgs, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 });
-                const otherLines = otherOutput.split(/\r?\n/).filter(line => line.trim() !== '');
-                for (const line of otherLines) {
+            case 'other': {
+                const cmd = `find /sdcard -type f -size +1G ! \\( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.jpg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.mp3" -o -iname "*.wav" -o -iname "*.flac" \\) -exec ls -lh {} \\; 2>/dev/null | awk '{print $5, $9}'`;
+                const args = ['shell', cmd];
+                if (deviceId) args.unshift('-s', deviceId);
+                const { stdout } = await execFileAsync('adb', args, { timeout: 30000, maxBuffer: 10 * 1024 * 1024 });
+                const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                for (const line of lines) {
                     const parts = line.trim().split(/\s+/);
                     const sizeStr = parts[0];
                     const path = parts.slice(1).join(' ');
@@ -114,10 +143,11 @@ router.get('/storage-category-details', async (req, res) => {
                     }
                 }
                 break;
+            }
         }
 
-        // Sort by size descending
         items.sort((a, b) => b.bytes - a.bytes);
+        console.log(`[storage-category-details] Returning ${items.length} items for ${category}`);
         res.json({ items, count: items.length });
     } catch (err: any) {
         console.error('Storage category details error:', err);

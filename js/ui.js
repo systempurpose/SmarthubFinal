@@ -630,8 +630,6 @@ async function renderDashboard() {
             securityPatch = props['ro.build.version.security_patch'] || '?';
         }
 
-        
-
         // Alerts
         let alerts = [];
         if (battery.level && battery.level < 15) alerts.push('⚠️ Battery level critically low (<15%)');
@@ -1308,7 +1306,8 @@ function getHumanFriendlyRiskReasons(app) {
     else if (app.riskScore >= 40) reasons.push('⚠️ Moderate risk — review carefully.');
     return reasons;
 }
-// ==================== QUICK DIAGNOSTIC ====================
+
+// ==================== DEEP DIAGNOSTIC ====================
 async function runDeepDiagnostic() {
     // Get or create modal
     let modal = document.getElementById('quickDiagModal');
@@ -1604,7 +1603,7 @@ async function runDeepDiagnostic() {
             storageHtml += breakdownHtml;
         }
 
-        // ---- Large files list (as before) ----
+        // ---- Large files list ----
         let largeFilesHtml = '';
         if (largeFiles.length > 0) {
             largeFilesHtml = `
@@ -2007,44 +2006,84 @@ async function runDeepDiagnostic() {
     }
 }
 
-// ---- Helper function to open app manager (placeholder) ----
-function openAppManager() {
-    // This could open the device info page or a specific app list modal
-    // For now, we'll navigate to the "Device Info" page or show a modal.
-    alert('App Manager – you can uninstall apps from the Device Info page.');
-    // Optionally: navigate to the device info page programmatically
-    // document.querySelector('.nav-item[data-page="device-info"]')?.click();
-}
+// ==================== STORAGE CATEGORY DETAILS ====================
 
-// ---- Helper function to open app manager (placeholder) ----
-function openAppManager() {
-    // This could open the device info page or a specific app list modal
-    // For now, we'll navigate to the "Device Info" page or show a modal.
-    // You can implement a function to show all installed apps with sizes.
-    alert('App Manager – you can uninstall apps from the Device Info page.');
-    // Optionally: navigate to the device info page programmatically
-    // document.querySelector('.nav-item[data-page="device-info"]')?.click();
-}
-async function uninstallPackage(packageName) {
-    if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
+// ---- Show category details ----
+async function showCategoryDetails(category) {
+    const modalBody = document.getElementById('quickDiagModalBody');
+    // Remove any existing details
+    const existingDetails = modalBody.querySelector('.category-details');
+    if (existingDetails) existingDetails.remove();
+
+    // Insert loading indicator after the storage section
+    const storageSection = modalBody.querySelector('.storage-section');
+    if (!storageSection) return;
+
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'category-details';
+    detailsDiv.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <div class="spinner"></div>
+            <p>Loading ${category} details...</p>
+        </div>
+    `;
+    storageSection.after(detailsDiv);
+
     try {
-        const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: currentDeviceId, packageName })
-        });
+        const response = await fetch(`${BACKEND_URL}/api/storage-category-details?deviceId=${currentDeviceId}&category=${category}`);
+        if (!response.ok) throw new Error('Failed to fetch details');
         const data = await response.json();
-        if (response.ok) {
-            alert(`Successfully uninstalled ${packageName}`);
-            runDeepDiagnostic();
-        } else {
-            alert(`Failed to uninstall: ${data.error}`);
-        }
+        renderCategoryDetails(category, data.items);
     } catch (err) {
-        alert(`Error: ${err.message}`);
+        console.error('Error fetching category details:', err);
+        detailsDiv.innerHTML = `<div style="color: #d32f2f; padding: 12px;">Error loading details: ${err.message}</div>`;
     }
 }
 
+// ---- Render category details ----
+function renderCategoryDetails(category, items) {
+    const modalBody = document.getElementById('quickDiagModalBody');
+    const detailsDiv = modalBody.querySelector('.category-details');
+    if (!detailsDiv) return;
+
+    if (!items || items.length === 0) {
+        detailsDiv.innerHTML = `<div style="padding: 12px; color: #28a745;">✅ No items ≥1GB found in ${category}.</div>`;
+        return;
+    }
+
+    // Sort by size descending
+    items.sort((a, b) => b.bytes - a.bytes);
+
+    let html = `
+        <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 ${category.charAt(0).toUpperCase() + category.slice(1)} Details</h4>
+            <div style="max-height: 300px; overflow-y: auto;">
+    `;
+
+    for (const item of items) {
+        html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
+                <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(item.name)}</span>
+                <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(item.size)}</span>
+                ${category === 'apps' ? `<button onclick="uninstallPackage('${escapeHtml(item.packageName)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>` : ''}
+                ${category !== 'apps' && item.path ? `<button onclick="deleteFile('${escapeHtml(item.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>` : ''}
+            </div>
+        `;
+    }
+
+    html += `
+            </div>
+            <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">Total: ${items.length} items</div>
+        </div>
+    `;
+
+    detailsDiv.innerHTML = html;
+    detailsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ==================== FILE OPERATIONS ====================
+
+// ---- Delete a file ----
 async function deleteFile(filePath) {
     if (!confirm(`Are you sure you want to delete:\n${filePath}?`)) return;
     try {
@@ -2056,7 +2095,13 @@ async function deleteFile(filePath) {
         const data = await response.json();
         if (response.ok) {
             alert('File deleted successfully.');
-            runDeepDiagnostic(); // refresh results
+            // Refresh the details view if a category is open
+            const activeCategory = document.querySelector('.storage-category.active');
+            if (activeCategory) {
+                showCategoryDetails(activeCategory.dataset.category);
+            } else {
+                runDeepDiagnostic(); // fallback
+            }
         } else {
             alert('Failed to delete: ' + data.error);
         }
@@ -2064,6 +2109,41 @@ async function deleteFile(filePath) {
         alert('Error: ' + err.message);
     }
 }
+
+// ---- Uninstall an app ----
+async function uninstallPackage(packageName) {
+    if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, packageName })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert(`Successfully uninstalled ${packageName}`);
+            // Refresh the details view if a category is open
+            const activeCategory = document.querySelector('.storage-category.active');
+            if (activeCategory) {
+                showCategoryDetails(activeCategory.dataset.category);
+            } else {
+                runDeepDiagnostic();
+            }
+        } else {
+            alert(`Failed to uninstall: ${data.error}`);
+        }
+    } catch (err) {
+        alert(`Error: ${err.message}`);
+    }
+}
+
+// ---- Open app manager (placeholder) ----
+function openAppManager() {
+    alert('App Manager – you can uninstall apps from the Device Info page.');
+    // Optionally navigate to Device Info page
+    // document.querySelector('.nav-item[data-page="device-info"]')?.click();
+}
+
 // ==================== HELP MODAL ====================
 function showHelpModal() {
     const modal = document.getElementById('helpModal');
