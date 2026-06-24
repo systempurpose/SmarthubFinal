@@ -1574,7 +1574,7 @@ async function runDeepDiagnostic() {
             </div>
         `;
 
-        // ---- Storage breakdown (categories) ----
+        // ---- Storage breakdown (clickable categories) ----
         if (storageDetails && storageDetails.breakdown) {
             const b = storageDetails.breakdown;
             const categories = [
@@ -1583,16 +1583,20 @@ async function runDeepDiagnostic() {
                 { key: 'system', label: '⚙️ System' },
                 { key: 'other', label: '📦 Other' }
             ];
-            let breakdownHtml = `<div style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
-                <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
-                <div style="display: grid; gap: 6px;">`;
+            let breakdownHtml = `
+                <div class="storage-section" style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
+                    <div style="display: grid; gap: 6px;">
+            `;
             for (const cat of categories) {
                 const data = b[cat.key] || { percent: 0, human: '0 KB', bytes: 0 };
-                const isApps = cat.key === 'apps';
                 breakdownHtml += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f1f3f5;">
+                    <div class="storage-category" data-category="${cat.key}" 
+                         style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f1f3f5; cursor: pointer; transition: background 0.15s;"
+                         onmouseover="this.style.background='#f1f3f5'" 
+                         onmouseout="this.style.background='transparent'">
                         <span>${cat.label} <span style="color: #6c757d; font-size: 12px;">(${data.human})</span></span>
-                        ${isApps ? `<button onclick="openAppManager()" style="background: #0d6efd; color:white; border:none; border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer;">🗑️ Delete Apps</button>` : ''}
+                        <span style="color: #0d6efd; font-size: 12px;">▶</span>
                     </div>
                 `;
             }
@@ -1600,7 +1604,7 @@ async function runDeepDiagnostic() {
             storageHtml += breakdownHtml;
         }
 
-        // ---- Large files list ----
+        // ---- Large files list (as before) ----
         let largeFilesHtml = '';
         if (largeFiles.length > 0) {
             largeFilesHtml = `
@@ -1643,7 +1647,7 @@ async function runDeepDiagnostic() {
         // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
         suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
 
-        // ===== DEDUPLICATE APPS (remove duplicates by packageName) =====
+        // ===== DEDUPLICATE APPS =====
         const seen = new Set();
         suspiciousAppsList = suspiciousAppsList.filter(app => {
             const key = app.packageName;
@@ -1652,7 +1656,7 @@ async function runDeepDiagnostic() {
             return true;
         });
 
-        // ===== BUILD SUMMARY BAR (with ID) =====
+        // ===== BUILD SUMMARY BAR =====
         const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
         const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
         const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
@@ -1668,7 +1672,7 @@ async function runDeepDiagnostic() {
             </div>
         `;
 
-        // ===== BUILD APP CARDS (SORTED, DEDUPLICATED, with icon IDs) =====
+        // ===== BUILD APP CARDS =====
         const escape = (str) => escapeHtml(str);
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
@@ -1762,10 +1766,19 @@ async function runDeepDiagnostic() {
             }
             appsHtml += `</div></div>`;
         }
+
         // Combine storage and apps
         modalBody.innerHTML = storageHtml + appsHtml;
 
-        // 3. Perform deep scans
+        // --- Attach click listeners to storage categories ---
+        document.querySelectorAll('.storage-category').forEach(el => {
+            el.addEventListener('click', function() {
+                const category = this.dataset.category;
+                showCategoryDetails(category);
+            });
+        });
+
+        // 3. Perform deep scans (unchanged)
         const appRiskMap = new Map();
         const scanPromises = suspiciousAppsList.map(async (app) => {
             try {
@@ -1795,7 +1808,7 @@ async function runDeepDiagnostic() {
                         return;
                     }
 
-                    // Update card appearance based on new risk score
+                    // Update card appearance
                     const newThreat = getThreatLevel(riskScore);
                     const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
 
@@ -1848,7 +1861,7 @@ async function runDeepDiagnostic() {
         });
         await Promise.all(scanPromises);
 
-        // ===== UPDATE SUMMARY BAR – ONLY FOR REMAINING VISIBLE CARDS =====
+        // ===== UPDATE SUMMARY BAR =====
         const remainingCards = document.querySelectorAll('.app-card-item');
         let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
         for (const card of remainingCards) {
@@ -1876,7 +1889,7 @@ async function runDeepDiagnostic() {
 
         await stopAndFetchOverlayEvents();
 
-        // ---- Frida on high-risk apps (unchanged) ----
+        // ---- Frida on high-risk apps ----
         const highRiskApps = suspiciousAppsList
             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
             .filter(app => app.riskScore >= 40)
@@ -1959,7 +1972,7 @@ async function runDeepDiagnostic() {
             console.warn('File monitor failed:', err);
         }
 
-        // ========== REAL‑TIME EVENTS (filtered, no heartbeat) ==========
+        // ========== REAL‑TIME EVENTS ==========
         const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
         if (filteredEvents.length > 0) {
             let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';

@@ -17,6 +17,7 @@ import fileMonitorRoutes from './routes/fileMonitorRoutes';
 import WebSocket from 'ws';
 import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
+import storageCategoryRoutes from './routes/storageCategoryRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -658,6 +659,7 @@ app.use('/css', express.static('css'));
 app.use('/js', express.static('js'));
 app.use('/api', largeFilesRoutes);
 app.use('/api', fileRoutes);
+app.use('/api', storageCategoryRoutes);
 
 
 ensureBaseDirs();
