@@ -10,6 +10,14 @@ const DEFAULT_TIMEOUT_MS = 120000;
 const MAX_BUFFER = 100 * 1024 * 1024;
 const APP_BATCH_SIZE = 5;
 
+type LargeFileItem = {
+  path: string;
+  size: string;
+  bytes: number;
+  type?: 'file' | 'app';
+  packageName?: string;
+};
+
 async function runAdbShell(deviceId: string, command: string, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const args = ['shell', command];
   if (deviceId) args.unshift('-s', deviceId);
@@ -36,8 +44,8 @@ function parseSizePathLine(line: string) {
   return { bytes, path };
 }
 
-async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: number, minSizeBytes: number) {
-  const files: Array<{ path: string; size: string; bytes: number }> = [];
+async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: number, minSizeBytes: number): Promise<Array<LargeFileItem>> {
+  const files: Array<LargeFileItem> = [];
   const seenPaths = new Set<string>();
 
   for (const root of roots) {
@@ -59,8 +67,8 @@ async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: nu
   return files;
 }
 
-async function scanAppStorage(deviceId: string, minSizeBytes: number) {
-  const files: Array<{ path: string; size: string; bytes: number }> = [];
+async function scanAppStorage(deviceId: string, minSizeBytes: number): Promise<Array<LargeFileItem>> {
+  const files: Array<LargeFileItem> = [];
   const seenPaths = new Set<string>();
 
   try {
@@ -72,7 +80,7 @@ async function scanAppStorage(deviceId: string, minSizeBytes: number) {
 
     for (let i = 0; i < packages.length; i += APP_BATCH_SIZE) {
       const batch = packages.slice(i, i + APP_BATCH_SIZE);
-      const batchResults = await Promise.all(batch.map(async (pkg) => {
+      const batchResults = await Promise.all(batch.map(async (pkg): Promise<LargeFileItem | null> => {
         try {
           const pkgPathOut = await runAdbShell(deviceId, `pm path ${pkg}`);
           const apkLine = pkgPathOut.split(/\r?\n/).find((line) => line.startsWith('package:'));
@@ -100,7 +108,7 @@ async function scanAppStorage(deviceId: string, minSizeBytes: number) {
             const path = `package:${pkg}`;
             if (seenPaths.has(path)) return null;
             seenPaths.add(path);
-            return { path, size: formatBytes(totalBytes), bytes: totalBytes, type: 'app' };
+            return { path, packageName: pkg, size: formatBytes(totalBytes), bytes: totalBytes, type: 'app' } as LargeFileItem;
           }
         } catch {
           return null;
