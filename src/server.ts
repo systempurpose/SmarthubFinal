@@ -18,6 +18,7 @@ import WebSocket from 'ws';
 import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
+import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -671,7 +672,7 @@ app.use((req: Request, res: Response, next) => {
   if (!blocked) return next();
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
-
+registerConnectivityFixRoutes(app);
 app.use('/api', fileMonitorRoutes);
 app.use('/api', straceRoutes);
 app.use('/api', rootkitRoutes);

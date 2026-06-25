@@ -2846,52 +2846,74 @@ async function renderConnectionTroubleshoot() {
     }
     document.getElementById('pageContent').innerHTML = `<div class="card">Loading connection status...</div>`;
     try {
-        const wifiRes = await fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`);
-        let wifiStatus = wifiRes.ok ? await wifiRes.json() : null;
-        const btRes = await fetch(`${BACKEND_URL}/android-connectivity/diagnose/${currentDeviceId}?target=bluetooth`);
-        let btStatus = btRes.ok ? await btRes.json() : null;
-        const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
-        let mobileDataEnabled = 'Unknown';
-        if (deviceRes.ok) {
-            let rawText = await deviceRes.text();
-            try { const parsed = JSON.parse(rawText); if (typeof parsed === 'string') rawText = parsed; } catch(e) {}
-            const lines = rawText.split(/\r?\n/);
-            for (const line of lines) {
-                const match = line.match(/^\[gsm.data.setenabled\]:\s*\[(.*?)\]$/);
-                if (match) { mobileDataEnabled = match[1] === 'true' ? 'Enabled' : 'Disabled'; break; }
-            }
+        // Fetch WiFi, Bluetooth, and mobile data using unified endpoints
+        const [wifiRes, btRes, infoRes] = await Promise.all([
+            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null),
+            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`).catch(() => null), // includes bluetoothOn and mobile data
+            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`).catch(() => null) // reuse same data
+        ]);
+
+        // Bluetooth and mobile data from infoRes
+        let bluetoothOn = false;
+        let mobileDataToggle = false;
+        let mobileDataConnected = false;
+        if (infoRes && infoRes.ok) {
+            const infoData = await infoRes.json();
+            bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
+            mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
+            mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
         }
 
+        // WiFi
         let wifiHtml = '';
-        if (wifiStatus && wifiStatus.wifi) {
-            const w = wifiStatus.wifi;
-            const info = formatWifiStatus(w);
-            wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid">
-                <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(info.ssid)}</span></div>
-                <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(info.status)}</span></div>
-                <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${escapeHtml(info.signal)}</span></div>
-                <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${escapeHtml(info.linkSpeed)}</span></div>
-            </div><div class="card-actions"><button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button></div></div>`;
+        if (wifiRes && wifiRes.ok) {
+            const wifiData = await wifiRes.json();
+            if (wifiData.wifi) {
+                const w = wifiData.wifi;
+                const info = formatWifiStatus(w);
+                wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid">
+                    <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(info.ssid)}</span></div>
+                    <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(info.status)}</span></div>
+                    <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${escapeHtml(info.signal)}</span></div>
+                    <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${escapeHtml(info.linkSpeed)}</span></div>
+                </div><div class="card-actions"><button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button></div></div>`;
+            } else {
+                wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;
+            }
         } else {
             wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;
         }
 
-        let btHtml = '';
-        if (btStatus && btStatus.bluetooth) {
-            const bt = btStatus.bluetooth;
-            btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid">
-                <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bt.enabled ? '✅ Yes' : '❌ No'}</span></div>
-                <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${bt.summary?.bondedCount || 0}</span></div>
-                <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${bt.summary?.connectedCount || 0}</span></div>
-            </div><div class="card-actions"><button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth</button><button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button><button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache</button></div></div>`;
-        } else {
-            btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid"><div class="card-item">Unable to fetch Bluetooth status</div></div></div>`;
-        }
+        // Bluetooth
+        const btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid">
+            <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bluetoothOn ? '✅ Yes' : '❌ No'}</span></div>
+            <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${'?'}</span></div>
+            <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${'?'}</span></div>
+        </div><div class="card-actions">
+            <button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth</button>
+            <button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button>
+            <button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache</button>
+        </div></div>`;
 
-        const mobileHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div><div class="card-grid"><div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(mobileDataEnabled)}</span></div></div><div class="card-actions"><button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data</button></div></div>`;
+        // Mobile Data
+        const mobileHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div><div class="card-grid">
+            <div class="card-item"><span class="item-label">Toggle</span><span class="item-value">${mobileDataToggle ? '✅ On' : '❌ Off'}</span></div>
+            <div class="card-item"><span class="item-label">Connection</span><span class="item-value">${mobileDataConnected ? '✅ Connected' : '❌ Not Connected'}</span></div>
+        </div><div class="card-actions"><button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data</button></div></div>`;
 
         const html = `<div class="cards-container">${wifiHtml}${btHtml}${mobileHtml}</div><div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>`;
         document.getElementById('pageContent').innerHTML = html;
+
+        // Fix function
+        async function callFix(service, action) {
+            const response = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        }
 
         function showFixResult(message, isError = false) {
             const resultDiv = document.getElementById('fixResult');
@@ -2900,18 +2922,20 @@ async function renderConnectionTroubleshoot() {
             setTimeout(() => resultDiv.style.display = 'none', 5000);
         }
 
+        // Attach event listeners for all fix buttons
         document.querySelectorAll('.fix-wifi').forEach(btn => {
             btn.addEventListener('click', async () => {
-                if (btn.getAttribute('data-action') === 'wifi_reset') {
-                    try {
-                        await fetch(`${BACKEND_URL}/wifi/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: currentDeviceId, enable: false }) });
-                        await new Promise(r => setTimeout(r, 1000));
-                        await fetch(`${BACKEND_URL}/wifi/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: currentDeviceId, enable: true }) });
-                        showFixResult('WiFi reset completed. Refresh status to see changes.');
-                    } catch (err) { showFixResult(`WiFi reset failed: ${err.message}`, true); }
-                } else showFixResult('Action not yet implemented', true);
+                const action = btn.getAttribute('data-action');
+                try {
+                    await callFix('wifi', action);
+                    showFixResult(`WiFi fix '${action}' completed.`);
+                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                } catch (err) {
+                    showFixResult(`WiFi fix failed: ${err.message}`, true);
+                }
             });
         });
+
         document.querySelectorAll('.fix-bluetooth').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const action = btn.getAttribute('data-action');
@@ -2919,16 +2943,22 @@ async function renderConnectionTroubleshoot() {
                     await callFix('bluetooth', action);
                     showFixResult(`Bluetooth fix '${action}' completed.`);
                     setTimeout(() => renderConnectionTroubleshoot(), 2000);
-                } catch (err) { showFixResult(`Bluetooth fix failed: ${err.message}`, true); }
+                } catch (err) {
+                    showFixResult(`Bluetooth fix failed: ${err.message}`, true);
+                }
             });
         });
+
         document.querySelectorAll('.fix-mobile').forEach(btn => {
             btn.addEventListener('click', async () => {
+                const action = btn.getAttribute('data-action');
                 try {
-                    await callFix('mobile', 'mobile_data_reset');
-                    showFixResult('Mobile data reset completed.');
+                    await callFix('mobile', action);
+                    showFixResult(`Mobile data fix '${action}' completed.`);
                     setTimeout(() => renderConnectionTroubleshoot(), 2000);
-                } catch (err) { showFixResult(`Mobile data reset failed: ${err.message}`, true); }
+                } catch (err) {
+                    showFixResult(`Mobile data fix failed: ${err.message}`, true);
+                }
             });
         });
     } catch (err) {
