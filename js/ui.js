@@ -2501,13 +2501,22 @@ async function renderHardwareTests() {
                 const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
                 const sensors = res.sensors || [];
                 const types = sensors.map(s => s.type.toLowerCase());
-               const hasAccel = types.some(t => t.includes('accelerometer'));
+const hasAccel = types.some(t => t.includes('accelerometer'));
 const hasGyro = types.some(t => t.includes('gyroscope'));
 const hasProx = types.some(t => t.includes('proximity'));
 const hasLight = types.some(t => t.includes('light'));
 
-// Require only accel, proximity, light – gyroscope is optional
+// Gyroscope is optional – require only the core sensors
 const passed = hasAccel && hasProx && hasLight;
+const missing = [];
+if (!hasAccel) missing.push('accelerometer');
+if (!hasProx) missing.push('proximity');
+if (!hasLight) missing.push('light');
+// gyro is optional – don't mark as missing, just report
+
+const message = passed
+    ? `All core sensors detected (Gyro: ${hasGyro ? '✅' : '❌ not present, optional'})`
+    : `Missing required sensors: ${missing.join(', ')}`;
 let message = `Accel: ${hasAccel}, Gyro: ${hasGyro ? '✅' : '❌ (not supported)'}, Prox: ${hasProx}, Light: ${hasLight}`;
                 const missing = [];
                 if (!types.some(t => t.includes('accelerometer'))) missing.push('accelerometer');
