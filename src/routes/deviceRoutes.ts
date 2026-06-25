@@ -22,12 +22,13 @@ export function registerDeviceRoutes(app: Express): void {
             if (label) d.model = label;
             else if (model) d.model = model;
           } catch {
-            // ignore
+            // ignore enrichment errors
           }
         })
       );
       res.json({ devices });
     } catch (err) {
+      console.error('[api/devices] error:', err);
       res.status(500).json({ error: String(err) });
     }
   });
@@ -70,7 +71,6 @@ export function registerDeviceRoutes(app: Express): void {
       let mobileDataConnected: boolean | undefined;
       try {
         const telephony = await adb('-s', deviceId, 'shell', 'dumpsys', 'telephony.registry');
-        // Look for line like "mDataConnectionState=2" (2 = connected)
         const match = telephony.match(/mDataConnectionState=(\d+)/);
         if (match) {
           const state = parseInt(match[1], 10);
@@ -88,6 +88,7 @@ export function registerDeviceRoutes(app: Express): void {
         mobileDataConnected,
       });
     } catch (err) {
+      console.error('[api/device/info] error:', err);
       res.status(500).json({ error: String(err) });
     }
   });

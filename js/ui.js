@@ -4,7 +4,12 @@ let wizardStep = 0;
 
 // Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
-const BACKEND_URL = 'http://127.0.0.1:3333';
+const BACKEND_URL = (() => {
+    if (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) {
+        return window.location.origin;
+    }
+    return 'http://127.0.0.1:3333';
+})();
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     const controller = new AbortController();
@@ -417,24 +422,62 @@ function formatWifiStatus(wifi) {
 }
 
 // ==================== CONNECTION STATUS ====================
+async function fetchDevices() {
+    try {
+        return await apiCall('/devices');
+    } catch (err) {
+        console.warn('[fetchDevices] /api/devices failed, retrying direct /api/devices fetch', err);
+        try {
+            const res = await fetchWithTimeout(`${BACKEND_URL}/api/devices`, { headers: { 'Content-Type': 'application/json' } }, 6000);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+        } catch (err2) {
+            console.warn('[fetchDevices] direct /api/devices failed, trying /devices fallback', err2);
+            try {
+                const res2 = await fetchWithTimeout(`${BACKEND_URL}/devices`, { headers: { 'Content-Type': 'application/json' } }, 6000);
+                if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+                return await res2.json();
+            } catch (err3) {
+                console.error('[fetchDevices] /devices fallback failed', err3);
+                throw err3;
+            }
+        }
+    }
+}
+
 async function updateConnectionStatus() {
+    console.log('[updateConnectionStatus] called');
     const statusSpan = document.querySelector('#connectionStatus span');
-    if (!statusSpan) return;
+    if (!statusSpan) {
+        console.warn('[updateConnectionStatus] #connectionStatus span not found');
+        return;
+    }
+    statusSpan.innerText = 'Checking…';
+    statusSpan.style.color = '#6B7280';
     const previousDeviceId = currentDeviceId;
     try {
-        const data = await apiCall('/devices');
-        if (data.devices && data.devices.length) {
-    const firstDevice = data.devices[0];
-    currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || String(firstDevice));
-    statusSpan.innerText = `Connected: ${currentDeviceId}`;
-    statusSpan.style.color = '#107c10';
-    updateDeviceInfo(); // This is present, good.
-} else {
+        console.log('[updateConnectionStatus] fetching devices');
+        const data = await fetchDevices();
+        console.log('[updateConnectionStatus] device data:', data);
+        const devices = Array.isArray(data.devices) ? data.devices : Array.isArray(data) ? data : [];
+        if (devices.length) {
+            const firstDevice = devices[0];
+            currentDeviceId = typeof firstDevice === 'string' ? firstDevice : (firstDevice.id || firstDevice.serial || firstDevice.device || String(firstDevice));
+            console.log('[updateConnectionStatus] currentDeviceId set to:', currentDeviceId);
+            statusSpan.innerText = `Connected: ${currentDeviceId}`;
+            statusSpan.style.color = '#107c10';
+            try {
+                await updateDeviceInfo();
+            } catch (deviceInfoErr) {
+                console.warn('[updateConnectionStatus] updateDeviceInfo failed', deviceInfoErr);
+            }
+        } else {
             currentDeviceId = null;
             statusSpan.innerText = 'No device found';
             statusSpan.style.color = '#d83b01';
         }
     } catch (err) {
+        console.error('[updateConnectionStatus] error:', err);
         currentDeviceId = null;
         statusSpan.innerText = 'ADB error';
         statusSpan.style.color = '#d83b01';
@@ -442,6 +485,7 @@ async function updateConnectionStatus() {
 
     const activePage = document.querySelector('.nav-item.active')?.dataset.page;
     if (activePage === 'dashboard' && currentDeviceId && currentDeviceId !== previousDeviceId) {
+        console.log('[updateConnectionStatus] re-rendering dashboard');
         await renderDashboard();
     }
 }
@@ -2457,8 +2501,14 @@ async function renderHardwareTests() {
                 const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
                 const sensors = res.sensors || [];
                 const types = sensors.map(s => s.type.toLowerCase());
-                const passed = types.some(t => t.includes('accelerometer')) && types.some(t => t.includes('gyroscope')) &&
-                              types.some(t => t.includes('proximity')) && types.some(t => t.includes('light'));
+               const hasAccel = types.some(t => t.includes('accelerometer'));
+const hasGyro = types.some(t => t.includes('gyroscope'));
+const hasProx = types.some(t => t.includes('proximity'));
+const hasLight = types.some(t => t.includes('light'));
+
+// Require only accel, proximity, light – gyroscope is optional
+const passed = hasAccel && hasProx && hasLight;
+let message = `Accel: ${hasAccel}, Gyro: ${hasGyro ? '✅' : '❌ (not supported)'}, Prox: ${hasProx}, Light: ${hasLight}`;
                 const missing = [];
                 if (!types.some(t => t.includes('accelerometer'))) missing.push('accelerometer');
                 if (!types.some(t => t.includes('gyroscope'))) missing.push('gyroscope');

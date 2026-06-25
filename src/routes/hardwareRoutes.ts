@@ -360,21 +360,50 @@ router.get('/sensors', async (req, res) => {
     try {
         const deviceId = await getDeviceId(req);
         const output = await adbShell(deviceId, 'dumpsys sensorservice');
+
+        // More robust parsing: look for lines that contain "Sensor" and "type:"
         const lines = output.split('\n');
-        const sensorList = [];
-        let inSensorList = false;
+        const sensorList: { name: string; vendor: string; type: string }[] = [];
+
+        // Try parsing with a more tolerant regex
         for (const line of lines) {
-            if (line.includes('Sensor List:')) inSensorList = true;
-            if (inSensorList) {
-                if (line.trim() === '' || line.includes('Fusion States')) break;
-                const match = line.match(/^\s*0x[0-9a-f]+\)\s+(\S+)\s+\|\s+([^|]+)\|\s+ver:\s+\d+\s+\|\s+type:\s+(.+)/i);
-                if (match) {
-                    sensorList.push({ name: match[1].trim(), vendor: match[2].trim(), type: match[3].trim() });
+            // Match pattern: ) SensorName | Vendor | ver: 1 | type: android.sensor.gyroscope(4)
+            const match = line.match(/\)\s+([^|]+?)\s+\|\s+([^|]+?)\s+\|\s+ver:\s+\d+\s+\|\s+type:\s+([^|]+)/i);
+            if (match) {
+                let name = match[1].trim();
+                let vendor = match[2].trim();
+                let type = match[3].trim();
+                // Clean up type: remove trailing (number) if present
+                type = type.replace(/\(.*\)$/, '').trim();
+                // Also remove "android.sensor." prefix for simpler matching
+                const simpleType = type.replace(/^android\.sensor\./, '');
+                sensorList.push({ name, vendor, type: simpleType });
+            } else {
+                // Fallback: try to parse lines that contain "type:" and "Sensor"
+                const fallbackMatch = line.match(/type:\s*([\w.]+)/i);
+                if (fallbackMatch) {
+                    let type = fallbackMatch[1].trim();
+                    // Clean up
+                    type = type.replace(/\(.*\)$/, '').trim();
+                    const simpleType = type.replace(/^android\.sensor\./, '');
+                    // Try to extract name and vendor from the line
+                    let name = 'Unknown', vendor = 'Unknown';
+                    const nameMatch = line.match(/\)\s+([^|]+?)\s+\|/);
+                    if (nameMatch) name = nameMatch[1].trim();
+                    const vendorMatch = line.match(/\|\s+([^|]+?)\s+\|\s+ver:/);
+                    if (vendorMatch) vendor = vendorMatch[1].trim();
+                    sensorList.push({ name, vendor, type: simpleType });
                 }
             }
         }
-        res.json({ sensors: sensorList.slice(0, 30), raw: output.substring(0, 2000) });
+
+        // Also capture raw output for debugging (optional)
+        res.json({
+            sensors: sensorList,
+            raw: output.substring(0, 3000) // limited for safety
+        });
     } catch (err: any) {
+        console.error('[sensors] error:', err);
         res.status(500).json({ error: err.message });
     }
 });

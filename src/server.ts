@@ -1663,6 +1663,17 @@ app.get('/api/devices', async (_req, res) => {
   }
 });
 
+// Legacy fallback endpoint for UI variants using /devices
+app.get('/devices', async (_req, res) => {
+  try {
+    const devices = await listDevices();
+    res.json({ devices });
+  } catch (err) {
+    console.error('Failed to list devices (legacy fallback):', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ----- FALLBACK ROUTES FOR DEVICE INFO AND NETWORK -----
 // These ensure /device/:id and /wifi/status/:id work even if the
 // registered route files have different paths.
