@@ -246,13 +246,25 @@ app.get('/bluetooth/state/:id', async (req, res) => {
         if (state === 'UNKNOWN') {
             try {
                 const setting = await adb('-s', deviceId, 'shell', 'settings get global bluetooth_on');
-                state = setting.trim() === '1' ? 'ON' : 'OFF';
+                if (typeof setting === 'string' && setting.trim() !== '') {
+                    state = (String(setting).trim().toLowerCase() === '1' || String(setting).trim().toLowerCase() === 'true') ? 'ON' : 'OFF';
+                }
             } catch {}
         }
-        const enabled = state === 'ON' || state === 'TURNING_ON' || state === 'BLE_ON';
+        // Determine enabled using dumpsys state OR settings fallbacks (global/secure/system)
+        const isStateOn = state === 'ON' || state === 'TURNING_ON' || state === 'BLE_ON';
+        let settingGlobal = '';
+        let settingSecure = '';
+        let settingSystem = '';
+        try { settingGlobal = (await adb('-s', deviceId, 'shell', 'settings get global bluetooth_on')) || ''; } catch (e) { settingGlobal = ''; }
+        try { settingSecure = (await adb('-s', deviceId, 'shell', 'settings get secure bluetooth_on')) || ''; } catch (e) { settingSecure = ''; }
+        try { settingSystem = (await adb('-s', deviceId, 'shell', 'settings get system bluetooth_on')) || ''; } catch (e) { settingSystem = ''; }
+        const normalize = (v: any) => { if (!v && v !== 0) return false; const s = String(v).trim().toLowerCase(); return s === '1' || s === 'true'; };
+        const settingEnabled = normalize(settingGlobal) || normalize(settingSecure) || normalize(settingSystem);
+        const enabled = isStateOn || settingEnabled;
         const bondMatch = dump.match(/Bonded devices:\s*(\d+)/i);
         const bondedCount = bondMatch ? parseInt(bondMatch[1]) || 0 : 0;
-        res.json({ enabled, state, bondedCount });
+        res.json({ enabled, state, bondedCount, settingGlobal: String(settingGlobal).trim(), settingSecure: String(settingSecure).trim(), settingSystem: String(settingSystem).trim() });
     } catch (err) {
         res.status(500).json({ error: String(err) });
     }
@@ -270,10 +282,13 @@ app.get('/mobile-data/state/:id', async (req, res) => {
         try {
             dump = await adb('-s', deviceId, 'shell', 'dumpsys telephony.registry');
         } catch (e) {
-            // Fallback: use settings
-            const setting = await adb('-s', deviceId, 'shell', 'settings get global mobile_data');
-            const enabled = setting.trim() === '1';
-            res.json({ enabled, connected: enabled, networkType: 'Unknown', operator: 'Unknown' });
+            // Fallback: use settings (global/secure/system)
+            const setting = await adb('-s', deviceId, 'shell', 'settings get global mobile_data').catch(() => '');
+            const setting2 = await adb('-s', deviceId, 'shell', 'settings get secure mobile_data').catch(() => '');
+            const setting3 = await adb('-s', deviceId, 'shell', 'settings get system mobile_data').catch(() => '');
+            const normalize = (v: any) => { if (!v && v !== 0) return false; const s = String(v).trim().toLowerCase(); return s === '1' || s === 'true'; };
+            const enabled = normalize(setting) || normalize(setting2) || normalize(setting3);
+            res.json({ enabled, connected: enabled, networkType: 'Unknown', operator: 'Unknown', settingGlobal: String(setting).trim(), settingSecure: String(setting2).trim(), settingSystem: String(setting3).trim() });
             return;
         }
         // Parse data registration state
@@ -320,7 +335,17 @@ app.get('/mobile-data/state/:id', async (req, res) => {
         let operator = 'Unknown';
         const operatorMatch = dump.match(/mOperatorAlphaLong=(.+)/)?.[1];
         if (operatorMatch) operator = operatorMatch.trim();
-        res.json({ enabled, connected, networkType, operator });
+        // Additionally consult settings values which may reflect the toggle faster on some devices
+        let s1 = '';
+        let s2 = '';
+        let s3 = '';
+        try { s1 = (await adb('-s', deviceId, 'shell', 'settings get global mobile_data')) || ''; } catch(e) { s1 = ''; }
+        try { s2 = (await adb('-s', deviceId, 'shell', 'settings get secure mobile_data').catch(() => '')) || ''; } catch(e) { s2 = ''; }
+        try { s3 = (await adb('-s', deviceId, 'shell', 'settings get system mobile_data').catch(() => '')) || ''; } catch(e) { s3 = ''; }
+        const normalize = (v: any) => { if (!v && v !== 0) return false; const ss = String(v).trim().toLowerCase(); return ss === '1' || ss === 'true'; };
+        if (normalize(s1) || normalize(s2) || normalize(s3)) enabled = true;
+
+        res.json({ enabled, connected, networkType, operator, settingGlobal: String(s1).trim(), settingSecure: String(s2).trim(), settingSystem: String(s3).trim() });
     } catch (err) {
         res.status(500).json({ error: String(err) });
     }

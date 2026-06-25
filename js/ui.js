@@ -1,6 +1,7 @@
 // ==================== GLOBALS ====================
 let currentDeviceId = null;
 let wizardStep = 0;
+let deviceInfoPollId = null;
 
 // Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
@@ -443,6 +444,28 @@ async function updateConnectionStatus() {
     const activePage = document.querySelector('.nav-item.active')?.dataset.page;
     if (activePage === 'dashboard' && currentDeviceId && currentDeviceId !== previousDeviceId) {
         await renderDashboard();
+    }
+
+    // Start/stop live polling of device info when a device is connected
+    if (currentDeviceId) {
+        if (!deviceInfoPollId) {
+            deviceInfoPollId = setInterval(async () => {
+                try {
+                    // Only update when Device Info page is visible and tab is active
+                    const active = document.querySelector('.nav-item.active')?.dataset.page;
+                    if ((active === 'device-info' || active === 'device') && document.visibilityState === 'visible') {
+                        await renderDeviceInfo();
+                    }
+                } catch (e) {
+                    console.warn('deviceInfo poll error', e);
+                }
+            }, 1500);
+        }
+    } else {
+        if (deviceInfoPollId) {
+            clearInterval(deviceInfoPollId);
+            deviceInfoPollId = null;
+        }
     }
 }
 
