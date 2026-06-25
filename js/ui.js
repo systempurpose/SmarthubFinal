@@ -2637,42 +2637,34 @@ async function renderDeviceInfo() {
         return;
     }
     try {
-        // Fetch all data in parallel
-        const [propsRes, wifiStatus, btState, mobileState] = await Promise.all([
-            fetch(`${BACKEND_URL}/device/${currentDeviceId}`),
-            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null),
-            fetch(`${BACKEND_URL}/bluetooth/state/${currentDeviceId}`).catch(() => null),
-            fetch(`${BACKEND_URL}/mobile-data/state/${currentDeviceId}`).catch(() => null)
+        // Fetch all data in parallel – use the unified endpoint for device info
+        const [infoRes, wifiRes] = await Promise.all([
+            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`),
+            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null)
         ]);
 
-        if (!propsRes.ok) throw new Error(`HTTP ${propsRes.status}`);
-        let rawText = await propsRes.text();
-        try {
-            const parsedJson = JSON.parse(rawText);
-            if (typeof parsedJson === 'string') rawText = parsedJson;
-        } catch (e) {}
-        const lines = rawText.split(/\r?\n/);
-        const props = {};
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            const match = trimmed.match(/^\[(.*?)\]:\s*\[(.*?)\]$/);
-            if (match) props[match[1]] = match[2];
-        }
-        if (Object.keys(props).length === 0) {
-            document.getElementById('pageContent').innerHTML = `<div class="card">No properties found.</div>`;
-            return;
-        }
+        if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+        const infoData = await infoRes.json();
+        // infoData contains all getprop properties plus bluetoothOn, mobileDataToggle, mobileDataConnected
+        const props = infoData; // since infoData already includes all props
 
-        const wifiData = wifiStatus && wifiStatus.ok ? await wifiStatus.json() : null;
-        const btData = btState && btState.ok ? await btState.json() : null;
-        const mobileData = mobileState && mobileState.ok ? await mobileState.json() : null;
+        const wifiData = wifiRes && wifiRes.ok ? await wifiRes.json() : null;
 
+        // Helper to get prop with fallback
         const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
 
         // Define all variables before using them in the cards
         const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
         const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+
+        // Extract Bluetooth and mobile data from the unified response
+        const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
+        const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
+        const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
+
+        // For Bluetooth, we can also get paired devices count from props or from a separate endpoint if needed
+        // We'll keep it simple: just show enabled/disabled.
+        const btPaired = get('bluetooth.paired.count', '?'); // may not exist
 
         const makeCard = (title, icon, items) => `
             <div class="info-card">
@@ -2696,23 +2688,11 @@ async function renderDeviceInfo() {
             { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
         ]));
 
-        // Bluetooth
-        let btEnabled = false;
-        let btStateText = 'Unknown';
-        let btBonded = 0;
-        if (btData) {
-            btEnabled = btData.enabled;
-            btStateText = btData.state || (btEnabled ? 'ON' : 'OFF');
-            btBonded = btData.bondedCount || 0;
-        } else {
-            // fallback to props
-            btEnabled = get('bluetooth.profile.a2dp.source.enabled') === 'true';
-            btStateText = btEnabled ? 'ON' : 'OFF';
-        }
+        // Bluetooth – using the new boolean
         cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
-            { label: 'Enabled', value: btEnabled ? '✅ Yes' : '❌ No' },
-            { label: 'Adapter State', value: btStateText },
-            { label: 'Paired Devices', value: btBonded }
+            { label: 'Enabled', value: bluetoothOn ? '✅ Yes' : '❌ No' },
+            { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
+            { label: 'Paired Devices', value: btPaired } // might be '?' if not available
         ]));
 
         // WiFi
@@ -2731,19 +2711,17 @@ async function renderDeviceInfo() {
         }
         cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
 
-        // Network & SIM
-        const mobileEnabled = mobileData ? mobileData.enabled : false;
-        const mobileConnected = mobileData ? mobileData.connected : false;
-        const networkType = mobileData ? mobileData.networkType : get('gsm.network.type', 'Unknown');
-        const operator = mobileData ? mobileData.operator : get('gsm.operator.alpha', 'Unknown');
+        // Network & SIM – using the new mobile data booleans
+        const networkType = get('gsm.network.type', 'Unknown');
+        const operator = get('gsm.operator.alpha', 'Unknown');
         const simState = get('gsm.sim.state', 'Unknown');
 
         cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
             { label: 'Operator', value: operator },
             { label: 'Network Type', value: networkType },
             { label: 'SIM State', value: simState },
-            { label: 'Mobile Data (Toggle)', value: mobileEnabled ? '✅ On' : '❌ Off' },
-            { label: 'Mobile Data (Connected)', value: mobileConnected ? '✅ Connected' : '❌ Not Connected' },
+            { label: 'Mobile Data (Toggle)', value: mobileDataToggle ? '✅ On' : '❌ Off' },
+            { label: 'Mobile Data (Connected)', value: mobileDataConnected ? '✅ Connected' : '❌ Not Connected' },
             { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
         ]));
 
