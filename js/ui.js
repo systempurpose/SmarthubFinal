@@ -1765,7 +1765,6 @@ async function runDeepDiagnostic() {
 
                         <!-- Meta Info -->
                         <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
-                            <span>🎯 Risk Score: <strong>${app.riskScore || 0}/100</strong></span>
                             ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
                             ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
                         </div>
