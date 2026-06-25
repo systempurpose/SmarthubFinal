@@ -11,8 +11,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-`n
+
     <permission
         android:name="com.smarthub.diagnostics.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
@@ -38,11 +37,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!--
-             Activity used only for technician-controlled tests (flash, vibration, sound),
-             triggered from the desktop app via ADB.
-        -->
         <activity
             android:name="com.smarthub.diagnostics.TestRunnerActivity"
             android:exported="true"

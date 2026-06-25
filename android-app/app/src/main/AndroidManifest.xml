@@ -21,13 +21,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Activity used only for technician-controlled tests (flash, vibration, sound),
-             triggered from the desktop app via ADB. -->
         <activity
             android:name=".TestRunnerActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
     </application>
 
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />`n</manifest>
-
+</manifest>

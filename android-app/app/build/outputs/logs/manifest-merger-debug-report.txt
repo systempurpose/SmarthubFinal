@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-32:90
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-30:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-30:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-30:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-30:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -65,8 +65,8 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xm
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:6:22-66
 application
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:8:5-30:19
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:8:5-30:19
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:8:5-28:19
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:8:5-28:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -116,17 +116,13 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xm
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:20:27-74
 activity#com.smarthub.diagnostics.TestRunnerActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:9-29:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:24:9-27:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:13-47
-uses-permission#android.permission.QUERY_ALL_PACKAGES
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:5-77
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:22-74
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:13-47
 uses-sdk
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml
