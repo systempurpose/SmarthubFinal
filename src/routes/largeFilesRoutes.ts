@@ -52,7 +52,7 @@ async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: nu
       if (parsed.bytes < minSizeBytes) continue;
       if (seenPaths.has(parsed.path)) continue;
       seenPaths.add(parsed.path);
-      files.push({ path: parsed.path, size: formatBytes(parsed.bytes), bytes: parsed.bytes });
+      files.push({ path: parsed.path, size: formatBytes(parsed.bytes), bytes: parsed.bytes, type: 'file' });
     }
   }
 

@@ -1615,7 +1615,9 @@ async function runDeepDiagnostic() {
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
                                 <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
                                 <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
-                                ${isApp ? '<span style="font-size: 11px; color: #6c757d; white-space: nowrap;">App package</span>' : `<button onclick="deleteFile('${escapeHtml(file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
+                                ${isApp
+                                    ? `<button onclick="uninstallPackage('${escapeHtml(file.packageName || file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>`
+                                    : `<button onclick="deleteFile('${escapeHtml(file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
                             </div>
                         `}).join('')}
                     </div>
