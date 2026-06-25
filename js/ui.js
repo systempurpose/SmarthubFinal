@@ -841,7 +841,7 @@ async function showStorageModal() {
     try {
         const url = `${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`;
         console.log('Fetching storage details from:', url);
-        const response = await fetchWithTimeout(url, {}, 15000);
+        const response = await fetchWithTimeout(url, {}, 120000);
         const data = await response.json();
         console.log('Storage details response:', data);
         const b = data.breakdown || {};
@@ -1524,10 +1524,10 @@ async function runDeepDiagnostic() {
             if (detailsRes.ok) storageDetails = await detailsRes.json();
         } catch (e) { console.warn('Could not fetch storage details:', e); }
 
-        // ---- Fetch large files (>= 1GB) ----
+        // ---- Fetch large files (>= 500MB) ----
         let largeFiles = [];
         try {
-            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${currentDeviceId}&minSize=1`);
+            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${currentDeviceId}&minSize=0.5`);
             if (filesRes.ok) {
                 const filesData = await filesRes.json();
                 largeFiles = filesData.files || [];
@@ -1585,17 +1585,15 @@ async function runDeepDiagnostic() {
             let breakdownHtml = `
                 <div class="storage-section" style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
+                    <div style="font-size: 13px; color: #555; margin-bottom: 10px;">Showing a combined list of all files ≥500MB. Category buttons are hidden to simplify analysis.</div>
                     <div style="display: grid; gap: 6px;">
             `;
             for (const cat of categories) {
                 const data = b[cat.key] || { percent: 0, human: '0 KB', bytes: 0 };
                 breakdownHtml += `
-                    <div class="storage-category" data-category="${cat.key}" 
-                         style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f1f3f5; cursor: pointer; transition: background 0.15s;"
-                         onmouseover="this.style.background='#f1f3f5'" 
-                         onmouseout="this.style.background='transparent'">
-                        <span>${cat.label} <span style="color: #6c757d; font-size: 12px;">(${data.human})</span></span>
-                        <span style="color: #0d6efd; font-size: 12px;">▶</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #f1f3f5; background: #fafbfc; border-radius: 6px;">
+                        <span>${cat.label}</span>
+                        <span style="color: #6c757d; font-size: 12px;">${data.human}</span>
                     </div>
                 `;
             }
@@ -1608,18 +1606,18 @@ async function runDeepDiagnostic() {
         if (largeFiles.length > 0) {
             largeFilesHtml = `
                 <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥1GB)</h4>
+                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥500MB)</h4>
+                    <div style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">Combined scan across available storage roots. Duplicates are filtered.</div>
                     <div style="max-height: 300px; overflow-y: auto;">
-                        ${largeFiles.map(file => `
+                        ${largeFiles.map(file => {
+                            const isApp = file.type === 'app';
+                            return `
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
                                 <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
                                 <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
-                                <button onclick="deleteFile('${escapeHtml(file.path)}')" 
-                                        style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">
-                                    🗑️ Delete
-                                </button>
+                                ${isApp ? '<span style="font-size: 11px; color: #6c757d; white-space: nowrap;">App package</span>' : `<button onclick="deleteFile('${escapeHtml(file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
                             </div>
-                        `).join('')}
+                        `}).join('')}
                     </div>
                     <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">Total: ${largeFiles.length} large files</div>
                 </div>
@@ -1627,7 +1625,7 @@ async function runDeepDiagnostic() {
         } else {
             largeFilesHtml = `
                 <div style="margin-top: 12px; font-size: 13px; color: #28a745; padding: 8px; background: #e8f5e9; border-radius: 6px;">
-                    ✅ No large files (≥1GB) found.
+                    ✅ No large files (≥500MB) found.
                 </div>
             `;
         }
@@ -1768,14 +1766,6 @@ async function runDeepDiagnostic() {
 
         // Combine storage and apps
         modalBody.innerHTML = storageHtml + appsHtml;
-
-        // --- Attach click listeners to storage categories ---
-        document.querySelectorAll('.storage-category').forEach(el => {
-            el.addEventListener('click', function() {
-                const category = this.dataset.category;
-                showCategoryDetails(category);
-            });
-        });
 
         // 3. Perform deep scans (unchanged)
         const appRiskMap = new Map();
@@ -2013,31 +2003,28 @@ async function runDeepDiagnostic() {
 
 // ---- Show category details ----
 // ---- Show category details ----
+// ---- Show category details ----
+// ---- Show category details ----
+// ---- Show category details ----
 async function showCategoryDetails(category) {
-    // Validate device connection
     if (!currentDeviceId) {
         alert('No device connected. Please connect a phone first.');
         return;
     }
 
     const modalBody = document.getElementById('quickDiagModalBody');
-    // Remove any existing details
     const existingDetails = modalBody.querySelector('.category-details');
     if (existingDetails) existingDetails.remove();
 
-    // Insert loading indicator after the storage section
     const storageSection = modalBody.querySelector('.storage-section');
-    if (!storageSection) {
-        console.warn('Storage section not found; cannot show details.');
-        return;
-    }
+    if (!storageSection) return;
 
     const detailsDiv = document.createElement('div');
     detailsDiv.className = 'category-details';
     detailsDiv.innerHTML = `
         <div style="text-align: center; padding: 20px;">
             <div class="spinner"></div>
-            <p>Loading ${category} details... (may take up to 30 seconds)</p>
+            <p>Scanning ${category}... this may take up to 2 minutes.</p>
         </div>
     `;
     storageSection.after(detailsDiv);
@@ -2045,21 +2032,19 @@ async function showCategoryDetails(category) {
     try {
         const url = `${BACKEND_URL}/api/storage-category-details?deviceId=${encodeURIComponent(currentDeviceId)}&category=${encodeURIComponent(category)}`;
         console.log(`[StorageDetails] Fetching: ${url}`);
-        
-        // Use a longer timeout: 30 seconds (30000 ms)
-        const response = await fetchWithTimeout(url, {}, 30000);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        // Increase timeout to 180 seconds for media/other scans
+        let timeoutMs = 180000; // 3 minutes
+        // For apps, we can keep shorter timeout because it's faster
+        if (category === 'apps') timeoutMs = 60000;
+        const response = await fetchWithTimeout(url, {}, timeoutMs);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         const data = await response.json();
-        console.log(`[StorageDetails] Received ${data.items?.length || 0} items for ${category}`);
         renderCategoryDetails(category, data.items || []);
     } catch (err) {
         console.error('Error fetching category details:', err);
         let errorMsg = err.message;
         if (err.name === 'AbortError' || errorMsg.includes('aborted')) {
-            errorMsg = 'Request timed out. The backend may be taking too long to scan all apps. Please try again.';
+            errorMsg = 'The scan is taking longer than expected. Try again later, or reduce the number of files/apps.';
         }
         detailsDiv.innerHTML = `<div style="color: #d32f2f; padding: 12px; background: #ffebee; border-radius: 6px;">
             ❌ Error loading details: ${escapeHtml(errorMsg)}
@@ -2068,7 +2053,6 @@ async function showCategoryDetails(category) {
         </div>`;
     }
 }
-
 // ---- Render category details ----
 function renderCategoryDetails(category, items) {
     const modalBody = document.getElementById('quickDiagModalBody');
