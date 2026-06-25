@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { execFile } from 'node:child_process';
+import { execFile, exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -23,7 +23,6 @@ router.get('/storage-category-details', async (req, res) => {
 
         switch (category) {
             case 'apps': {
-                // ... (your existing apps logic – unchanged, works fine)
                 console.log('[storage] Apps scan started...');
                 const listCmd = 'pm list packages -3';
                 const args = ['shell', listCmd];
@@ -96,69 +95,81 @@ router.get('/storage-category-details', async (req, res) => {
 
             case 'media': {
                 console.log('[storage] Media scan started...');
-                // Use the EXACT command that worked in the manual test
-                // Manual: adb shell "find /storage/emulated/0 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \) -size +500M -exec du -b {} \; 2>/dev/null"
                 const root = '/storage/emulated/0';
+                // Exact command that works manually – with single quotes around patterns
                 const cmd = `find ${root} -type f \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -size +500M -exec du -b {} \\; 2>/dev/null`;
-                const args = ['shell', cmd];
-                if (deviceId) args.unshift('-s', deviceId);
-                console.log(`[storage] Executing: adb ${args.join(' ')}`);
-                const { stdout, stderr } = await execFileAsync('adb', args, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 });
-                console.log(`[storage] Media stdout length: ${stdout.length}`);
-                console.log(`[storage] Media stderr length: ${stderr.length}`);
-                if (stdout.length > 0) {
-                    console.log(`[storage] Media stdout first 500 chars:\n${stdout.substring(0, 500)}`);
-                }
-                if (stderr.length > 0) {
-                    console.log(`[storage] Media stderr first 500 chars:\n${stderr.substring(0, 500)}`);
-                }
-                const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
-                console.log(`[storage] Media lines count: ${lines.length}`);
-                if (lines.length > 0) {
-                    console.log('[storage] Media first 3 lines:', lines.slice(0, 3));
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!/^\d+/.test(trimmed)) continue; // skip non-numeric lines
-                        const parts = trimmed.split(/\s+/);
-                        if (parts.length < 2) continue;
-                        const bytes = parseInt(parts[0], 10);
-                        if (isNaN(bytes)) continue;
-                        const path = parts.slice(1).join(' ');
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
-                            });
+                // Use exec to preserve quoting
+                const fullCmd = `adb -s ${deviceId} shell "${cmd}"`;
+                console.log(`[storage] Executing full: ${fullCmd}`);
+                try {
+                    const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                        exec(fullCmd, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 }, (error, stdout, stderr) => {
+                            if (error) reject(error);
+                            else resolve({ stdout, stderr });
+                        });
+                    });
+                    console.log(`[storage] Media stdout length: ${stdout.length}`);
+                    if (stderr) console.log(`[storage] Media stderr: ${stderr}`);
+                    const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                    console.log(`[storage] Media lines count: ${lines.length}`);
+                    if (lines.length > 0) {
+                        console.log('[storage] Media first 3 lines:', lines.slice(0, 3));
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            // Skip permission denied or other error messages
+                            if (trimmed.includes('Permission denied') || trimmed.includes('No such file')) continue;
+                            // Skip lines that don't start with a number
+                            if (!/^\d+/.test(trimmed)) continue;
+                            const parts = trimmed.split(/\s+/);
+                            if (parts.length < 2) continue;
+                            const bytes = parseInt(parts[0], 10);
+                            if (isNaN(bytes)) continue;
+                            const path = parts.slice(1).join(' ');
+                            if (bytes >= MIN_SIZE_BYTES) {
+                                items.push({
+                                    name: path.split('/').pop() || path,
+                                    path: path,
+                                    size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                    bytes: bytes
+                                });
+                            }
                         }
                     }
-                }
-                // If no items found, try /sdcard as fallback
-                if (items.length === 0) {
+                } catch (err: any) {
+                    console.error('[storage] Media exec error:', err.message);
+                    // Fallback to /sdcard
                     console.log('[storage] Media: trying /sdcard fallback');
                     const fallbackRoot = '/sdcard';
                     const fallbackCmd = `find ${fallbackRoot} -type f \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -size +500M -exec du -b {} \\; 2>/dev/null`;
-                    const fallbackArgs = ['shell', fallbackCmd];
-                    if (deviceId) fallbackArgs.unshift('-s', deviceId);
-                    const { stdout: fallbackOut } = await execFileAsync('adb', fallbackArgs, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 });
-                    const fallbackLines = fallbackOut.split(/\r?\n/).filter(line => line.trim() !== '');
-                    for (const line of fallbackLines) {
-                        const trimmed = line.trim();
-                        if (!/^\d+/.test(trimmed)) continue;
-                        const parts = trimmed.split(/\s+/);
-                        if (parts.length < 2) continue;
-                        const bytes = parseInt(parts[0], 10);
-                        if (isNaN(bytes)) continue;
-                        const path = parts.slice(1).join(' ');
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
+                    const fallbackFullCmd = `adb -s ${deviceId} shell "${fallbackCmd}"`;
+                    try {
+                        const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                            exec(fallbackFullCmd, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 }, (error, stdout, stderr) => {
+                                if (error) reject(error);
+                                else resolve({ stdout, stderr });
                             });
+                        });
+                        const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.includes('Permission denied') || trimmed.includes('No such file')) continue;
+                            if (!/^\d+/.test(trimmed)) continue;
+                            const parts = trimmed.split(/\s+/);
+                            if (parts.length < 2) continue;
+                            const bytes = parseInt(parts[0], 10);
+                            if (isNaN(bytes)) continue;
+                            const path = parts.slice(1).join(' ');
+                            if (bytes >= MIN_SIZE_BYTES) {
+                                items.push({
+                                    name: path.split('/').pop() || path,
+                                    path: path,
+                                    size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                    bytes: bytes
+                                });
+                            }
                         }
+                    } catch (fallbackErr) {
+                        console.error('[storage] Media fallback error:', fallbackErr);
                     }
                 }
                 break;
@@ -173,64 +184,74 @@ router.get('/storage-category-details', async (req, res) => {
                 console.log('[storage] Other scan started...');
                 const root = '/storage/emulated/0';
                 const cmd = `find ${root} -type f -size +500M ! \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -exec du -b {} \\; 2>/dev/null`;
-                const args = ['shell', cmd];
-                if (deviceId) args.unshift('-s', deviceId);
-                console.log(`[storage] Executing: adb ${args.join(' ')}`);
-                const { stdout, stderr } = await execFileAsync('adb', args, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 });
-                console.log(`[storage] Other stdout length: ${stdout.length}`);
-                console.log(`[storage] Other stderr length: ${stderr.length}`);
-                if (stdout.length > 0) {
-                    console.log(`[storage] Other stdout first 500 chars:\n${stdout.substring(0, 500)}`);
-                }
-                if (stderr.length > 0) {
-                    console.log(`[storage] Other stderr first 500 chars:\n${stderr.substring(0, 500)}`);
-                }
-                const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
-                console.log(`[storage] Other lines count: ${lines.length}`);
-                if (lines.length > 0) {
-                    console.log('[storage] Other first 3 lines:', lines.slice(0, 3));
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (!/^\d+/.test(trimmed)) continue;
-                        const parts = trimmed.split(/\s+/);
-                        if (parts.length < 2) continue;
-                        const bytes = parseInt(parts[0], 10);
-                        if (isNaN(bytes)) continue;
-                        const path = parts.slice(1).join(' ');
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
-                            });
+                const fullCmd = `adb -s ${deviceId} shell "${cmd}"`;
+                console.log(`[storage] Executing full: ${fullCmd}`);
+                try {
+                    const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                        exec(fullCmd, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 }, (error, stdout, stderr) => {
+                            if (error) reject(error);
+                            else resolve({ stdout, stderr });
+                        });
+                    });
+                    console.log(`[storage] Other stdout length: ${stdout.length}`);
+                    if (stderr) console.log(`[storage] Other stderr: ${stderr}`);
+                    const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                    console.log(`[storage] Other lines count: ${lines.length}`);
+                    if (lines.length > 0) {
+                        console.log('[storage] Other first 3 lines:', lines.slice(0, 3));
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.includes('Permission denied') || trimmed.includes('No such file')) continue;
+                            if (!/^\d+/.test(trimmed)) continue;
+                            const parts = trimmed.split(/\s+/);
+                            if (parts.length < 2) continue;
+                            const bytes = parseInt(parts[0], 10);
+                            if (isNaN(bytes)) continue;
+                            const path = parts.slice(1).join(' ');
+                            if (bytes >= MIN_SIZE_BYTES) {
+                                items.push({
+                                    name: path.split('/').pop() || path,
+                                    path: path,
+                                    size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                    bytes: bytes
+                                });
+                            }
                         }
                     }
-                }
-                if (items.length === 0) {
+                } catch (err: any) {
+                    console.error('[storage] Other exec error:', err.message);
                     console.log('[storage] Other: trying /sdcard fallback');
                     const fallbackRoot = '/sdcard';
                     const fallbackCmd = `find ${fallbackRoot} -type f -size +500M ! \\( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.jpg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' \\) -exec du -b {} \\; 2>/dev/null`;
-                    const fallbackArgs = ['shell', fallbackCmd];
-                    if (deviceId) fallbackArgs.unshift('-s', deviceId);
-                    const { stdout: fallbackOut } = await execFileAsync('adb', fallbackArgs, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 });
-                    const fallbackLines = fallbackOut.split(/\r?\n/).filter(line => line.trim() !== '');
-                    for (const line of fallbackLines) {
-                        const trimmed = line.trim();
-                        if (!/^\d+/.test(trimmed)) continue;
-                        const parts = trimmed.split(/\s+/);
-                        if (parts.length < 2) continue;
-                        const bytes = parseInt(parts[0], 10);
-                        if (isNaN(bytes)) continue;
-                        const path = parts.slice(1).join(' ');
-                        if (bytes >= MIN_SIZE_BYTES) {
-                            items.push({
-                                name: path.split('/').pop() || path,
-                                path: path,
-                                size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
-                                bytes: bytes
+                    const fallbackFullCmd = `adb -s ${deviceId} shell "${fallbackCmd}"`;
+                    try {
+                        const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+                            exec(fallbackFullCmd, { timeout: 120000, maxBuffer: 100 * 1024 * 1024 }, (error, stdout, stderr) => {
+                                if (error) reject(error);
+                                else resolve({ stdout, stderr });
                             });
+                        });
+                        const lines = stdout.split(/\r?\n/).filter(line => line.trim() !== '');
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.includes('Permission denied') || trimmed.includes('No such file')) continue;
+                            if (!/^\d+/.test(trimmed)) continue;
+                            const parts = trimmed.split(/\s+/);
+                            if (parts.length < 2) continue;
+                            const bytes = parseInt(parts[0], 10);
+                            if (isNaN(bytes)) continue;
+                            const path = parts.slice(1).join(' ');
+                            if (bytes >= MIN_SIZE_BYTES) {
+                                items.push({
+                                    name: path.split('/').pop() || path,
+                                    path: path,
+                                    size: (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB',
+                                    bytes: bytes
+                                });
+                            }
                         }
+                    } catch (fallbackErr) {
+                        console.error('[storage] Other fallback error:', fallbackErr);
                     }
                 }
                 break;
