@@ -1,156 +1,181 @@
 package com.smarthub.diagnostics;
 
-import android.content.Context;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
-import android.media.AudioManager;
-import android.media.ToneGenerator;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.view.MotionEvent;
 import android.widget.TextView;
+import android.widget.Toast;
+import android.media.RingtoneManager;
+import android.net.Uri;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
-/**
- * Activity used only for technician-controlled tests.
- * It is started via ADB from the desktop app with an extra "test" value
- * (e.g. flash, vibrate, sound) and performs the corresponding action.
- * No results are shown here; the technician records outcomes on the desktop.
- */
 public class TestRunnerActivity extends AppCompatActivity {
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private ToneGenerator toneGenerator;
-    private String torchCameraId;
-    private boolean touchTestActive = false;
-    private TextView hintView;
-    private int touchPointsRegistered = 0;
+    private static final int PERMISSION_REQUEST_CODE = 100;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_test_runner);
 
-        TextView title = findViewById(R.id.test_title);
-        TextView instructions = findViewById(R.id.test_instructions);
-        hintView = findViewById(R.id.test_hint);
+        String testType = getIntent().getStringExtra("test");
+        if (testType == null) {
+            finish();
+            return;
+        }
 
-        String test = getIntent().getStringExtra("test");
-        if (test == null) test = "";
+        // Check required permissions (if needed)
+        if (testType.equals("flash") || testType.equals("camera")) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA},
+                        PERMISSION_REQUEST_CODE);
+                // The test will be triggered after permission result.
+                return;
+            }
+        }
 
-        switch (test) {
-            case "flash":
-                title.setText("Flashlight test");
-                instructions.setText("The SmartHub desktop app is testing the flashlight. Look at the rear LED – it should turn on briefly and then off. Tell the technician what you saw.");
-                runFlashTest();
-                break;
-            case "vibrate":
-                title.setText("Vibration test");
-                instructions.setText("The SmartHub desktop app is testing vibration. Hold the phone and wait for a short buzz. Tell the technician if you felt it.");
-                runVibrateTest();
-                break;
-            case "sound":
-                title.setText("Speaker test");
-                instructions.setText("The SmartHub desktop app is testing the speaker. Listen for a short test tone and tell the technician if you heard it clearly.");
-                runSoundTest();
-                break;
-            case "touch":
-                title.setText("Touch screen test");
-                instructions.setText("The SmartHub desktop app is testing the touch screen. Slowly drag your finger across the entire screen and tap different spots. Tell the technician if any area does not respond.");
-                if (hintView != null) {
-                    hintView.setText("Move and tap your finger around. The counter below should keep increasing as touches are detected.");
-                }
-                touchTestActive = true;
-                break;
-            default:
-                title.setText("SmartHub device test");
-                instructions.setText("A technician is running a test from the SmartHub desktop app. Follow their instructions and watch what the phone does.");
-                break;
+        runTest(testType);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            String testType = getIntent().getStringExtra("test");
+            if (testType != null) {
+                runTest(testType);
+            } else {
+                finish();
+            }
         }
     }
 
-    private void runFlashTest() {
-        CameraManager cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        if (cm == null) return;
+    private void runTest(String testType) {
+        TextView status = findViewById(R.id.testStatus);
+        if (status != null) {
+            status.setText("Running: " + testType);
+        }
 
-        try {
-            for (String id : cm.getCameraIdList()) {
-                CameraCharacteristics cc = cm.getCameraCharacteristics(id);
-                Boolean hasFlash = cc.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
-                if (Boolean.TRUE.equals(hasFlash)) {
-                    torchCameraId = id;
-                    try {
-                        cm.setTorchMode(id, true);
-                    } catch (SecurityException se) {
-                        // Missing camera/flash permission – nothing else to do here.
-                        return;
-                    }
-                    handler.postDelayed(() -> {
-                        try {
-                            cm.setTorchMode(id, false);
-                        } catch (Exception ignored) {
-                        }
-                    }, 2500);
-                    break;
-                }
-            }
-        } catch (CameraAccessException ignored) {
+        switch (testType) {
+            case "vibrate":
+                runVibrateTest();
+                break;
+            case "sound":
+                runSoundTest();
+                break;
+            case "flash":
+                runFlashTest();
+                break;
+            case "touch":
+                // Already handled by separate activity? For now just show a message.
+                Toast.makeText(this, "Touch test should be run via the main app.", Toast.LENGTH_LONG).show();
+                finish();
+                break;
+            default:
+                Toast.makeText(this, "Unknown test: " + testType, Toast.LENGTH_SHORT).show();
+                finish();
         }
     }
 
     private void runVibrateTest() {
-        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        if (v == null) return;
+        Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            Toast.makeText(this, "Vibrator not available", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v.vibrate(VibrationEffect.createOneShot(800, VibrationEffect.DEFAULT_AMPLITUDE));
+            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
         } else {
-            //noinspection deprecation
-            v.vibrate(800);
+            vibrator.vibrate(500);
         }
+
+        Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
+        // Finish after a short delay
+        new android.os.Handler().postDelayed(this::finish, 1500);
     }
 
     private void runSoundTest() {
-        toneGenerator = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
-        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1500);
+    // Use a system notification sound instead of a custom raw file
+    Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+    if (notificationUri == null) {
+        Toast.makeText(this, "No notification sound available", Toast.LENGTH_SHORT).show();
+        finish();
+        return;
     }
 
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (touchTestActive) {
-            int action = ev.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-                touchPointsRegistered++;
-                if (hintView != null) {
-                    hintView.setText("Touches detected: " + touchPointsRegistered + ". Continue tapping and dragging across the whole screen.");
+    MediaPlayer mp = MediaPlayer.create(this, notificationUri);
+    if (mp == null) {
+        Toast.makeText(this, "Could not create MediaPlayer", Toast.LENGTH_SHORT).show();
+        finish();
+        return;
+    }
+
+    mp.setVolume(1.0f, 1.0f);
+    mp.setOnCompletionListener(mp1 -> {
+        mp1.release();
+        finish();
+    });
+    mp.setOnErrorListener((mp1, what, extra) -> {
+        mp1.release();
+        Toast.makeText(this, "Audio playback error", Toast.LENGTH_SHORT).show();
+        finish();
+        return true;
+    });
+    mp.start();
+    Toast.makeText(this, "Playing notification sound...", Toast.LENGTH_SHORT).show();
+}
+
+    private void runFlashTest() {
+        CameraManager cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        if (cameraManager == null) {
+            Toast.makeText(this, "Camera service not available", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+
+        try {
+            String cameraId = null;
+            for (String id : cameraManager.getCameraIdList()) {
+                if (cameraManager.getCameraCharacteristics(id)
+                        .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE)) {
+                    cameraId = id;
+                    break;
                 }
             }
-        }
-        return super.dispatchTouchEvent(ev);
-    }
+            if (cameraId == null) {
+                Toast.makeText(this, "No flash unit available", Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (toneGenerator != null) {
-            toneGenerator.release();
-            toneGenerator = null;
-        }
+            cameraManager.setTorchMode(cameraId, true);
+            Toast.makeText(this, "Flash on", Toast.LENGTH_SHORT).show();
 
-        if (torchCameraId != null) {
-            CameraManager cm = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            if (cm != null) {
+            // Turn off after 2 seconds
+            new android.os.Handler().postDelayed(() -> {
                 try {
-                    cm.setTorchMode(torchCameraId, false);
-                } catch (Exception ignored) {
+                    cameraManager.setTorchMode(cameraId, false);
+                } catch (CameraAccessException e) {
+                    e.printStackTrace();
                 }
-            }
+                finish();
+            }, 2000);
+        } catch (Exception e) {
+            Toast.makeText(this, "Flash error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            finish();
         }
     }
 }

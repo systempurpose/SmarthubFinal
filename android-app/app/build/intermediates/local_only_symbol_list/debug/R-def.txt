@@ -21,9 +21,7 @@ id desktop_hint
 id diagnostic_spinner
 id instructions
 id last_updated
-id test_hint
-id test_instructions
-id test_title
+id testStatus
 layout activity_main
 layout activity_test_runner
 mipmap ic_launcher
