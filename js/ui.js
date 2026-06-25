@@ -1,7 +1,6 @@
 // ==================== GLOBALS ====================
 let currentDeviceId = null;
 let wizardStep = 0;
-let deviceInfoPollId = null;
 
 // Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
@@ -444,28 +443,6 @@ async function updateConnectionStatus() {
     const activePage = document.querySelector('.nav-item.active')?.dataset.page;
     if (activePage === 'dashboard' && currentDeviceId && currentDeviceId !== previousDeviceId) {
         await renderDashboard();
-    }
-
-    // Start/stop live polling of device info when a device is connected
-    if (currentDeviceId) {
-        if (!deviceInfoPollId) {
-            deviceInfoPollId = setInterval(async () => {
-                try {
-                    // Only update when Device Info page is visible and tab is active
-                    const active = document.querySelector('.nav-item.active')?.dataset.page;
-                    if ((active === 'device-info' || active === 'device') && document.visibilityState === 'visible') {
-                        await renderDeviceInfo();
-                    }
-                } catch (e) {
-                    console.warn('deviceInfo poll error', e);
-                }
-            }, 1500);
-        }
-    } else {
-        if (deviceInfoPollId) {
-            clearInterval(deviceInfoPollId);
-            deviceInfoPollId = null;
-        }
     }
 }
 
@@ -1549,13 +1526,20 @@ async function runDeepDiagnostic() {
 
         // ---- Fetch large files (>= 500MB) ----
         let largeFiles = [];
+        let largeFilesError = null;
         try {
-            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${currentDeviceId}&minSize=0.5`);
+            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${encodeURIComponent(currentDeviceId)}&minSize=0.5`);
             if (filesRes.ok) {
                 const filesData = await filesRes.json();
                 largeFiles = filesData.files || [];
+            } else {
+                largeFilesError = `Failed to load large files: ${filesRes.status} ${filesRes.statusText}`;
+                console.warn('Large files request failed:', filesRes.status, filesRes.statusText);
             }
-        } catch (e) { console.warn('Could not fetch large files:', e); }
+        } catch (e) {
+            largeFilesError = `Could not fetch large files: ${e.message}`;
+            console.warn('Could not fetch large files:', e);
+        }
 
         // ---- Helper functions ----
         function formatSize(bytes) {
@@ -1626,7 +1610,14 @@ async function runDeepDiagnostic() {
 
         // ---- Large files list ----
         let largeFilesHtml = '';
-        if (largeFiles.length > 0) {
+        if (largeFilesError) {
+            largeFilesHtml = `
+                <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba; color: #856404;">
+                    <strong>⚠️ Large files unavailable.</strong><br>
+                    ${escapeHtml(largeFilesError)}
+                </div>
+            `;
+        } else if (largeFiles.length > 0) {
             largeFilesHtml = `
                 <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥500MB)</h4>
@@ -1634,13 +1625,14 @@ async function runDeepDiagnostic() {
                     <div style="max-height: 300px; overflow-y: auto;">
                         ${largeFiles.map(file => {
                             const isApp = file.type === 'app';
+                            const actionArg = JSON.stringify(file.packageName || file.path);
                             return `
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
                                 <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
                                 <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
                                 ${isApp
-                                    ? `<button onclick="uninstallPackage('${escapeHtml(file.packageName || file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>`
-                                    : `<button onclick="deleteFile('${escapeHtml(file.path)}')" style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
+                                    ? `<button onclick='uninstallPackage(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>`
+                                    : `<button onclick='deleteFile(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
                             </div>
                         `}).join('')}
                     </div>
