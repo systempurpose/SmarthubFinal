@@ -3469,29 +3469,24 @@ async function callFix(service, action) {
     return await response.json();
 }
 
-async function renderConnectionTroubleshoot() {
-    if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
-        return;
-    }
-    document.getElementById('pageContent').innerHTML = `<div class="card">Loading connection status...</div>`;
+async function renderFullFixPage(showWarning) {
     try {
-        // Fetch WiFi, Bluetooth, and mobile data using unified endpoints
-        const [wifiRes, btRes, infoRes] = await Promise.all([
+        // Fetch WiFi and device info
+        const [wifiRes, infoRes] = await Promise.all([
             fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null),
-            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`).catch(() => null), // includes bluetoothOn and mobile data
-            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`).catch(() => null) // reuse same data
+            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`).catch(() => null)
         ]);
 
-        // Bluetooth and mobile data from infoRes
         let bluetoothOn = false;
         let mobileDataToggle = false;
         let mobileDataConnected = false;
+        let pairedDevices = [];
         if (infoRes && infoRes.ok) {
             const infoData = await infoRes.json();
             bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
             mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
             mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
+            pairedDevices = infoData.pairedDevices || [];
         }
 
         // WiFi
@@ -3501,12 +3496,21 @@ async function renderConnectionTroubleshoot() {
             if (wifiData.wifi) {
                 const w = wifiData.wifi;
                 const info = formatWifiStatus(w);
-                wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid">
-                    <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(info.ssid)}</span></div>
-                    <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(info.status)}</span></div>
-                    <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${escapeHtml(info.signal)}</span></div>
-                    <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${escapeHtml(info.linkSpeed)}</span></div>
-                </div><div class="card-actions"><button class="btn-primary fix-wifi" data-action="wifi_reset">Reset WiFi</button></div></div>`;
+                wifiHtml = `
+                    <div class="info-card">
+                        <div class="card-header"><i class="fas fa-wifi"></i> WiFi</div>
+                        <div class="card-grid">
+                            <div class="card-item"><span class="item-label">SSID</span><span class="item-value">${escapeHtml(info.ssid)}</span></div>
+                            <div class="card-item"><span class="item-label">Status</span><span class="item-value">${escapeHtml(info.status)}</span></div>
+                            <div class="card-item"><span class="item-label">Signal</span><span class="item-value">${escapeHtml(info.signal)}</span></div>
+                            <div class="card-item"><span class="item-label">Link Speed</span><span class="item-value">${escapeHtml(info.linkSpeed)}</span></div>
+                        </div>
+                        <div class="card-actions" style="display:flex; flex-wrap:wrap; gap:8px; padding:8px 16px 12px;">
+                            <button class="btn-primary fix-wifi" data-action="wifi_reset">🔄 Reset WiFi</button>
+                            <button class="btn-secondary fix-wifi" data-action="wifi_scan">📡 Scan</button>
+                        </div>
+                    </div>
+                `;
             } else {
                 wifiHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-wifi"></i> WiFi</div><div class="card-grid"><div class="card-item">Unable to fetch WiFi status</div></div></div>`;
             }
@@ -3515,26 +3519,81 @@ async function renderConnectionTroubleshoot() {
         }
 
         // Bluetooth
-        const btHtml = `<div class="info-card"><div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div><div class="card-grid">
-            <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bluetoothOn ? '✅ Yes' : '❌ No'}</span></div>
-            <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${'?'}</span></div>
-            <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${'?'}</span></div>
-        </div><div class="card-actions">
-            <button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">Reset Bluetooth</button>
-            <button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">Force Stop & Reset</button>
-            <button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">Clear Cache</button>
-        </div></div>`;
+        const pairedCount = pairedDevices.length;
+        const pairedDisplay = pairedCount > 0 ? `${pairedCount} device${pairedCount > 1 ? 's' : ''} paired` : 'None';
+        const btHtml = `
+            <div class="info-card">
+                <div class="card-header"><i class="fab fa-bluetooth"></i> Bluetooth</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Enabled</span><span class="item-value">${bluetoothOn ? '✅ Yes' : '❌ No'}</span></div>
+                    <div class="card-item"><span class="item-label">Paired Devices</span><span class="item-value">${pairedDisplay}</span></div>
+                    <div class="card-item"><span class="item-label">Connected</span><span class="item-value">${'?'}</span></div>
+                </div>
+                <div class="card-actions" style="display:flex; flex-wrap:wrap; gap:8px; padding:8px 16px 12px;">
+                    <button class="btn-primary fix-bluetooth" data-action="bluetooth_reset">🔄 Reset Bluetooth</button>
+                    <button class="btn-secondary fix-bluetooth" data-action="bluetooth_force_stop">⏹️ Force Stop & Reset</button>
+                    <button class="btn-secondary fix-bluetooth" data-action="bluetooth_clear_cache">🧹 Clear Cache</button>
+                </div>
+            </div>
+        `;
 
         // Mobile Data
-        const mobileHtml = `<div class="info-card"><div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div><div class="card-grid">
-            <div class="card-item"><span class="item-label">Toggle</span><span class="item-value">${mobileDataToggle ? '✅ On' : '❌ Off'}</span></div>
-            <div class="card-item"><span class="item-label">Connection</span><span class="item-value">${mobileDataConnected ? '✅ Connected' : '❌ Not Connected'}</span></div>
-        </div><div class="card-actions"><button class="btn-primary fix-mobile" data-action="mobile_data_reset">Reset Mobile Data</button></div></div>`;
+        const mobileHtml = `
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-mobile-alt"></i> Mobile Data</div>
+                <div class="card-grid">
+                    <div class="card-item"><span class="item-label">Toggle</span><span class="item-value">${mobileDataToggle ? '✅ On' : '❌ Off'}</span></div>
+                    <div class="card-item"><span class="item-label">Connection</span><span class="item-value">${mobileDataConnected ? '✅ Connected' : '❌ Not Connected'}</span></div>
+                </div>
+                <div class="card-actions" style="display:flex; flex-wrap:wrap; gap:8px; padding:8px 16px 12px;">
+                    <button class="btn-primary fix-mobile" data-action="mobile_data_reset">🔄 Reset Mobile Data</button>
+                    <button class="btn-secondary fix-mobile" data-action="set_lte">📶 Force LTE</button>
+                </div>
+            </div>
+        `;
 
-        const html = `<div class="cards-container">${wifiHtml}${btHtml}${mobileHtml}</div><div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>`;
+        // Advanced Network Fixes
+        const advancedHtml = `
+            <div class="info-card">
+                <div class="card-header"><i class="fas fa-tools"></i> Advanced Network Fixes</div>
+                <div class="card-grid">
+                    <div class="card-item" style="grid-column: span 2;">
+                        <span style="font-size:13px; color:#6B7280;">These actions reset all radios or network configurations.</span>
+                    </div>
+                </div>
+                <div class="card-actions" style="display:flex; flex-wrap:wrap; gap:8px; padding:8px 16px 12px;">
+                    <button class="btn-secondary fix-advanced" data-action="airplane_mode_reset">✈️ Airplane Mode Reset</button>
+                    <button class="btn-secondary fix-advanced" data-action="reset_network_full">🔄 Full Network Reset</button>
+                </div>
+            </div>
+        `;
+
+        // Build the full HTML with optional warning
+        let warningHtml = '';
+        if (showWarning) {
+            warningHtml = `
+                <div class="info-card" style="border-left:4px solid #f59e0b; margin-bottom:16px;">
+                    <div class="card-content" style="color:#92400e;">
+                        ⚠️ All services are healthy. Fixes are available but not required.
+                    </div>
+                </div>
+            `;
+        }
+
+        const html = `
+            ${warningHtml}
+            <div class="cards-container">
+                ${wifiHtml}
+                ${btHtml}
+                ${mobileHtml}
+                ${advancedHtml}
+            </div>
+            <div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>
+        `;
+
         document.getElementById('pageContent').innerHTML = html;
 
-        // Fix function
+        // ---- Attach event listeners (same as before) ----
         async function callFix(service, action) {
             const response = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
                 method: 'POST',
@@ -3552,48 +3611,166 @@ async function renderConnectionTroubleshoot() {
             setTimeout(() => resultDiv.style.display = 'none', 5000);
         }
 
-        // Attach event listeners for all fix buttons
+        // WiFi
         document.querySelectorAll('.fix-wifi').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
+                const action = btn.dataset.action;
                 try {
                     await callFix('wifi', action);
                     showFixResult(`WiFi fix '${action}' completed.`);
-                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                    setTimeout(() => renderFullFixPage(showWarning), 2000);
                 } catch (err) {
                     showFixResult(`WiFi fix failed: ${err.message}`, true);
                 }
             });
         });
 
+        // Bluetooth
         document.querySelectorAll('.fix-bluetooth').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
+                const action = btn.dataset.action;
                 try {
                     await callFix('bluetooth', action);
                     showFixResult(`Bluetooth fix '${action}' completed.`);
-                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                    setTimeout(() => renderFullFixPage(showWarning), 2000);
                 } catch (err) {
                     showFixResult(`Bluetooth fix failed: ${err.message}`, true);
                 }
             });
         });
 
+        // Mobile Data
         document.querySelectorAll('.fix-mobile').forEach(btn => {
             btn.addEventListener('click', async () => {
-                const action = btn.getAttribute('data-action');
+                const action = btn.dataset.action;
                 try {
                     await callFix('mobile', action);
                     showFixResult(`Mobile data fix '${action}' completed.`);
-                    setTimeout(() => renderConnectionTroubleshoot(), 2000);
+                    setTimeout(() => renderFullFixPage(showWarning), 2000);
                 } catch (err) {
                     showFixResult(`Mobile data fix failed: ${err.message}`, true);
                 }
             });
         });
+
+        // Advanced
+        document.querySelectorAll('.fix-advanced').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.dataset.action;
+                try {
+                    await callFix('network', action);
+                    showFixResult(`Advanced fix '${action}' completed.`);
+                    setTimeout(() => renderFullFixPage(showWarning), 2000);
+                } catch (err) {
+                    showFixResult(`Advanced fix failed: ${err.message}`, true);
+                }
+            });
+        });
+
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading troubleshoot page: ${err.message}</div>`;
     }
+}
+// ==================== CONNECTION TROUBLESHOOT ====================
+async function renderConnectionTroubleshoot() {
+    if (!currentDeviceId) {
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        return;
+    }
+
+    document.getElementById('pageContent').innerHTML = `
+        <div class="card" style="text-align:center; padding:20px;">
+            <h3>🔌 Connection Troubleshoot</h3>
+            <p>Run diagnostics to check WiFi, Bluetooth, and Mobile Data.</p>
+            <button id="runDiagnosticsBtn" class="btn-primary" style="font-size:16px;">🔍 Run Diagnostics</button>
+        </div>
+        <div id="diagnosticProgress" style="display:none; margin-top:16px;"></div>
+        <div id="diagnosticResults" style="display:none; margin-top:16px;"></div>
+        <div id="fixButtonsContainer" style="display:none; margin-top:16px;"></div>
+        <div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>
+    `;
+
+    const runBtn = document.getElementById('runDiagnosticsBtn');
+    const progressDiv = document.getElementById('diagnosticProgress');
+    const resultsDiv = document.getElementById('diagnosticResults');
+    const fixContainer = document.getElementById('fixButtonsContainer');
+
+    runBtn.addEventListener('click', async () => {
+        runBtn.disabled = true;
+        runBtn.textContent = '⏳ Running...';
+        progressDiv.style.display = 'block';
+        resultsDiv.style.display = 'none';
+        fixContainer.style.display = 'none';
+
+        const tests = [
+            { name: 'WiFi', endpoint: '/connectivity/diagnose/wifi/' },
+            { name: 'Bluetooth', endpoint: '/connectivity/diagnose/bluetooth/' },
+            { name: 'Mobile Data', endpoint: '/connectivity/diagnose/mobile/' }
+        ];
+
+        const results = {};
+
+        for (const test of tests) {
+            progressDiv.innerHTML = `<p>🔄 Testing ${test.name}...</p>`;
+            try {
+                const resp = await fetch(`${BACKEND_URL}${test.endpoint}${currentDeviceId}`);
+                const data = await resp.json();
+                results[test.name] = data;
+            } catch (err) {
+                results[test.name] = { ok: false, error: err.message };
+            }
+            // Wait 500ms between tests
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        progressDiv.style.display = 'none';
+        resultsDiv.style.display = 'block';
+        runBtn.disabled = false;
+        runBtn.textContent = '🔍 Run Diagnostics';
+
+        // Build results summary
+        let allPass = true;
+        let html = `<div class="info-card"><div class="card-header">📊 Diagnostic Results</div><div class="card-grid">`;
+        for (const [name, data] of Object.entries(results)) {
+            const pass = data.ok === true;
+            if (!pass) allPass = false;
+            const icon = pass ? '✅' : '❌';
+            const color = pass ? '#2e7d32' : '#d32f2f';
+            const msg = pass ? data.message : (data.error || 'Failed');
+            html += `<div class="card-item"><span class="item-label">${name}</span><span class="item-value" style="color:${color};">${icon} ${escapeHtml(msg)}</span></div>`;
+        }
+        html += `</div></div>`;
+        resultsDiv.innerHTML = html;
+
+        // Show fix buttons
+        if (allPass) {
+            // All good – show warning
+            fixContainer.innerHTML = `
+                <div class="info-card" style="border-left:4px solid #f59e0b;">
+                    <div class="card-header"><i class="fas fa-check-circle" style="color:#2e7d32;"></i> All services are working!</div>
+                    <div class="card-content">
+                        <p style="color:#92400e;">⚠️ No issues detected. Fix buttons are available for manual troubleshooting, but they are not required.</p>
+                        <button id="showFixButtonsBtn" class="btn-secondary">Show Fix Options Anyway</button>
+                    </div>
+                </div>
+            `;
+            fixContainer.style.display = 'block';
+            document.getElementById('showFixButtonsBtn')?.addEventListener('click', () => {
+                renderFixButtons(true);
+            });
+        } else {
+            // Some failures – show fix buttons immediately
+            renderFixButtons(false);
+        }
+
+        function renderFixButtons(showWarning) {
+            // Reuse the existing fix buttons layout from earlier version
+            // We'll fetch fresh status and render the full cards with fix buttons.
+            // For simplicity, we'll just call the original render with a flag.
+            // But to avoid duplication, we'll rebuild the full page with fix buttons.
+            renderFullFixPage(showWarning);
+        }
+    });
 }
 
 // ==================== BSOD DIAGNOSIS ====================
