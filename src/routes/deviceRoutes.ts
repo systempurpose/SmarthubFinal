@@ -57,7 +57,6 @@ export function registerDeviceRoutes(app: Express): void {
       // 3. Mobile data toggle (user preference)
       let mobileDataToggle: boolean | undefined;
       try {
-        // Android 10+ uses 'mobile_data1' for SIM slot 1; fallback to 'mobile_data'
         let dataRaw = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'mobile_data1');
         if (!dataRaw?.trim()) {
           dataRaw = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'mobile_data');
@@ -90,7 +89,6 @@ export function registerDeviceRoutes(app: Express): void {
         if (match) {
           batteryCapacity = parseInt(match[1], 10);
         } else {
-          // Fallback: sysfs charge_full_design
           const capPaths = [
             '/sys/class/power_supply/battery/charge_full_design',
             '/sys/class/power_supply/battery/charge_full',
@@ -108,7 +106,6 @@ export function registerDeviceRoutes(app: Express): void {
             } catch {}
           }
         }
-        // Validate: if > 20000 or < 200, treat as unknown
         if (batteryCapacity && (batteryCapacity > 20000 || batteryCapacity < 200)) {
           batteryCapacity = undefined;
         }
@@ -122,13 +119,8 @@ export function registerDeviceRoutes(app: Express): void {
         if (match) {
           const healthCode = parseInt(match[1], 10);
           const healthMap: Record<number, string> = {
-            1: 'Unknown',
-            2: 'Good',
-            3: 'Overheat',
-            4: 'Dead',
-            5: 'Over-voltage',
-            6: 'Failure',
-            7: 'Cold',
+            1: 'Unknown', 2: 'Good', 3: 'Overheat',
+            4: 'Dead', 5: 'Over-voltage', 6: 'Failure', 7: 'Cold',
           };
           batteryHealth = healthMap[healthCode] || 'Unknown';
         }
@@ -142,7 +134,6 @@ export function registerDeviceRoutes(app: Express): void {
         if (match) {
           refreshRate = parseFloat(match[1]).toFixed(1) + ' Hz';
         } else {
-          // Alternative: from surfaceflinger
           const sfDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'surfaceflinger');
           const sfMatch = sfDump.match(/refreshRate:\s*([\d.]+)/i);
           if (sfMatch) {
@@ -151,7 +142,7 @@ export function registerDeviceRoutes(app: Express): void {
         }
       } catch {}
 
-      // 8. Camera resolutions
+      // 8. Camera resolutions (filtered)
       let cameraResolutions: string[] = [];
       try {
         const camDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.camera');
@@ -159,28 +150,36 @@ export function registerDeviceRoutes(app: Express): void {
         for (const line of lines) {
           const match = line.match(/(\d+)\s*x\s*(\d+)/i);
           if (match) {
-            const res = `${match[1]} x ${match[2]}`;
-            if (!cameraResolutions.includes(res)) {
-              cameraResolutions.push(res);
-            }
-          }
-        }
-        // If none found, try dumpsys camera
-        if (cameraResolutions.length === 0) {
-          const camDump2 = await adb('-s', deviceId, 'shell', 'dumpsys', 'camera');
-          const lines2 = camDump2.split(/\r?\n/);
-          for (const line of lines2) {
-            const match = line.match(/(\d+)\s*x\s*(\d+)/i);
-            if (match) {
-              const res = `${match[1]} x ${match[2]}`;
+            const w = parseInt(match[1], 10);
+            const h = parseInt(match[2], 10);
+            // Filter out garbage: width/height > 0 and < 10000, and not containing 0x
+            if (w > 0 && h > 0 && w < 10000 && h < 10000 && !line.includes('0x')) {
+              const res = `${w} x ${h}`;
               if (!cameraResolutions.includes(res)) {
                 cameraResolutions.push(res);
               }
             }
           }
         }
-        // Limit and deduplicate
-        cameraResolutions = [...new Set(cameraResolutions)];
+        if (cameraResolutions.length === 0) {
+          const camDump2 = await adb('-s', deviceId, 'shell', 'dumpsys', 'camera');
+          const lines2 = camDump2.split(/\r?\n/);
+          for (const line of lines2) {
+            const match = line.match(/(\d+)\s*x\s*(\d+)/i);
+            if (match) {
+              const w = parseInt(match[1], 10);
+              const h = parseInt(match[2], 10);
+              if (w > 0 && h > 0 && w < 10000 && h < 10000 && !line.includes('0x')) {
+                const res = `${w} x ${h}`;
+                if (!cameraResolutions.includes(res)) {
+                  cameraResolutions.push(res);
+                }
+              }
+            }
+          }
+        }
+        // Deduplicate and limit to first 5
+        cameraResolutions = [...new Set(cameraResolutions)].slice(0, 5);
       } catch {}
 
       // 9. Wi-Fi MAC address
@@ -199,13 +198,52 @@ export function registerDeviceRoutes(app: Express): void {
       // 10. Bluetooth MAC address
       let btMac: string | undefined;
       try {
-        const mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'bluetooth_address');
-        if (mac && mac.trim()) btMac = mac.trim();
+        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth');
+        const macMatch = btDump.match(/address:\s*([0-9A-Fa-f:]{17})/i);
+        if (macMatch) {
+          btMac = macMatch[1];
+        } else {
+          const mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'bluetooth_address');
+          if (mac && mac.trim() && mac.trim() !== 'null') btMac = mac.trim();
+        }
+      } catch {}
+
+      // 11. Paired Bluetooth devices
+      let pairedDevices: string[] = [];
+      try {
+        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth');
+        const lines = btDump.split(/\r?\n/);
+        let inBonded = false;
+        for (const line of lines) {
+          if (line.includes('Bonded devices:')) {
+            inBonded = true;
+          } else if (inBonded && line.trim().startsWith('Device:')) {
+            const nameMatch = line.match(/Device:\s*([^)]+?)\s*\(/i);
+            if (nameMatch) {
+              pairedDevices.push(nameMatch[1].trim());
+            }
+          } else if (inBonded && line.trim() === '') {
+            inBonded = false;
+          }
+        }
+        if (pairedDevices.length === 0) {
+          const bondMatches = btDump.match(/Bonded[^:]*:\s*([^\n]+)/gi);
+          if (bondMatches) {
+            for (const m of bondMatches) {
+              const names = m.match(/([a-zA-Z0-9_\s-]+)/g);
+              if (names) {
+                for (const n of names) {
+                  if (n.trim().length > 0) pairedDevices.push(n.trim());
+                }
+              }
+            }
+          }
+        }
       } catch {}
 
       // 5. Combine everything into one response
       res.json({
-        ...props,                 // all getprop keys
+        ...props,
         bluetoothOn,
         mobileDataToggle,
         mobileDataConnected,
@@ -215,6 +253,7 @@ export function registerDeviceRoutes(app: Express): void {
         cameraResolutions,
         wifiMac,
         btMac,
+        pairedDevices,
       });
     } catch (err) {
       console.error('[api/device/info] error:', err);

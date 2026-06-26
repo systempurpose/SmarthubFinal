@@ -3022,7 +3022,6 @@ async function renderDeviceInfo() {
         return;
     }
     try {
-        // Fetch all data in parallel – use the unified endpoint for device info
         const [infoRes, wifiRes] = await Promise.all([
             fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`),
             fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null)
@@ -3030,33 +3029,36 @@ async function renderDeviceInfo() {
 
         if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
         const infoData = await infoRes.json();
-        // infoData contains all getprop properties plus the new fields
         const props = infoData;
 
         const wifiData = wifiRes && wifiRes.ok ? await wifiRes.json() : null;
 
-        // Helper to get prop with fallback
         const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
-
-        // Helper for boolean icons
         const boolIcon = (val) => val ? '✅' : '❌';
 
-        // Extract values
         const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
         const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
         const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
         const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
         const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
 
-        // New fields
+        // New fields with proper fallbacks
         const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : 'Not available';
         const batteryHealth = infoData.batteryHealth || 'Not available';
         const refreshRate = infoData.refreshRate || 'Not available';
-        const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length) 
-            ? infoData.cameraResolutions.join(', ') 
+        const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length)
+            ? infoData.cameraResolutions.join(', ')
             : 'Not available';
         const wifiMac = infoData.wifiMac || 'Not available';
         const btMac = infoData.btMac || 'Not available';
+
+        // Paired devices
+        let pairedDevicesDisplay = 'None';
+        if (infoData.pairedDevices && infoData.pairedDevices.length) {
+            const count = infoData.pairedDevices.length;
+            const list = infoData.pairedDevices.join(', ');
+            pairedDevicesDisplay = `${count} device${count > 1 ? 's' : ''}: ${list}`;
+        }
 
         const makeCard = (title, icon, items) => `
             <div class="info-card">
@@ -3101,7 +3103,7 @@ async function renderDeviceInfo() {
         cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
             { label: 'Enabled', value: boolIcon(bluetoothOn) },
             { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
-            { label: 'Paired Devices', value: get('bluetooth.paired.count', '?') },
+            { label: 'Paired Devices', value: pairedDevicesDisplay },
             { label: 'MAC Address', value: btMac }
         ]));
 
