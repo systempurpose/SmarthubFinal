@@ -152,13 +152,38 @@ public class TestRunnerActivity extends AppCompatActivity {
     }
 
     private void runSoundTest() {
-        PackageManager pm = getPackageManager();
-        if (!pm.hasSystemFeature("android.hardware.audio.output")) {
-            Toast.makeText(this, "Audio output not present", Toast.LENGTH_LONG).show();
-            Log.w(TAG, "Audio output not supported");
-            finish();
-            return;
-        }
+    PackageManager pm = getPackageManager();
+    if (!pm.hasSystemFeature("android.hardware.audio.output")) {
+        Toast.makeText(this, "Audio output not present", Toast.LENGTH_LONG).show();
+        Log.w(TAG, "Audio output not supported");
+        finish();
+        return;
+    }
+
+    // Use custom raw resource
+    MediaPlayer mp = MediaPlayer.create(this, R.raw.test_tone);
+    if (mp == null) {
+        Toast.makeText(this, "Audio resource not found", Toast.LENGTH_SHORT).show();
+        finish();
+        return;
+    }
+
+    mp.setVolume(1.0f, 1.0f);
+    mp.setOnCompletionListener(mp1 -> {
+        mp1.release();
+        finish();
+    });
+    mp.setOnErrorListener((mp1, what, extra) -> {
+        mp1.release();
+        Toast.makeText(this, "Audio playback error", Toast.LENGTH_SHORT).show();
+        Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
+        finish();
+        return true;
+    });
+    mp.start();
+    Toast.makeText(this, "Playing test tone...", Toast.LENGTH_SHORT).show();
+    Log.i(TAG, "Sound playback started");
+}
 
         Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         if (notificationUri == null) {

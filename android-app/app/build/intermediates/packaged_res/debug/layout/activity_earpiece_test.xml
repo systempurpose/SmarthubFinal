@@ -10,7 +10,7 @@
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Playing sound through earpiece..."
+        android:text="Playing through earpiece..."
         android:textSize="18sp"
         android:textAlignment="center" />
 

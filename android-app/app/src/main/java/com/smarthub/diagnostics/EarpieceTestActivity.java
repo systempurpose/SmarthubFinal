@@ -26,8 +26,12 @@ public class EarpieceTestActivity extends AppCompatActivity {
         am.setMode(AudioManager.MODE_IN_CALL);
         am.setSpeakerphoneOn(false);
 
+       // Instead of:
         Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         player = MediaPlayer.create(this, uri);
+
+        // Use:
+        player = MediaPlayer.create(this, R.raw.test_tone);
         if (player == null) {
             status.setText("No audio resource");
             Toast.makeText(this, "Cannot play sound", Toast.LENGTH_SHORT).show();
