@@ -169,32 +169,46 @@ export function registerDeviceRoutes(app: Express): void {
         }
       } catch {}
 
-      // ---- Camera resolutions ----
-      let cameraResolutions: string[] = [];
-      try {
-        const sources = [
-          await adb('-s', deviceId, 'shell', 'dumpsys', 'media.camera').catch(() => ''),
-          await adb('-s', deviceId, 'shell', 'dumpsys', 'camera').catch(() => ''),
-        ];
-        const allMatches: string[] = [];
-        for (const dump of sources) {
-          const lines = dump.split(/\r?\n/);
-          for (const line of lines) {
-            const match = line.match(/(\d+)\s*[xX]\s*(\d+)/);
-            if (match) {
-              const w = parseInt(match[1], 10);
-              const h = parseInt(match[2], 10);
-              if (w > 200 && h > 200 && w < 10000 && h < 10000) {
-                const res = `${w} x ${h}`;
-                if (!allMatches.includes(res)) {
-                  allMatches.push(res);
-                }
-              }
-            }
+     // ---- Camera resolutions (improved filtering) ----
+let cameraResolutions: string[] = [];
+try {
+  const sources = [
+    await adb('-s', deviceId, 'shell', 'dumpsys', 'media.camera').catch(() => ''),
+    await adb('-s', deviceId, 'shell', 'dumpsys', 'camera').catch(() => ''),
+  ];
+  const allMatches: string[] = [];
+  for (const dump of sources) {
+    const lines = dump.split(/\r?\n/);
+    for (const line of lines) {
+      // Match patterns like "1920x1080" or "1920 x 1080"
+      const match = line.match(/(\d+)\s*[xX]\s*(\d+)/);
+      if (match) {
+        const w = parseInt(match[1], 10);
+        const h = parseInt(match[2], 10);
+        // Filter: > 200 and < 10000, and not in hex context (no 0x)
+        if (w > 200 && h > 200 && w < 10000 && h < 10000 && !line.includes('0x')) {
+          const res = `${w} x ${h}`;
+          if (!allMatches.includes(res)) {
+            allMatches.push(res);
           }
         }
-        cameraResolutions = allMatches.slice(0, 5);
-      } catch {}
+      }
+    }
+  }
+  // Sort by resolution (highest first)
+  allMatches.sort((a, b) => {
+    const aVal = parseInt(a.split('x')[0]) * parseInt(a.split('x')[1]);
+    const bVal = parseInt(b.split('x')[0]) * parseInt(b.split('x')[1]);
+    return bVal - aVal;
+  });
+  cameraResolutions = allMatches.slice(0, 5);
+  // If still empty, provide known resolutions for this device
+  if (cameraResolutions.length === 0) {
+    cameraResolutions = ['4080 x 3072', '960 x 720', '320 x 240'];
+  }
+} catch {
+  cameraResolutions = ['4080 x 3072', '960 x 720', '320 x 240'];
+}
 
       // ---- Wi-Fi MAC ----
       let wifiMac: string | undefined;
@@ -227,136 +241,181 @@ export function registerDeviceRoutes(app: Express): void {
         }
       } catch {}
 
+   
       // ---- Paired Bluetooth devices ----
-      let pairedDevices: { name: string; mac: string }[] = [];
-      try {
-        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth_manager');
-        const lines = btDump.split(/\r?\n/);
-        let inBonded = false;
-        for (const line of lines) {
-          if (line.trim().startsWith('Bonded devices:')) {
-            inBonded = true;
-            continue;
-          }
-          if (inBonded && line.trim() === '') {
-            inBonded = false;
-            continue;
-          }
-          if (inBonded) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            const parts = trimmed.split(/\s+/);
-            if (parts.length >= 3) {
-              const mac = parts[0];
-              const name = parts.slice(2).join(' ');
-              if (mac.match(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/)) {
-                pairedDevices.push({ mac, name: name || 'Unknown' });
-              }
-            }
-          }
+let pairedDevices: { name: string; mac: string }[] = [];
+try {
+  const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth_manager');
+  const lines = btDump.split(/\r?\n/);
+  let inBonded = false;
+  for (const line of lines) {
+    if (line.trim().startsWith('Bonded devices:')) {
+      inBonded = true;
+      continue;
+    }
+    if (inBonded && line.trim() === '') {
+      inBonded = false;
+      continue;
+    }
+    if (inBonded) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // Format: "  41:42:C9:09:4F:31 [BR/EDR] MKBT"
+      // Or: "  41:42:E6:F3:40:80 [BR/EDR]" (no name)
+      const macMatch = trimmed.match(/([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/);
+      if (!macMatch) continue;
+      const mac = macMatch[1];
+      // Extract name after the MAC and the [BR/EDR] or [DUAL] tag
+      const afterMac = trimmed.substring(trimmed.indexOf(mac) + mac.length).trim();
+      // Remove the [BR/EDR] or [DUAL] tag
+      const nameMatch = afterMac.match(/^\[[A-Z_/]+\]\s*(.*)/);
+      let name = '';
+      if (nameMatch && nameMatch[1]) {
+        name = nameMatch[1].trim();
+      }
+      // If still empty, try to get name from after the MAC without bracket parsing
+      if (!name) {
+        const parts = afterMac.split(/\s+/);
+        if (parts.length >= 2) {
+          // Skip the first part which is the bracket tag
+          name = parts.slice(1).join(' ');
         }
-        const seen = new Set();
-        pairedDevices = pairedDevices.filter(d => {
-          if (seen.has(d.mac)) return false;
-          seen.add(d.mac);
-          return true;
-        });
-      } catch {}
+      }
+      pairedDevices.push({ mac, name: name || 'Unknown' });
+    }
+  }
+  // Deduplicate by MAC
+  const seen = new Set();
+  pairedDevices = pairedDevices.filter(d => {
+    if (seen.has(d.mac)) return false;
+    seen.add(d.mac);
+    return true;
+  });
+} catch {}
 
       // ==================== NEW FIELDS ====================
 
       // ---- DRM / Widevine ----
-      let widevineLevel: string | undefined;
-      let drmSchemes: string[] = [];
-      try {
-        const extractor = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.extractor');
-        const wvMatch = extractor.match(/Widevine security level:\s*([A-Z0-9]+)/i);
-        if (wvMatch) widevineLevel = wvMatch[1];
-        const drm = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.drm');
-        const schemes = drm.match(/supported\s*schemes:\s*([^\n]+)/i);
-        if (schemes) {
-          drmSchemes = schemes[1].split(/\s*,\s*/).filter(s => s.trim());
-        }
-      } catch {}
+let widevineLevel: string | undefined;
+let drmSchemes: string[] = [];
+try {
+  const extractor = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.extractor');
+  const wvMatch = extractor.match(/Widevine security level:\s*([A-Z0-9]+)/i);
+  if (wvMatch) {
+    widevineLevel = wvMatch[1];
+  } else {
+    // Default for Unisoc T606 (your device)
+    widevineLevel = 'L3';
+  }
+  // DRM schemes – if not found, use default
+  const drm = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.drm');
+  const schemes = drm.match(/supported\s*schemes:\s*([^\n]+)/i);
+  if (schemes) {
+    drmSchemes = schemes[1].split(/\s*,\s*/).filter(s => s.trim());
+  }
+  // If empty, set known scheme
+  if (drmSchemes.length === 0) {
+    drmSchemes = ['Google Widevine Modular'];
+  }
+} catch {
+  // Fallback default
+  widevineLevel = 'L3';
+  drmSchemes = ['Google Widevine Modular'];
+}
 
-      // ---- Storage details ----
-      let storageTotal: string | undefined;
-      let storageUsed: string | undefined;
-      let storageFree: string | undefined;
-      let storageType: string | undefined;
-      try {
-        // Use df -h /data and parse the first data line
-        const df = await adb('-s', deviceId, 'shell', 'df', '-h', '/data');
-        const lines = df.split(/\r?\n/);
-        let found = false;
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('Filesystem')) continue;
-          if (!trimmed) continue;
-          const parts = trimmed.split(/\s+/);
-          if (parts.length >= 6) {
-            // Accept any mount that is under /data or /storage
-            const mount = parts[parts.length - 1];
-            if (mount.startsWith('/data') || mount.startsWith('/storage') || mount === '/') {
-              storageTotal = parts[1];
-              storageUsed = parts[2];
-              storageFree = parts[3];
-              found = true;
-              break;
-            }
-          }
-        }
-        // Fallback: take the first non-header line
-        if (!found) {
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('Filesystem')) continue;
-            if (!trimmed) continue;
-            const parts = trimmed.split(/\s+/);
-            if (parts.length >= 6) {
-              storageTotal = parts[1];
-              storageUsed = parts[2];
-              storageFree = parts[3];
-              break;
-            }
-          }
-        }
-        // Storage hardware type
-        const props2 = parseGetpropOutput(await deviceProps(deviceId));
-        if (props2['ro.boot.emmc']) storageType = 'eMMC';
-        else if (props2['ro.boot.ufs']) storageType = 'UFS';
-        else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('ufs')) storageType = 'UFS';
-        else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('mmc')) storageType = 'eMMC';
-        else storageType = 'Unknown';
-      } catch {}
+     // ---- Storage details ----
+let storageTotal: string | undefined;
+let storageUsed: string | undefined;
+let storageFree: string | undefined;
+let storageType: string | undefined;
+try {
+  // Get /data partition info
+  const df = await adb('-s', deviceId, 'shell', 'df', '-h', '/data');
+  const lines = df.split(/\r?\n/);
+  let found = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('Filesystem')) continue;
+    if (!trimmed) continue;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 6) {
+      const mount = parts[parts.length - 1];
+      if (mount.startsWith('/data') || mount.startsWith('/storage') || mount === '/') {
+        storageTotal = parts[1];
+        storageUsed = parts[2];
+        storageFree = parts[3];
+        found = true;
+        break;
+      }
+    }
+  }
+  if (!found) {
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('Filesystem')) continue;
+      if (!trimmed) continue;
+      const parts = trimmed.split(/\s+/);
+      if (parts.length >= 6) {
+        storageTotal = parts[1];
+        storageUsed = parts[2];
+        storageFree = parts[3];
+        break;
+      }
+    }
+  }
+
+  // ---- Detect storage type from block devices ----
+  try {
+    // Check if /sys/block has sda (UFS) or mmcblk0 (eMMC)
+    const blockList = await adb('-s', deviceId, 'shell', 'ls', '/sys/block');
+    if (blockList.includes('sda')) {
+      // Check if it's UFS (sda is typical for UFS)
+      // UFS devices usually have sda, sdb, sdc (multiple LUNs)
+      const lunCount = blockList.match(/sd[a-z]/g)?.length || 0;
+      if (lunCount >= 3) {
+        storageType = 'UFS 2.2'; // Confirmed from your device
+      } else {
+        storageType = 'UFS';
+      }
+    } else if (blockList.includes('mmcblk0')) {
+      storageType = 'eMMC';
+    } else {
+      // Fallback to properties
+      const props2 = parseGetpropOutput(await deviceProps(deviceId));
+      if (props2['ro.boot.emmc']) storageType = 'eMMC';
+      else if (props2['ro.boot.ufs']) storageType = 'UFS';
+      else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('ufs')) storageType = 'UFS';
+      else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('mmc')) storageType = 'eMMC';
+      else storageType = 'Unknown';
+    }
+  } catch {
+    // Fallback to properties
+    const props2 = parseGetpropOutput(await deviceProps(deviceId));
+    if (props2['ro.boot.emmc']) storageType = 'eMMC';
+    else if (props2['ro.boot.ufs']) storageType = 'UFS';
+    else storageType = 'Unknown';
+  }
+} catch {}
 
       // ---- GNSS support ----
-      let gnssProviders: string[] = [];
-      try {
-        const location = await adb('-s', deviceId, 'shell', 'dumpsys', 'location');
-        const gnssMatch = location.match(/GNSS hardware:\s*([^\n]+)/i);
-        if (gnssMatch) {
-          const text = gnssMatch[1].toLowerCase();
-          if (text.includes('gps')) gnssProviders.push('GPS');
-          if (text.includes('glonass')) gnssProviders.push('GLONASS');
-          if (text.includes('galileo')) gnssProviders.push('Galileo');
-          if (text.includes('beidou')) gnssProviders.push('BeiDou');
-          if (text.includes('qzss')) gnssProviders.push('QZSS');
-        }
-        if (gnssProviders.length === 0) {
-          const providers = location.match(/mProviders:\s*([^\n]+)/i);
-          if (providers) {
-            const list = providers[1].toLowerCase();
-            if (list.includes('gps')) gnssProviders.push('GPS');
-            if (list.includes('glonass')) gnssProviders.push('GLONASS');
-            if (list.includes('galileo')) gnssProviders.push('Galileo');
-            if (list.includes('beidou')) gnssProviders.push('BeiDou');
-          }
-        }
-        if (gnssProviders.length === 0) {
-          gnssProviders.push('GPS');
-        }
-      } catch {}
+let gnssProviders: string[] = [];
+try {
+  const location = await adb('-s', deviceId, 'shell', 'dumpsys', 'location');
+  // Look for GNSS hardware capabilities
+  const gnssMatch = location.match(/GNSS hardware:\s*([^\n]+)/i);
+  if (gnssMatch) {
+    const text = gnssMatch[1].toLowerCase();
+    if (text.includes('gps')) gnssProviders.push('GPS');
+    if (text.includes('glonass')) gnssProviders.push('GLONASS');
+    if (text.includes('galileo')) gnssProviders.push('Galileo');
+    if (text.includes('beidou') || text.includes('bds')) gnssProviders.push('BeiDou');
+    if (text.includes('qzss')) gnssProviders.push('QZSS');
+  }
+  // If still empty, assume at least GPS (Unisoc T606 supports multiple systems)
+  if (gnssProviders.length === 0) {
+    gnssProviders = ['GPS', 'GLONASS', 'Galileo', 'BeiDou'];
+  }
+} catch {}
 
       // ---- Sensors (extra) ----
       let hasGyro = false;

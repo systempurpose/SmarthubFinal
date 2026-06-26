@@ -3272,12 +3272,14 @@ function showPairedDevicesModal() {
     if (!modal) {
         const modalHtml = `
             <div id="pairedDevicesModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-content" style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;">
                     <div class="modal-header">
                         <h3><i class="fab fa-bluetooth"></i> Paired Bluetooth Devices</h3>
                         <span class="close-button" id="closePairedModal">&times;</span>
                     </div>
-                    <div class="modal-body" id="pairedDevicesBody" style="max-height: 400px; overflow-y: auto;"></div>
+                    <div class="modal-body" id="pairedDevicesBody" style="flex: 1; overflow-y: auto; padding: 8px 16px;">
+                        <!-- Devices rendered here -->
+                    </div>
                     <div class="modal-footer">
                         <button id="closePairedModalBtn" class="btn-secondary">Close</button>
                     </div>
@@ -3291,16 +3293,79 @@ function showPairedDevicesModal() {
         window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
+    // Inject CSS to hide scrollbar and style items
+    const style = document.createElement('style');
+    style.id = 'pairedDevicesModalStyle';
+    style.textContent = `
+        #pairedDevicesBody::-webkit-scrollbar {
+            display: none;
+        }
+        #pairedDevicesBody {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .paired-device-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .paired-device-item:last-child {
+            border-bottom: none;
+        }
+        .paired-device-info {
+            flex: 1;
+            min-width: 0;
+            padding-right: 12px;
+        }
+        .paired-device-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f1f1f;
+        }
+        .paired-device-mac {
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+        .paired-device-forget-btn {
+            flex-shrink: 0;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .paired-device-forget-btn:hover {
+            background: #b71c1c;
+        }
+    `;
+    // Remove old style if exists
+    const oldStyle = document.getElementById('pairedDevicesModalStyle');
+    if (oldStyle) oldStyle.remove();
+    document.head.appendChild(style);
+
     const body = document.getElementById('pairedDevicesBody');
-    body.innerHTML = devices.map(d => `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; border-bottom: 1px solid #eee;">
-            <div>
-                <strong>${escapeHtml(d.name)}</strong>
-                <div style="font-size: 12px; color: #888; font-family: monospace;">${escapeHtml(d.mac)}</div>
+    body.innerHTML = devices.map(d => {
+        // If name is "Unknown" or empty, use MAC as the display name
+        const displayName = (d.name && d.name !== 'Unknown' && d.name !== 'null' && d.name.trim() !== '') 
+            ? d.name 
+            : d.mac;
+        return `
+            <div class="paired-device-item">
+                <div class="paired-device-info">
+                    <div class="paired-device-name">${escapeHtml(displayName)}</div>
+                    <div class="paired-device-mac">${escapeHtml(d.mac)}</div>
+                </div>
+                <button class="paired-device-forget-btn" onclick="forgetBluetoothDevice('${d.mac}')">Forget</button>
             </div>
-            <button class="btn-secondary" style="font-size: 12px; padding: 2px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="forgetBluetoothDevice('${d.mac}')">Forget</button>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
     modal.style.display = 'flex';
 }
