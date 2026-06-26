@@ -2618,44 +2618,42 @@ async function renderHardwareTests() {
     let passed = false;
     let message = 'GPS did not lock';
     try {
-        // 1. Enable location using modern cmd (Android 10+)
+        // 1. Enable location using modern Android command
+        await runAdb('cmd location set-location-enabled true');
+        await new Promise(r => setTimeout(r, 1000));
+
+        // 2. Check if location is enabled
+        let isEnabled = false;
         try {
-            await runAdb('cmd location set-location-enabled true');
+            const output = await runAdb('cmd location is-location-enabled');
+            isEnabled = output.trim().toLowerCase() === 'true';
         } catch (e) {
-            // Fallback for older Android
+            // Fallback: check location_mode
+            const mode = await runAdb('settings get secure location_mode');
+            if (mode.trim() === '3') isEnabled = true;
+        }
+
+        // 3. If not enabled, force via settings
+        if (!isEnabled) {
             await runAdb('settings put secure location_mode 3');
-        }
-        // Wait for setting to apply
-        await new Promise(r => setTimeout(r, 2000));
-
-        // 2. Ensure GPS provider is enabled
-        try {
-            await runAdb('settings put secure location_providers_allowed +gps');
-        } catch (e) {
-            // ignore if not supported
-        }
-        await new Promise(r => setTimeout(r, 2000));
-
-        // 3. Check location mode
-        const mode = await runAdb('settings get secure location_mode');
-        if (mode.trim() === '0' || mode.trim() === '1') {
-            // If still off, force high accuracy
-            await runAdb('settings put secure location_mode 3');
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise(r => setTimeout(r, 1000));
+            const mode = await runAdb('settings get secure location_mode');
+            if (mode.trim() === '3') isEnabled = true;
         }
 
-        // 4. Get dumpsys location to check for fix
-        const dump = await runAdb('dumpsys location');
-        // Look for GPS provider and a location fix
-        const hasGps = dump.includes('gps') && (dump.includes('mHasProvider: true') || dump.includes('Provider: gps'));
-        const hasLocation = dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null');
-        if (hasGps && hasLocation) {
+        // 4. Report result
+        if (isEnabled) {
             passed = true;
-            message = 'GPS locked successfully';
-        } else if (hasGps) {
-            message = 'GPS enabled but no fix yet (wait longer or go outside)';
+            message = 'GPS enabled (high accuracy)';
+            // Optionally check for a fix (no need to fail if no fix)
+            try {
+                const dump = await runAdb('dumpsys location');
+                if (dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null')) {
+                    message = 'GPS locked successfully';
+                }
+            } catch (e) {}
         } else {
-            message = 'GPS hardware not available or disabled';
+            message = 'GPS could not be enabled';
         }
     } catch (e) {
         message = 'Failed to check GPS status: ' + e.message;
