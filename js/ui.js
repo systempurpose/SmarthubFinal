@@ -893,63 +893,70 @@ async function showStorageModal() {
         const used = b.used?.human || '?';
         const usedBytes = Number(b.used?.bytes) || 0;
         const free = b.free?.human || '?';
+        const freeBytes = Number(b.free?.bytes) || 0;
         const apps = b.apps || { percent: 0, human: '0 KB', bytes: 0 };
         const media = b.media || { percent: 0, human: '0 KB', bytes: 0 };
         const system = b.system || { percent: 0, human: '0 KB', bytes: 0 };
         const other = b.other || { percent: 0, human: '0 KB', bytes: 0 };
 
-        // Predefined color palette (material design)
-        const colors = ['#0d6efd', '#198754', '#0dcaf0', '#6c757d'];
+        // Include "Free" as a separate slice
         const segments = [
-            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: colors[0], icon: '📱' },
-            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: colors[1], icon: '🎬' },
-            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: colors[2], icon: '⚙️' },
-            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: colors[3], icon: '📦' }
-        ].map(segment => {
-            const rawValue = Number(segment.percent) || 0;
-            const computedValue = rawValue > 0 ? rawValue : (usedBytes > 0 ? (Number(segment.bytes) / usedBytes) * 100 : 0);
-            return { ...segment, value: computedValue };
-        });
+            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: '#0d6efd', icon: '📱' },
+            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: '#198754', icon: '🎬' },
+            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: '#0dcaf0', icon: '⚙️' },
+            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: '#6c757d', icon: '📦' },
+            { label: 'Free', percent: 0, bytes: freeBytes, human: free, color: '#e9ecef', icon: '🟩' }
+        ];
 
-        // Build HTML with improved design
+        // Calculate actual percentages based on total bytes
+        const totalBytesAll = segments.reduce((sum, s) => sum + (s.bytes || 0), 0);
+        if (totalBytesAll > 0) {
+            for (const seg of segments) {
+                seg.percent = (seg.bytes / totalBytesAll) * 100;
+            }
+        }
+
+        // Sort: used categories first, then free at the end
+        const usedSegments = segments.filter(s => s.label !== 'Free');
+        const freeSegment = segments.find(s => s.label === 'Free');
+        const sortedSegments = [...usedSegments, freeSegment];
+
+        // Build HTML with improved layout
         const html = `
-            <div style="display: flex; flex-direction: column; gap: 24px;">
-                <!-- Top row: Pie chart + Overview -->
-                <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center;">
-                    <!-- Donut chart -->
-                    <div style="flex: 0 0 180px; text-align: center;">
-                        <canvas id="storagePieCanvas" width="180" height="180"></canvas>
-                        <div style="margin-top: 8px; font-size: 14px; font-weight: 500; color: #1f1f1f;">Storage</div>
-                    </div>
-                    <!-- Overview cards -->
-                    <div style="flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px;">
-                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                            <div style="font-size: 12px; color: #6B7280;">Total</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #1f1f1f;">${escapeHtml(total)}</div>
-                        </div>
-                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                            <div style="font-size: 12px; color: #6B7280;">Used</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #dc3545;">${escapeHtml(used)}</div>
-                        </div>
-                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
-                            <div style="font-size: 12px; color: #6B7280;">Free</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #198754;">${escapeHtml(free)}</div>
-                        </div>
-                    </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; padding: 8px 0;">
+                <!-- Left: Pie chart -->
+                <div style="flex: 0 0 auto; text-align: center;">
+                    <canvas id="storagePieCanvas" width="240" height="240" style="max-width: 100%; height: auto;"></canvas>
                 </div>
+                <!-- Right: Legend & Overview -->
+                <div style="flex: 1; min-width: 200px;">
+                    <!-- Overview cards -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
+                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: #6B7280;">Total</div>
+                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(total)}</div>
+                        </div>
+                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: #6B7280;">Used</div>
+                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(used)}</div>
+                        </div>
+                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
+                            <div style="font-size: 11px; color: #6B7280;">Free</div>
+                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(free)}</div>
+                        </div>
+                    </div>
 
-                <!-- Detailed usage bars -->
-                <div style="background: #f8f9fa; border-radius: 12px; padding: 16px;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Detailed Usage</h4>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        ${segments.map(segment => `
-                            <div>
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 14px;">
-                                    <span><strong>${segment.icon} ${segment.label}</strong></span>
-                                    <span>${escapeHtml(segment.human)} (${segment.value.toFixed(1)}%)</span>
+                    <!-- Legend with progress bars -->
+                    <div style="background: #f8f9fa; border-radius: 8px; padding: 12px;">
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">Detailed Usage</div>
+                        ${sortedSegments.map(segment => `
+                            <div style="margin-bottom: 8px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                                    <span>${segment.icon} ${segment.label}</span>
+                                    <span>${escapeHtml(segment.human)} (${segment.percent.toFixed(1)}%)</span>
                                 </div>
-                                <div style="background: #e9ecef; border-radius: 8px; height: 8px; overflow: hidden;">
-                                    <div style="width: ${Math.max(1, segment.value)}%; background: ${segment.color}; height: 100%; border-radius: 8px; transition: width 0.6s ease;"></div>
+                                <div style="background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
+                                    <div style="width: ${Math.max(0.5, segment.percent)}%; background: ${segment.color}; height: 100%;"></div>
                                 </div>
                             </div>
                         `).join('')}
@@ -960,53 +967,64 @@ async function showStorageModal() {
 
         body.innerHTML = html;
 
-        // Draw pie chart on canvas (donut style)
+        // Draw the pie chart
         const canvas = document.getElementById('storagePieCanvas');
-        const totalPercent = segments.reduce((sum, segment) => sum + segment.value, 0);
         if (canvas) {
             const ctx = canvas.getContext('2d');
-            const w = 180, h = 180, cx = 90, cy = 90, outerR = 75, innerR = 45;
+            const w = 240, h = 240, cx = 120, cy = 120, r = 90;
+            const innerRadius = 50; // for donut style
             ctx.clearRect(0, 0, w, h);
 
-            if (totalPercent > 0.05) {
-                let start = -0.5 * Math.PI;
-                for (const segment of segments) {
-                    const angle = (segment.value / 100) * 2 * Math.PI;
-                    if (angle <= 0) continue;
-                    const end = start + angle;
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, outerR, start, end);
-                    ctx.arc(cx, cy, innerR, end, start, true);
-                    ctx.closePath();
-                    ctx.fillStyle = segment.color;
-                    ctx.fill();
-                    start = end;
-                }
-                // Center text
+            let start = -0.5 * Math.PI;
+            const usedTotal = sortedSegments.filter(s => s.label !== 'Free').reduce((sum, s) => sum + s.percent, 0);
+            // Ensure free is last slice
+            const sortedForPie = [...sortedSegments.filter(s => s.label !== 'Free'), sortedSegments.find(s => s.label === 'Free')];
+
+            for (const segment of sortedForPie) {
+                const angle = (segment.percent / 100) * 2 * Math.PI;
+                if (angle <= 0) continue;
+                const end = start + angle;
+                // Draw donut slice
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, start, end);
+                ctx.arc(cx, cy, innerRadius, end, start, true);
+                ctx.closePath();
+                ctx.fillStyle = segment.color;
+                ctx.fill();
+                // Draw white stroke between slices
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Draw percentage label in the middle of the slice
+                const midAngle = start + angle / 2;
+                const labelRadius = (r + innerRadius) / 2;
+                const labelX = cx + labelRadius * Math.cos(midAngle);
+                const labelY = cy + labelRadius * Math.sin(midAngle);
                 ctx.fillStyle = '#1f1f1f';
-                ctx.font = 'bold 14px "Segoe UI", sans-serif';
+                ctx.font = 'bold 11px "Segoe UI", sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(`${used}`, cx, cy - 8);
-                ctx.font = '10px "Segoe UI", sans-serif';
-                ctx.fillStyle = '#6B7280';
-                ctx.fillText('used', cx, cy + 10);
-            } else {
-                // Fallback: empty state
-                ctx.fillStyle = '#e9ecef';
-                ctx.beginPath();
-                ctx.arc(cx, cy, outerR, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
-                ctx.fill();
-                ctx.fillStyle = '#9ca3af';
-                ctx.font = '12px "Segoe UI", sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('No data', cx, cy);
+                if (segment.percent > 5) { // only show if slice is large enough
+                    ctx.fillText(segment.percent.toFixed(0) + '%', labelX, labelY);
+                }
+
+                start = end;
             }
+
+            // Inner circle text
+            ctx.beginPath();
+            ctx.arc(cx, cy, innerRadius - 2, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.fillStyle = '#1f1f1f';
+            ctx.font = 'bold 14px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Storage', cx, cy - 10);
+            ctx.font = '13px "Segoe UI", sans-serif';
+            ctx.fillStyle = '#555';
+            ctx.fillText(`${total}`, cx, cy + 12);
         }
     } catch (err) {
         console.error('Storage modal error:', err);
