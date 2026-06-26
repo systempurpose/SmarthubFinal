@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,6 +23,7 @@ import androidx.core.content.ContextCompat;
 
 public class TestRunnerActivity extends AppCompatActivity {
 
+    private static final String TAG = "TestRunner";
     private static final int PERMISSION_REQUEST_CODE = 100;
     private String pendingTestType;
 
@@ -37,14 +39,13 @@ public class TestRunnerActivity extends AppCompatActivity {
             return;
         }
 
-        // Permission handling for flash/camera
         if (testType.equals("flash")) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.CAMERA},
                         PERMISSION_REQUEST_CODE);
-                return; // onRequestPermissionsResult will continue
+                return;
             }
         }
 
@@ -59,7 +60,7 @@ public class TestRunnerActivity extends AppCompatActivity {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 runTest(pendingTestType);
             } else {
-                Toast.makeText(this, "Camera permission required for flashlight test", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Camera permission required for flashlight", Toast.LENGTH_SHORT).show();
                 finish();
             }
         }
@@ -67,9 +68,7 @@ public class TestRunnerActivity extends AppCompatActivity {
 
     private void runTest(String testType) {
         TextView status = findViewById(R.id.testStatus);
-        if (status != null) {
-            status.setText("Running: " + testType);
-        }
+        if (status != null) status.setText("Running: " + testType);
 
         switch (testType) {
             case "vibrate":
@@ -81,10 +80,11 @@ public class TestRunnerActivity extends AppCompatActivity {
             case "flash":
                 runFlashTest();
                 break;
-            case "touch":
-                Toast.makeText(this, "Touch test is handled by the main app", Toast.LENGTH_LONG).show();
-                finish();
-                break;
+           case "touch":
+            Intent touchIntent = new Intent(this, TouchTestActivity.class);
+            startActivity(touchIntent);
+            finish();
+            break;
             default:
                 Toast.makeText(this, "Unknown test: " + testType, Toast.LENGTH_SHORT).show();
                 finish();
@@ -92,25 +92,47 @@ public class TestRunnerActivity extends AppCompatActivity {
     }
 
     private void runVibrateTest() {
-        Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-        if (vibrator == null || !vibrator.hasVibrator()) {
-            Toast.makeText(this, "Vibrator not available", Toast.LENGTH_SHORT).show();
+        PackageManager pm = getPackageManager();
+        // Use string literal for compatibility with all API levels
+        if (!pm.hasSystemFeature("android.hardware.vibrator")) {
+            Toast.makeText(this, "Vibrator hardware not present", Toast.LENGTH_LONG).show();
+            Log.w(TAG, "Vibrator not supported");
             finish();
             return;
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
-        } else {
-            vibrator.vibrate(500);
+        Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            Toast.makeText(this, "Vibrator service unavailable", Toast.LENGTH_LONG).show();
+            finish();
+            return;
         }
 
-        Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(500);
+            }
+            Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
+            Log.i(TAG, "Vibration triggered");
+        } catch (Exception e) {
+            Log.e(TAG, "Vibration error", e);
+            Toast.makeText(this, "Vibration error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+
         new android.os.Handler().postDelayed(this::finish, 1500);
     }
 
     private void runSoundTest() {
-        // Use system notification sound – no raw resource needed
+        PackageManager pm = getPackageManager();
+        if (!pm.hasSystemFeature("android.hardware.audio.output")) {
+            Toast.makeText(this, "Audio output not present", Toast.LENGTH_LONG).show();
+            Log.w(TAG, "Audio output not supported");
+            finish();
+            return;
+        }
+
         Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         if (notificationUri == null) {
             Toast.makeText(this, "No notification sound available", Toast.LENGTH_SHORT).show();
@@ -133,47 +155,56 @@ public class TestRunnerActivity extends AppCompatActivity {
         mp.setOnErrorListener((mp1, what, extra) -> {
             mp1.release();
             Toast.makeText(this, "Audio playback error", Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
             finish();
             return true;
         });
         mp.start();
         Toast.makeText(this, "Playing notification sound...", Toast.LENGTH_SHORT).show();
+        Log.i(TAG, "Sound playback started");
     }
 
     private void runFlashTest() {
+        PackageManager pm = getPackageManager();
+        if (!pm.hasSystemFeature("android.hardware.camera.flash")) {
+            Toast.makeText(this, "Flash hardware not present", Toast.LENGTH_LONG).show();
+            Log.w(TAG, "Flash not supported");
+            finish();
+            return;
+        }
+
         CameraManager cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
         if (cameraManager == null) {
-            Toast.makeText(this, "Camera service not available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Camera service unavailable", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
 
         try {
-            // Find a camera with flash
             String flashCameraId = findFlashCameraId(cameraManager);
             if (flashCameraId == null) {
-                Toast.makeText(this, "No flash unit available", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "No flash unit found", Toast.LENGTH_SHORT).show();
                 finish();
                 return;
             }
 
-            // Turn flash on
             cameraManager.setTorchMode(flashCameraId, true);
             Toast.makeText(this, "Flash on", Toast.LENGTH_SHORT).show();
+            Log.i(TAG, "Flash turned on");
 
-            // Use a final copy for the lambda
             final String finalCameraId = flashCameraId;
             new android.os.Handler().postDelayed(() -> {
                 try {
                     cameraManager.setTorchMode(finalCameraId, false);
                 } catch (CameraAccessException e) {
-                    e.printStackTrace();
+                    Log.e(TAG, "Failed to turn off flash", e);
                 }
                 finish();
             }, 2000);
 
         } catch (Exception e) {
-            Toast.makeText(this, "Flash error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "Flash error", e);
+            Toast.makeText(this, "Flash error: " + e.getMessage(), Toast.LENGTH_LONG).show();
             finish();
         }
     }
@@ -182,9 +213,7 @@ public class TestRunnerActivity extends AppCompatActivity {
         for (String id : manager.getCameraIdList()) {
             Boolean hasFlash = manager.getCameraCharacteristics(id)
                     .get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
-            if (hasFlash != null && hasFlash) {
-                return id;
-            }
+            if (hasFlash != null && hasFlash) return id;
         }
         return null;
     }

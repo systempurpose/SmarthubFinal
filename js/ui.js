@@ -2372,7 +2372,31 @@ function createHelpModal() {
 }
 
 // ==================== HARDWARE TESTS PAGE ====================
-// ==================== HARDWARE TESTS PAGE ====================
+// Feature cache
+let hardwareFeaturesCache = null;
+
+async function getHardwareFeatures() {
+    if (hardwareFeaturesCache !== null) return hardwareFeaturesCache;
+    try {
+        const res = await fetch(`${BACKEND_URL}/adb-shell`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, command: 'pm list features' })
+        });
+        const data = await res.json();
+        const output = data.output || '';
+        const features = output.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.startsWith('feature:'))
+            .map(line => line.replace('feature:', '').trim());
+        hardwareFeaturesCache = features;
+        return features;
+    } catch (err) {
+        console.warn('Could not fetch hardware features:', err);
+        return [];
+    }
+}
+
 async function renderHardwareTests() {
     if (!currentDeviceId) {
         document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
@@ -2550,42 +2574,67 @@ async function renderHardwareTests() {
             const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
             return { passed, message };
         }},
-        { id: 'vibration', name: 'Vibration', run: async () => {
-            await launchAndroidTest('vibrate');
-            modalTitle.textContent = 'Vibration Test';
-            modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation(5000);
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
-            return { passed, message };
-        }},
-        { id: 'flashlight', name: 'Flashlight', run: async () => {
-            await launchAndroidTest('flash');
-            modalTitle.textContent = 'Flashlight Test';
-            modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation(5000);
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed flashlight' : 'User did not see light';
-            return { passed, message };
-        }},
-        { id: 'speaker', name: 'Speaker', run: async () => {
-            await launchAndroidTest('sound');
-            modalTitle.textContent = 'Speaker Test';
-            modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation(5000);
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
-            return { passed, message };
-        }},
+        {
+            id: 'vibration',
+            name: 'Vibration',
+            run: async () => {
+                // Check if vibrator hardware is present
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.vibrator')) {
+                    return { passed: true, message: 'Not supported (no vibrator hardware)' };
+                }
+                await launchAndroidTest('vibrate');
+                modalTitle.textContent = 'Vibration Test';
+                modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation(5000);
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
+                return { passed, message };
+            }
+        },
+        {
+            id: 'flashlight',
+            name: 'Flashlight',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.camera.flash')) {
+                    return { passed: true, message: 'Not supported (no flashlight hardware)' };
+                }
+                await launchAndroidTest('flash');
+                modalTitle.textContent = 'Flashlight Test';
+                modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation(5000);
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed flashlight' : 'User did not see light';
+                return { passed, message };
+            }
+        },
+        {
+            id: 'speaker',
+            name: 'Speaker',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.audio.output')) {
+                    return { passed: true, message: 'Not supported (no audio output hardware)' };
+                }
+                await launchAndroidTest('sound');
+                modalTitle.textContent = 'Speaker Test';
+                modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation(5000);
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
+                return { passed, message };
+            }
+        },
         { id: 'camera', name: 'Camera', run: async () => {
             await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
             modalTitle.textContent = 'Camera Test';
