@@ -285,17 +285,43 @@ export function registerDeviceRoutes(app: Express): void {
       let storageFree: string | undefined;
       let storageType: string | undefined;
       try {
+        // Use df -h /data and parse the first data line
         const df = await adb('-s', deviceId, 'shell', 'df', '-h', '/data');
         const lines = df.split(/\r?\n/);
+        let found = false;
         for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          if (parts.length >= 6 && parts[parts.length - 1] === '/data') {
-            storageTotal = parts[1];
-            storageUsed = parts[2];
-            storageFree = parts[3];
-            break;
+          const trimmed = line.trim();
+          if (trimmed.startsWith('Filesystem')) continue;
+          if (!trimmed) continue;
+          const parts = trimmed.split(/\s+/);
+          if (parts.length >= 6) {
+            // Accept any mount that is under /data or /storage
+            const mount = parts[parts.length - 1];
+            if (mount.startsWith('/data') || mount.startsWith('/storage') || mount === '/') {
+              storageTotal = parts[1];
+              storageUsed = parts[2];
+              storageFree = parts[3];
+              found = true;
+              break;
+            }
           }
         }
+        // Fallback: take the first non-header line
+        if (!found) {
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('Filesystem')) continue;
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\s+/);
+            if (parts.length >= 6) {
+              storageTotal = parts[1];
+              storageUsed = parts[2];
+              storageFree = parts[3];
+              break;
+            }
+          }
+        }
+        // Storage hardware type
         const props2 = parseGetpropOutput(await deviceProps(deviceId));
         if (props2['ro.boot.emmc']) storageType = 'eMMC';
         else if (props2['ro.boot.ufs']) storageType = 'UFS';
@@ -327,6 +353,9 @@ export function registerDeviceRoutes(app: Express): void {
             if (list.includes('beidou')) gnssProviders.push('BeiDou');
           }
         }
+        if (gnssProviders.length === 0) {
+          gnssProviders.push('GPS');
+        }
       } catch {}
 
       // ---- Sensors (extra) ----
@@ -347,10 +376,14 @@ export function registerDeviceRoutes(app: Express): void {
       // ---- USB OTG ----
       let usbOtgSupported = false;
       try {
-        const usbDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'usb');
-        if (usbDump.toLowerCase().includes('host mode')) usbOtgSupported = true;
-        const otgCheck = await adb('-s', deviceId, 'shell', 'cat', '/sys/class/udc').catch(() => '');
-        if (otgCheck && otgCheck.trim()) usbOtgSupported = true;
+        // Check package manager feature
+        const features = await adb('-s', deviceId, 'shell', 'pm', 'list', 'features');
+        if (features.includes('android.hardware.usb.host')) {
+          usbOtgSupported = true;
+        } else {
+          const usbDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'usb');
+          if (usbDump.toLowerCase().includes('host mode')) usbOtgSupported = true;
+        }
       } catch {}
 
       // ---- Network identifiers ----
@@ -358,21 +391,33 @@ export function registerDeviceRoutes(app: Express): void {
       let gateway: string | undefined;
       let dnsServers: string[] = [];
       try {
-        const ipAddr = await adb('-s', deviceId, 'shell', 'ip', '-f', 'inet', 'addr', 'show', 'wlan0');
+        // IP from wlan0
+        const ipAddr = await adb('-s', deviceId, 'shell', 'ip', 'addr', 'show', 'wlan0');
         const ipMatch = ipAddr.match(/inet\s+([\d.]+)\/\d+/);
         if (ipMatch) localIp = ipMatch[1];
         if (!localIp) {
-          const ipMobile = await adb('-s', deviceId, 'shell', 'ip', '-f', 'inet', 'addr', 'show', 'rmnet0');
+          // Try rmnet0 (mobile data)
+          const ipMobile = await adb('-s', deviceId, 'shell', 'ip', 'addr', 'show', 'rmnet0');
           const m = ipMobile.match(/inet\s+([\d.]+)\/\d+/);
           if (m) localIp = m[1];
         }
-        const route = await adb('-s', deviceId, 'shell', 'ip', 'route', 'show', 'default');
+        // Gateway from route table
+        const route = await adb('-s', deviceId, 'shell', 'ip', 'route', 'show', 'dev', 'wlan0');
         const gwMatch = route.match(/via\s+([\d.]+)/);
         if (gwMatch) gateway = gwMatch[1];
-        const resolv = await adb('-s', deviceId, 'shell', 'cat', '/etc/resolv.conf').catch(() => '');
-        const dnsMatches = resolv.match(/nameserver\s+([\d.]+)/g);
-        if (dnsMatches) {
-          dnsServers = dnsMatches.map(m => m.split(/\s+/)[1]);
+        if (!gateway) {
+          const defaultRoute = await adb('-s', deviceId, 'shell', 'ip', 'route', 'show', 'default');
+          const m = defaultRoute.match(/via\s+([\d.]+)/);
+          if (m) gateway = m[1];
+        }
+        // DNS: check private DNS settings
+        const dnsMode = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'private_dns_mode');
+        const dnsSpec = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'private_dns_specifier');
+        if (dnsMode && dnsMode.trim() !== 'off' && dnsSpec && dnsSpec.trim()) {
+          dnsServers.push(dnsSpec.trim());
+        } else {
+          // No private DNS – we can say "Automatic (Gateway)" or use public defaults
+          dnsServers.push('Automatic (Gateway)');
         }
       } catch {}
 
