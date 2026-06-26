@@ -3036,30 +3036,55 @@ async function renderDeviceInfo() {
         const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
         const boolIcon = (val) => val ? '✅' : '❌';
 
+        // ---- Existing fields ----
         const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
         const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
         const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
         const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
         const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
 
-        // New fields with proper fallbacks
+        // ---- Battery ----
         const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : 'Not available';
         const batteryHealth = infoData.batteryHealth || 'Not available';
+        const batteryVoltage = infoData.batteryVoltage ? infoData.batteryVoltage + ' mV' : 'Not available';
+        const batteryTemp = infoData.batteryTemperature ? infoData.batteryTemperature + '°C' : 'Not available';
+        const maxChargeCurrent = infoData.maxChargingCurrent ? infoData.maxChargingCurrent + ' mA' : 'Not available';
+        const maxChargeVoltage = infoData.maxChargingVoltage ? infoData.maxChargingVoltage + ' mV' : 'Not available';
+
+        // ---- Display ----
         const refreshRate = infoData.refreshRate || 'Not available';
+
+        // ---- Camera ----
         const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length)
             ? infoData.cameraResolutions.join(', ')
             : 'Not available';
+
+        // ---- MACs ----
         const wifiMac = infoData.wifiMac || 'Not available';
         const btMac = infoData.btMac || 'Not available';
 
-        // Paired devices
-        let pairedDevicesDisplay = 'None';
-        if (infoData.pairedDevices && infoData.pairedDevices.length) {
-            const count = infoData.pairedDevices.length;
-            const list = infoData.pairedDevices.join(', ');
-            pairedDevicesDisplay = `${count} device${count > 1 ? 's' : ''}: ${list}`;
-        }
+        // ---- Paired devices ----
+        const pairedDevices = infoData.pairedDevices || [];
+        const pairedCount = pairedDevices.length;
+        const pairedSummary = pairedCount > 0 ? `${pairedCount} device${pairedCount > 1 ? 's' : ''} paired` : 'None';
 
+        // ---- New fields ----
+        const widevineLevel = infoData.widevineLevel || 'Not available';
+        const drmSchemes = (infoData.drmSchemes && infoData.drmSchemes.length) ? infoData.drmSchemes.join(', ') : 'None';
+        const storageTotal = infoData.storageTotal || '?';
+        const storageUsed = infoData.storageUsed || '?';
+        const storageFree = infoData.storageFree || '?';
+        const storageType = infoData.storageType || 'Unknown';
+        const gnss = (infoData.gnssProviders && infoData.gnssProviders.length) ? infoData.gnssProviders.join(', ') : 'Unknown';
+        const hasGyroText = infoData.hasGyro ? '✅' : '❌';
+        const hasMagText = infoData.hasMagnetometer ? '✅' : '❌';
+        const hasBaroText = infoData.hasBarometer ? '✅' : '❌';
+        const usbOtg = infoData.usbOtgSupported ? '✅ Supported' : 'Not supported';
+        const localIp = infoData.localIp || 'Not connected';
+        const gateway = infoData.gateway || 'Not available';
+        const dns = (infoData.dnsServers && infoData.dnsServers.length) ? infoData.dnsServers.join(', ') : 'Not available';
+
+        // ---- Helpers ----
         const makeCard = (title, icon, items) => `
             <div class="info-card">
                 <div class="card-header"><i class="${icon}"></i> ${title}</div>
@@ -3069,9 +3094,19 @@ async function renderDeviceInfo() {
             </div>
         `;
 
+        const makeCardWithExtra = (title, icon, items, extraHtml) => `
+            <div class="info-card">
+                <div class="card-header"><i class="${icon}"></i> ${title}</div>
+                <div class="card-grid">
+                    ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
+                </div>
+                ${extraHtml ? `<div style="padding: 8px 16px 12px; text-align: right;">${extraHtml}</div>` : ''}
+            </div>
+        `;
+
         const cards = [];
 
-        // Device Overview
+        // ---- Device Overview ----
         cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
             { label: 'Model', value: get('ro.product.model', 'Unknown') },
             { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
@@ -3082,32 +3117,78 @@ async function renderDeviceInfo() {
             { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
         ]));
 
-        // Battery
+        // ---- Battery ----
         cards.push(makeCard('Battery', 'fas fa-battery-full', [
             { label: 'Capacity', value: batteryCapacity },
-            { label: 'Health', value: batteryHealth }
+            { label: 'Health', value: batteryHealth },
+            { label: 'Voltage', value: batteryVoltage },
+            { label: 'Temperature', value: batteryTemp },
+            { label: 'Max Charge Current', value: maxChargeCurrent },
+            { label: 'Max Charge Voltage', value: maxChargeVoltage }
         ]));
 
-        // Display
+        // ---- Display ----
         cards.push(makeCard('Display', 'fas fa-desktop', [
             { label: 'Refresh Rate', value: refreshRate },
             { label: 'Density', value: `${get('ro.sf.lcd_density', '?')} dpi` }
         ]));
 
-        // Camera
+        // ---- Camera ----
         cards.push(makeCard('Camera', 'fas fa-camera', [
             { label: 'Resolutions', value: camRes }
         ]));
 
-        // Bluetooth
-        cards.push(makeCard('Bluetooth', 'fab fa-bluetooth', [
-            { label: 'Enabled', value: boolIcon(bluetoothOn) },
-            { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
-            { label: 'Paired Devices', value: pairedDevicesDisplay },
-            { label: 'MAC Address', value: btMac }
+        // ---- DRM & Media ----
+        cards.push(makeCard('DRM & Media', 'fas fa-lock', [
+            { label: 'Widevine Level', value: widevineLevel },
+            { label: 'Supported DRM', value: drmSchemes }
         ]));
 
-        // WiFi
+        // ---- Storage ----
+        cards.push(makeCard('Storage', 'fas fa-hdd', [
+            { label: 'Total (Data)', value: storageTotal },
+            { label: 'Used', value: storageUsed },
+            { label: 'Free', value: storageFree },
+            { label: 'Hardware Type', value: storageType }
+        ]));
+
+        // ---- GNSS / GPS ----
+        cards.push(makeCard('GNSS / GPS', 'fas fa-satellite', [
+            { label: 'Satellites', value: gnss }
+        ]));
+
+        // ---- Sensors (extra) ----
+        cards.push(makeCard('Sensors', 'fas fa-microchip', [
+            { label: 'Gyroscope', value: hasGyroText },
+            { label: 'Magnetometer', value: hasMagText },
+            { label: 'Barometer', value: hasBaroText }
+        ]));
+
+        // ---- USB OTG ----
+        cards.push(makeCard('USB OTG', 'fas fa-usb', [
+            { label: 'Host Mode', value: usbOtg }
+        ]));
+
+        // ---- Network Details ----
+        cards.push(makeCard('Network Details', 'fas fa-network-wired', [
+            { label: 'Local IP', value: localIp },
+            { label: 'Gateway', value: gateway },
+            { label: 'DNS Servers', value: dns }
+        ]));
+
+        // ---- Bluetooth (with Show Paired button) ----
+        let pairedExtra = '';
+        if (pairedCount > 0) {
+            pairedExtra = `<button class="btn-secondary" style="font-size:12px; padding:4px 12px;" onclick="showPairedDevicesModal()">📋 Show (${pairedCount})</button>`;
+        }
+        cards.push(makeCardWithExtra('Bluetooth', 'fab fa-bluetooth', [
+            { label: 'Enabled', value: boolIcon(bluetoothOn) },
+            { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
+            { label: 'Paired Devices', value: pairedSummary },
+            { label: 'MAC Address', value: btMac }
+        ], pairedExtra));
+
+        // ---- WiFi ----
         let wifiItems = [];
         if (wifiData && wifiData.wifi) {
             const info = formatWifiStatus(wifiData.wifi);
@@ -3127,21 +3208,17 @@ async function renderDeviceInfo() {
         }
         cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
 
-        // Network & SIM
-        const networkType = get('gsm.network.type', 'Unknown');
-        const operator = get('gsm.operator.alpha', 'Unknown');
-        const simState = get('gsm.sim.state', 'Unknown');
-
+        // ---- Network & SIM ----
         cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
-            { label: 'Operator', value: operator },
-            { label: 'Network Type', value: networkType },
-            { label: 'SIM State', value: simState },
+            { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
+            { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
+            { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
             { label: 'Mobile Data (Toggle)', value: boolIcon(mobileDataToggle) },
             { label: 'Mobile Data (Connected)', value: boolIcon(mobileDataConnected) },
             { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
         ]));
 
-        // System & Build
+        // ---- System & Build ----
         cards.push(makeCard('System & Build', 'fas fa-code-branch', [
             { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
             { label: 'Build Date', value: get('ro.build.date', 'N/A') },
@@ -3149,7 +3226,7 @@ async function renderDeviceInfo() {
             { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
         ]));
 
-        // Hardware
+        // ---- Hardware ----
         cards.push(makeCard('Hardware', 'fas fa-microchip', [
             { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
             { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
@@ -3157,7 +3234,7 @@ async function renderDeviceInfo() {
             { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
         ]));
 
-        // Special Features
+        // ---- Special Features ----
         cards.push(makeCard('Special Features', 'fas fa-star', [
             { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
             { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
@@ -3165,7 +3242,7 @@ async function renderDeviceInfo() {
             { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
         ]));
 
-        // Security & Boot
+        // ---- Security & Boot ----
         cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
             { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
             { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },
@@ -3175,11 +3252,83 @@ async function renderDeviceInfo() {
 
         const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
         document.getElementById('pageContent').innerHTML = finalHtml;
+
+        // Store paired devices globally for the modal
+        window._pairedDevices = pairedDevices;
     } catch (err) {
         document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
     }
 }
 
+// ---- Show Paired Devices Modal ----
+function showPairedDevicesModal() {
+    const devices = window._pairedDevices || [];
+    if (!devices.length) {
+        alert('No paired devices found.');
+        return;
+    }
+
+    let modal = document.getElementById('pairedDevicesModal');
+    if (!modal) {
+        const modalHtml = `
+            <div id="pairedDevicesModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3><i class="fab fa-bluetooth"></i> Paired Bluetooth Devices</h3>
+                        <span class="close-button" id="closePairedModal">&times;</span>
+                    </div>
+                    <div class="modal-body" id="pairedDevicesBody" style="max-height: 400px; overflow-y: auto;"></div>
+                    <div class="modal-footer">
+                        <button id="closePairedModalBtn" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('pairedDevicesModal');
+        document.getElementById('closePairedModal').addEventListener('click', () => modal.style.display = 'none');
+        document.getElementById('closePairedModalBtn').addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    }
+
+    const body = document.getElementById('pairedDevicesBody');
+    body.innerHTML = devices.map(d => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; border-bottom: 1px solid #eee;">
+            <div>
+                <strong>${escapeHtml(d.name)}</strong>
+                <div style="font-size: 12px; color: #888; font-family: monospace;">${escapeHtml(d.mac)}</div>
+            </div>
+            <button class="btn-secondary" style="font-size: 12px; padding: 2px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="forgetBluetoothDevice('${d.mac}')">Forget</button>
+        </div>
+    `).join('');
+
+    modal.style.display = 'flex';
+}
+
+// ---- Forget a Bluetooth device ----
+async function forgetBluetoothDevice(mac) {
+    if (!confirm(`Forget device with MAC ${mac}?`)) return;
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/forget-bluetooth-device`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, mac })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Device forgotten successfully.');
+            // Refresh the device info to update paired list
+            await renderDeviceInfo();
+            // Close modal if open
+            const modal = document.getElementById('pairedDevicesModal');
+            if (modal) modal.style.display = 'none';
+        } else {
+            alert('Failed to forget device: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
 // ==================== AI CONCLUSION ====================
 async function renderAIConclusion() {
     if (!currentDeviceId) {

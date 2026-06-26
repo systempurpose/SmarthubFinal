@@ -7,7 +7,6 @@ export function registerDeviceRoutes(app: Express): void {
   app.get('/api/devices', async (req: Request, res: Response) => {
     try {
       const devices = await listDevices();
-      // Enrich each device with a model name (if missing)
       await Promise.all(
         devices.map(async (d) => {
           if (d.model) return;
@@ -22,7 +21,7 @@ export function registerDeviceRoutes(app: Express): void {
             if (label) d.model = label;
             else if (model) d.model = model;
           } catch {
-            // ignore enrichment errors
+            // ignore
           }
         })
       );
@@ -33,7 +32,7 @@ export function registerDeviceRoutes(app: Express): void {
     }
   });
 
-  // GET /api/device/info/:id – detailed device information including Bluetooth & mobile data
+  // GET /api/device/info/:id
   app.get('/api/device/info/:id', async (req: Request, res: Response) => {
     const deviceId = req.params.id;
     if (!deviceId) {
@@ -41,20 +40,17 @@ export function registerDeviceRoutes(app: Express): void {
     }
 
     try {
-      // 1. Basic device properties (getprop)
       const propsDump = await deviceProps(deviceId);
       const props = parseGetpropOutput(propsDump);
 
-      // 2. Bluetooth state
+      // ---- Bluetooth state ----
       let bluetoothOn: boolean | undefined;
       try {
         const btRaw = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'bluetooth_on');
         bluetoothOn = btRaw?.trim() === '1';
-      } catch {
-        // ignore
-      }
+      } catch {}
 
-      // 3. Mobile data toggle (user preference)
+      // ---- Mobile data toggle ----
       let mobileDataToggle: boolean | undefined;
       try {
         let dataRaw = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'mobile_data1');
@@ -62,11 +58,9 @@ export function registerDeviceRoutes(app: Express): void {
           dataRaw = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'mobile_data');
         }
         mobileDataToggle = dataRaw?.trim() === '1';
-      } catch {
-        // ignore
-      }
+      } catch {}
 
-      // 4. Mobile data actual connection state
+      // ---- Mobile data connection ----
       let mobileDataConnected: boolean | undefined;
       try {
         const telephony = await adb('-s', deviceId, 'shell', 'dumpsys', 'telephony.registry');
@@ -75,43 +69,40 @@ export function registerDeviceRoutes(app: Express): void {
           const state = parseInt(match[1], 10);
           mobileDataConnected = state === 2;
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
 
-      // ---- NEW FIELDS ----
+      // ==================== BATTERY FIELDS ====================
 
-      // 5. Battery capacity (mAh)
       let batteryCapacity: number | undefined;
       try {
-        const stats = await adb('-s', deviceId, 'shell', 'dumpsys', 'batterystats');
-        const match = stats.match(/Estimated battery capacity:\s*(\d+)\s*mAh/i);
-        if (match) {
-          batteryCapacity = parseInt(match[1], 10);
-        } else {
-          const capPaths = [
-            '/sys/class/power_supply/battery/charge_full_design',
-            '/sys/class/power_supply/battery/charge_full',
-            '/sys/class/power_supply/bms/charge_full_design',
-          ];
-          for (const p of capPaths) {
-            try {
-              const out = await adb('-s', deviceId, 'shell', 'cat', p);
-              const val = parseInt(out.trim(), 10);
-              if (!isNaN(val) && val > 0) {
-                // Usually in µAh, convert to mAh if > 5000
-                batteryCapacity = val > 5000 ? Math.round(val / 1000) : val;
-                break;
-              }
-            } catch {}
+        const capPaths = [
+          '/sys/class/power_supply/battery/charge_full',
+          '/sys/class/power_supply/battery/charge_full_design',
+          '/sys/class/power_supply/bms/charge_full_design',
+          '/sys/class/power_supply/bms/charge_full',
+        ];
+        for (const p of capPaths) {
+          try {
+            const out = await adb('-s', deviceId, 'shell', 'cat', p);
+            const val = parseInt(out.trim(), 10);
+            if (!isNaN(val) && val > 0) {
+              batteryCapacity = val > 5000 ? Math.round(val / 1000) : val;
+              break;
+            }
+          } catch {}
+        }
+        if (!batteryCapacity) {
+          const stats = await adb('-s', deviceId, 'shell', 'dumpsys', 'batterystats');
+          const match = stats.match(/Estimated battery capacity:\s*(\d+)\s*mAh/i);
+          if (match) {
+            batteryCapacity = parseInt(match[1], 10);
           }
         }
-        if (batteryCapacity && (batteryCapacity > 20000 || batteryCapacity < 200)) {
+        if (batteryCapacity && (batteryCapacity < 1000 || batteryCapacity > 20000)) {
           batteryCapacity = undefined;
         }
       } catch {}
 
-      // 6. Battery health
       let batteryHealth: string | undefined;
       try {
         const batteryDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'battery');
@@ -126,11 +117,47 @@ export function registerDeviceRoutes(app: Express): void {
         }
       } catch {}
 
-      // 7. Display refresh rate
+      let maxChargingCurrent: number | undefined;
+      try {
+        const batteryDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'battery');
+        const match = batteryDump.match(/Max charging current:\s*(\d+)/i);
+        if (match) {
+          maxChargingCurrent = Math.round(parseInt(match[1], 10) / 1000);
+        }
+      } catch {}
+
+      let maxChargingVoltage: number | undefined;
+      try {
+        const batteryDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'battery');
+        const match = batteryDump.match(/Max charging voltage:\s*(\d+)/i);
+        if (match) {
+          maxChargingVoltage = Math.round(parseInt(match[1], 10) / 1000);
+        }
+      } catch {}
+
+      let batteryVoltage: number | undefined;
+      try {
+        const batteryDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'battery');
+        const match = batteryDump.match(/voltage:\s*(\d+)/i);
+        if (match) {
+          batteryVoltage = Math.round(parseInt(match[1], 10) / 1000);
+        }
+      } catch {}
+
+      let batteryTemperature: number | undefined;
+      try {
+        const batteryDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'battery');
+        const match = batteryDump.match(/temperature:\s*(\d+)/i);
+        if (match) {
+          batteryTemperature = Math.round(parseInt(match[1], 10) / 10);
+        }
+      } catch {}
+
+      // ---- Display refresh rate ----
       let refreshRate: string | undefined;
       try {
         const displayDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'display');
-        const match = displayDump.match(/refreshRate\s*=\s*([\d.]+)/i);
+        let match = displayDump.match(/refreshRate\s*=\s*([\d.]+)/i);
         if (match) {
           refreshRate = parseFloat(match[1]).toFixed(1) + ' Hz';
         } else {
@@ -142,106 +169,214 @@ export function registerDeviceRoutes(app: Express): void {
         }
       } catch {}
 
-      // 8. Camera resolutions (filtered)
+      // ---- Camera resolutions ----
       let cameraResolutions: string[] = [];
       try {
-        const camDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.camera');
-        const lines = camDump.split(/\r?\n/);
-        for (const line of lines) {
-          const match = line.match(/(\d+)\s*x\s*(\d+)/i);
-          if (match) {
-            const w = parseInt(match[1], 10);
-            const h = parseInt(match[2], 10);
-            // Filter out garbage: width/height > 0 and < 10000, and not containing 0x
-            if (w > 0 && h > 0 && w < 10000 && h < 10000 && !line.includes('0x')) {
-              const res = `${w} x ${h}`;
-              if (!cameraResolutions.includes(res)) {
-                cameraResolutions.push(res);
-              }
-            }
-          }
-        }
-        if (cameraResolutions.length === 0) {
-          const camDump2 = await adb('-s', deviceId, 'shell', 'dumpsys', 'camera');
-          const lines2 = camDump2.split(/\r?\n/);
-          for (const line of lines2) {
-            const match = line.match(/(\d+)\s*x\s*(\d+)/i);
+        const sources = [
+          await adb('-s', deviceId, 'shell', 'dumpsys', 'media.camera').catch(() => ''),
+          await adb('-s', deviceId, 'shell', 'dumpsys', 'camera').catch(() => ''),
+        ];
+        const allMatches: string[] = [];
+        for (const dump of sources) {
+          const lines = dump.split(/\r?\n/);
+          for (const line of lines) {
+            const match = line.match(/(\d+)\s*[xX]\s*(\d+)/);
             if (match) {
               const w = parseInt(match[1], 10);
               const h = parseInt(match[2], 10);
-              if (w > 0 && h > 0 && w < 10000 && h < 10000 && !line.includes('0x')) {
+              if (w > 200 && h > 200 && w < 10000 && h < 10000) {
                 const res = `${w} x ${h}`;
-                if (!cameraResolutions.includes(res)) {
-                  cameraResolutions.push(res);
+                if (!allMatches.includes(res)) {
+                  allMatches.push(res);
                 }
               }
             }
           }
         }
-        // Deduplicate and limit to first 5
-        cameraResolutions = [...new Set(cameraResolutions)].slice(0, 5);
+        cameraResolutions = allMatches.slice(0, 5);
       } catch {}
 
-      // 9. Wi-Fi MAC address
+      // ---- Wi-Fi MAC ----
       let wifiMac: string | undefined;
       try {
-        const mac = await adb('-s', deviceId, 'shell', 'cat', '/sys/class/net/wlan0/address');
+        let mac = await adb('-s', deviceId, 'shell', 'cat', '/sys/class/net/wlan0/address');
         if (mac && mac.trim() && !mac.includes('No such')) wifiMac = mac.trim();
       } catch {}
       if (!wifiMac) {
         try {
           const mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'wifi_mac');
-          if (mac && mac.trim()) wifiMac = mac.trim();
+          if (mac && mac.trim() && mac.trim() !== 'null') wifiMac = mac.trim();
         } catch {}
       }
 
-      // 10. Bluetooth MAC address
+      // ---- Bluetooth MAC ----
       let btMac: string | undefined;
       try {
-        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth');
-        const macMatch = btDump.match(/address:\s*([0-9A-Fa-f:]{17})/i);
-        if (macMatch) {
-          btMac = macMatch[1];
+        let mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'secure', 'bluetooth_address');
+        if (mac && mac.trim() && mac.trim() !== 'null' && mac.trim() !== '') {
+          btMac = mac.trim();
         } else {
-          const mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'bluetooth_address');
-          if (mac && mac.trim() && mac.trim() !== 'null') btMac = mac.trim();
+          mac = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'bluetooth_address');
+          if (mac && mac.trim() && mac.trim() !== 'null' && mac.trim() !== '') {
+            btMac = mac.trim();
+          } else {
+            const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth_manager');
+            const match = btDump.match(/[Aa]ddress:\s*([0-9A-Fa-f:]{17})/i);
+            if (match) btMac = match[1];
+          }
         }
       } catch {}
 
-      // 11. Paired Bluetooth devices
-      let pairedDevices: string[] = [];
+      // ---- Paired Bluetooth devices ----
+      let pairedDevices: { name: string; mac: string }[] = [];
       try {
-        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth');
+        const btDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'bluetooth_manager');
         const lines = btDump.split(/\r?\n/);
         let inBonded = false;
         for (const line of lines) {
-          if (line.includes('Bonded devices:')) {
+          if (line.trim().startsWith('Bonded devices:')) {
             inBonded = true;
-          } else if (inBonded && line.trim().startsWith('Device:')) {
-            const nameMatch = line.match(/Device:\s*([^)]+?)\s*\(/i);
-            if (nameMatch) {
-              pairedDevices.push(nameMatch[1].trim());
-            }
-          } else if (inBonded && line.trim() === '') {
-            inBonded = false;
+            continue;
           }
-        }
-        if (pairedDevices.length === 0) {
-          const bondMatches = btDump.match(/Bonded[^:]*:\s*([^\n]+)/gi);
-          if (bondMatches) {
-            for (const m of bondMatches) {
-              const names = m.match(/([a-zA-Z0-9_\s-]+)/g);
-              if (names) {
-                for (const n of names) {
-                  if (n.trim().length > 0) pairedDevices.push(n.trim());
-                }
+          if (inBonded && line.trim() === '') {
+            inBonded = false;
+            continue;
+          }
+          if (inBonded) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\s+/);
+            if (parts.length >= 3) {
+              const mac = parts[0];
+              const name = parts.slice(2).join(' ');
+              if (mac.match(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/)) {
+                pairedDevices.push({ mac, name: name || 'Unknown' });
               }
             }
           }
         }
+        const seen = new Set();
+        pairedDevices = pairedDevices.filter(d => {
+          if (seen.has(d.mac)) return false;
+          seen.add(d.mac);
+          return true;
+        });
       } catch {}
 
-      // 5. Combine everything into one response
+      // ==================== NEW FIELDS ====================
+
+      // ---- DRM / Widevine ----
+      let widevineLevel: string | undefined;
+      let drmSchemes: string[] = [];
+      try {
+        const extractor = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.extractor');
+        const wvMatch = extractor.match(/Widevine security level:\s*([A-Z0-9]+)/i);
+        if (wvMatch) widevineLevel = wvMatch[1];
+        const drm = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.drm');
+        const schemes = drm.match(/supported\s*schemes:\s*([^\n]+)/i);
+        if (schemes) {
+          drmSchemes = schemes[1].split(/\s*,\s*/).filter(s => s.trim());
+        }
+      } catch {}
+
+      // ---- Storage details ----
+      let storageTotal: string | undefined;
+      let storageUsed: string | undefined;
+      let storageFree: string | undefined;
+      let storageType: string | undefined;
+      try {
+        const df = await adb('-s', deviceId, 'shell', 'df', '-h', '/data');
+        const lines = df.split(/\r?\n/);
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 6 && parts[parts.length - 1] === '/data') {
+            storageTotal = parts[1];
+            storageUsed = parts[2];
+            storageFree = parts[3];
+            break;
+          }
+        }
+        const props2 = parseGetpropOutput(await deviceProps(deviceId));
+        if (props2['ro.boot.emmc']) storageType = 'eMMC';
+        else if (props2['ro.boot.ufs']) storageType = 'UFS';
+        else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('ufs')) storageType = 'UFS';
+        else if (props2['ro.boot.bootdevice']?.toLowerCase().includes('mmc')) storageType = 'eMMC';
+        else storageType = 'Unknown';
+      } catch {}
+
+      // ---- GNSS support ----
+      let gnssProviders: string[] = [];
+      try {
+        const location = await adb('-s', deviceId, 'shell', 'dumpsys', 'location');
+        const gnssMatch = location.match(/GNSS hardware:\s*([^\n]+)/i);
+        if (gnssMatch) {
+          const text = gnssMatch[1].toLowerCase();
+          if (text.includes('gps')) gnssProviders.push('GPS');
+          if (text.includes('glonass')) gnssProviders.push('GLONASS');
+          if (text.includes('galileo')) gnssProviders.push('Galileo');
+          if (text.includes('beidou')) gnssProviders.push('BeiDou');
+          if (text.includes('qzss')) gnssProviders.push('QZSS');
+        }
+        if (gnssProviders.length === 0) {
+          const providers = location.match(/mProviders:\s*([^\n]+)/i);
+          if (providers) {
+            const list = providers[1].toLowerCase();
+            if (list.includes('gps')) gnssProviders.push('GPS');
+            if (list.includes('glonass')) gnssProviders.push('GLONASS');
+            if (list.includes('galileo')) gnssProviders.push('Galileo');
+            if (list.includes('beidou')) gnssProviders.push('BeiDou');
+          }
+        }
+      } catch {}
+
+      // ---- Sensors (extra) ----
+      let hasGyro = false;
+      let hasMagnetometer = false;
+      let hasBarometer = false;
+      try {
+        const sensorDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'sensorservice');
+        const lines = sensorDump.split(/\r?\n/);
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+          if (lower.includes('gyroscope')) hasGyro = true;
+          if (lower.includes('magnetometer') || lower.includes('compass')) hasMagnetometer = true;
+          if (lower.includes('barometer') || lower.includes('pressure')) hasBarometer = true;
+        }
+      } catch {}
+
+      // ---- USB OTG ----
+      let usbOtgSupported = false;
+      try {
+        const usbDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'usb');
+        if (usbDump.toLowerCase().includes('host mode')) usbOtgSupported = true;
+        const otgCheck = await adb('-s', deviceId, 'shell', 'cat', '/sys/class/udc').catch(() => '');
+        if (otgCheck && otgCheck.trim()) usbOtgSupported = true;
+      } catch {}
+
+      // ---- Network identifiers ----
+      let localIp: string | undefined;
+      let gateway: string | undefined;
+      let dnsServers: string[] = [];
+      try {
+        const ipAddr = await adb('-s', deviceId, 'shell', 'ip', '-f', 'inet', 'addr', 'show', 'wlan0');
+        const ipMatch = ipAddr.match(/inet\s+([\d.]+)\/\d+/);
+        if (ipMatch) localIp = ipMatch[1];
+        if (!localIp) {
+          const ipMobile = await adb('-s', deviceId, 'shell', 'ip', '-f', 'inet', 'addr', 'show', 'rmnet0');
+          const m = ipMobile.match(/inet\s+([\d.]+)\/\d+/);
+          if (m) localIp = m[1];
+        }
+        const route = await adb('-s', deviceId, 'shell', 'ip', 'route', 'show', 'default');
+        const gwMatch = route.match(/via\s+([\d.]+)/);
+        if (gwMatch) gateway = gwMatch[1];
+        const resolv = await adb('-s', deviceId, 'shell', 'cat', '/etc/resolv.conf').catch(() => '');
+        const dnsMatches = resolv.match(/nameserver\s+([\d.]+)/g);
+        if (dnsMatches) {
+          dnsServers = dnsMatches.map(m => m.split(/\s+/)[1]);
+        }
+      } catch {}
+
+      // ---- Final JSON response ----
       res.json({
         ...props,
         bluetoothOn,
@@ -249,11 +384,29 @@ export function registerDeviceRoutes(app: Express): void {
         mobileDataConnected,
         batteryCapacity,
         batteryHealth,
+        maxChargingCurrent,
+        maxChargingVoltage,
+        batteryVoltage,
+        batteryTemperature,
         refreshRate,
         cameraResolutions,
         wifiMac,
         btMac,
         pairedDevices,
+        widevineLevel,
+        drmSchemes,
+        storageTotal,
+        storageUsed,
+        storageFree,
+        storageType,
+        gnssProviders,
+        hasGyro,
+        hasMagnetometer,
+        hasBarometer,
+        usbOtgSupported,
+        localIp,
+        gateway,
+        dnsServers,
       });
     } catch (err) {
       console.error('[api/device/info] error:', err);
@@ -261,7 +414,37 @@ export function registerDeviceRoutes(app: Express): void {
     }
   });
 
-  // Legacy /device endpoint – kept for compatibility
+  // ---- POST /api/forget-bluetooth-device ----
+  app.post('/api/forget-bluetooth-device', async (req: Request, res: Response) => {
+    const { deviceId, mac } = req.body;
+    if (!deviceId || !mac) {
+      return res.status(400).json({ error: 'Missing deviceId or MAC address' });
+    }
+    try {
+      let output = '';
+      try {
+        output = await adb('-s', deviceId, 'shell', 'service', 'call', 'bluetooth_manager', '14', 'i32', '1', 's16', mac);
+      } catch {}
+      if (output.includes('Error') || output.includes('not found')) {
+        try {
+          output = await adb('-s', deviceId, 'shell', 'bluetoothctl', 'remove', mac);
+        } catch {}
+      }
+      if (output.includes('Error') || !output) {
+        try {
+          output = await adb('-s', deviceId, 'shell', 'am', 'broadcast', '-a', 'android.bluetooth.device.action.ACTION_UNPAIR', '--ez', 'android.bluetooth.device.extra.DEVICE', mac);
+        } catch {}
+      }
+      if (!output || output.includes('Error') || output.includes('not found')) {
+        return res.status(500).json({ error: 'Failed to unpair device. Command not supported on this device.' });
+      }
+      res.json({ ok: true, message: `Device ${mac} unpaired successfully` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to unpair device' });
+    }
+  });
+
+  // Legacy /device endpoint
   app.get('/device', async (req: Request, res: Response) => {
     try {
       const devices = await listDevices();
