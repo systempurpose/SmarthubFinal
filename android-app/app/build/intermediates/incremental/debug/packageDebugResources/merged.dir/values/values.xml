@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sh_background">#F1F5F9</color>
+    <color name="sh_border">#4A90A8B8</color>
+    <color name="sh_card_tint">#EFF6FF</color>
+    <color name="sh_muted">#6B7280</color>
+    <color name="sh_on_primary">#FFFFFF</color>
+    <color name="sh_on_secondary">#FFFFFF</color>
+    <color name="sh_on_surface">#0F172A</color>
+    <color name="sh_primary">#0EA5E9</color>
+    <color name="sh_primary_variant">#0284C7</color>
+    <color name="sh_secondary">#6366F1</color>
+    <color name="sh_secondary_variant">#4F46E5</color>
+    <color name="sh_surface">#FFFFFF</color>
+    <string name="app_name">SmartHub Mobile Diagnostics ALPHA</string>
+    <style name="ShapeAppearance.SmartHub.Large" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">18dp</item>
+    </style>
+    <style name="ShapeAppearance.SmartHub.Medium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">14dp</item>
+    </style>
+    <style name="ShapeAppearance.SmartHub.Small" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">10dp</item>
+    </style>
+    <style name="TextAppearance.SmartHub.DialogBody" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+    <style name="Theme.SmartHub" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/sh_primary</item>
+        <item name="colorPrimaryVariant">@color/sh_primary_variant</item>
+        <item name="colorOnPrimary">@color/sh_on_primary</item>
+
+        <item name="colorSecondary">@color/sh_secondary</item>
+        <item name="colorSecondaryVariant">@color/sh_secondary_variant</item>
+        <item name="colorOnSecondary">@color/sh_on_secondary</item>
+
+        <item name="android:windowBackground">@color/sh_background</item>
+        <item name="colorSurface">@color/sh_surface</item>
+        <item name="colorOnSurface">@color/sh_on_surface</item>
+
+        <item name="android:statusBarColor">@color/sh_background</item>
+        <item name="android:navigationBarColor">@color/sh_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.SmartHub.AlertDialog</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.SmartHub.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.SmartHub.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.SmartHub.Large</item>
+    </style>
+    <style name="ThemeOverlay.SmartHub.AlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.SmartHub.DialogBody</item>
+    </style>
+</resources>

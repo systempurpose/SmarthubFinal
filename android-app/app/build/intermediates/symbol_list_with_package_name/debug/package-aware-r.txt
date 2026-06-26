@@ -3170,6 +3170,7 @@ id exitUntilCollapsed
 id expand_activities_button
 id expanded_menu
 id fade
+id failButton
 id fill
 id fill_horizontal
 id fill_vertical
@@ -3322,6 +3323,7 @@ id parent
 id parentPanel
 id parentRelative
 id parent_matrix
+id passButton
 id password_toggle
 id path
 id pathRelative
@@ -3461,6 +3463,7 @@ id view_tree_saved_state_registry_owner
 id view_tree_view_model_store_owner
 id visible
 id visible_removing_fragment_view_tag
+id webView
 id withText
 id with_icon
 id withinBounds
@@ -3581,16 +3584,18 @@ layout abc_search_dropdown_item_icons_2line
 layout abc_search_view
 layout abc_select_dialog_material
 layout abc_tooltip
-layout activity_earpiece_test
+layout activity_bluetooth_test
 layout activity_fingerprint_test
 layout activity_gps_test
 layout activity_gyro_test
+layout activity_headphone_test
 layout activity_main
 layout activity_microphone_test
 layout activity_nfc_test
 layout activity_proximity_test
 layout activity_test_runner
 layout activity_touch_test
+layout activity_webview_test
 layout custom_dialog
 layout design_bottom_navigation_item
 layout design_bottom_sheet_dialog

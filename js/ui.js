@@ -3678,10 +3678,12 @@ async function renderConnectionTroubleshoot() {
         return;
     }
 
-    document.getElementById('pageContent').innerHTML = `
+    // Clear page and inject fresh layout
+    const container = document.getElementById('pageContent');
+    container.innerHTML = `
         <div class="card" style="text-align:center; padding:20px;">
             <h3>🔌 Connection Troubleshoot</h3>
-            <p>Running automatic diagnostics...</p>
+            <p>Run diagnostics to check WiFi, Bluetooth, and Mobile Data.</p>
             <button id="runDiagnosticsBtn" class="btn-primary" style="font-size:16px;">🔍 Run Diagnostics</button>
         </div>
         <div id="diagnosticProgress" style="display:none; margin-top:16px;"></div>
@@ -3695,14 +3697,17 @@ async function renderConnectionTroubleshoot() {
     const resultsDiv = document.getElementById('diagnosticResults');
     const fixContainer = document.getElementById('fixButtonsContainer');
 
-    runBtn.addEventListener('click', async () => {
-        runBtn.disabled = true;
-        runBtn.textContent = '⏳ Running...';
+    // Remove any previous listeners to avoid duplicate runs
+    runBtn.replaceWith(runBtn.cloneNode(true));
+    const newRunBtn = document.getElementById('runDiagnosticsBtn');
+
+    newRunBtn.addEventListener('click', async () => {
+        newRunBtn.disabled = true;
+        newRunBtn.textContent = '⏳ Running...';
         progressDiv.style.display = 'block';
         resultsDiv.style.display = 'none';
         fixContainer.style.display = 'none';
 
-        // Run diagnostics one by one
         const tests = [
             { name: 'WiFi', endpoint: '/connectivity/diagnose/wifi/' },
             { name: 'Bluetooth', endpoint: '/connectivity/diagnose/bluetooth/' },
@@ -3725,10 +3730,9 @@ async function renderConnectionTroubleshoot() {
 
         progressDiv.style.display = 'none';
         resultsDiv.style.display = 'block';
-        runBtn.disabled = false;
-        runBtn.textContent = '🔍 Run Diagnostics';
+        newRunBtn.disabled = false;
+        newRunBtn.textContent = '🔍 Run Diagnostics';
 
-        // Build detailed results
         let allPass = true;
         let html = `<div class="info-card"><div class="card-header">📊 Diagnostic Results</div><div class="card-grid">`;
         for (const [name, data] of Object.entries(results)) {
@@ -3737,7 +3741,6 @@ async function renderConnectionTroubleshoot() {
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
             let msg = pass ? data.message : (data.error || 'Failed');
-            // Add extra details for Bluetooth
             if (name === 'Bluetooth' && pass) {
                 msg += ` | Paired: ${data.pairedCount || 0} | State: ${data.connectionState || 'Unknown'} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
             }
@@ -3746,7 +3749,6 @@ async function renderConnectionTroubleshoot() {
         html += `</div></div>`;
         resultsDiv.innerHTML = html;
 
-        // Show fix buttons
         if (allPass) {
             fixContainer.innerHTML = `
                 <div class="info-card" style="border-left:4px solid #f59e0b;">
