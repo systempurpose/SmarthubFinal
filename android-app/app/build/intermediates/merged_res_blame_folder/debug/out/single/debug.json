@@ -1,94 +1,122 @@
 [
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\drawable_sh_card.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\drawable\\sh_card.xml"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_microphone_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_microphone_test.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\layout_activity_test_runner.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\layout\\activity_test_runner.xml"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-anydpi-v26/ic_launcher_round.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxxhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxxhdpi\\ic_launcher.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_gps_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_gps_test.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxhdpi\\ic_launcher.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xhdpi/ic_launcher_round.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-hdpi_ic_launcher_round.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-hdpi\\ic_launcher_round.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-mdpi/ic_launcher_round.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xhdpi_ic_launcher_round.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xhdpi\\ic_launcher_round.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_earpiece_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_earpiece_test.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxhdpi_ic_launcher_round.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxhdpi\\ic_launcher_round.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxhdpi/ic_launcher_foreground.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-mdpi_ic_launcher_foreground.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-mdpi\\ic_launcher_foreground.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_fingerprint_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_fingerprint_test.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xhdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xhdpi\\ic_launcher.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxxhdpi/ic_launcher_foreground.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxxhdpi\\ic_launcher_foreground.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/drawable_sh_status_waiting.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/drawable/sh_status_waiting.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-hdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-hdpi\\ic_launcher.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_main.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_gyro_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_gyro_test.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_proximity_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_proximity_test.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-hdpi_ic_launcher_foreground.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-hdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/drawable_sh_card.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/drawable/sh_card.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_nfc_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_nfc_test.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/raw_license.txt.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/raw/license.txt"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-mdpi_ic_launcher_foreground.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-mdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_touch_test.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_touch_test.xml"
     },
     {
         "merged": "com.smarthub.diagnostics.app-merged_res-30:/layout_activity_test_runner.xml.flat",
         "source": "com.smarthub.diagnostics.app-main-32:/layout/activity_test_runner.xml"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-anydpi-v26\\ic_launcher_round.xml"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xhdpi/ic_launcher_foreground.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-mdpi_ic_launcher.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-mdpi\\ic_launcher.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxxhdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-mdpi_ic_launcher_round.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-mdpi\\ic_launcher_round.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxxhdpi/ic_launcher_round.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\raw_license.txt.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\raw\\license.txt"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xxhdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxxhdpi_ic_launcher_round.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxxhdpi\\ic_launcher_round.png"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-xhdpi/ic_launcher.png"
     },
     {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\drawable_sh_status_waiting.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\drawable\\sh_status_waiting.xml"
-    },
-    {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xhdpi_ic_launcher_foreground.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xhdpi\\ic_launcher_foreground.png"
-    },
-    {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-xxhdpi_ic_launcher_foreground.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-xxhdpi\\ic_launcher_foreground.png"
-    },
-    {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\layout_activity_main.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\layout\\activity_main.xml"
-    },
-    {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-hdpi_ic_launcher_foreground.png.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-hdpi\\ic_launcher_foreground.png"
-    },
-    {
-        "merged": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-merged_res-30:\\mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "C:\\Users\\mark lhemuel\\.gradle\\daemon\\8.2.1\\com.smarthub.diagnostics.app-main-32:\\mipmap-anydpi-v26\\ic_launcher.xml"
+        "merged": "com.smarthub.diagnostics.app-merged_res-30:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.smarthub.diagnostics.app-main-32:/mipmap-mdpi/ic_launcher.png"
     }
 ]

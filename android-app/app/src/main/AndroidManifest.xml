@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -12,6 +19,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartHub">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -20,15 +28,52 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-    android:name=".TouchTestActivity"
-    android:exported="true"
-    android:theme="@style/Theme.SmartHub" />
 
         <activity
             android:name=".TestRunnerActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".TouchTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".ProximityTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".GyroTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".MicrophoneTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".EarpieceTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".GpsTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".FingerprintTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
+        <activity
+            android:name=".NfcTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+
     </application>
 
 </manifest>

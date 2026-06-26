@@ -3049,6 +3049,7 @@ id accessibility_custom_action_6
 id accessibility_custom_action_7
 id accessibility_custom_action_8
 id accessibility_custom_action_9
+id actionButton
 id action_bar
 id action_bar_activity_content
 id action_bar_container
@@ -3073,6 +3074,7 @@ id alertTitle
 id aligned
 id all
 id always
+id angleText
 id animateToEnd
 id animateToStart
 id app_logo
@@ -3104,12 +3106,14 @@ id checkbox
 id checked
 id chronometer
 id circle_center
+id clearButton
 id clear_text
 id clip_horizontal
 id clip_vertical
 id clockwise
 id collapseActionView
 id compress
+id confirmButton
 id confirm_button
 id connection_status
 id container
@@ -3149,6 +3153,7 @@ id dragLeft
 id dragRight
 id dragStart
 id dragUp
+id drawView
 id dropdown_menu
 id easeIn
 id easeInOut
@@ -3328,6 +3333,7 @@ id postLayout
 id pressed
 id progress_circular
 id progress_horizontal
+id proximityStatus
 id radio
 id ratio
 id rectangles
@@ -3390,6 +3396,7 @@ id startToEnd
 id startVertical
 id staticLayout
 id staticPostLayout
+id statusText
 id stop
 id stretch
 id submenuarrow
@@ -3432,6 +3439,7 @@ id title_template
 id toggle
 id top
 id topPanel
+id touchCounter
 id touch_outside
 id transitionToEnd
 id transitionToStart
@@ -3572,8 +3580,16 @@ layout abc_search_dropdown_item_icons_2line
 layout abc_search_view
 layout abc_select_dialog_material
 layout abc_tooltip
+layout activity_earpiece_test
+layout activity_fingerprint_test
+layout activity_gps_test
+layout activity_gyro_test
 layout activity_main
+layout activity_microphone_test
+layout activity_nfc_test
+layout activity_proximity_test
 layout activity_test_runner
+layout activity_touch_test
 layout custom_dialog
 layout design_bottom_navigation_item
 layout design_bottom_sheet_dialog

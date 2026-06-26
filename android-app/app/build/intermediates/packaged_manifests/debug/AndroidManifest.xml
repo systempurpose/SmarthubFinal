@@ -11,6 +11,17 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <uses-feature
+        android:name="android.hardware.fingerprint"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
 
     <permission
         android:name="com.smarthub.diagnostics.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -39,6 +50,38 @@
         </activity>
         <activity
             android:name="com.smarthub.diagnostics.TestRunnerActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.TouchTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.ProximityTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.GyroTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.MicrophoneTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.EarpieceTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.GpsTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.FingerprintTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.NfcTestActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
 

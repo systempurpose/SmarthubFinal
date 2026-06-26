@@ -1,6 +1,7 @@
 package com.smarthub.diagnostics;
 
 import android.Manifest;
+import android.content.Intent;  // <-- ADD THIS IMPORT
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -80,11 +81,38 @@ public class TestRunnerActivity extends AppCompatActivity {
             case "flash":
                 runFlashTest();
                 break;
-           case "touch":
-            Intent touchIntent = new Intent(this, TouchTestActivity.class);
-            startActivity(touchIntent);
-            finish();
-            break;
+            case "touch":
+                startActivity(new Intent(this, TouchTestActivity.class));
+                finish();
+                break;
+            case "proximity":
+                startActivity(new Intent(this, ProximityTestActivity.class));
+                finish();
+                break;
+            case "gyro":
+                startActivity(new Intent(this, GyroTestActivity.class));
+                finish();
+                break;
+            case "microphone":
+                startActivity(new Intent(this, MicrophoneTestActivity.class));
+                finish();
+                break;
+            case "earpiece":
+                startActivity(new Intent(this, EarpieceTestActivity.class));
+                finish();
+                break;
+            case "gps":
+                startActivity(new Intent(this, GpsTestActivity.class));
+                finish();
+                break;
+            case "fingerprint":
+                startActivity(new Intent(this, FingerprintTestActivity.class));
+                finish();
+                break;
+            case "nfc":
+                startActivity(new Intent(this, NfcTestActivity.class));
+                finish();
+                break;
             default:
                 Toast.makeText(this, "Unknown test: " + testType, Toast.LENGTH_SHORT).show();
                 finish();
@@ -93,7 +121,6 @@ public class TestRunnerActivity extends AppCompatActivity {
 
     private void runVibrateTest() {
         PackageManager pm = getPackageManager();
-        // Use string literal for compatibility with all API levels
         if (!pm.hasSystemFeature("android.hardware.vibrator")) {
             Toast.makeText(this, "Vibrator hardware not present", Toast.LENGTH_LONG).show();
             Log.w(TAG, "Vibrator not supported");
