@@ -3049,7 +3049,6 @@ id accessibility_custom_action_6
 id accessibility_custom_action_7
 id accessibility_custom_action_8
 id accessibility_custom_action_9
-id actionButton
 id action_bar
 id action_bar_activity_content
 id action_bar_container
@@ -3292,6 +3291,7 @@ id navigation_bar_item_large_label_view
 id navigation_bar_item_small_label_view
 id navigation_header_container
 id never
+id noButton
 id noScroll
 id none
 id normal
@@ -3466,6 +3466,7 @@ id with_icon
 id withinBounds
 id wrap
 id wrap_content
+id yesButton
 integer abc_config_activityDefaultDur
 integer abc_config_activityShortDur
 integer app_bar_elevation_anim_duration
@@ -3674,6 +3675,7 @@ mipmap ic_launcher_foreground
 mipmap ic_launcher_round
 plurals mtrl_badge_content_description
 raw license
+raw test_tone
 string abc_action_bar_home_description
 string abc_action_bar_up_description
 string abc_action_menu_overflow_description

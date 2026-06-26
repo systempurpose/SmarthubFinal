@@ -7,6 +7,7 @@ import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,14 +22,20 @@ public class MicrophoneTestActivity extends AppCompatActivity {
     private MediaPlayer player;
     private String audioPath;
     private TextView status;
-    private Button confirmBtn;
+    private Button yesBtn, noBtn;
+    private Handler handler = new Handler();
+    private boolean isLooping = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_microphone_test);
+
         status = findViewById(R.id.statusText);
-        confirmBtn = findViewById(R.id.actionButton);
+        yesBtn = findViewById(R.id.yesButton);
+        noBtn = findViewById(R.id.noButton);
+        yesBtn.setEnabled(false);
+        noBtn.setEnabled(false);
 
         audioPath = getExternalFilesDir(Environment.DIRECTORY_MUSIC) + "/test_audio.3gp";
 
@@ -69,38 +76,66 @@ public class MicrophoneTestActivity extends AppCompatActivity {
             return;
         }
 
-        // Countdown UI
+        // Countdown
         status.setText("Recording in 3...");
-        Handler h = new Handler();
-        h.postDelayed(() -> status.setText("2..."), 1000);
-        h.postDelayed(() -> status.setText("1..."), 2000);
-        h.postDelayed(() -> {
-            status.setText("Recording...");
+        handler.postDelayed(() -> status.setText("2..."), 1000);
+        handler.postDelayed(() -> status.setText("1..."), 2000);
+        handler.postDelayed(() -> {
+            status.setText("Recording... speak now");
             recorder.start();
-            // Stop after 3 seconds
-            h.postDelayed(this::stopAndPlay, 3000);
+            handler.postDelayed(this::stopAndPlayLoop, 3000);
         }, 3000);
     }
 
-    private void stopAndPlay() {
+    private void stopAndPlayLoop() {
         if (recorder != null) {
             recorder.stop();
             recorder.release();
             recorder = null;
         }
-        status.setText("Playback...");
-        confirmBtn.setEnabled(true);
-        confirmBtn.setText("✅ I heard my voice");
-        confirmBtn.setOnClickListener(v -> finish());
+        status.setText("Playback (looping) – did you hear your voice?");
+        yesBtn.setEnabled(true);
+        noBtn.setEnabled(true);
 
+        isLooping = true;
+        playLoop();
+
+        yesBtn.setOnClickListener(v -> {
+            isLooping = false;
+            if (player != null) player.stop();
+            finish();
+        });
+        noBtn.setOnClickListener(v -> {
+            isLooping = false;
+            if (player != null) player.stop();
+            finish();
+        });
+    }
+
+    private void playLoop() {
+        if (!isLooping) return;
+        if (player != null) {
+            player.release();
+            player = null;
+        }
         player = new MediaPlayer();
         try {
             player.setDataSource(audioPath);
             player.prepare();
+            player.setVolume(1.0f, 1.0f);
             player.start();
             player.setOnCompletionListener(mp -> {
                 mp.release();
-                status.setText("Playback finished");
+                if (isLooping) {
+                    handler.postDelayed(this::playLoop, 300);
+                }
+            });
+            player.setOnErrorListener((mp, what, extra) -> {
+                mp.release();
+                if (isLooping) {
+                    handler.postDelayed(this::playLoop, 300);
+                }
+                return true;
             });
         } catch (IOException e) {
             Toast.makeText(this, "Playback failed", Toast.LENGTH_SHORT).show();
@@ -111,6 +146,7 @@ public class MicrophoneTestActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        isLooping = false;
         if (recorder != null) { recorder.release(); recorder = null; }
         if (player != null) { player.release(); player = null; }
     }

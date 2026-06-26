@@ -39,7 +39,10 @@
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
             
-
+        <activity 
+        android:name=".HeadphoneTestActivity" 
+        android:exported="true"
+        android:theme="@style/Theme.SmartHub" />
         <activity
             android:name=".ProximityTestActivity"
             android:exported="true"

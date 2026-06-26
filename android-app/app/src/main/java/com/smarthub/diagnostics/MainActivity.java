@@ -1,10 +1,14 @@
 package com.smarthub.diagnostics;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.net.ConnectivityManager;
@@ -18,17 +22,17 @@ import android.os.Environment;
 import android.os.StatFs;
 import android.provider.Settings;
 import android.text.format.Formatter;
-import android.graphics.Color;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.WindowManager;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ProgressBar;
-import android.content.SharedPreferences;
-import android.content.res.Resources;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -42,8 +46,12 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final int PERMISSION_REQUEST_CODE = 100;
 
     private TextView connectionStatus;
     private TextView lastUpdated;
@@ -80,7 +88,8 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         if (prefs.getBoolean(KEY_LICENSE_ACCEPTED, false)) {
-            startDiagnosticsSession();
+            // License already accepted – check and request permissions
+            checkAndRequestPermissions();
         } else {
             showLicenseGate(prefs);
         }
@@ -88,9 +97,9 @@ public class MainActivity extends AppCompatActivity {
 
     private String loadLicenseText() {
         return "SmartHub Mobile Diagnostics - License Agreement\n\n" +
-               "This software is provided for diagnostic purposes only.\n" +
-               "By using this software, you agree that the developer is not liable for any damages.\n" +
-               "Data collected is used solely for device diagnostics.\n";
+                "This software is provided for diagnostic purposes only.\n" +
+                "By using this software, you agree that the developer is not liable for any damages.\n" +
+                "Data collected is used solely for device diagnostics.\n";
     }
 
     private void showLicenseGate(SharedPreferences prefs) {
@@ -102,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
         builder.setPositiveButton("I agree", (dialog, which) -> {
             prefs.edit().putBoolean(KEY_LICENSE_ACCEPTED, true).apply();
             dialog.dismiss();
-            startDiagnosticsSession();
+            checkAndRequestPermissions();
         });
         builder.setNegativeButton("Exit", (dialog, which) -> {
             dialog.dismiss();
@@ -111,6 +120,51 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
+    // ==================== PERMISSION REQUEST ====================
+    private void checkAndRequestPermissions() {
+        String[] permissions = {
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        };
+
+        List<String> missing = new ArrayList<>();
+        for (String perm : permissions) {
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(perm);
+            }
+        }
+
+        if (missing.isEmpty()) {
+            Toast.makeText(this, "All permissions granted", Toast.LENGTH_SHORT).show();
+            startDiagnosticsSession();
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    missing.toArray(new String[0]),
+                    PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean allGranted = true;
+            for (int i = 0; i < permissions.length; i++) {
+                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    Toast.makeText(this, "Permission " + permissions[i] + " denied – some tests may not work",
+                            Toast.LENGTH_LONG).show();
+                }
+            }
+            // Start diagnostics regardless (some tests may be limited)
+            startDiagnosticsSession();
+        }
+    }
+
+    // ==================== DIAGNOSTICS SESSION ====================
     private void startDiagnosticsSession() {
         if (powerMonitor == null) {
             powerMonitor = new PowerStabilityMonitor(this);
@@ -434,9 +488,9 @@ public class MainActivity extends AppCompatActivity {
                             long freeBytes = blockSize * availBlocks;
                             long usedBytes = totalBytes - freeBytes;
                             sb.append("External storage ").append(i).append(": ")
-                              .append(readableBytes(totalBytes)).append(" total, ")
-                              .append(readableBytes(usedBytes)).append(" used, ")
-                              .append(readableBytes(freeBytes)).append(" free\n");
+                                    .append(readableBytes(totalBytes)).append(" total, ")
+                                    .append(readableBytes(usedBytes)).append(" used, ")
+                                    .append(readableBytes(freeBytes)).append(" free\n");
                         } catch (Exception ignored) {}
                     }
                 }
@@ -519,7 +573,6 @@ public class MainActivity extends AppCompatActivity {
             sensorsJson.put("hasProximity", sensorSummary.hasProximity);
             sensorsJson.put("hasLight", sensorSummary.hasLight);
 
-            // ---- NEW HARDWARE FIELDS ----
             JSONObject cpuJson = new JSONObject();
             cpuJson.put("info", getCpuInfo());
             root.put("cpu", cpuJson);
@@ -540,7 +593,6 @@ public class MainActivity extends AppCompatActivity {
             extStorageJson.put("info", getExternalStorageInfo());
             root.put("externalStorage", extStorageJson);
 
-            // ---- MALWARE SCAN ----
             JSONObject malwareJson = new JSONObject();
             try {
                 JSONObject scanResults = getMalwareScanResults();

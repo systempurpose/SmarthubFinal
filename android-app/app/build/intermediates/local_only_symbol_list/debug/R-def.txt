@@ -14,7 +14,6 @@ color sh_secondary_variant
 color sh_surface
 drawable sh_card
 drawable sh_status_waiting
-id actionButton
 id angleText
 id app_logo
 id app_title
@@ -26,10 +25,12 @@ id diagnostic_spinner
 id drawView
 id instructions
 id last_updated
+id noButton
 id proximityStatus
 id statusText
 id testStatus
 id touchCounter
+id yesButton
 layout activity_earpiece_test
 layout activity_fingerprint_test
 layout activity_gps_test
@@ -44,6 +45,7 @@ mipmap ic_launcher
 mipmap ic_launcher_foreground
 mipmap ic_launcher_round
 raw license
+raw test_tone
 string app_name
 style ShapeAppearance.SmartHub.Large
 style ShapeAppearance.SmartHub.Medium

@@ -10,15 +10,31 @@
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Playing through earpiece..."
+        android:text="Please plug in earphones/headphones"
         android:textSize="18sp"
         android:textAlignment="center" />
 
-    <Button
-        android:id="@+id/confirmButton"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="✅ I heard it"
+        android:orientation="horizontal"
         android:layout_marginTop="16dp"
-        android:enabled="false" />
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/yesButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="✅ Yes, I heard it"
+            android:enabled="false" />
+
+        <Button
+            android:id="@+id/noButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="❌ No, I didn't hear it"
+            android:enabled="false"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
 </LinearLayout>

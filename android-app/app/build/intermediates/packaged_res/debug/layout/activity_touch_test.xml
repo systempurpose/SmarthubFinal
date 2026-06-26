@@ -14,7 +14,6 @@
         android:textStyle="bold"
         android:padding="16dp" />
 
-    <!-- Now using simple class name (no $) -->
     <com.smarthub.diagnostics.DrawView
         android:id="@+id/drawView"
         android:layout_width="match_parent"

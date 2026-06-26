@@ -1,7 +1,7 @@
 package com.smarthub.diagnostics;
 
 import android.Manifest;
-import android.content.Intent;  // <-- ADD THIS IMPORT
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -11,6 +11,7 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
@@ -75,6 +76,9 @@ public class TestRunnerActivity extends AppCompatActivity {
             case "vibrate":
                 runVibrateTest();
                 break;
+            case "vibrate_loop":
+                runVibrateLoopTest();
+                break;
             case "sound":
                 runSoundTest();
                 break;
@@ -97,8 +101,8 @@ public class TestRunnerActivity extends AppCompatActivity {
                 startActivity(new Intent(this, MicrophoneTestActivity.class));
                 finish();
                 break;
-            case "earpiece":
-                startActivity(new Intent(this, EarpieceTestActivity.class));
+            case "headphone":
+                startActivity(new Intent(this, HeadphoneTestActivity.class));
                 finish();
                 break;
             case "gps":
@@ -148,72 +152,82 @@ public class TestRunnerActivity extends AppCompatActivity {
             Toast.makeText(this, "Vibration error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
 
-        new android.os.Handler().postDelayed(this::finish, 1500);
+        new Handler().postDelayed(this::finish, 1500);
+    }
+
+    private void runVibrateLoopTest() {
+        PackageManager pm = getPackageManager();
+        if (!pm.hasSystemFeature("android.hardware.vibrator")) {
+            Toast.makeText(this, "Vibrator not available", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        final Vibrator vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            Toast.makeText(this, "Vibrator service unavailable", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        final Handler handler = new Handler();
+        final Runnable vibrateLoop = new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing()) return;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    vibrator.vibrate(500);
+                }
+                handler.postDelayed(this, 1500);
+            }
+        };
+        vibrateLoop.run();
+        Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
+        // The activity will be finished by desktop sending back key
     }
 
     private void runSoundTest() {
-    PackageManager pm = getPackageManager();
-    if (!pm.hasSystemFeature("android.hardware.audio.output")) {
-        Toast.makeText(this, "Audio output not present", Toast.LENGTH_LONG).show();
-        Log.w(TAG, "Audio output not supported");
-        finish();
-        return;
-    }
-
-    // Use custom raw resource
-    MediaPlayer mp = MediaPlayer.create(this, R.raw.test_tone);
-    if (mp == null) {
-        Toast.makeText(this, "Audio resource not found", Toast.LENGTH_SHORT).show();
-        finish();
-        return;
-    }
-
-    mp.setVolume(1.0f, 1.0f);
-    mp.setOnCompletionListener(mp1 -> {
-        mp1.release();
-        finish();
-    });
-    mp.setOnErrorListener((mp1, what, extra) -> {
-        mp1.release();
-        Toast.makeText(this, "Audio playback error", Toast.LENGTH_SHORT).show();
-        Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
-        finish();
-        return true;
-    });
-    mp.start();
-    Toast.makeText(this, "Playing test tone...", Toast.LENGTH_SHORT).show();
-    Log.i(TAG, "Sound playback started");
-}
-
-        Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-        if (notificationUri == null) {
-            Toast.makeText(this, "No notification sound available", Toast.LENGTH_SHORT).show();
+        PackageManager pm = getPackageManager();
+        if (!pm.hasSystemFeature("android.hardware.audio.output")) {
+            Toast.makeText(this, "Audio output not present", Toast.LENGTH_LONG).show();
+            Log.w(TAG, "Audio output not supported");
             finish();
             return;
         }
 
-        MediaPlayer mp = MediaPlayer.create(this, notificationUri);
-        if (mp == null) {
-            Toast.makeText(this, "Could not create MediaPlayer", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
-
-        mp.setVolume(1.0f, 1.0f);
-        mp.setOnCompletionListener(mp1 -> {
-            mp1.release();
-            finish();
-        });
-        mp.setOnErrorListener((mp1, what, extra) -> {
-            mp1.release();
-            Toast.makeText(this, "Audio playback error", Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
-            finish();
-            return true;
-        });
-        mp.start();
-        Toast.makeText(this, "Playing notification sound...", Toast.LENGTH_SHORT).show();
-        Log.i(TAG, "Sound playback started");
+        final Handler handler = new Handler();
+        final Runnable playLoop = new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing()) return;
+                MediaPlayer mp = null;
+                try {
+                    mp = MediaPlayer.create(TestRunnerActivity.this, R.raw.test_tone);
+                } catch (Exception e) {}
+                if (mp == null) {
+                    Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                    mp = MediaPlayer.create(TestRunnerActivity.this, uri);
+                }
+                if (mp == null) {
+                    Toast.makeText(TestRunnerActivity.this, "No audio", Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
+                mp.setVolume(1.0f, 1.0f);
+                mp.setOnCompletionListener(mp1 -> {
+                    mp1.release();
+                    handler.postDelayed(this, 500);
+                });
+                mp.setOnErrorListener((mp1, what, extra) -> {
+                    mp1.release();
+                    handler.postDelayed(this, 500);
+                    return true;
+                });
+                mp.start();
+            }
+        };
+        playLoop.run();
+        Toast.makeText(this, "Playing test tone...", Toast.LENGTH_SHORT).show();
     }
 
     private void runFlashTest() {
@@ -245,7 +259,7 @@ public class TestRunnerActivity extends AppCompatActivity {
             Log.i(TAG, "Flash turned on");
 
             final String finalCameraId = flashCameraId;
-            new android.os.Handler().postDelayed(() -> {
+            new Handler().postDelayed(() -> {
                 try {
                     cameraManager.setTorchMode(finalCameraId, false);
                 } catch (CameraAccessException e) {
