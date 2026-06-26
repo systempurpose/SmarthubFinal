@@ -2787,49 +2787,76 @@ async function renderHardwareTests() {
 
     // ---- Run all tests with delays ----
     async function runAllTests() {
-        const resultsContainer = document.getElementById('hwResults');
-        resultsContainer.style.display = 'block';
-        const cardsContainer = document.getElementById('hwCardsContainer');
-        cardsContainer.innerHTML = '';
-        const results = {};
+    const resultsContainer = document.getElementById('hwResults');
+    resultsContainer.style.display = 'block';
+    const cardsContainer = document.getElementById('hwCardsContainer');
+    cardsContainer.innerHTML = '';
+    const results = {};
 
-        await launchAndroidApp();
-        for (const test of tests) {
-            const card = document.createElement('div');
-            card.className = 'info-card';
-            card.id = `test-card-${test.id}`;
-            card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
-            cardsContainer.appendChild(card);
-            try {
-                const result = await test.run();
-                results[test.id] = { name: test.name, passed: result.passed, message: result.message };
-                const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
-                const color = result.passed ? '#2e7d32' : '#d32f2f';
-                card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
-                card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
-            } catch (err) {
-                results[test.id] = { name: test.name, passed: false, message: err.message };
-                card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
-                card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
-            }
-            // Add a 1.5 second delay between tests to avoid rushing
-            await new Promise(r => setTimeout(r, 1500));
+    await launchAndroidApp();
+    for (const test of tests) {
+        const card = document.createElement('div');
+        card.className = 'info-card';
+        card.id = `test-card-${test.id}`;
+        card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
+        cardsContainer.appendChild(card);
+        try {
+            const result = await test.run();
+            results[test.id] = { name: test.name, passed: result.passed, message: result.message };
+            const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
+            const color = result.passed ? '#2e7d32' : '#d32f2f';
+            card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
+            card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
+        } catch (err) {
+            results[test.id] = { name: test.name, passed: false, message: err.message };
+            card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
+            card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
         }
-        const passedCount = Object.values(results).filter(r => r.passed).length;
-        const total = tests.length;
-        const summaryDiv = document.getElementById('hwSummaryCard');
-        summaryDiv.innerHTML = `
-            <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-            <div class="card-content">
-                <div style="background: ${passedCount === total ? '#e8f5e9' : '#ffebee'}; padding: 16px; border-radius: 16px;">
-                    <i class="fas ${passedCount === total ? 'fa-check-circle' : 'fa-exclamation-triangle'}" style="font-size: 32px; color: ${passedCount === total ? '#2e7d32' : '#c62828'};"></i>
-                    <h3>${passedCount}/${total} tests passed</h3>
-                    <ul>${Object.values(results).map(r => `<li><strong>${r.name}</strong>: ${r.passed ? '✅ Pass' : '❌ Fail'}${r.message ? ` (${escapeHtml(r.message)})` : ''}</li>`).join('')}</ul>
+        await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // ---- SUMMARY CARD (improved UI) ----
+    const passedCount = Object.values(results).filter(r => r.passed).length;
+    const total = tests.length;
+    const percentage = Math.round((passedCount / total) * 100);
+
+    const summaryDiv = document.getElementById('hwSummaryCard');
+    summaryDiv.innerHTML = `
+        <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
+        <div class="card-content">
+            <!-- Overall score -->
+            <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
+                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
+                        <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
+                            stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
+                    </svg>
+                    <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 20px;">${passedCount}/${total} tests passed</h3>
+                    <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
                 </div>
             </div>
-        `;
-        localStorage.setItem('smartHubDiagnostics', JSON.stringify({ hardwareTests: { results, timestamp: Date.now() } }));
-    }
+
+            <!-- Individual test results as cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+                ${Object.values(results).map(r => `
+                    <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'}; transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: default;">
+                        <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 14px;">${escapeHtml(r.name)}</div>
+                            <div style="font-size: 12px; color: #555; word-break: break-word;">${escapeHtml(r.message)}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    localStorage.setItem('smartHubDiagnostics', JSON.stringify({ hardwareTests: { results, timestamp: Date.now() } }));
+}
 
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
