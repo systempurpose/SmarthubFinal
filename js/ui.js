@@ -3674,14 +3674,14 @@ async function renderFullFixPage(showWarning) {
 // ==================== CONNECTION TROUBLESHOOT ====================
 async function renderConnectionTroubleshoot() {
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
+        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
         return;
     }
 
     document.getElementById('pageContent').innerHTML = `
         <div class="card" style="text-align:center; padding:20px;">
             <h3>🔌 Connection Troubleshoot</h3>
-            <p>Run diagnostics to check WiFi, Bluetooth, and Mobile Data.</p>
+            <p>Running automatic diagnostics...</p>
             <button id="runDiagnosticsBtn" class="btn-primary" style="font-size:16px;">🔍 Run Diagnostics</button>
         </div>
         <div id="diagnosticProgress" style="display:none; margin-top:16px;"></div>
@@ -3702,6 +3702,7 @@ async function renderConnectionTroubleshoot() {
         resultsDiv.style.display = 'none';
         fixContainer.style.display = 'none';
 
+        // Run diagnostics one by one
         const tests = [
             { name: 'WiFi', endpoint: '/connectivity/diagnose/wifi/' },
             { name: 'Bluetooth', endpoint: '/connectivity/diagnose/bluetooth/' },
@@ -3719,7 +3720,6 @@ async function renderConnectionTroubleshoot() {
             } catch (err) {
                 results[test.name] = { ok: false, error: err.message };
             }
-            // Wait 500ms between tests
             await new Promise(r => setTimeout(r, 500));
         }
 
@@ -3728,7 +3728,7 @@ async function renderConnectionTroubleshoot() {
         runBtn.disabled = false;
         runBtn.textContent = '🔍 Run Diagnostics';
 
-        // Build results summary
+        // Build detailed results
         let allPass = true;
         let html = `<div class="info-card"><div class="card-header">📊 Diagnostic Results</div><div class="card-grid">`;
         for (const [name, data] of Object.entries(results)) {
@@ -3736,7 +3736,11 @@ async function renderConnectionTroubleshoot() {
             if (!pass) allPass = false;
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
-            const msg = pass ? data.message : (data.error || 'Failed');
+            let msg = pass ? data.message : (data.error || 'Failed');
+            // Add extra details for Bluetooth
+            if (name === 'Bluetooth' && pass) {
+                msg += ` | Paired: ${data.pairedCount || 0} | State: ${data.connectionState || 'Unknown'} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
+            }
             html += `<div class="card-item"><span class="item-label">${name}</span><span class="item-value" style="color:${color};">${icon} ${escapeHtml(msg)}</span></div>`;
         }
         html += `</div></div>`;
@@ -3744,7 +3748,6 @@ async function renderConnectionTroubleshoot() {
 
         // Show fix buttons
         if (allPass) {
-            // All good – show warning
             fixContainer.innerHTML = `
                 <div class="info-card" style="border-left:4px solid #f59e0b;">
                     <div class="card-header"><i class="fas fa-check-circle" style="color:#2e7d32;"></i> All services are working!</div>
@@ -3756,20 +3759,71 @@ async function renderConnectionTroubleshoot() {
             `;
             fixContainer.style.display = 'block';
             document.getElementById('showFixButtonsBtn')?.addEventListener('click', () => {
-                renderFixButtons(true);
+                renderFullFixPage(true);
             });
         } else {
-            // Some failures – show fix buttons immediately
-            renderFixButtons(false);
+            renderFullFixPage(false);
+        }
+    });
+}
+
+// Helper: wait for user confirmation with a custom modal
+function waitForUserConfirmationWithMessage(title, message, timeoutMs = 30000) {
+    return new Promise((resolve) => {
+        // Create a modal if not exists
+        let modal = document.getElementById('userConfirmModal');
+        if (!modal) {
+            const modalHtml = `
+                <div id="userConfirmModal" class="modal" style="display: none;">
+                    <div class="modal-content" style="max-width: 500px;">
+                        <div class="modal-header">
+                            <h3 id="confirmModalTitle">Confirm</h3>
+                            <span class="close-button" id="closeConfirmModal">&times;</span>
+                        </div>
+                        <div class="modal-body" id="confirmModalBody" style="white-space: pre-wrap;"></div>
+                        <div class="modal-footer">
+                            <button id="confirmYesBtn" class="btn-primary">✅ Yes</button>
+                            <button id="confirmNoBtn" class="btn-secondary">❌ No</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            modal = document.getElementById('userConfirmModal');
+            document.getElementById('closeConfirmModal').addEventListener('click', () => modal.style.display = 'none');
+            window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
         }
 
-        function renderFixButtons(showWarning) {
-            // Reuse the existing fix buttons layout from earlier version
-            // We'll fetch fresh status and render the full cards with fix buttons.
-            // For simplicity, we'll just call the original render with a flag.
-            // But to avoid duplication, we'll rebuild the full page with fix buttons.
-            renderFullFixPage(showWarning);
-        }
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalBody').textContent = message;
+        modal.style.display = 'flex';
+
+        const yesBtn = document.getElementById('confirmYesBtn');
+        const noBtn = document.getElementById('confirmNoBtn');
+        let resolved = false;
+
+        const cleanup = () => {
+            if (resolved) return;
+            resolved = true;
+            yesBtn.removeEventListener('click', onYes);
+            noBtn.removeEventListener('click', onNo);
+            modal.style.display = 'none';
+        };
+
+        const onYes = () => { cleanup(); resolve('yes'); };
+        const onNo = () => { cleanup(); resolve('no'); };
+
+        yesBtn.addEventListener('click', onYes);
+        noBtn.addEventListener('click', onNo);
+
+        // Auto timeout
+        setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve('timeout');
+            }
+        }, timeoutMs);
     });
 }
 
