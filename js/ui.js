@@ -897,70 +897,59 @@ async function showStorageModal() {
         const media = b.media || { percent: 0, human: '0 KB', bytes: 0 };
         const system = b.system || { percent: 0, human: '0 KB', bytes: 0 };
         const other = b.other || { percent: 0, human: '0 KB', bytes: 0 };
+
+        // Predefined color palette (material design)
+        const colors = ['#0d6efd', '#198754', '#0dcaf0', '#6c757d'];
         const segments = [
-            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: '#0d6efd', icon: '📱' },
-            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: '#198754', icon: '🎬' },
-            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: '#0dcaf0', icon: '⚙️' },
-            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: '#6c757d', icon: '📦' }
+            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: colors[0], icon: '📱' },
+            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: colors[1], icon: '🎬' },
+            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: colors[2], icon: '⚙️' },
+            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: colors[3], icon: '📦' }
         ].map(segment => {
             const rawValue = Number(segment.percent) || 0;
             const computedValue = rawValue > 0 ? rawValue : (usedBytes > 0 ? (Number(segment.bytes) / usedBytes) * 100 : 0);
             return { ...segment, value: computedValue };
         });
 
-        // Build HTML with explicit width styles
+        // Build HTML with improved design
         const html = `
-            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
-                <!-- Left column: Pie chart + legend -->
-                <div style="flex: 1; min-width: 220px;">
-                    <div style="text-align: center;">
-                        <canvas id="storagePieCanvas" width="220" height="220"></canvas>
+            <div style="display: flex; flex-direction: column; gap: 24px;">
+                <!-- Top row: Pie chart + Overview -->
+                <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center;">
+                    <!-- Donut chart -->
+                    <div style="flex: 0 0 180px; text-align: center;">
+                        <canvas id="storagePieCanvas" width="180" height="180"></canvas>
+                        <div style="margin-top: 8px; font-size: 14px; font-weight: 500; color: #1f1f1f;">Storage</div>
                     </div>
-                    <div style="margin-top: 16px;">
-                        ${segments.map(segment => `
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                <span style="width: 16px; height: 16px; background: ${segment.color}; border-radius: 4px;"></span>
-                                <div style="flex:1;">
-                                    <strong>${segment.icon} ${segment.label}</strong><br>
-                                    <span style="font-size:12px; color:#666;">${escapeHtml(segment.human)} (${segment.value.toFixed(1)}%)</span>
-                                </div>
-                            </div>
-                        `).join('')}
+                    <!-- Overview cards -->
+                    <div style="flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px;">
+                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                            <div style="font-size: 12px; color: #6B7280;">Total</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #1f1f1f;">${escapeHtml(total)}</div>
+                        </div>
+                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                            <div style="font-size: 12px; color: #6B7280;">Used</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #dc3545;">${escapeHtml(used)}</div>
+                        </div>
+                        <div style="background: #f8f9fa; border-radius: 12px; padding: 12px; text-align: center;">
+                            <div style="font-size: 12px; color: #6B7280;">Free</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #198754;">${escapeHtml(free)}</div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Right column: Overview + Detailed Usage -->
-                <div style="flex: 2; min-width: 280px;">
-                    <!-- Overview card -->
-                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-                        <h4 style="margin-top:0; margin-bottom:12px;">Overview</h4>
-                        <div style="display: flex; justify-content: space-between; gap: 16px;">
-                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
-                                <div style="font-size:13px; color:#666;">Total</div>
-                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(total)}</div>
-                            </div>
-                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
-                                <div style="font-size:13px; color:#666;">Used</div>
-                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(used)}</div>
-                            </div>
-                            <div style="flex:1; text-align:center; background:white; border-radius:8px; padding:12px;">
-                                <div style="font-size:13px; color:#666;">Free</div>
-                                <div style="font-size:20px; font-weight:bold;">${escapeHtml(free)}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Detailed Usage -->
-                    <div style="background: #f8f9fa; border-radius: 12px; padding: 16px;">
-                        <h4 style="margin-top:0; margin-bottom:12px;">Detailed Usage</h4>
+                <!-- Detailed usage bars -->
+                <div style="background: #f8f9fa; border-radius: 12px; padding: 16px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Detailed Usage</h4>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
                         ${segments.map(segment => `
-                            <div style="margin-bottom: 12px;">
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 14px;">
                                     <span><strong>${segment.icon} ${segment.label}</strong></span>
                                     <span>${escapeHtml(segment.human)} (${segment.value.toFixed(1)}%)</span>
                                 </div>
-                                <div style="background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden;">
-                                    <div style="width: ${Math.max(1, segment.value)}%; background: ${segment.color}; height: 100%;"></div>
+                                <div style="background: #e9ecef; border-radius: 8px; height: 8px; overflow: hidden;">
+                                    <div style="width: ${Math.max(1, segment.value)}%; background: ${segment.color}; height: 100%; border-radius: 8px; transition: width 0.6s ease;"></div>
                                 </div>
                             </div>
                         `).join('')}
@@ -971,14 +960,14 @@ async function showStorageModal() {
 
         body.innerHTML = html;
 
-        // Draw pie chart
+        // Draw pie chart on canvas (donut style)
         const canvas = document.getElementById('storagePieCanvas');
         const totalPercent = segments.reduce((sum, segment) => sum + segment.value, 0);
         if (canvas) {
             const ctx = canvas.getContext('2d');
-            const w = 220, h = 220, cx = 110, cy = 110, r = 90;
+            const w = 180, h = 180, cx = 90, cy = 90, outerR = 75, innerR = 45;
             ctx.clearRect(0, 0, w, h);
-            
+
             if (totalPercent > 0.05) {
                 let start = -0.5 * Math.PI;
                 for (const segment of segments) {
@@ -986,41 +975,37 @@ async function showStorageModal() {
                     if (angle <= 0) continue;
                     const end = start + angle;
                     ctx.beginPath();
+                    ctx.arc(cx, cy, outerR, start, end);
+                    ctx.arc(cx, cy, innerR, end, start, true);
+                    ctx.closePath();
                     ctx.fillStyle = segment.color;
-                    ctx.moveTo(cx, cy);
-                    ctx.arc(cx, cy, r, start, end);
                     ctx.fill();
                     start = end;
                 }
-                // Inner circle for donut style
-                ctx.beginPath();
-                ctx.fillStyle = '#ffffff';
-                ctx.arc(cx, cy, 45, 0, 2 * Math.PI);
-                ctx.fill();
+                // Center text
                 ctx.fillStyle = '#1f1f1f';
-                ctx.font = 'bold 14px "Segoe UI"';
+                ctx.font = 'bold 14px "Segoe UI", sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('Storage', cx, cy - 8);
-                ctx.font = '13px "Segoe UI"';
-                ctx.fillStyle = '#555';
-                ctx.fillText(`${total}`, cx, cy + 10);
+                ctx.fillText(`${used}`, cx, cy - 8);
+                ctx.font = '10px "Segoe UI", sans-serif';
+                ctx.fillStyle = '#6B7280';
+                ctx.fillText('used', cx, cy + 10);
             } else {
-                // Fallback: gray circle with message
-                ctx.fillStyle = '#e5e7eb';
+                // Fallback: empty state
+                ctx.fillStyle = '#e9ecef';
                 ctx.beginPath();
-                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.arc(cx, cy, outerR, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(cx, cy, 60, 0, 2 * Math.PI);
+                ctx.arc(cx, cy, innerR, 0, 2 * Math.PI);
                 ctx.fill();
                 ctx.fillStyle = '#9ca3af';
-                ctx.font = '12px "Segoe UI"';
+                ctx.font = '12px "Segoe UI", sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('No breakdown', cx, cy - 5);
-                ctx.fillText('data yet', cx, cy + 10);
+                ctx.fillText('No data', cx, cy);
             }
         }
     } catch (err) {
