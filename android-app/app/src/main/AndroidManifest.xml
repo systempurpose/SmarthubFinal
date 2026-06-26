@@ -38,6 +38,7 @@
             android:name=".TouchTestActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
+            
 
         <activity
             android:name=".ProximityTestActivity"

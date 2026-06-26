@@ -33,8 +33,15 @@ public class TouchTestActivity extends AppCompatActivity {
             }
             return false; // let drawView handle drawing
         });
+
+        // Clear button
+        findViewById(R.id.clearButton).setOnClickListener(v -> {
+            drawView.clear();
+            touchCounter.setText("Touches: 0");
+        });
     }
 
+    // Make DrawView a public static class to avoid inflation issues
     public static class DrawView extends View {
         private Path path = new Path();
         private Paint paint = new Paint();
@@ -52,7 +59,6 @@ public class TouchTestActivity extends AppCompatActivity {
         protected void onDraw(android.graphics.Canvas canvas) {
             super.onDraw(canvas);
 
-            // Draw guide square (centered, 80% of view size)
             int width = getWidth();
             int height = getHeight();
             int size = Math.min(width, height) * 80 / 100;
@@ -67,7 +73,6 @@ public class TouchTestActivity extends AppCompatActivity {
             guidePaint.setStrokeWidth(4f);
             canvas.drawRect(left, top, right, bottom, guidePaint);
 
-            // Draw user's path
             canvas.drawPath(path, paint);
         }
 

@@ -10,7 +10,7 @@
         android:id="@+id/statusText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Waiting for GPS..."
+        android:text="Waiting..."
         android:textSize="18sp"
         android:textAlignment="center" />
 

@@ -6,6 +6,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -14,36 +15,33 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 public class GpsTestActivity extends AppCompatActivity {
-    private static final int PERMISSION_REQUEST_CODE = 300;
-    private LocationManager locationManager;
-    private TextView statusText;
-    private Button confirmButton;
-    private boolean gotFix = false;
-    private LocationListener locationListener;
+    private static final int PERMISSION_REQUEST = 300;
+    private LocationManager lm;
+    private TextView status;
+    private Button confirmBtn;
+    private LocationListener listener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_gps_test);
 
-        statusText = findViewById(R.id.statusText);
-        confirmButton = findViewById(R.id.confirmButton);
+        status = findViewById(R.id.statusText);
+        confirmBtn = findViewById(R.id.confirmButton);
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                    PERMISSION_REQUEST_CODE);
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSION_REQUEST);
             return;
         }
-
         startGps();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE) {
+        if (requestCode == PERMISSION_REQUEST) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startGps();
             } else {
@@ -54,47 +52,49 @@ public class GpsTestActivity extends AppCompatActivity {
     }
 
     private void startGps() {
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            statusText.setText("GPS is disabled. Please enable it.");
+        lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            status.setText("GPS is disabled. Please enable it in settings.");
             return;
         }
 
-        confirmButton.setEnabled(false);
-        statusText.setText("Waiting for GPS fix... (may take up to 30s)");
+        confirmBtn.setEnabled(false);
+        status.setText("Waiting for GPS fix (up to 30s)...");
 
-        locationListener = new LocationListener() {
+        listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                gotFix = true;
-                statusText.setText("GPS locked!\nLat: " + location.getLatitude() + "\nLng: " + location.getLongitude() + "\nAccuracy: " + location.getAccuracy() + "m");
-                confirmButton.setEnabled(true);
-                locationManager.removeUpdates(this);
+                status.setText("GPS locked!\nLat: " + location.getLatitude() +
+                        "\nLng: " + location.getLongitude() +
+                        "\nAccuracy: " + location.getAccuracy() + "m");
+                confirmBtn.setEnabled(true);
+                lm.removeUpdates(this);
             }
-
-            @Override
-            public void onStatusChanged(String provider, int status, Bundle extras) {}
-            @Override
-            public void onProviderEnabled(String provider) {}
-            @Override
-            public void onProviderDisabled(String provider) {}
+            @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+            @Override public void onProviderEnabled(String provider) {}
+            @Override public void onProviderDisabled(String provider) {}
         };
 
         try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1, locationListener);
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1, listener);
+            // Timeout after 30 seconds
+            new Handler().postDelayed(() -> {
+                if (!confirmBtn.isEnabled()) {
+                    status.setText("GPS timeout – no fix. Please try again.");
+                    lm.removeUpdates(listener);
+                }
+            }, 30000);
         } catch (SecurityException e) {
             Toast.makeText(this, "GPS permission error", Toast.LENGTH_SHORT).show();
             finish();
         }
 
-        confirmButton.setOnClickListener(v -> finish());
+        confirmBtn.setOnClickListener(v -> finish());
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (locationManager != null && locationListener != null) {
-            locationManager.removeUpdates(locationListener);
-        }
+        if (lm != null && listener != null) lm.removeUpdates(listener);
     }
 }

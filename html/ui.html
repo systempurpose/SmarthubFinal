@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="../css/ui.css">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Tesseract.js for offline OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -38,6 +40,10 @@
                 <a href="#" class="nav-item" data-page="bsod">
                     <i class="fas fa-exclamation-triangle"></i> BSOD Diagnosis
                 </a>
+                <!-- NEW: Live Screen -->
+                <a href="#" class="nav-item" data-page="live-screen">
+                    <i class="fas fa-eye"></i> Live Screen
+                </a>
             </nav>
             <div class="sidebar-footer">
                 <div class="connection-status" id="connectionStatus">
@@ -49,24 +55,23 @@
         <!-- Main Content -->
         <main class="main-content">
             <!-- Device Info Card (still used for quick device summary) -->
-            <!-- Device Info Card -->
-<div id="device-info-card" style="display: flex; align-items: center; gap: 16px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
-    <div id="brand-icon" style="font-size: 48px; width: 60px; text-align: center;">
-        <!-- logo or text -->
-    </div>
-    <div style="flex: 1; padding-left: 16px;">
-        <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
-            <span id="device-model" style="font-size: 20px; font-weight: 600;">Device</span>
-            <span id="device-brand" style="font-size: 14px; color: #6B7280;"></span>
-        </div>
-        <div style="display: flex; gap: 16px; margin-top: 4px; flex-wrap: wrap; font-size: 13px; color: #6B7280;">
-            <span id="device-android">Android --</span>
-            <span id="device-security">Patch: --</span>
-            <span id="device-resolution">-- x --</span>
-            <span id="device-battery-summary">🔋 --%</span>
-        </div>
-    </div>
-</div>
+            <div id="device-info-card" style="display: flex; align-items: center; gap: 16px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
+                <div id="brand-icon" style="font-size: 48px; width: 60px; text-align: center;">
+                    <!-- logo or text -->
+                </div>
+                <div style="flex: 1; padding-left: 16px;">
+                    <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                        <span id="device-model" style="font-size: 20px; font-weight: 600;">Device</span>
+                        <span id="device-brand" style="font-size: 14px; color: #6B7280;"></span>
+                    </div>
+                    <div style="display: flex; gap: 16px; margin-top: 4px; flex-wrap: wrap; font-size: 13px; color: #6B7280;">
+                        <span id="device-android">Android --</span>
+                        <span id="device-security">Patch: --</span>
+                        <span id="device-resolution">-- x --</span>
+                        <span id="device-battery-summary">🔋 --%</span>
+                    </div>
+                </div>
+            </div>
 
             <!-- Status Bar (Battery, Storage, RAM) -->
             <div id="status-bar" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
@@ -227,4 +232,3 @@
 
     <script src="../js/ui.js"></script>
 </body>
-</html>

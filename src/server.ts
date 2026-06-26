@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import fs from 'node:fs/promises';
+
 import path from 'node:path';
 import os from 'node:os';
 import networkRoutes from './routes/networkRoutes';
@@ -19,6 +20,7 @@ import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
+
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
@@ -739,6 +741,24 @@ function findCodeBytes(codeMap: Record<string, number>, pkg: string): number | u
 
 // Blue/blank-screen quick tests were extracted to src/routes/blueTestRoutes.ts
 
+app.get('/api/screenshot', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+
+    try {
+        const tempFile = `/sdcard/screenshot_${Date.now()}.png`;
+        await execAsync(`adb -s ${deviceId} shell screencap -p ${tempFile}`);
+        const localFile = `./temp_screenshot_${Date.now()}.png`;
+        await execAsync(`adb -s ${deviceId} pull ${tempFile} ${localFile}`);
+        await execAsync(`adb -s ${deviceId} shell rm ${tempFile}`);
+        const imageBuffer = await fs.readFile(localFile);   // <-- async
+        const base64 = imageBuffer.toString('base64');
+        await fs.unlink(localFile);                          // <-- async
+        res.json({ image: base64 });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // CPU usage and temperature
 app.get('/api/system/cpu', async (req, res) => {

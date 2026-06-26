@@ -11,8 +11,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 public class EarpieceTestActivity extends AppCompatActivity {
-    private MediaPlayer mediaPlayer;
-    private Button confirmButton;
+    private MediaPlayer player;
+    private Button confirmBtn;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -20,29 +20,29 @@ public class EarpieceTestActivity extends AppCompatActivity {
         setContentView(R.layout.activity_earpiece_test);
 
         TextView status = findViewById(R.id.statusText);
-        confirmButton = findViewById(R.id.confirmButton);
+        confirmBtn = findViewById(R.id.confirmButton);
 
-        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        // Route audio to earpiece (not speaker)
-        audioManager.setSpeakerphoneOn(false);
-        audioManager.setMode(AudioManager.MODE_IN_CALL);
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        am.setMode(AudioManager.MODE_IN_CALL);
+        am.setSpeakerphoneOn(false);
 
-        Uri notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-        mediaPlayer = MediaPlayer.create(this, notificationUri);
-        if (mediaPlayer == null) {
+        Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        player = MediaPlayer.create(this, uri);
+        if (player == null) {
             status.setText("No audio resource");
             Toast.makeText(this, "Cannot play sound", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
 
-        mediaPlayer.setVolume(1.0f, 1.0f);
-        mediaPlayer.setOnCompletionListener(mp -> {
+        player.setAudioStreamType(AudioManager.STREAM_VOICE_CALL);
+        player.setVolume(1.0f, 1.0f);
+        player.setOnCompletionListener(mp -> {
             mp.release();
             status.setText("Playback finished. Did you hear it?");
-            confirmButton.setEnabled(true);
+            confirmBtn.setEnabled(true);
         });
-        mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+        player.setOnErrorListener((mp, what, extra) -> {
             mp.release();
             Toast.makeText(this, "Playback error", Toast.LENGTH_SHORT).show();
             finish();
@@ -50,17 +50,15 @@ public class EarpieceTestActivity extends AppCompatActivity {
         });
 
         status.setText("Listening through earpiece...");
-        mediaPlayer.start();
-
-        confirmButton.setOnClickListener(v -> finish());
-        confirmButton.setEnabled(false);
+        player.start();
+        confirmBtn.setEnabled(false);
+        confirmBtn.setOnClickListener(v -> finish());
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (mediaPlayer != null) mediaPlayer.release();
-        // Restore audio mode
+        if (player != null) player.release();
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
         am.setMode(AudioManager.MODE_NORMAL);
         am.setSpeakerphoneOn(true);
