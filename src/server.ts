@@ -1360,6 +1360,7 @@ app.get('/suspicious-apps/:id', async (req: Request, res: Response) => {
     await endMobileDiagnostic(id);
   }
 });
+// ---- APK SCAN WITH VIRUSTOTAL ----
 app.post('/api/scan-apk', async (req, res) => {
   const { deviceId, packageName } = req.body;
   if (!deviceId || !packageName) {
@@ -1384,21 +1385,21 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis = { error: 'Failed to parse analyzer output', raw: stdout };
     }
 
-    // ----- YARA SCAN -----
+    // ---- YARA SCAN ----
     let yaraMatches: { rule: string; matches: string[] }[] = [];
     if (apkPath) {
       yaraMatches = await scanWithYara(apkPath);
     }
     analysis.yara_matches = yaraMatches.map(m => ({ rule: m.rule, count: m.matches.length }));
 
-    // ----- PACKER DETECTION -----
+    // ---- PACKER DETECTION ----
     if (apkPath) {
       const packer = detectPackerIndicators(packageName, apkPath);
       analysis.isPacked = packer.isPacked;
       analysis.packerReason = packer.reason;
     }
 
-   
+    // ---- ENTROPY ----
     const entropy = await calculateEntropy(apkPath);
     analysis.entropy = entropy;
     if (entropy > 0.85) {
@@ -1406,7 +1407,7 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis.polymorphicReason = `High entropy (${entropy.toFixed(3)}) suggests packed/polymorphic code.`;
     }
 
-    // ----- MALWARE TYPE CLASSIFICATION -----
+    // ---- MALWARE TYPE CLASSIFICATION ----
     if (analysis && !analysis.error) {
       const malwareTypes = classifyMalware({
         dangerousPermissions: analysis.dangerous_permissions || [],
@@ -1416,32 +1417,48 @@ app.post('/api/scan-apk', async (req, res) => {
       analysis.malware_types = malwareTypes;
     }
 
-    // ----- VIRUSTOTAL INTEGRATION (optional) -----
-    let vtResult = null;
+    // ---- VIRUSTOTAL INTEGRATION (automatic) ----
     const vtApiKey = process.env.VIRUSTOTAL_API_KEY;
+    let vtResult: any = null;
     if (vtApiKey) {
-      const hash = await computeSha256(apkPath);
-      const vtResp = await fetch(`https://www.virustotal.com/api/v3/files/${hash}`, {
-        headers: { 'x-apikey': vtApiKey }
-      });
-      if (vtResp.ok) vtResult = await vtResp.json();
+      try {
+        const hash = await computeSha256(apkPath);
+        const vtResp = await fetch(`https://www.virustotal.com/api/v3/files/${hash}`, {
+          headers: { 'x-apikey': vtApiKey }
+        });
+        if (vtResp.ok) {
+          const vtData = await vtResp.json();
+          const stats = vtData.data?.attributes?.last_analysis_stats || {};
+          vtResult = {
+            malicious: stats.malicious || 0,
+            suspicious: stats.suspicious || 0,
+            undetected: stats.undetected || 0,
+            totalEngines: Object.keys(vtData.data?.attributes?.last_analysis_results || {}).length,
+            link: `https://www.virustotal.com/gui/file/${hash}`
+          };
+        } else if (vtResp.status === 404) {
+          vtResult = { notFound: true, message: 'Not found in VirusTotal database' };
+        } else {
+          vtResult = { error: `VirusTotal API error: ${vtResp.status}` };
+        }
+      } catch (e: any) {
+        vtResult = { error: e.message || 'VirusTotal query failed' };
+      }
+    } else {
+      vtResult = { notAvailable: true, message: 'VIRUSTOTAL_API_KEY not set' };
     }
+    analysis.virusTotal = vtResult;
 
     res.json({
       ok: true,
       packageName,
       staticAnalysis: analysis,
-      virusTotal: vtResult ? {
-        malicious: vtResult.data?.attributes?.last_analysis_stats?.malicious || 0,
-        suspicious: vtResult.data?.attributes?.last_analysis_stats?.suspicious || 0,
-        totalEngines: Object.keys(vtResult.data?.attributes?.last_analysis_results || {}).length
-      } : null
     });
   } catch (err: any) {
     console.error('APK scan error:', err);
     res.status(500).json({ error: err.message });
   } finally {
-    if (apkPath) try { await fs.unlink(apkPath); } catch { }
+    if (apkPath) try { await fs.unlink(apkPath); } catch {}
   }
 });
 app.post('/adb-uninstall', async (req: Request, res: Response) => {
