@@ -146,7 +146,8 @@ router.get('/large-files', async (req, res) => {
     return res.json({ files: allFiles, count: allFiles.length });
   } catch (err: any) {
     console.error('Large files scan error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to scan large files' });
+    // Never throw 500 – return empty array with error message
+    return res.json({ files: [], count: 0, error: err.message || 'Failed to scan large files' });
   }
 });
 

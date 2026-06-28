@@ -29,11 +29,20 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
 
 function showLoading() {
     const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.add('active');
+    if (overlay) {
+        overlay.classList.add('active');
+        // Force a reflow to ensure the transition starts
+        overlay.offsetHeight;
+    } else {
+        console.warn('Loading overlay not found in DOM');
+    }
 }
+
 function hideLoading() {
     const overlay = document.getElementById('loadingOverlay');
-    if (overlay) overlay.classList.remove('active');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
 }
 // ==================== MODERN SPINNER HELPER ====================
 function getModernSpinnerHTML(text = 'Loading...') {
@@ -4628,15 +4637,26 @@ function initNavigation() {
             document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             const page = item.dataset.page;
-            if (page === 'dashboard') await renderDashboard();
-            else if (page === 'device-info') await renderDeviceInfo();
-            else if (page === 'hardware-tests') await renderHardwareTests();
-            else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
-            else if (page === 'ai-conclusion') await renderAIConclusion();
-            else if (page === 'repairs') await renderRepairs();
-            else if (page === 'bsod') await renderBsodDiagnosis();
-            else if (page === 'live-screen') await renderLiveScreen();
-            else await renderDashboard();
+            showLoading();
+            try {
+                // Allow DOM to update before heavy rendering
+                await new Promise(r => setTimeout(r, 50));
+                if (page === 'dashboard') await renderDashboard();
+                else if (page === 'device-info') await renderDeviceInfo();
+                else if (page === 'hardware-tests') await renderHardwareTests();
+                else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
+                else if (page === 'ai-conclusion') await renderAIConclusion();
+                else if (page === 'repairs') await renderRepairs();
+                else if (page === 'bsod') await renderBsodDiagnosis();
+                else if (page === 'live-screen') await renderLiveScreen();
+                else await renderDashboard();
+            } catch (err) {
+                console.error('Page render error:', err);
+            } finally {
+                // Keep spinner visible for at least 300ms (smooth experience)
+                await new Promise(r => setTimeout(r, 300));
+                hideLoading();
+            }
         });
     });
 }

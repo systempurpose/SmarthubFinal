@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-90:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-90:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-90:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-90:12
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-93:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-93:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-93:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-93:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -115,8 +115,8 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xm
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:19:19-60
 application
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-88:19
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-88:19
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-91:19
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-91:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -173,78 +173,86 @@ ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xm
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:41:13-50
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:39:13-47
+activity#com.smarthub.diagnostics.HeadphoneTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:42:9-45:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:13-50
 activity#com.smarthub.diagnostics.TouchTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:9-46:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:9-49:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:48:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-46
-activity#com.smarthub.diagnostics.ProximityTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:48:9-51:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:50:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:13-50
-	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:49:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:47:13-46
+activity#com.smarthub.diagnostics.ProximityTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:9-54:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:52:13-50
 activity#com.smarthub.diagnostics.GyroTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:9-56:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:56:9-59:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:55:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:56:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:13-45
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:57:13-45
 activity#com.smarthub.diagnostics.MicrophoneTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:9-61:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:9-64:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:60:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:63:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:13-51
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:62:13-51
 activity#com.smarthub.diagnostics.EarpieceTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:63:9-66:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:66:9-69:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:65:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:66:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-49
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:67:13-49
 activity#com.smarthub.diagnostics.GpsTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:9-71:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:9-74:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:70:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-44
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:72:13-44
 activity#com.smarthub.diagnostics.FingerprintTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:9-76:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:9-79:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:75:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-52
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:77:13-52
 activity#com.smarthub.diagnostics.NfcTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:9-81:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:9-84:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:80:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-44
-activity#com.smarthub.diagnostics.BluetoothTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:9-86:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:85:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:13-50
-	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:84:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:82:13-44
+activity#com.smarthub.diagnostics.BluetoothTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:9-89:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:88:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:89:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:87:13-50
 uses-sdk
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml

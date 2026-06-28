@@ -28,8 +28,6 @@ public class TestRunnerActivity extends AppCompatActivity {
     private static final String TAG = "TestRunner";
     private static final int PERMISSION_REQUEST_CODE = 100;
     private String pendingTestType;
-
-    // ---- For loop cancellation ----
     private Handler loopHandler = new Handler();
     private Runnable soundLoopRunnable;
 
@@ -105,11 +103,7 @@ public class TestRunnerActivity extends AppCompatActivity {
                 startActivity(new Intent(this, MicrophoneTestActivity.class));
                 finish();
                 break;
-            case "earpiece":
-                startActivity(new Intent(this, EarpieceTestActivity.class));
-                finish();
-                break;
-            case "headphone":
+            case "headphone": // ← renamed from "earpiece"
                 startActivity(new Intent(this, HeadphoneTestActivity.class));
                 finish();
                 break;
@@ -159,7 +153,6 @@ public class TestRunnerActivity extends AppCompatActivity {
             Log.e(TAG, "Vibration error", e);
             Toast.makeText(this, "Vibration error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-
         new Handler().postDelayed(this::finish, 1500);
     }
 
@@ -193,7 +186,6 @@ public class TestRunnerActivity extends AppCompatActivity {
         Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
     }
 
-    // ---- Updated runSoundTest with loop cancellation ----
     private void runSoundTest() {
         PackageManager pm = getPackageManager();
         if (!pm.hasSystemFeature("android.hardware.audio.output")) {
@@ -203,7 +195,7 @@ public class TestRunnerActivity extends AppCompatActivity {
             return;
         }
 
-        // Cancel any previous loop
+        // Cancel previous loop
         if (soundLoopRunnable != null) {
             loopHandler.removeCallbacks(soundLoopRunnable);
         }
@@ -211,9 +203,7 @@ public class TestRunnerActivity extends AppCompatActivity {
         soundLoopRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isFinishing()) {
-                    return;
-                }
+                if (isFinishing()) return;
                 MediaPlayer mp = null;
                 try {
                     mp = MediaPlayer.create(TestRunnerActivity.this, R.raw.test_tone);
@@ -232,7 +222,6 @@ public class TestRunnerActivity extends AppCompatActivity {
                 mp.setVolume(1.0f, 1.0f);
                 mp.setOnCompletionListener(mp1 -> {
                     mp1.release();
-                    // Only repeat if not finishing
                     if (!isFinishing()) {
                         loopHandler.postDelayed(soundLoopRunnable, 500);
                     }
@@ -254,7 +243,6 @@ public class TestRunnerActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Stop all loops
         if (soundLoopRunnable != null) {
             loopHandler.removeCallbacks(soundLoopRunnable);
         }

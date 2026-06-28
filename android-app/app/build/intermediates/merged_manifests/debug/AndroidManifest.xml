@@ -61,6 +61,10 @@
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
         <activity
+            android:name="com.smarthub.diagnostics.HeadphoneTestActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartHub" />
+        <activity
             android:name="com.smarthub.diagnostics.TouchTestActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
