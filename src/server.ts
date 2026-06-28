@@ -1689,6 +1689,8 @@ app.get('/device-info', async (req, res) => {
         res.status(500).json({ error: errorMessage });
     }
 });
+
+
 // Add a simple endpoint to get the list of connected devices
 app.get('/api/devices', async (_req, res) => {
   try {
@@ -1724,6 +1726,44 @@ app.get('/device/:id', async (req, res) => {
   }
 });
 
+// ---- Software Safety ----
+// ---- Software Safety ----
+app.get('/api/software-safety', async (req, res) => {
+    const deviceId = req.query.deviceId as string;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+
+    try {
+        const patch = await adb('-s', deviceId, 'shell', 'getprop', 'ro.build.version.security_patch');
+        const patchDate = patch.trim() || 'Unknown';
+
+        let isRooted = false;
+        try {
+            const suCheck = await adb('-s', deviceId, 'shell', 'which', 'su');
+            if (suCheck.trim()) isRooted = true;
+        } catch {}
+        const secure = await adb('-s', deviceId, 'shell', 'getprop', 'ro.secure');
+        if (secure.trim() === '0') isRooted = true;
+
+        const verifier = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'package_verifier_enable');
+        const playProtectEnabled = verifier.trim() === '1';
+
+        const unknownSources = await adb('-s', deviceId, 'shell', 'settings', 'get', 'secure', 'install_non_market_apps');
+        const unknownSourcesEnabled = unknownSources.trim() === '1';
+
+        const adbEnabled = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'adb_enabled');
+        const adbDebugging = adbEnabled.trim() === '1';
+
+        res.json({
+            patchDate,
+            isRooted,
+            playProtectEnabled,
+            unknownSourcesEnabled,
+            adbDebugging,
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Software safety check failed' });
+    }
+});
 // Improved WiFi status endpoint that returns structured JSON with real values
 app.get('/wifi/status/:id', async (req, res) => {
     const deviceId = req.params.id;
