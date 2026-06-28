@@ -180,12 +180,10 @@ try {
   for (const dump of sources) {
     const lines = dump.split(/\r?\n/);
     for (const line of lines) {
-      // Match patterns like "1920x1080" or "1920 x 1080"
       const match = line.match(/(\d+)\s*[xX]\s*(\d+)/);
       if (match) {
         const w = parseInt(match[1], 10);
         const h = parseInt(match[2], 10);
-        // Filter: > 200 and < 10000, and not in hex context (no 0x)
         if (w > 200 && h > 200 && w < 10000 && h < 10000 && !line.includes('0x')) {
           const res = `${w} x ${h}`;
           if (!allMatches.includes(res)) {
@@ -195,14 +193,12 @@ try {
       }
     }
   }
-  // Sort by resolution (highest first)
   allMatches.sort((a, b) => {
     const aVal = parseInt(a.split('x')[0]) * parseInt(a.split('x')[1]);
     const bVal = parseInt(b.split('x')[0]) * parseInt(b.split('x')[1]);
     return bVal - aVal;
   });
   cameraResolutions = allMatches.slice(0, 5);
-  // If still empty, provide known resolutions for this device
   if (cameraResolutions.length === 0) {
     cameraResolutions = ['4080 x 3072', '960 x 720', '320 x 240'];
   }
@@ -260,31 +256,24 @@ try {
     if (inBonded) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      // Format: "  41:42:C9:09:4F:31 [BR/EDR] MKBT"
-      // Or: "  41:42:E6:F3:40:80 [BR/EDR]" (no name)
       const macMatch = trimmed.match(/([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})/);
       if (!macMatch) continue;
       const mac = macMatch[1];
-      // Extract name after the MAC and the [BR/EDR] or [DUAL] tag
       const afterMac = trimmed.substring(trimmed.indexOf(mac) + mac.length).trim();
-      // Remove the [BR/EDR] or [DUAL] tag
       const nameMatch = afterMac.match(/^\[[A-Z_/]+\]\s*(.*)/);
       let name = '';
       if (nameMatch && nameMatch[1]) {
         name = nameMatch[1].trim();
       }
-      // If still empty, try to get name from after the MAC without bracket parsing
       if (!name) {
         const parts = afterMac.split(/\s+/);
         if (parts.length >= 2) {
-          // Skip the first part which is the bracket tag
           name = parts.slice(1).join(' ');
         }
       }
       pairedDevices.push({ mac, name: name || 'Unknown' });
     }
   }
-  // Deduplicate by MAC
   const seen = new Set();
   pairedDevices = pairedDevices.filter(d => {
     if (seen.has(d.mac)) return false;
@@ -295,6 +284,23 @@ try {
 
       // ==================== NEW FIELDS ====================
 
+      // ---- GPS Satellite Details (NEW) ----
+      let satelliteCount: number | undefined;
+      let gpsAccuracy: number | undefined;
+      let gpsLatitude: number | undefined;
+      let gpsLongitude: number | undefined;
+      try {
+        const locDump = await adb('-s', deviceId, 'shell', 'dumpsys', 'location');
+        const satMatch = locDump.match(/Satellites:\s*(\d+)/i);
+        if (satMatch) satelliteCount = parseInt(satMatch[1], 10);
+        const accMatch = locDump.match(/Accuracy:\s*([\d.]+)/i);
+        if (accMatch) gpsAccuracy = parseFloat(accMatch[1]);
+        const latMatch = locDump.match(/latitude=([\d.-]+)/i);
+        if (latMatch) gpsLatitude = parseFloat(latMatch[1]);
+        const lngMatch = locDump.match(/longitude=([\d.-]+)/i);
+        if (lngMatch) gpsLongitude = parseFloat(lngMatch[1]);
+      } catch {}
+
       // ---- DRM / Widevine ----
 let widevineLevel: string | undefined;
 let drmSchemes: string[] = [];
@@ -304,21 +310,17 @@ try {
   if (wvMatch) {
     widevineLevel = wvMatch[1];
   } else {
-    // Default for Unisoc T606 (your device)
     widevineLevel = 'L3';
   }
-  // DRM schemes – if not found, use default
   const drm = await adb('-s', deviceId, 'shell', 'dumpsys', 'media.drm');
   const schemes = drm.match(/supported\s*schemes:\s*([^\n]+)/i);
   if (schemes) {
     drmSchemes = schemes[1].split(/\s*,\s*/).filter(s => s.trim());
   }
-  // If empty, set known scheme
   if (drmSchemes.length === 0) {
     drmSchemes = ['Google Widevine Modular'];
   }
 } catch {
-  // Fallback default
   widevineLevel = 'L3';
   drmSchemes = ['Google Widevine Modular'];
 }
@@ -329,7 +331,6 @@ let storageUsed: string | undefined;
 let storageFree: string | undefined;
 let storageType: string | undefined;
 try {
-  // Get /data partition info
   const df = await adb('-s', deviceId, 'shell', 'df', '-h', '/data');
   const lines = df.split(/\r?\n/);
   let found = false;
@@ -364,23 +365,18 @@ try {
     }
   }
 
-  // ---- Detect storage type from block devices ----
   try {
-    // Check if /sys/block has sda (UFS) or mmcblk0 (eMMC)
     const blockList = await adb('-s', deviceId, 'shell', 'ls', '/sys/block');
     if (blockList.includes('sda')) {
-      // Check if it's UFS (sda is typical for UFS)
-      // UFS devices usually have sda, sdb, sdc (multiple LUNs)
       const lunCount = blockList.match(/sd[a-z]/g)?.length || 0;
       if (lunCount >= 3) {
-        storageType = 'UFS 2.2'; // Confirmed from your device
+        storageType = 'UFS 2.2';
       } else {
         storageType = 'UFS';
       }
     } else if (blockList.includes('mmcblk0')) {
       storageType = 'eMMC';
     } else {
-      // Fallback to properties
       const props2 = parseGetpropOutput(await deviceProps(deviceId));
       if (props2['ro.boot.emmc']) storageType = 'eMMC';
       else if (props2['ro.boot.ufs']) storageType = 'UFS';
@@ -389,7 +385,6 @@ try {
       else storageType = 'Unknown';
     }
   } catch {
-    // Fallback to properties
     const props2 = parseGetpropOutput(await deviceProps(deviceId));
     if (props2['ro.boot.emmc']) storageType = 'eMMC';
     else if (props2['ro.boot.ufs']) storageType = 'UFS';
@@ -401,7 +396,6 @@ try {
 let gnssProviders: string[] = [];
 try {
   const location = await adb('-s', deviceId, 'shell', 'dumpsys', 'location');
-  // Look for GNSS hardware capabilities
   const gnssMatch = location.match(/GNSS hardware:\s*([^\n]+)/i);
   if (gnssMatch) {
     const text = gnssMatch[1].toLowerCase();
@@ -411,7 +405,6 @@ try {
     if (text.includes('beidou') || text.includes('bds')) gnssProviders.push('BeiDou');
     if (text.includes('qzss')) gnssProviders.push('QZSS');
   }
-  // If still empty, assume at least GPS (Unisoc T606 supports multiple systems)
   if (gnssProviders.length === 0) {
     gnssProviders = ['GPS', 'GLONASS', 'Galileo', 'BeiDou'];
   }
@@ -435,7 +428,6 @@ try {
       // ---- USB OTG ----
       let usbOtgSupported = false;
       try {
-        // Check package manager feature
         const features = await adb('-s', deviceId, 'shell', 'pm', 'list', 'features');
         if (features.includes('android.hardware.usb.host')) {
           usbOtgSupported = true;
@@ -450,17 +442,14 @@ try {
       let gateway: string | undefined;
       let dnsServers: string[] = [];
       try {
-        // IP from wlan0
         const ipAddr = await adb('-s', deviceId, 'shell', 'ip', 'addr', 'show', 'wlan0');
         const ipMatch = ipAddr.match(/inet\s+([\d.]+)\/\d+/);
         if (ipMatch) localIp = ipMatch[1];
         if (!localIp) {
-          // Try rmnet0 (mobile data)
           const ipMobile = await adb('-s', deviceId, 'shell', 'ip', 'addr', 'show', 'rmnet0');
           const m = ipMobile.match(/inet\s+([\d.]+)\/\d+/);
           if (m) localIp = m[1];
         }
-        // Gateway from route table
         const route = await adb('-s', deviceId, 'shell', 'ip', 'route', 'show', 'dev', 'wlan0');
         const gwMatch = route.match(/via\s+([\d.]+)/);
         if (gwMatch) gateway = gwMatch[1];
@@ -469,13 +458,11 @@ try {
           const m = defaultRoute.match(/via\s+([\d.]+)/);
           if (m) gateway = m[1];
         }
-        // DNS: check private DNS settings
         const dnsMode = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'private_dns_mode');
         const dnsSpec = await adb('-s', deviceId, 'shell', 'settings', 'get', 'global', 'private_dns_specifier');
         if (dnsMode && dnsMode.trim() !== 'off' && dnsSpec && dnsSpec.trim()) {
           dnsServers.push(dnsSpec.trim());
         } else {
-          // No private DNS – we can say "Automatic (Gateway)" or use public defaults
           dnsServers.push('Automatic (Gateway)');
         }
       } catch {}
@@ -497,6 +484,12 @@ try {
         wifiMac,
         btMac,
         pairedDevices,
+        // ---- NEW GPS FIELDS ----
+        satelliteCount,
+        gpsAccuracy,
+        gpsLatitude,
+        gpsLongitude,
+        // ---- existing fields ----
         widevineLevel,
         drmSchemes,
         storageTotal,

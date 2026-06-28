@@ -3678,7 +3678,6 @@ async function renderConnectionTroubleshoot() {
         return;
     }
 
-    // Clear page and inject fresh layout
     const container = document.getElementById('pageContent');
     container.innerHTML = `
         <div class="card" style="text-align:center; padding:20px;">
@@ -3697,7 +3696,6 @@ async function renderConnectionTroubleshoot() {
     const resultsDiv = document.getElementById('diagnosticResults');
     const fixContainer = document.getElementById('fixButtonsContainer');
 
-    // Remove any previous listeners to avoid duplicate runs
     runBtn.replaceWith(runBtn.cloneNode(true));
     const newRunBtn = document.getElementById('runDiagnosticsBtn');
 
@@ -3743,6 +3741,9 @@ async function renderConnectionTroubleshoot() {
             let msg = pass ? data.message : (data.error || 'Failed');
             if (name === 'Bluetooth' && pass) {
                 msg += ` | Paired: ${data.pairedCount || 0} | State: ${data.connectionState || 'Unknown'} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
+            }
+            if (name === 'Mobile Data' && data.signalStrength) {
+                msg += ` | Signal: ${data.signalStrength}`;
             }
             html += `<div class="card-item"><span class="item-label">${name}</span><span class="item-value" style="color:${color};">${icon} ${escapeHtml(msg)}</span></div>`;
         }
