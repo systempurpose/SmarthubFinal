@@ -29,6 +29,10 @@ public class TestRunnerActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 100;
     private String pendingTestType;
 
+    // ---- For loop cancellation ----
+    private Handler loopHandler = new Handler();
+    private Runnable soundLoopRunnable;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -99,6 +103,10 @@ public class TestRunnerActivity extends AppCompatActivity {
                 break;
             case "microphone":
                 startActivity(new Intent(this, MicrophoneTestActivity.class));
+                finish();
+                break;
+            case "earpiece":
+                startActivity(new Intent(this, EarpieceTestActivity.class));
                 finish();
                 break;
             case "headphone":
@@ -183,9 +191,9 @@ public class TestRunnerActivity extends AppCompatActivity {
         };
         vibrateLoop.run();
         Toast.makeText(this, "Vibrating...", Toast.LENGTH_SHORT).show();
-        // The activity will be finished by desktop sending back key
     }
 
+    // ---- Updated runSoundTest with loop cancellation ----
     private void runSoundTest() {
         PackageManager pm = getPackageManager();
         if (!pm.hasSystemFeature("android.hardware.audio.output")) {
@@ -195,15 +203,23 @@ public class TestRunnerActivity extends AppCompatActivity {
             return;
         }
 
-        final Handler handler = new Handler();
-        final Runnable playLoop = new Runnable() {
+        // Cancel any previous loop
+        if (soundLoopRunnable != null) {
+            loopHandler.removeCallbacks(soundLoopRunnable);
+        }
+
+        soundLoopRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isFinishing()) return;
+                if (isFinishing()) {
+                    return;
+                }
                 MediaPlayer mp = null;
                 try {
                     mp = MediaPlayer.create(TestRunnerActivity.this, R.raw.test_tone);
-                } catch (Exception e) {}
+                } catch (Exception e) {
+                    // ignore
+                }
                 if (mp == null) {
                     Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
                     mp = MediaPlayer.create(TestRunnerActivity.this, uri);
@@ -216,18 +232,33 @@ public class TestRunnerActivity extends AppCompatActivity {
                 mp.setVolume(1.0f, 1.0f);
                 mp.setOnCompletionListener(mp1 -> {
                     mp1.release();
-                    handler.postDelayed(this, 500);
+                    // Only repeat if not finishing
+                    if (!isFinishing()) {
+                        loopHandler.postDelayed(soundLoopRunnable, 500);
+                    }
                 });
                 mp.setOnErrorListener((mp1, what, extra) -> {
                     mp1.release();
-                    handler.postDelayed(this, 500);
+                    if (!isFinishing()) {
+                        loopHandler.postDelayed(soundLoopRunnable, 500);
+                    }
                     return true;
                 });
                 mp.start();
             }
         };
-        playLoop.run();
+        soundLoopRunnable.run();
         Toast.makeText(this, "Playing test tone...", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Stop all loops
+        if (soundLoopRunnable != null) {
+            loopHandler.removeCallbacks(soundLoopRunnable);
+        }
+        loopHandler.removeCallbacksAndMessages(null);
     }
 
     private void runFlashTest() {

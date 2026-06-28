@@ -2835,15 +2835,13 @@ async function renderHardwareTests() {
             await runAdb('svc nfc enable');
             await runAdb('settings put global nfc_on 1');
         }
-        if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
-            // Set media volume to half and show the volume slider
-            try {
-                await runAdb('cmd media_session volume --stream 3 --set 8 --show');
-            } catch (e) {
-                // Fallback command
-                await runAdb('settings put system volume_music 8');
-            }
-        }
+       if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
+    try {
+        await runAdb('cmd media_session volume --stream 3 --set 8 --show');
+    } catch (e) {
+        await runAdb('settings put system volume_music 8');
+    }
+}
     } catch (e) {
         console.warn('Device preparation failed:', e);
     }
