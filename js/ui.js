@@ -3839,16 +3839,16 @@ async function renderConnectionTroubleshoot() {
 
     // ---- Test state ----
     let isRunning = false;
-    let testResults = {};
+    // We'll use window._connectionTestResults for persistence.
 
     // ---- Card definitions ----
     const testCards = [
-        { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity', status: 'Pending' },
-        { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer', status: 'Pending' },
-        { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity', status: 'Pending' },
+        { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity' },
+        { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer' },
+        { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity' },
     ];
 
-    // ---- Build test cards ----
+    // ---- Build test cards with unique IDs ----
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const card of testCards) {
         cardsHtml += `
@@ -3859,7 +3859,7 @@ async function renderConnectionTroubleshoot() {
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
                     <span class="status-text" id="conn-status-${card.id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
-                    <button class="btn-primary run-conn-test" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
+                    <button class="btn-primary run-conn-test" id="conn-btn-${card.id}" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
                 </div>
             </div>
         `;
@@ -3885,6 +3885,20 @@ async function renderConnectionTroubleshoot() {
         <div id="testResult" style="margin-top: 20px; display: none;"></div>
         ${fixOptionsHtml}
     `;
+
+    // ========== RESTORE SAVED RESULTS ==========
+    const savedResults = window._connectionTestResults || {};
+    for (const [id, data] of Object.entries(savedResults)) {
+        const statusSpan = document.getElementById(`conn-status-${id}`);
+        const btn = document.getElementById(`conn-btn-${id}`);
+        if (statusSpan) {
+            const icon = data.passed ? '✅' : '❌';
+            const color = data.passed ? '#2e7d32' : '#d32f2f';
+            statusSpan.style.color = color;
+            statusSpan.textContent = `${icon} ${data.passed ? 'Passed' : 'Failed'}`;
+            if (btn) btn.textContent = data.passed ? 'Rerun' : 'Retry';
+        }
+    }
 
     // ---- Build fix cards for all services ----
     function buildAllFixCards() {
@@ -3915,8 +3929,8 @@ async function renderConnectionTroubleshoot() {
                 const service = btn.dataset.service;
 
                 // ---- Warning if all services are healthy ----
-                const allPass = Object.values(testResults).every(r => r === true);
-                if (allPass && Object.keys(testResults).length > 0) {
+                const allPass = Object.values(window._connectionTestResults || {}).every(r => r.passed === true);
+                if (allPass && Object.keys(window._connectionTestResults || {}).length > 0) {
                     if (!confirm(`⚠️ All services are currently working. Are you sure you want to apply the fix "${action}"? This may temporarily disrupt connectivity.`)) {
                         return;
                     }
@@ -3965,7 +3979,7 @@ async function renderConnectionTroubleshoot() {
 
         const card = document.getElementById(`conn-card-${testId}`);
         const statusSpan = document.getElementById(`conn-status-${testId}`);
-        const btn = card.querySelector('.run-conn-test');
+        const btn = document.getElementById(`conn-btn-${testId}`);
         const resultDiv = document.getElementById('testResult');
         const warningDiv = document.getElementById('fixWarning');
 
@@ -4003,7 +4017,13 @@ async function renderConnectionTroubleshoot() {
             const resp = await fetch(`${BACKEND_URL}${endpoint}`);
             const data = await resp.json();
             const pass = data.ok === true;
-            testResults[testId] = pass;
+
+            // Save result
+            if (!window._connectionTestResults) window._connectionTestResults = {};
+            window._connectionTestResults[testId] = {
+                passed: pass,
+                message: pass ? data.message : (data.error || 'Failed')
+            };
 
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
@@ -4024,10 +4044,16 @@ async function renderConnectionTroubleshoot() {
             resultDiv.innerHTML = `<div style="background: ${pass ? '#e8f5e9' : '#ffebee'}; padding: 12px; border-radius: 8px; color: ${color};">${icon} ${msg}</div>`;
 
             // ---- Show warning if all tests passed ----
-            const allPass = Object.values(testResults).every(r => r === true);
+            const allPass = Object.values(window._connectionTestResults || {}).every(r => r.passed === true);
             warningDiv.style.display = allPass ? 'block' : 'none';
 
         } catch (err) {
+            // Save error result
+            if (!window._connectionTestResults) window._connectionTestResults = {};
+            window._connectionTestResults[testId] = {
+                passed: false,
+                message: err.message
+            };
             statusSpan.style.color = '#d32f2f';
             statusSpan.textContent = '❌ Error';
             btn.textContent = 'Retry';
@@ -4050,8 +4076,8 @@ async function renderConnectionTroubleshoot() {
         });
     });
 
-    // ---- initialise results ----
-    testResults = {};
+    // ---- initialise results if needed ----
+    if (!window._connectionTestResults) window._connectionTestResults = {};
 }
 
 async function runConnectionTest(testId) {
