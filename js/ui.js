@@ -31,7 +31,9 @@ function showLoading() {
     document.getElementById('loadingOverlay').classList.add('active');
 }
 function hideLoading() {
-    document.getElementById('loadingOverlay').classList.remove('active');
+    setTimeout(() => {
+        document.getElementById('loadingOverlay').classList.remove('active');
+    }, 150); // small delay to let the content settle
 }
 
 // ==================== BRAND ICON MAPPING ====================
