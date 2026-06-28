@@ -27,6 +27,20 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     }
 }
 
+// ==================== MODERN SPINNER HELPER ====================
+function getModernSpinnerHTML(text = 'Loading...') {
+    return `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 0;">
+            <div style="position: relative; width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;">
+                <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; border-right-color: #60a5fa; border-bottom-color: #93c5fd; animation: spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;"></div>
+                <div style="position: absolute; width: 80%; height: 80%; border-radius: 50%; border: 4px solid transparent; border-top-color: #7c3aed; border-right-color: #a78bfa; border-bottom-color: #c4b5fd; animation: spin 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite reverse;"></div>
+                <div style="position: absolute; width: 60%; height: 60%; border-radius: 50%; border: 4px solid transparent; border-top-color: #10b981; border-right-color: #34d399; border-bottom-color: #6ee7b7; animation: spin 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;"></div>
+                <div style="width: 12px; height: 12px; background: #3b82f6; border-radius: 50%; animation: pulse 1.2s ease-in-out infinite; z-index: 1;"></div>
+            </div>
+            <p style="margin-top: 16px; color: #6B7280; font-weight: 500; font-size: 14px;">${escapeHtml(text)}</p>
+        </div>
+    `;
+}
 function showLoading() {
     document.getElementById('loadingOverlay').classList.add('active');
 }
@@ -761,12 +775,7 @@ function renderPieChart(svgElement, segments) {
 async function showBatteryModal() {
     const modal = ensureInfoModal('batteryModal', '🔋 Battery & CPU Usage');
     const body = document.getElementById('batteryModalBody');
-    body.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <div class="spinner"></div>
-            <p>Loading data...</p>
-        </div>
-    `;
+    body.innerHTML = getModernSpinnerHTML('Loading battery data...');
     modal.style.display = 'flex';
 
     try {
@@ -893,7 +902,7 @@ async function showBatteryModal() {
 async function showStorageModal() {
     const modal = ensureInfoModal('storageModal', '💾 Storage Details');
     const body = document.getElementById('storageModalBody');
-    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading storage...</p></div>';
+    body.innerHTML = getModernSpinnerHTML('Loading storage...');
     modal.style.display = 'flex';
     try {
         const url = `${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`;
@@ -1078,7 +1087,7 @@ function simplifyAppName(pkg) {
 async function showRamModal() {
     const modal = ensureInfoModal('ramModal', '🧠 RAM Usage by App');
     const body = document.getElementById('ramModalBody');
-    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading RAM usage...</p></div>';
+    body.innerHTML = getModernSpinnerHTML('Loading RAM usage...');
     modal.style.display = 'flex';
     try {
         const [processes, ramInfo] = await Promise.all([
@@ -1240,7 +1249,7 @@ async function showTemperatureModal() {
 async function showSecurityModal() {
     const modal = ensureInfoModal('securityModal', '🛡️ Security Overview');
     const body = document.getElementById('securityModalBody');
-    body.innerHTML = '<div class="modal-loading"><div class="spinner"></div><p>Loading security status...</p></div>';
+    body.innerHTML = getModernSpinnerHTML('Loading security status...');
     modal.style.display = 'flex';
     try {
         const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
@@ -1397,7 +1406,7 @@ async function runDeepDiagnostic() {
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
     modalTitle.textContent = 'Running Deep Diagnostic';
-    modalBody.innerHTML = '<div class="spinner"></div><p style="text-align: center;">Analyzing system...</p>';
+    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
     modal.style.display = 'flex';
 
     const closeModal = () => { modal.style.display = 'none'; };
@@ -1405,6 +1414,9 @@ async function runDeepDiagnostic() {
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
+     modalTitle.textContent = 'Running Deep Diagnostic';
+    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
+    modal.style.display = 'flex';
     // ========== ANDROID APP HELPER ==========
     async function ensureAndroidAppOpen() {
         try {
