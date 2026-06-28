@@ -32,8 +32,9 @@
             android:id="@+id/noButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="❌ No, I didn't hear"
+            android:text="❌ No, I didn't hear it"
             android:enabled="false"
             android:layout_marginStart="16dp" />
     </LinearLayout>
+
 </LinearLayout>
