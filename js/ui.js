@@ -2,6 +2,9 @@
 let currentDeviceId = null;
 let wizardStep = 0;
 
+// ---- Persistent test results ----
+window._hardwareTestResults = {};   // { testId: { status, message, passed } }
+window._connectionTestResults = {}; // { testId: { status, message, passed } }
 // Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
 const BACKEND_URL = (() => {
@@ -23,6 +26,14 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
         clearTimeout(timeoutId);
     }
 }
+
+function showLoading() {
+    document.getElementById('loadingOverlay').classList.add('active');
+}
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('active');
+}
+
 // ==================== BRAND ICON MAPPING ====================
 function getBrandIcon(brand) {
     const brandMap = {
@@ -2409,8 +2420,6 @@ async function renderHardwareTests() {
     }
 
     // ========== TEST DEFINITIONS ==========
-    // Map test IDs to display info and the actual run function.
-    // The run functions are the same as in the existing tests array.
     const testDefs = {
         battery: {
             title: 'Battery',
@@ -2709,20 +2718,20 @@ async function renderHardwareTests() {
     };
 
     // ========== CARD UI ==========
-    // Build card HTML from testDefs
     const testIds = Object.keys(testDefs);
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const id of testIds) {
         const def = testDefs[id];
+        // Add unique IDs for status and button
         cardsHtml += `
-            <div class="test-card" id="card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+            <div class="test-card" id="hw-card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
                 <div>
                     <h3 style="margin: 0 0 4px 0; font-size: 16px;">${def.title}</h3>
                     <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${def.desc}</p>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
-                    <button class="btn-secondary run-single-test" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
+                    <span class="status-text" id="hw-status-${id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
+                    <button class="btn-secondary run-single-test" id="hw-btn-${id}" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
                 </div>
             </div>
         `;
@@ -2758,6 +2767,20 @@ async function renderHardwareTests() {
     `;
 
     document.getElementById('pageContent').innerHTML = fullHtml;
+
+    // ========== RESTORE SAVED RESULTS ==========
+    const savedResults = window._hardwareTestResults || {};
+    for (const [id, data] of Object.entries(savedResults)) {
+        const statusSpan = document.getElementById(`hw-status-${id}`);
+        const btn = document.getElementById(`hw-btn-${id}`);
+        if (statusSpan) {
+            const icon = data.passed ? '✅' : '❌';
+            const color = data.passed ? '#2e7d32' : '#d32f2f';
+            statusSpan.style.color = color;
+            statusSpan.textContent = `${icon} ${data.passed ? 'Passed' : 'Failed'}`;
+            if (btn) btn.textContent = data.passed ? 'Rerun' : 'Details';
+        }
+    }
 
     // ========== MODAL HELPERS ==========
     const modal = document.getElementById('hwTestModal');
@@ -2826,32 +2849,32 @@ async function renderHardwareTests() {
     }
 
     async function prepareDeviceForTest(testType) {
-    try {
-        await runAdb('settings put global zen_mode 0');
-        if (testType === 'gps') {
-            await runAdb('settings put secure location_mode 3');
+        try {
+            await runAdb('settings put global zen_mode 0');
+            if (testType === 'gps') {
+                await runAdb('settings put secure location_mode 3');
+            }
+            if (testType === 'nfc') {
+                await runAdb('svc nfc enable');
+                await runAdb('settings put global nfc_on 1');
+            }
+            if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
+                try {
+                    await runAdb('cmd media_session volume --stream 3 --set 8 --show');
+                } catch (e) {
+                    await runAdb('settings put system volume_music 8');
+                }
+            }
+        } catch (e) {
+            console.warn('Device preparation failed:', e);
         }
-        if (testType === 'nfc') {
-            await runAdb('svc nfc enable');
-            await runAdb('settings put global nfc_on 1');
-        }
-       if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
-    try {
-        await runAdb('cmd media_session volume --stream 3 --set 8 --show');
-    } catch (e) {
-        await runAdb('settings put system volume_music 8');
     }
-}
-    } catch (e) {
-        console.warn('Device preparation failed:', e);
-    }
-}
 
     // ========== RUN A SINGLE TEST ==========
     async function runSingleHardwareTest(testId) {
-        const card = document.getElementById(`card-${testId}`);
-        const statusSpan = card.querySelector('.status-text');
-        const btn = card.querySelector('.run-single-test');
+        const card = document.getElementById(`hw-card-${testId}`);
+        const statusSpan = document.getElementById(`hw-status-${testId}`);
+        const btn = document.getElementById(`hw-btn-${testId}`);
         btn.disabled = true;
         btn.textContent = '⏳ Running...';
 
@@ -2863,16 +2886,24 @@ async function renderHardwareTests() {
             if (!def) throw new Error('Test not found');
             const result = await def.run();
             const passed = result.passed;
+            // Save result
+            window._hardwareTestResults[testId] = {
+                passed: result.passed,
+                message: result.message
+            };
             const icon = passed ? '✅' : '❌';
             const color = passed ? '#2e7d32' : '#d32f2f';
             const statusText = passed ? 'Passed' : 'Failed';
             statusSpan.style.color = color;
             statusSpan.textContent = `${icon} ${statusText}`;
-            // Show message in a small tooltip or below? We'll just show an alert for now.
             alert(`${def.title}: ${result.message}`);
             btn.textContent = passed ? 'Rerun' : 'Details';
             btn.disabled = false;
         } catch (err) {
+            window._hardwareTestResults[testId] = {
+                passed: false,
+                message: err.message
+            };
             statusSpan.style.color = '#d32f2f';
             statusSpan.textContent = '❌ Error';
             alert(`Error running test: ${err.message}`);
@@ -2883,7 +2914,6 @@ async function renderHardwareTests() {
 
     // ========== RUN ALL TESTS (full suite) ==========
     async function runAllTests() {
-        // This is the same as the original runAllTests but we'll update card statuses as we go.
         const resultsContainer = document.getElementById('hwResults');
         resultsContainer.style.display = 'block';
         const cardsContainer = document.getElementById('hwCardsContainer');
@@ -2893,9 +2923,9 @@ async function renderHardwareTests() {
         await launchAndroidApp();
         for (const id of testIds) {
             const def = testDefs[id];
-            const card = document.getElementById(`card-${id}`);
-            const statusSpan = card.querySelector('.status-text');
-            const btn = card.querySelector('.run-single-test');
+            const card = document.getElementById(`hw-card-${id}`);
+            const statusSpan = document.getElementById(`hw-status-${id}`);
+            const btn = document.getElementById(`hw-btn-${id}`);
             btn.disabled = true;
             btn.textContent = '⏳ Running...';
             statusSpan.style.color = '#f59e0b';
@@ -2904,6 +2934,11 @@ async function renderHardwareTests() {
             try {
                 const result = await def.run();
                 results[id] = { name: def.title, passed: result.passed, message: result.message };
+                // Save to global store
+                window._hardwareTestResults[id] = {
+                    passed: result.passed,
+                    message: result.message
+                };
                 const passed = result.passed;
                 const icon = passed ? '✅' : '❌';
                 const color = passed ? '#2e7d32' : '#d32f2f';
@@ -2914,6 +2949,10 @@ async function renderHardwareTests() {
                 btn.disabled = false;
             } catch (err) {
                 results[id] = { name: def.title, passed: false, message: err.message };
+                window._hardwareTestResults[id] = {
+                    passed: false,
+                    message: err.message
+                };
                 statusSpan.style.color = '#d32f2f';
                 statusSpan.textContent = '❌ Error';
                 btn.textContent = 'Retry';
@@ -2922,7 +2961,7 @@ async function renderHardwareTests() {
             await new Promise(r => setTimeout(r, 500));
         }
 
-        // Show summary (same as before)
+        // Show summary
         const passedCount = Object.values(results).filter(r => r.passed).length;
         const total = testIds.length;
         const percentage = Math.round((passedCount / total) * 100);
@@ -2962,7 +3001,6 @@ async function renderHardwareTests() {
     }
 
     // ========== ATTACH EVENT LISTENERS ==========
-    // Single test buttons
     document.querySelectorAll('.run-single-test').forEach(btn => {
         btn.addEventListener('click', () => {
             const testId = btn.dataset.test;
@@ -2970,7 +3008,6 @@ async function renderHardwareTests() {
         });
     });
 
-    // Full suite button
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
 
@@ -4256,15 +4293,22 @@ function initNavigation() {
             document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             const page = item.dataset.page;
-            if (page === 'dashboard') await renderDashboard();
-            else if (page === 'device-info') await renderDeviceInfo();
-            else if (page === 'hardware-tests') await renderHardwareTests();
-            else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
-            else if (page === 'ai-conclusion') await renderAIConclusion();
-            else if (page === 'repairs') await renderRepairs();
-            else if (page === 'bsod') await renderBsodDiagnosis();
-            else if (page === 'live-screen') await renderLiveScreen();
-            else await renderDashboard();
+            showLoading();
+            try {
+                if (page === 'dashboard') await renderDashboard();
+                else if (page === 'device-info') await renderDeviceInfo();
+                else if (page === 'hardware-tests') await renderHardwareTests();
+                else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
+                else if (page === 'ai-conclusion') await renderAIConclusion();
+                else if (page === 'repairs') await renderRepairs();
+                else if (page === 'bsod') await renderBsodDiagnosis();
+                else if (page === 'live-screen') await renderLiveScreen();
+                else await renderDashboard();
+            } catch (err) {
+                console.error('Page render error:', err);
+            } finally {
+                hideLoading();
+            }
         });
     });
 }
