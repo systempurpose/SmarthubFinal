@@ -1610,9 +1610,9 @@ async function runAppSecurityScan() {
     modalBody.innerHTML = getModernSpinnerHTML('Scanning apps...');
 
     try {
-        // 1. Fetch suspicious apps
-        const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
-        if (!appsResponse.ok) throw new Error('Failed to fetch suspicious apps');
+        // 1. Fetch suspicious apps using BACKEND_URL
+        const appsResponse = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
+        if (!appsResponse.ok) throw new Error(`HTTP ${appsResponse.status}`);
         const appsData = await appsResponse.json();
         let suspiciousAppsList = appsData.suspiciousApps || [];
 
@@ -1636,7 +1636,6 @@ async function runAppSecurityScan() {
             'com.heytap.market',
             'com.bbk.appstore',
             'com.amazon.venezia',
-            // 'com.transsnet.store' // REMOVED – treat as suspicious
         ];
         suspiciousAppsList = suspiciousAppsList.filter(app => {
             const installer = app.installer || '';
