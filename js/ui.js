@@ -28,10 +28,12 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
 }
 
 function showLoading() {
-    document.getElementById('loadingOverlay').classList.add('active');
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('active');
 }
 function hideLoading() {
-    document.getElementById('loadingOverlay').classList.remove('active');
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('active');
 }
 // ==================== MODERN SPINNER HELPER ====================
 function getModernSpinnerHTML(text = 'Loading...') {
@@ -590,6 +592,7 @@ async function testSuspiciousScan() {
     }
 }
 
+
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
@@ -610,21 +613,31 @@ async function renderDashboard() {
     container.innerHTML = `
         <h1 style="margin-bottom: 24px;">Dashboard</h1>
         <div class="action-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div class="action-card" data-action="diagnostic" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
-                <div style="font-size: 32px; margin-bottom: 8px;">🔬</div>
-                <div style="font-weight: 600; font-size: 15px;">Deep Diagnostic</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Full system scan</div>
+            <!-- Storage Analysis -->
+            <div class="action-card" data-action="storage-analysis" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">💾</div>
+                <div style="font-weight: 600; font-size: 15px;">Storage Analysis</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Check storage usage & large files</div>
             </div>
+            <!-- App Security Scan -->
+            <div class="action-card" data-action="app-security" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
+                <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
+                <div style="font-weight: 600; font-size: 15px;">App Security Scan</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Scan for risky apps</div>
+            </div>
+            <!-- Install Android App -->
             <div class="action-card" data-action="install" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
                 <div style="font-weight: 600; font-size: 15px;">Install Android App</div>
                 <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Deploy companion app</div>
             </div>
+            <!-- USB Debugging Wizard -->
             <div class="action-card" data-action="wizard" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">🔌</div>
                 <div style="font-weight: 600; font-size: 15px;">USB Debugging Wizard</div>
                 <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Connect your phone</div>
             </div>
+            <!-- Help -->
             <div class="action-card" data-action="help" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">❓</div>
                 <div style="font-weight: 600; font-size: 15px;">Help</div>
@@ -641,11 +654,12 @@ async function renderDashboard() {
         <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
-    // ---- Attach event listeners to the new action cards ----
-    document.querySelector('.action-card[data-action="diagnostic"]')?.addEventListener('click', runDeepDiagnostic);
+    // ---- Attach event listeners ----
+    document.querySelector('.action-card[data-action="storage-analysis"]')?.addEventListener('click', runStorageAnalysis);
+    document.querySelector('.action-card[data-action="app-security"]')?.addEventListener('click', runAppSecurityScan);
     document.querySelector('.action-card[data-action="install"]')?.addEventListener('click', async () => {
         if (!currentDeviceId) {
-            alert('No device connected. Please connect a phone first.');
+            await showAlert('No Device', 'No device connected. Please connect a phone first.');
             return;
         }
         const btn = document.querySelector('.action-card[data-action="install"]');
@@ -659,10 +673,13 @@ async function renderDashboard() {
                 body: JSON.stringify({ deviceId: currentDeviceId })
             });
             const data = await response.json();
-            if (response.ok) alert('Android app installed successfully!');
-            else alert('Installation failed: ' + data.error);
+            if (response.ok) {
+                await showAlert('Success', 'Android app installed successfully!');
+            } else {
+                await showAlert('Error', 'Installation failed: ' + data.error);
+            }
         } catch (err) {
-            alert('Error: ' + err.message);
+            await showAlert('Error', 'Error: ' + err.message);
         } finally {
             if (descEl) descEl.innerHTML = originalText;
         }
@@ -716,6 +733,7 @@ async function renderDashboard() {
     // (Optional: if you still have a test scan button, re‑attach it)
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
 }
+
 function ensureInfoModal(modalId, title) {
     let modal = document.getElementById(modalId);
     if (!modal) {
@@ -1374,223 +1392,53 @@ function getHumanFriendlyRiskReasons(app) {
 }
 
 // ==================== DEEP DIAGNOSTIC ====================
-async function runDeepDiagnostic() {
-    // Get or create modal
-    let modal = document.getElementById('quickDiagModal');
+
+// ==================== STORAGE ANALYSIS (standalone) ====================
+async function runStorageAnalysis() {
+    if (!currentDeviceId) {
+        await showAlert('No Device', 'Please connect a device first.');
+        return;
+    }
+
+    // Create modal
+    let modal = document.getElementById('storageAnalysisModal');
     if (!modal) {
         const modalHTML = `
-            <div id="quickDiagModal" class="modal" style="display: none;">
+            <div id="storageAnalysisModal" class="modal" style="display: none;">
                 <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
                     <div class="modal-header" style="padding: 12px 20px;">
-                        <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
-                        <span class="close-button" id="closeQuickDiagModal">&times;</span>
+                        <h3 id="storageAnalysisTitle">Storage Analysis</h3>
+                        <span class="close-button" id="closeStorageModal">&times;</span>
                     </div>
-                    <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
-                        <div class="spinner"></div>
-                        <p style="text-align: center;">Analyzing system...</p>
-                    </div>
+                    <div id="storageAnalysisBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;"></div>
                     <div class="modal-footer" style="padding: 8px 20px;">
-                        <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
+                        <button id="closeStorageModalBtn" class="btn-secondary">Close</button>
                     </div>
                 </div>
             </div>
         `;
         document.body.insertAdjacentHTML('beforeend', modalHTML);
-        modal = document.getElementById('quickDiagModal');
+        modal = document.getElementById('storageAnalysisModal');
+        document.getElementById('closeStorageModal').addEventListener('click', () => modal.style.display = 'none');
+        document.getElementById('closeStorageModalBtn').addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
     }
 
-    modal.style.display = 'none';
-    const modalTitle = document.getElementById('quickDiagModalTitle');
-    const modalBody = document.getElementById('quickDiagModalBody');
-    modalTitle.textContent = 'Running Deep Diagnostic';
-    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
     modal.style.display = 'flex';
-
-    const closeModal = () => { modal.style.display = 'none'; };
-    document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
-    document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
-    window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-    // ========== ANDROID APP HELPER ==========
-    async function ensureAndroidAppOpen() {
-        try {
-            const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
-            const state = await stateRes.json();
-            if (!state.installed) {
-                const modal = document.createElement('div');
-                modal.className = 'modal';
-                modal.style.display = 'flex';
-                modal.innerHTML = `
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h3>SmartHub Diagnostics App Required</h3>
-                            <span class="close-button">&times;</span>
-                        </div>
-                        <div class="modal-body">
-                            <p>The SmartHub Diagnostics app is not installed on your phone.</p>
-                            <p>Please install it using one of these methods:</p>
-                            <ul>
-                                <li>Click the "Install Android App" button in the SmartHub dashboard.</li>
-                                <li>Or manually install the APK from the SmartHub installation folder.</li>
-                            </ul>
-                            <button id="installAppBtn" class="btn-primary">Go to Install</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(modal);
-                modal.querySelector('.close-button').onclick = () => modal.remove();
-                modal.querySelector('#installAppBtn').onclick = () => {
-                    modal.remove();
-                    document.getElementById('installAppBtn')?.click();
-                };
-                return false;
-            }
-            if (state.running) return true;
-            const openRes = await fetch(`${BACKEND_URL}/mobile-app-open`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: currentDeviceId })
-            });
-            const openData = await openRes.json();
-            if (openData.ok) {
-                await new Promise(r => setTimeout(r, 3000));
-                return true;
-            }
-            alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
-            return false;
-        } catch (err) {
-            console.error('ensureAndroidAppOpen error:', err);
-            alert('Error communicating with the device. Make sure USB debugging is enabled.');
-            return false;
-        }
-    }
-
-    // ========== ENSURE ANDROID APP IS READY (abort if not) ==========
-    const appReady = await ensureAndroidAppOpen();
-    if (!appReady) {
-        modalTitle.textContent = 'Diagnostic Failed';
-        modalBody.innerHTML = '<div style="color: #d32f2f; text-align: center;">SmartHub Diagnostics app is required. Please install it and try again.</div>';
-        return;
-    }
-
-    // ========== OVERLAY MONITORING HELPERS ==========
-    let overlayEvents = [];
-    async function startOverlayMonitoring() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
-            });
-            console.log('Overlay monitoring started');
-        } catch (err) { console.warn('Could not start overlay monitoring:', err); }
-    }
-    async function stopAndFetchOverlayEvents() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
-            const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
-            const data = await res.json();
-            overlayEvents = data.events || [];
-        } catch (err) { console.warn('Could not fetch overlay events:', err); }
-    }
-
-    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
-    async function runFridaOnPackage(packageName, timeoutMs = 300000) {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: currentDeviceId,
-                    packageName,
-                    timeoutMs,
-                    stealth: true,
-                    scriptName: 'full_monitor.js'
-                })
-            });
-            const data = await response.json();
-            return data.events || [];
-        } catch (err) {
-            console.warn('Frida scan failed:', err);
-            return [];
-        }
-    }
-
-    // ========== REAL‑TIME SYNC ==========
-    let realTimeWs = null;
-    let realTimeEvents = [];
-
-    async function setupAdbForward(deviceId) {
-        const res = await fetch(`${BACKEND_URL}/api/adb-forward`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId })
-        });
-        if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`ADB forward failed: ${res.status} ${text}`);
-        }
-        return res.json();
-    }
-
-    async function connectRealTime(deviceId) {
-        try {
-            await setupAdbForward(deviceId);
-        } catch (err) {
-            throw new Error(`ADB forward failed: ${err.message}`);
-        }
-        return new Promise((resolve, reject) => {
-            const ws = new WebSocket('ws://localhost:12345');
-            const timeout = setTimeout(() => {
-                ws.close();
-                reject(new Error('WebSocket connection timeout (5s)'));
-            }, 5000);
-            ws.onopen = () => {
-                clearTimeout(timeout);
-                console.log('Real‑time WebSocket connected');
-                realTimeWs = ws;
-                resolve();
-            };
-            ws.onerror = () => {
-                clearTimeout(timeout);
-                reject(new Error('WebSocket connection failed. Is the Android app running?'));
-            };
-            ws.onmessage = (msg) => {
-                try {
-                    const event = JSON.parse(msg.data);
-                    if (event.type !== 'heartbeat') {
-                        realTimeEvents.push(event);
-                        console.log('[RealTime]', event);
-                    }
-                } catch (e) {}
-            };
-        });
-    }
+    const modalBody = document.getElementById('storageAnalysisBody');
+    const modalTitle = document.getElementById('storageAnalysisTitle');
+    modalTitle.textContent = 'Storage Analysis';
+    modalBody.innerHTML = getModernSpinnerHTML('Analyzing storage...');
 
     try {
-        // ---- REAL‑TIME SYNC (optional) ----
-        try {
-            await connectRealTime(currentDeviceId);
-            console.log('Real‑time sync active');
-        } catch (err) {
-            console.warn('Real‑time sync unavailable:', err.message);
-        }
-
-        startOverlayMonitoring();
-
-        // 1. Hardware checks – fetch data (only used for storage summary)
-        const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
+        // ---- Fetch storage data ----
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
-        const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
-
-        // Fetch storage details for breakdown
         let storageDetails = null;
         try {
             const detailsRes = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
             if (detailsRes.ok) storageDetails = await detailsRes.json();
         } catch (e) { console.warn('Could not fetch storage details:', e); }
 
-        // ---- Fetch large files (>= 500MB) ----
         let largeFiles = [];
         let largeFilesError = null;
         try {
@@ -1600,14 +1448,12 @@ async function runDeepDiagnostic() {
                 largeFiles = filesData.files || [];
             } else {
                 largeFilesError = `Failed to load large files: ${filesRes.status} ${filesRes.statusText}`;
-                console.warn('Large files request failed:', filesRes.status, filesRes.statusText);
             }
         } catch (e) {
             largeFilesError = `Could not fetch large files: ${e.message}`;
-            console.warn('Could not fetch large files:', e);
         }
 
-        // ---- Helper functions ----
+        // ---- Helpers ----
         function formatSize(bytes) {
             if (!bytes || bytes === '0') return '0 B';
             const num = parseFloat(bytes);
@@ -1635,8 +1481,8 @@ async function runDeepDiagnostic() {
         const storageUsedBytes = parseSize(storage.used);
         const storagePercent = storageTotalBytes > 0 ? (storageUsedBytes / storageTotalBytes) * 100 : 0;
 
-        // ---- Build storage summary (no bars) ----
-        let storageHtml = `
+        // ---- Build HTML ----
+        let html = `
             <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; font-size: 14px;">
                     <span><strong>💾 Storage</strong> ${formatSize(storageUsedBytes)} / ${formatSize(storageTotalBytes)}</span>
@@ -1646,7 +1492,7 @@ async function runDeepDiagnostic() {
             </div>
         `;
 
-        // ---- Storage breakdown (clickable categories) ----
+        // ---- Storage breakdown ----
         if (storageDetails && storageDetails.breakdown) {
             const b = storageDetails.breakdown;
             const categories = [
@@ -1658,7 +1504,6 @@ async function runDeepDiagnostic() {
             let breakdownHtml = `
                 <div class="storage-section" style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
-                    <div style="font-size: 13px; color: #555; margin-bottom: 10px;">Showing a combined list of all files ≥500MB. Category buttons are hidden to simplify analysis.</div>
                     <div style="display: grid; gap: 6px;">
             `;
             for (const cat of categories) {
@@ -1671,23 +1516,22 @@ async function runDeepDiagnostic() {
                 `;
             }
             breakdownHtml += `</div></div>`;
-            storageHtml += breakdownHtml;
+            html += breakdownHtml;
         }
 
-        // ---- Large files list ----
-        let largeFilesHtml = '';
+        // ---- Large files ----
         if (largeFilesError) {
-            largeFilesHtml = `
+            html += `
                 <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba; color: #856404;">
                     <strong>⚠️ Large files unavailable.</strong><br>
                     ${escapeHtml(largeFilesError)}
                 </div>
             `;
         } else if (largeFiles.length > 0) {
-            largeFilesHtml = `
+            html += `
                 <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥500MB)</h4>
-                    <div style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">Combined scan across available storage roots. Duplicates are filtered.</div>
+                    <div style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">Combined scan across available storage roots.</div>
                     <div style="max-height: 300px; overflow-y: auto;">
                         ${largeFiles.map(file => {
                             const isApp = file.type === 'app';
@@ -1706,28 +1550,64 @@ async function runDeepDiagnostic() {
                 </div>
             `;
         } else {
-            largeFilesHtml = `
+            html += `
                 <div style="margin-top: 12px; font-size: 13px; color: #28a745; padding: 8px; background: #e8f5e9; border-radius: 6px;">
                     ✅ No large files (≥500MB) found.
                 </div>
             `;
         }
-        storageHtml += largeFilesHtml;
 
-        // ---- Fetch suspicious apps ----
-        let suspiciousAppsList = [];
-        try {
-            const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
-            if (appsResponse.ok) {
-                const appsData = await appsResponse.json();
-                suspiciousAppsList = appsData.suspiciousApps || [];
-            }
-        } catch (err) { console.error('Failed to fetch suspicious apps:', err); }
+        modalBody.innerHTML = html;
+    } catch (err) {
+        modalBody.innerHTML = `<div style="color: #d32f2f;">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
 
-        // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
-        suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+// ==================== APP SECURITY SCAN (standalone) ====================
+async function runAppSecurityScan() {
+    if (!currentDeviceId) {
+        await showAlert('No Device', 'Please connect a device first.');
+        return;
+    }
 
-        // ===== DEDUPLICATE APPS =====
+    // Create modal
+    let modal = document.getElementById('appSecurityModal');
+    if (!modal) {
+        const modalHTML = `
+            <div id="appSecurityModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+                    <div class="modal-header" style="padding: 12px 20px;">
+                        <h3 id="appSecurityModalTitle">App Security Scan</h3>
+                        <span class="close-button" id="closeAppSecurityModal">&times;</span>
+                    </div>
+                    <div id="appSecurityModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;"></div>
+                    <div class="modal-footer" style="padding: 8px 20px;">
+                        <button id="closeAppSecurityModalBtn" class="btn-secondary">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        modal = document.getElementById('appSecurityModal');
+        document.getElementById('closeAppSecurityModal').addEventListener('click', () => modal.style.display = 'none');
+        document.getElementById('closeAppSecurityModalBtn').addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    }
+
+    modal.style.display = 'flex';
+    const modalBody = document.getElementById('appSecurityModalBody');
+    const modalTitle = document.getElementById('appSecurityModalTitle');
+    modalTitle.textContent = 'App Security Scan';
+    modalBody.innerHTML = getModernSpinnerHTML('Scanning apps...');
+
+    try {
+        // 1. Fetch suspicious apps
+        const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
+        if (!appsResponse.ok) throw new Error('Failed to fetch suspicious apps');
+        const appsData = await appsResponse.json();
+        let suspiciousAppsList = appsData.suspiciousApps || [];
+
+        // 2. Deduplicate
         const seen = new Set();
         suspiciousAppsList = suspiciousAppsList.filter(app => {
             const key = app.packageName;
@@ -1736,347 +1616,820 @@ async function runDeepDiagnostic() {
             return true;
         });
 
-        // ===== BUILD SUMMARY BAR =====
-        const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
-        const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
-        const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
-        const initialLow = suspiciousAppsList.filter(a => (a.riskScore || 0) < 35).length;
+        // 3. Filter out official store apps
+        const LEGITIMATE_INSTALLERS = [
+            'com.android.vending',
+            'com.google.android.packageinstaller',
+            'com.sec.android.app.samsungapps',
+            'com.huawei.appmarket',
+            'com.xiaomi.market',
+            'com.oppo.market',
+            'com.heytap.market',
+            'com.bbk.appstore',
+            'com.amazon.venezia',
+            // 'com.transsnet.store' // REMOVED – treat as suspicious
+        ];
+        suspiciousAppsList = suspiciousAppsList.filter(app => {
+            const installer = app.installer || '';
+            return !LEGITIMATE_INSTALLERS.some(store => installer.includes(store));
+        });
 
-        let summaryBarHtml = `
-            <div id="summaryBar" style="display: flex; gap: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-                <span><span style="color: #c62828; font-weight: bold;">🔴 ${initialCritical}</span> Critical</span>
-                <span><span style="color: #e65100; font-weight: bold;">🟠 ${initialHigh}</span> High</span>
-                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${initialMedium}</span> Medium</span>
-                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${initialLow}</span> Low</span>
-                <span style="margin-left: auto; color: #888;">Total: ${suspiciousAppsList.length} apps</span>
+        // 4. Filter out risk score < 30
+        suspiciousAppsList = suspiciousAppsList.filter(app => (app.riskScore || 0) >= 30);
+
+        // 5. Sort by risk
+        suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+
+        // 6. Build UI
+        const escape = (str) => escapeHtml(str);
+        let html = '';
+
+        if (suspiciousAppsList.length === 0) {
+            html = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
+            modalBody.innerHTML = html;
+            return;
+        }
+
+        // Summary bar
+        const critical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
+        const high = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
+        const medium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
+        const low = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 30 && (a.riskScore || 0) < 35).length;
+
+        html = `
+            <div style="margin-bottom:16px;">
+                <h3 style="color: #ed6c02;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>
+                <div style="display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 0;">
+                    <span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>
+                    <span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>
+                    <span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>
+                    <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> Low</span>
+                </div>
             </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
         `;
 
-        // ===== BUILD APP CARDS =====
-        const escape = (str) => escapeHtml(str);
-        let appsHtml = '';
-        if (suspiciousAppsList.length === 0) {
-            appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
-        } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+        for (const app of suspiciousAppsList) {
+            const threat = getThreatLevel(app.riskScore || 0);
+            const threatIcon = app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : app.riskScore >= 35 ? '🟡' : '🟢';
+            const humanReasons = getHumanFriendlyRiskReasons(app);
+            const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
+                ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
+                : [];
 
-            for (const app of suspiciousAppsList) {
-                const threat = getThreatLevel(app.riskScore || 0);
-                const threatIcon = app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : app.riskScore >= 35 ? '🟡' : '🟢';
-                const humanReasons = getHumanFriendlyRiskReasons(app);
-                const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
-                    ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
-                    : [];
-
-                let summaryBullets = '';
-                if (threatSummary.length > 0) {
-                    summaryBullets = `<ul style="margin: 4px 0 8px 0; padding-left: 20px; font-size: 13px;">`;
-                    for (const t of threatSummary.slice(0, 3)) {
-                        summaryBullets += `<li>${t}</li>`;
-                    }
-                    if (threatSummary.length > 3) {
-                        summaryBullets += `<li>... and ${threatSummary.length - 3} more concerns</li>`;
-                    }
-                    summaryBullets += `</ul>`;
+            let summaryBullets = '';
+            if (threatSummary.length > 0) {
+                summaryBullets = `<ul style="margin: 4px 0 8px 0; padding-left: 20px; font-size: 13px;">`;
+                for (const t of threatSummary.slice(0, 3)) {
+                    summaryBullets += `<li>${t}</li>`;
                 }
+                if (threatSummary.length > 3) {
+                    summaryBullets += `<li>... and ${threatSummary.length - 3} more concerns</li>`;
+                }
+                summaryBullets += `</ul>`;
+            }
 
-                const riskLabel = threat.label;
-                const riskColor = threat.color;
-                const riskBg = threat.bg;
+            const riskColor = threat.color;
+            const riskBg = threat.bg;
+            const displayName = app.displayName || app.packageName;
 
-                appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
-                         style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
-                                border-left: 6px solid ${riskColor};
-                                background: ${riskBg};
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-                                transition: transform 0.15s ease, box-shadow 0.15s ease;
-                                cursor: default;">
-
-                        <!-- Header: Threat Icon + App Name -->
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span id="icon-${escape(app.packageName)}" style="font-size: 20px;">${threatIcon}</span>
-                                <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
-                                <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
-                            </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')"
-                                    class="delete-app"
-                                    style="background: #d32f2f; color: white; border: none;
-                                           border-radius: 20px; padding: 4px 16px; cursor: pointer;
-                                           font-size: 12px; white-space: nowrap;
-                                           transition: background 0.2s ease, transform 0.15s ease;"
-                                    onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
-                                    onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
-                                🗑️ Uninstall
-                            </button>
+            html += `
+                <div style="padding: 16px; border-radius: 12px; border-left: 6px solid ${riskColor}; background: ${riskBg}; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-size: 20px;">${threatIcon}</span>
+                            <strong style="font-size: 15px;">${escape(displayName)}</strong>
+                            <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
                         </div>
-
-                        <!-- Reason -->
-                        <div style="font-size: 13px; color: #555; margin-top: 6px;">
-                            ${escape(app.reason || '')}
-                        </div>
-
-                        <!-- Human-Friendly Risk Reasons -->
-                        ${humanReasons.length > 0 ? `
-                            <div style="font-size: 13px; margin-top: 6px; color: #424242;
-                                        background: rgba(255,255,255,0.5); padding: 6px 10px;
-                                        border-radius: 6px;">
-                                ${humanReasons.join('; ')}
-                            </div>
-                        ` : ''}
-
-                        <!-- Threat Summary Bullets -->
-                        ${summaryBullets}
-
-                        <!-- Meta Info -->
-                        <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
-                            ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
-                            ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
-                        </div>
-
-                        <!-- Deep Scan Area -->
-                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
-                            <div class="spinner" style="width: 18px; height: 18px; margin: 0; display: inline-block;"></div>
-                            <span style="font-size: 12px; margin-left: 8px; color: #888;">Running deep scan...</span>
-                        </div>
+                        <button onclick="uninstallPackage('${escape(app.packageName)}')"
+                                style="background: #d32f2f; color: white; border: none; border-radius: 4px; padding: 4px 16px; cursor: pointer; font-size: 12px;">
+                            🗑️ Uninstall
+                        </button>
                     </div>
-                `;
-            }
-            appsHtml += `</div></div>`;
-        }
-
-        // Combine storage and apps
-        modalBody.innerHTML = storageHtml + appsHtml;
-
-        // 3. Perform deep scans (unchanged)
-        const appRiskMap = new Map();
-        const scanPromises = suspiciousAppsList.map(async (app) => {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deviceId: currentDeviceId, packageName: app.packageName })
-                });
-                const data = await response.json();
-                const container = document.getElementById(`deep-${app.packageName}`);
-                const appCard = document.getElementById(`app-card-${app.packageName}`);
-                if (!container || !appCard) return;
-
-                if (data.ok) {
-                    const analysis = data.staticAnalysis;
-                    const riskScore = analysis.risk_score || 0;
-                    appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName });
-
-                    if (riskScore <= 29) {
-                        appCard.remove();
-                        const remainingCards = document.querySelectorAll('.app-card-item').length;
-                        const heading = document.getElementById('suspiciousAppsHeading');
-                        if (heading) {
-                            heading.textContent = `⚠️ Suspicious Apps Found (${remainingCards})`;
-                            if (remainingCards === 0) heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
-                        }
-                        return;
-                    }
-
-                    // Update card appearance
-                    const newThreat = getThreatLevel(riskScore);
-                    const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
-
-                    appCard.style.borderLeftColor = newThreat.color;
-                    const iconSpan = document.getElementById(`icon-${app.packageName}`);
-                    if (iconSpan) iconSpan.textContent = newIcon;
-                    appCard.style.background = newThreat.bg;
-
-                    // Deep scan details
-                    const threat = getThreatLevel(riskScore);
-                    const threatTypes = analysis.malware_types || [];
-                    const suspiciousIndicators = analysis.suspicious_indicators || [];
-                    const humanThreats = getHumanReadableThreats(threatTypes, suspiciousIndicators);
-
-                    let humanSummary = '';
-                    if (humanThreats.length > 0) {
-                        humanSummary = `<ul style="margin: 4px 0 8px 0; padding-left: 18px; font-size: 12px;">`;
-                        for (const t of humanThreats) {
-                            humanSummary += `<li>${t}</li>`;
-                        }
-                        humanSummary += `</ul>`;
-                    }
-
-                    const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
-
-                    let html = `
-                        <div style="margin-top: 8px;">
-                            ${riskBadge} &nbsp; Risk Score: <strong>${riskScore}/100</strong>
-                            ${humanSummary}
-                            <details style="font-size: 12px; color: #666; margin-top: 4px;">
-                                <summary style="cursor: pointer;">🔍 Technical details</summary>
-                                <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
-                                    <strong>Permissions:</strong> ${analysis.dangerous_permissions?.length || 0} dangerous<br>
-                                    ${analysis.isPacked ? '⚠️ Packed/obfuscated code detected<br>' : ''}
-                                    ${analysis.isPolymorphic ? '⚠️ Advanced evasion techniques detected<br>' : ''}
-                                    ${analysis.yara_matches && analysis.yara_matches.length > 0 ? `YARA matches: ${analysis.yara_matches.length}<br>` : ''}
-                                    ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}` : ''}
-                                </div>
-                            </details>
-                        </div>
-                    `;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
-                }
-            } catch (err) {
-                const container = document.getElementById(`deep-${app.packageName}`);
-                if (container) container.innerHTML = `<span style="color: #d32f2f;">Deep scan error: ${err.message}</span>`;
-            }
-        });
-        await Promise.all(scanPromises);
-
-        // ===== UPDATE SUMMARY BAR =====
-        const remainingCards = document.querySelectorAll('.app-card-item');
-        let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
-        for (const card of remainingCards) {
-            const pkg = card.dataset.package;
-            const info = appRiskMap.get(pkg);
-            if (info) {
-                const score = info.riskScore;
-                if (score >= 80) finalCritical++;
-                else if (score >= 60) finalHigh++;
-                else if (score >= 35) finalMedium++;
-                else finalLow++;
-            }
-        }
-
-        const summaryBar = document.getElementById('summaryBar');
-        if (summaryBar) {
-            summaryBar.innerHTML = `
-                <span><span style="color: #c62828; font-weight: bold;">🔴 ${finalCritical}</span> Critical</span>
-                <span><span style="color: #e65100; font-weight: bold;">🟠 ${finalHigh}</span> High</span>
-                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${finalMedium}</span> Medium</span>
-                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${finalLow}</span> Low</span>
-                <span style="margin-left: auto; color: #888;">Total: ${remainingCards.length} apps</span>
+                    <div style="font-size: 13px; color: #555; margin-top: 6px;">${escape(app.reason || '')}</div>
+                    ${humanReasons.length > 0 ? `<div style="font-size: 13px; margin-top: 6px; color: #424242; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: 6px;">${humanReasons.join('; ')}</div>` : ''}
+                    ${summaryBullets}
+                    <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
+                        ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
+                        ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
+                    </div>
+                    <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                        <span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>
+                        &nbsp; Risk Score: <strong>${app.riskScore || 0}/100</strong>
+                    </div>
+                </div>
             `;
         }
-
-        await stopAndFetchOverlayEvents();
-
-        // ---- Frida on high-risk apps ----
-        const highRiskApps = suspiciousAppsList
-            .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
-            .filter(app => app.riskScore >= 40)
-            .sort((a, b) => b.riskScore - a.riskScore);
-        let allFridaEvents = [];
-        if (highRiskApps.length) {
-            modalBody.insertAdjacentHTML('beforeend', '<div style="margin-top:20px;"><div class="spinner"></div><p>Running dynamic analysis on high-risk apps...</p></div>');
-            for (const app of highRiskApps) {
-                const events = await runFridaOnPackage(app.packageName, 300000);
-                if (events.length) allFridaEvents.push({ package: app.packageName, displayName: app.displayName, events });
-            }
-            const loadingDiv = modalBody.querySelector('.spinner')?.parentElement;
-            if (loadingDiv) loadingDiv.remove();
-            if (allFridaEvents.length) {
-                let fridaHtml = `<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🔬 Dynamic Analysis (Frida)</h3>`;
-                for (const appEv of allFridaEvents) {
-                    fridaHtml += `<h4>📱 ${escapeHtml(appEv.displayName)} (${escapeHtml(appEv.package)})</h4><ul>`;
-                    for (const ev of appEv.events.slice(0,15)) fridaHtml += `<li>${escapeHtml(JSON.stringify(ev))}</li>`;
-                    if (appEv.events.length > 15) fridaHtml += `<li>... and ${appEv.events.length-15} more</li>`;
-                    fridaHtml += `</ul>`;
-                }
-                fridaHtml += '<p class="text-muted" style="font-size:12px;">API calls detected at runtime.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', fridaHtml);
-            }
-        }
-
-        if (overlayEvents.length) {
-            let overlayHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🕵️ Overlay / Popup Events Detected</h3><ul>';
-            for (const ev of overlayEvents.slice(0,15)) overlayHtml += `<li><strong>${new Date(ev.timestamp).toLocaleTimeString()}</strong> - Package: ${escapeHtml(ev.package)}</li>`;
-            if (overlayEvents.length > 15) overlayHtml += `<li>... and ${overlayEvents.length-15} more</li>`;
-            overlayHtml += '</ul><p class="text-muted" style="font-size:12px;">Apps that draw overlays during the scan are often adware or malicious.</p></div>';
-            modalBody.insertAdjacentHTML('beforeend', overlayHtml);
-        }
-
-        // ========== ROOTKIT / KERNEL DETECTION ==========
-        try {
-            const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
-            const rootkitData = await rootkitRes.json();
-            if (rootkitData.rootkitIndicators) {
-                let rootkitHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🔒 Rootkit / Kernel Anomalies Detected</h3>';
-                if (rootkitData.dmesgAnomalies?.length) {
-                    rootkitHtml += '<div><strong>⚠️ Kernel log anomalies:</strong><ul>';
-                    for (const line of rootkitData.dmesgAnomalies.slice(0, 5)) {
-                        rootkitHtml += `<li>${escapeHtml(line)}</li>`;
-                    }
-                    if (rootkitData.dmesgAnomalies.length > 5) rootkitHtml += `<li>... and ${rootkitData.dmesgAnomalies.length - 5} more</li>`;
-                    rootkitHtml += '</ul></div>';
-                }
-                if (rootkitData.suspiciousModules?.length) {
-                    rootkitHtml += '<div><strong>⚠️ Suspicious kernel modules loaded:</strong><ul>';
-                    for (const mod of rootkitData.suspiciousModules.slice(0, 10)) {
-                        rootkitHtml += `<li>${escapeHtml(mod)}</li>`;
-                    }
-                    rootkitHtml += '</ul></div>';
-                }
-                if (rootkitData.hiddenProcesses?.length) {
-                    rootkitHtml += `<div><strong>⚠️ Hidden processes (PID not in ps):</strong> ${rootkitData.hiddenProcesses.join(', ')}</div>`;
-                }
-                rootkitHtml += '<p class="text-muted" style="font-size:12px;">Possible kernel‑level compromise – requires advanced removal.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', rootkitHtml);
-            }
-        } catch (err) {
-            console.warn('Rootkit scan failed:', err);
-        }
-
-        // ========== FILE SYSTEM MONITORING ==========
-        try {
-            const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
-            const filesData = await filesRes.json();
-            if (filesData.suspicious && filesData.suspicious.length > 0) {
-                let fileHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
-                for (const f of filesData.suspicious.slice(0, 20)) {
-                    fileHtml += `<li>${escapeHtml(f)}</li>`;
-                }
-                if (filesData.suspicious.length > 20) fileHtml += `<li>... and ${filesData.suspicious.length - 20} more</li>`;
-                fileHtml += '</ul><p class="text-muted" style="font-size:12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', fileHtml);
-            }
-        } catch (err) {
-            console.warn('File monitor failed:', err);
-        }
-
-        // ========== REAL‑TIME EVENTS ==========
-        const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
-        if (filteredEvents.length > 0) {
-            let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
-            for (const ev of filteredEvents.slice(0, 20)) {
-                const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
-                realTimeHtml += `<li>[${time}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
-            }
-            if (filteredEvents.length > 20) realTimeHtml += `<li>... and ${filteredEvents.length - 20} more</li>`;
-            realTimeHtml += '</ul><p class="text-muted">Live events captured during the diagnostic – proves real‑time synchronization.</p></div>';
-            modalBody.insertAdjacentHTML('beforeend', realTimeHtml);
-        }
-
-        modalTitle.textContent = 'Deep Diagnostic Complete';
+        html += `</div>`;
+        modalBody.innerHTML = html;
     } catch (err) {
-        console.error('[DeepDiag] Error:', err);
-        modalTitle.textContent = 'Diagnostic Failed';
-        let errorMessage = 'Unknown error';
-        if (err instanceof Error) {
-            errorMessage = err.message;
-        } else if (err && typeof err === 'object' && err.message) {
-            errorMessage = err.message;
-        } else if (typeof err === 'string') {
-            errorMessage = err;
-        } else {
-            errorMessage = String(err);
-        }
-        modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
-    } finally {
-        if (realTimeWs && realTimeWs.readyState === WebSocket.OPEN) {
-            realTimeWs.close();
-        }
+        modalBody.innerHTML = `<div style="color: #d32f2f;">Error: ${escapeHtml(err.message)}</div>`;
     }
 }
+
+// async function runDeepDiagnostic() {
+//     // Get or create modal
+//     let modal = document.getElementById('quickDiagModal');
+//     if (!modal) {
+//         const modalHTML = `
+//             <div id="quickDiagModal" class="modal" style="display: none;">
+//                 <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+//                     <div class="modal-header" style="padding: 12px 20px;">
+//                         <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
+//                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
+//                     </div>
+//                     <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
+//                         <div class="spinner"></div>
+//                         <p style="text-align: center;">Analyzing system...</p>
+//                     </div>
+//                     <div class="modal-footer" style="padding: 8px 20px;">
+//                         <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
+//                     </div>
+//                 </div>
+//             </div>
+//         `;
+//         document.body.insertAdjacentHTML('beforeend', modalHTML);
+//         modal = document.getElementById('quickDiagModal');
+//     }
+
+//     modal.style.display = 'none';
+//     const modalTitle = document.getElementById('quickDiagModalTitle');
+//     const modalBody = document.getElementById('quickDiagModalBody');
+//     modalTitle.textContent = 'Running Deep Diagnostic';
+//     modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
+//     modal.style.display = 'flex';
+
+//     const closeModal = () => { modal.style.display = 'none'; };
+//     document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
+//     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
+//     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+//     // ========== ANDROID APP HELPER ==========
+//     async function ensureAndroidAppOpen() {
+//         try {
+//             const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
+//             const state = await stateRes.json();
+//             if (!state.installed) {
+//                 const modal = document.createElement('div');
+//                 modal.className = 'modal';
+//                 modal.style.display = 'flex';
+//                 modal.innerHTML = `
+//                     <div class="modal-content">
+//                         <div class="modal-header">
+//                             <h3>SmartHub Diagnostics App Required</h3>
+//                             <span class="close-button">&times;</span>
+//                         </div>
+//                         <div class="modal-body">
+//                             <p>The SmartHub Diagnostics app is not installed on your phone.</p>
+//                             <p>Please install it using one of these methods:</p>
+//                             <ul>
+//                                 <li>Click the "Install Android App" button in the SmartHub dashboard.</li>
+//                                 <li>Or manually install the APK from the SmartHub installation folder.</li>
+//                             </ul>
+//                             <button id="installAppBtn" class="btn-primary">Go to Install</button>
+//                         </div>
+//                     </div>
+//                 `;
+//                 document.body.appendChild(modal);
+//                 modal.querySelector('.close-button').onclick = () => modal.remove();
+//                 modal.querySelector('#installAppBtn').onclick = () => {
+//                     modal.remove();
+//                     document.getElementById('installAppBtn')?.click();
+//                 };
+//                 return false;
+//             }
+//             if (state.running) return true;
+//             const openRes = await fetch(`${BACKEND_URL}/mobile-app-open`, {
+//                 method: 'POST',
+//                 headers: { 'Content-Type': 'application/json' },
+//                 body: JSON.stringify({ id: currentDeviceId })
+//             });
+//             const openData = await openRes.json();
+//             if (openData.ok) {
+//                 await new Promise(r => setTimeout(r, 3000));
+//                 return true;
+//             }
+//             alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
+//             return false;
+//         } catch (err) {
+//             console.error('ensureAndroidAppOpen error:', err);
+//             alert('Error communicating with the device. Make sure USB debugging is enabled.');
+//             return false;
+//         }
+//     }
+
+//     // ========== ENSURE ANDROID APP IS READY (abort if not) ==========
+//     const appReady = await ensureAndroidAppOpen();
+//     if (!appReady) {
+//         modalTitle.textContent = 'Diagnostic Failed';
+//         modalBody.innerHTML = '<div style="color: #d32f2f; text-align: center;">SmartHub Diagnostics app is required. Please install it and try again.</div>';
+//         return;
+//     }
+
+//     // ========== OVERLAY MONITORING HELPERS ==========
+//     let overlayEvents = [];
+//     async function startOverlayMonitoring() {
+//         try {
+//             await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
+//                 method: 'POST',
+//                 headers: { 'Content-Type': 'application/json' },
+//                 body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
+//             });
+//             console.log('Overlay monitoring started');
+//         } catch (err) { console.warn('Could not start overlay monitoring:', err); }
+//     }
+//     async function stopAndFetchOverlayEvents() {
+//         try {
+//             await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
+//             const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
+//             const data = await res.json();
+//             overlayEvents = data.events || [];
+//         } catch (err) { console.warn('Could not fetch overlay events:', err); }
+//     }
+
+//     // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
+//     async function runFridaOnPackage(packageName, timeoutMs = 300000) {
+//         try {
+//             const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
+//                 method: 'POST',
+//                 headers: { 'Content-Type': 'application/json' },
+//                 body: JSON.stringify({
+//                     deviceId: currentDeviceId,
+//                     packageName,
+//                     timeoutMs,
+//                     stealth: true,
+//                     scriptName: 'full_monitor.js'
+//                 })
+//             });
+//             const data = await response.json();
+//             return data.events || [];
+//         } catch (err) {
+//             console.warn('Frida scan failed:', err);
+//             return [];
+//         }
+//     }
+
+//     // ========== REAL‑TIME SYNC ==========
+//     let realTimeWs = null;
+//     let realTimeEvents = [];
+
+//     async function setupAdbForward(deviceId) {
+//         const res = await fetch(`${BACKEND_URL}/api/adb-forward`, {
+//             method: 'POST',
+//             headers: { 'Content-Type': 'application/json' },
+//             body: JSON.stringify({ deviceId })
+//         });
+//         if (!res.ok) {
+//             const text = await res.text();
+//             throw new Error(`ADB forward failed: ${res.status} ${text}`);
+//         }
+//         return res.json();
+//     }
+
+//     async function connectRealTime(deviceId) {
+//         try {
+//             await setupAdbForward(deviceId);
+//         } catch (err) {
+//             throw new Error(`ADB forward failed: ${err.message}`);
+//         }
+//         return new Promise((resolve, reject) => {
+//             const ws = new WebSocket('ws://localhost:12345');
+//             const timeout = setTimeout(() => {
+//                 ws.close();
+//                 reject(new Error('WebSocket connection timeout (5s)'));
+//             }, 5000);
+//             ws.onopen = () => {
+//                 clearTimeout(timeout);
+//                 console.log('Real‑time WebSocket connected');
+//                 realTimeWs = ws;
+//                 resolve();
+//             };
+//             ws.onerror = () => {
+//                 clearTimeout(timeout);
+//                 reject(new Error('WebSocket connection failed. Is the Android app running?'));
+//             };
+//             ws.onmessage = (msg) => {
+//                 try {
+//                     const event = JSON.parse(msg.data);
+//                     if (event.type !== 'heartbeat') {
+//                         realTimeEvents.push(event);
+//                         console.log('[RealTime]', event);
+//                     }
+//                 } catch (e) {}
+//             };
+//         });
+//     }
+
+//     try {
+//         // ---- REAL‑TIME SYNC (optional) ----
+//         try {
+//             await connectRealTime(currentDeviceId);
+//             console.log('Real‑time sync active');
+//         } catch (err) {
+//             console.warn('Real‑time sync unavailable:', err.message);
+//         }
+
+//         startOverlayMonitoring();
+
+//         // 1. Hardware checks – fetch data (only used for storage summary)
+//         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
+//         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
+//         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
+
+//         // Fetch storage details for breakdown
+//         let storageDetails = null;
+//         try {
+//             const detailsRes = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
+//             if (detailsRes.ok) storageDetails = await detailsRes.json();
+//         } catch (e) { console.warn('Could not fetch storage details:', e); }
+
+//         // ---- Fetch large files (>= 500MB) ----
+//         let largeFiles = [];
+//         let largeFilesError = null;
+//         try {
+//             const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${encodeURIComponent(currentDeviceId)}&minSize=0.5`);
+//             if (filesRes.ok) {
+//                 const filesData = await filesRes.json();
+//                 largeFiles = filesData.files || [];
+//             } else {
+//                 largeFilesError = `Failed to load large files: ${filesRes.status} ${filesRes.statusText}`;
+//                 console.warn('Large files request failed:', filesRes.status, filesRes.statusText);
+//             }
+//         } catch (e) {
+//             largeFilesError = `Could not fetch large files: ${e.message}`;
+//             console.warn('Could not fetch large files:', e);
+//         }
+
+//         // ---- Helper functions ----
+//         function formatSize(bytes) {
+//             if (!bytes || bytes === '0') return '0 B';
+//             const num = parseFloat(bytes);
+//             if (isNaN(num)) return bytes;
+//             if (num >= 1024 * 1024 * 1024) return (num / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+//             if (num >= 1024 * 1024) return (num / (1024 * 1024)).toFixed(1) + ' MB';
+//             if (num >= 1024) return (num / 1024).toFixed(1) + ' KB';
+//             return num + ' B';
+//         }
+
+//         function parseSize(str) {
+//             if (!str || str === '?') return 0;
+//             const trimmed = String(str).trim();
+//             const match = trimmed.match(/^([\d.]+)\s*([GMK]?)/i);
+//             if (!match) return 0;
+//             let val = parseFloat(match[1]);
+//             const unit = (match[2] || '').toUpperCase();
+//             if (unit === 'G') return val * 1024 * 1024 * 1024;
+//             if (unit === 'M') return val * 1024 * 1024;
+//             if (unit === 'K') return val * 1024;
+//             return val;
+//         }
+
+//         const storageTotalBytes = parseSize(storage.total);
+//         const storageUsedBytes = parseSize(storage.used);
+//         const storagePercent = storageTotalBytes > 0 ? (storageUsedBytes / storageTotalBytes) * 100 : 0;
+
+//         // ---- Build storage summary (no bars) ----
+//         let storageHtml = `
+//             <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+//                 <div style="display: flex; justify-content: space-between; font-size: 14px;">
+//                     <span><strong>💾 Storage</strong> ${formatSize(storageUsedBytes)} / ${formatSize(storageTotalBytes)}</span>
+//                     <span style="color: ${storagePercent > 90 ? '#dc3545' : '#28a745'};">${storagePercent.toFixed(1)}% used</span>
+//                 </div>
+//                 ${storagePercent > 90 ? `<div style="color: #d32f2f; font-size: 13px; margin-top: 4px;">⚠️ Storage is nearly full.</div>` : ''}
+//             </div>
+//         `;
+
+//         // ---- Storage breakdown (clickable categories) ----
+//         if (storageDetails && storageDetails.breakdown) {
+//             const b = storageDetails.breakdown;
+//             const categories = [
+//                 { key: 'apps', label: '📱 Apps' },
+//                 { key: 'media', label: '🎬 Media' },
+//                 { key: 'system', label: '⚙️ System' },
+//                 { key: 'other', label: '📦 Other' }
+//             ];
+//             let breakdownHtml = `
+//                 <div class="storage-section" style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+//                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
+//                     <div style="font-size: 13px; color: #555; margin-bottom: 10px;">Showing a combined list of all files ≥500MB. Category buttons are hidden to simplify analysis.</div>
+//                     <div style="display: grid; gap: 6px;">
+//             `;
+//             for (const cat of categories) {
+//                 const data = b[cat.key] || { percent: 0, human: '0 KB', bytes: 0 };
+//                 breakdownHtml += `
+//                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #f1f3f5; background: #fafbfc; border-radius: 6px;">
+//                         <span>${cat.label}</span>
+//                         <span style="color: #6c757d; font-size: 12px;">${data.human}</span>
+//                     </div>
+//                 `;
+//             }
+//             breakdownHtml += `</div></div>`;
+//             storageHtml += breakdownHtml;
+//         }
+
+//         // ---- Large files list ----
+//         let largeFilesHtml = '';
+//         if (largeFilesError) {
+//             largeFilesHtml = `
+//                 <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba; color: #856404;">
+//                     <strong>⚠️ Large files unavailable.</strong><br>
+//                     ${escapeHtml(largeFilesError)}
+//                 </div>
+//             `;
+//         } else if (largeFiles.length > 0) {
+//             largeFilesHtml = `
+//                 <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
+//                     <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥500MB)</h4>
+//                     <div style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">Combined scan across available storage roots. Duplicates are filtered.</div>
+//                     <div style="max-height: 300px; overflow-y: auto;">
+//                         ${largeFiles.map(file => {
+//                             const isApp = file.type === 'app';
+//                             const actionArg = JSON.stringify(file.packageName || file.path);
+//                             return `
+//                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
+//                                 <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
+//                                 <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
+//                                 ${isApp
+//                                     ? `<button onclick='uninstallPackage(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>`
+//                                     : `<button onclick='deleteFile(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
+//                             </div>
+//                         `}).join('')}
+//                     </div>
+//                     <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">Total: ${largeFiles.length} large files</div>
+//                 </div>
+//             `;
+//         } else {
+//             largeFilesHtml = `
+//                 <div style="margin-top: 12px; font-size: 13px; color: #28a745; padding: 8px; background: #e8f5e9; border-radius: 6px;">
+//                     ✅ No large files (≥500MB) found.
+//                 </div>
+//             `;
+//         }
+//         storageHtml += largeFilesHtml;
+
+//         // ---- Fetch suspicious apps ----
+//         let suspiciousAppsList = [];
+//         try {
+//             const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
+//             if (appsResponse.ok) {
+//                 const appsData = await appsResponse.json();
+//                 suspiciousAppsList = appsData.suspiciousApps || [];
+//             }
+//         } catch (err) { console.error('Failed to fetch suspicious apps:', err); }
+
+//         // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
+//         suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+
+//         // ===== DEDUPLICATE APPS =====
+//         const seen = new Set();
+//         suspiciousAppsList = suspiciousAppsList.filter(app => {
+//             const key = app.packageName;
+//             if (seen.has(key)) return false;
+//             seen.add(key);
+//             return true;
+//         });
+
+//         // ===== BUILD SUMMARY BAR =====
+//         const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
+//         const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
+//         const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
+//         const initialLow = suspiciousAppsList.filter(a => (a.riskScore || 0) < 35).length;
+
+//         let summaryBarHtml = `
+//             <div id="summaryBar" style="display: flex; gap: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+//                 <span><span style="color: #c62828; font-weight: bold;">🔴 ${initialCritical}</span> Critical</span>
+//                 <span><span style="color: #e65100; font-weight: bold;">🟠 ${initialHigh}</span> High</span>
+//                 <span><span style="color: #e67e22; font-weight: bold;">🟡 ${initialMedium}</span> Medium</span>
+//                 <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${initialLow}</span> Low</span>
+//                 <span style="margin-left: auto; color: #888;">Total: ${suspiciousAppsList.length} apps</span>
+//             </div>
+//         `;
+
+//         // ===== BUILD APP CARDS =====
+//         const escape = (str) => escapeHtml(str);
+//         let appsHtml = '';
+//         if (suspiciousAppsList.length === 0) {
+//             appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
+//         } else {
+//             appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+
+//             for (const app of suspiciousAppsList) {
+//                 const threat = getThreatLevel(app.riskScore || 0);
+//                 const threatIcon = app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : app.riskScore >= 35 ? '🟡' : '🟢';
+//                 const humanReasons = getHumanFriendlyRiskReasons(app);
+//                 const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
+//                     ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
+//                     : [];
+
+//                 let summaryBullets = '';
+//                 if (threatSummary.length > 0) {
+//                     summaryBullets = `<ul style="margin: 4px 0 8px 0; padding-left: 20px; font-size: 13px;">`;
+//                     for (const t of threatSummary.slice(0, 3)) {
+//                         summaryBullets += `<li>${t}</li>`;
+//                     }
+//                     if (threatSummary.length > 3) {
+//                         summaryBullets += `<li>... and ${threatSummary.length - 3} more concerns</li>`;
+//                     }
+//                     summaryBullets += `</ul>`;
+//                 }
+
+//                 const riskLabel = threat.label;
+//                 const riskColor = threat.color;
+//                 const riskBg = threat.bg;
+
+//                 appsHtml += `
+//                     <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
+//                          style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
+//                                 border-left: 6px solid ${riskColor};
+//                                 background: ${riskBg};
+//                                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+//                                 transition: transform 0.15s ease, box-shadow 0.15s ease;
+//                                 cursor: default;">
+
+//                         <!-- Header: Threat Icon + App Name -->
+//                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+//                             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+//                                 <span id="icon-${escape(app.packageName)}" style="font-size: 20px;">${threatIcon}</span>
+//                                 <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
+//                                 <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
+//                             </div>
+//                             <button onclick="uninstallPackage('${escape(app.packageName)}')"
+//                                     class="delete-app"
+//                                     style="background: #d32f2f; color: white; border: none;
+//                                            border-radius: 20px; padding: 4px 16px; cursor: pointer;
+//                                            font-size: 12px; white-space: nowrap;
+//                                            transition: background 0.2s ease, transform 0.15s ease;"
+//                                     onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
+//                                     onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
+//                                 🗑️ Uninstall
+//                             </button>
+//                         </div>
+
+//                         <!-- Reason -->
+//                         <div style="font-size: 13px; color: #555; margin-top: 6px;">
+//                             ${escape(app.reason || '')}
+//                         </div>
+
+//                         <!-- Human-Friendly Risk Reasons -->
+//                         ${humanReasons.length > 0 ? `
+//                             <div style="font-size: 13px; margin-top: 6px; color: #424242;
+//                                         background: rgba(255,255,255,0.5); padding: 6px 10px;
+//                                         border-radius: 6px;">
+//                                 ${humanReasons.join('; ')}
+//                             </div>
+//                         ` : ''}
+
+//                         <!-- Threat Summary Bullets -->
+//                         ${summaryBullets}
+
+//                         <!-- Meta Info -->
+//                         <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
+//                             ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
+//                             ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
+//                         </div>
+
+//                         <!-- Deep Scan Area -->
+//                         <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
+//                             <div class="spinner" style="width: 18px; height: 18px; margin: 0; display: inline-block;"></div>
+//                             <span style="font-size: 12px; margin-left: 8px; color: #888;">Running deep scan...</span>
+//                         </div>
+//                     </div>
+//                 `;
+//             }
+//             appsHtml += `</div></div>`;
+//         }
+
+//         // Combine storage and apps
+//         modalBody.innerHTML = storageHtml + appsHtml;
+
+//         // 3. Perform deep scans (unchanged)
+//         const appRiskMap = new Map();
+//         const scanPromises = suspiciousAppsList.map(async (app) => {
+//             try {
+//                 const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
+//                     method: 'POST',
+//                     headers: { 'Content-Type': 'application/json' },
+//                     body: JSON.stringify({ deviceId: currentDeviceId, packageName: app.packageName })
+//                 });
+//                 const data = await response.json();
+//                 const container = document.getElementById(`deep-${app.packageName}`);
+//                 const appCard = document.getElementById(`app-card-${app.packageName}`);
+//                 if (!container || !appCard) return;
+
+//                 if (data.ok) {
+//                     const analysis = data.staticAnalysis;
+//                     const riskScore = analysis.risk_score || 0;
+//                     appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName });
+
+//                     if (riskScore <= 29) {
+//                         appCard.remove();
+//                         const remainingCards = document.querySelectorAll('.app-card-item').length;
+//                         const heading = document.getElementById('suspiciousAppsHeading');
+//                         if (heading) {
+//                             heading.textContent = `⚠️ Suspicious Apps Found (${remainingCards})`;
+//                             if (remainingCards === 0) heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
+//                         }
+//                         return;
+//                     }
+
+//                     // Update card appearance
+//                     const newThreat = getThreatLevel(riskScore);
+//                     const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
+
+//                     appCard.style.borderLeftColor = newThreat.color;
+//                     const iconSpan = document.getElementById(`icon-${app.packageName}`);
+//                     if (iconSpan) iconSpan.textContent = newIcon;
+//                     appCard.style.background = newThreat.bg;
+
+//                     // Deep scan details
+//                     const threat = getThreatLevel(riskScore);
+//                     const threatTypes = analysis.malware_types || [];
+//                     const suspiciousIndicators = analysis.suspicious_indicators || [];
+//                     const humanThreats = getHumanReadableThreats(threatTypes, suspiciousIndicators);
+
+//                     let humanSummary = '';
+//                     if (humanThreats.length > 0) {
+//                         humanSummary = `<ul style="margin: 4px 0 8px 0; padding-left: 18px; font-size: 12px;">`;
+//                         for (const t of humanThreats) {
+//                             humanSummary += `<li>${t}</li>`;
+//                         }
+//                         humanSummary += `</ul>`;
+//                     }
+
+//                     const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
+
+//                     let html = `
+//                         <div style="margin-top: 8px;">
+//                             ${riskBadge} &nbsp; Risk Score: <strong>${riskScore}/100</strong>
+//                             ${humanSummary}
+//                             <details style="font-size: 12px; color: #666; margin-top: 4px;">
+//                                 <summary style="cursor: pointer;">🔍 Technical details</summary>
+//                                 <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
+//                                     <strong>Permissions:</strong> ${analysis.dangerous_permissions?.length || 0} dangerous<br>
+//                                     ${analysis.isPacked ? '⚠️ Packed/obfuscated code detected<br>' : ''}
+//                                     ${analysis.isPolymorphic ? '⚠️ Advanced evasion techniques detected<br>' : ''}
+//                                     ${analysis.yara_matches && analysis.yara_matches.length > 0 ? `YARA matches: ${analysis.yara_matches.length}<br>` : ''}
+//                                     ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}` : ''}
+//                                 </div>
+//                             </details>
+//                         </div>
+//                     `;
+//                     container.innerHTML = html;
+//                 } else {
+//                     container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
+//                 }
+//             } catch (err) {
+//                 const container = document.getElementById(`deep-${app.packageName}`);
+//                 if (container) container.innerHTML = `<span style="color: #d32f2f;">Deep scan error: ${err.message}</span>`;
+//             }
+//         });
+//         await Promise.all(scanPromises);
+
+//         // ===== UPDATE SUMMARY BAR =====
+//         const remainingCards = document.querySelectorAll('.app-card-item');
+//         let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
+//         for (const card of remainingCards) {
+//             const pkg = card.dataset.package;
+//             const info = appRiskMap.get(pkg);
+//             if (info) {
+//                 const score = info.riskScore;
+//                 if (score >= 80) finalCritical++;
+//                 else if (score >= 60) finalHigh++;
+//                 else if (score >= 35) finalMedium++;
+//                 else finalLow++;
+//             }
+//         }
+
+//         const summaryBar = document.getElementById('summaryBar');
+//         if (summaryBar) {
+//             summaryBar.innerHTML = `
+//                 <span><span style="color: #c62828; font-weight: bold;">🔴 ${finalCritical}</span> Critical</span>
+//                 <span><span style="color: #e65100; font-weight: bold;">🟠 ${finalHigh}</span> High</span>
+//                 <span><span style="color: #e67e22; font-weight: bold;">🟡 ${finalMedium}</span> Medium</span>
+//                 <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${finalLow}</span> Low</span>
+//                 <span style="margin-left: auto; color: #888;">Total: ${remainingCards.length} apps</span>
+//             `;
+//         }
+
+//         await stopAndFetchOverlayEvents();
+
+//         // ---- Frida on high-risk apps ----
+//         const highRiskApps = suspiciousAppsList
+//             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
+//             .filter(app => app.riskScore >= 40)
+//             .sort((a, b) => b.riskScore - a.riskScore);
+//         let allFridaEvents = [];
+//         if (highRiskApps.length) {
+//             modalBody.insertAdjacentHTML('beforeend', '<div style="margin-top:20px;"><div class="spinner"></div><p>Running dynamic analysis on high-risk apps...</p></div>');
+//             for (const app of highRiskApps) {
+//                 const events = await runFridaOnPackage(app.packageName, 300000);
+//                 if (events.length) allFridaEvents.push({ package: app.packageName, displayName: app.displayName, events });
+//             }
+//             const loadingDiv = modalBody.querySelector('.spinner')?.parentElement;
+//             if (loadingDiv) loadingDiv.remove();
+//             if (allFridaEvents.length) {
+//                 let fridaHtml = `<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🔬 Dynamic Analysis (Frida)</h3>`;
+//                 for (const appEv of allFridaEvents) {
+//                     fridaHtml += `<h4>📱 ${escapeHtml(appEv.displayName)} (${escapeHtml(appEv.package)})</h4><ul>`;
+//                     for (const ev of appEv.events.slice(0,15)) fridaHtml += `<li>${escapeHtml(JSON.stringify(ev))}</li>`;
+//                     if (appEv.events.length > 15) fridaHtml += `<li>... and ${appEv.events.length-15} more</li>`;
+//                     fridaHtml += `</ul>`;
+//                 }
+//                 fridaHtml += '<p class="text-muted" style="font-size:12px;">API calls detected at runtime.</p></div>';
+//                 modalBody.insertAdjacentHTML('beforeend', fridaHtml);
+//             }
+//         }
+
+//         if (overlayEvents.length) {
+//             let overlayHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🕵️ Overlay / Popup Events Detected</h3><ul>';
+//             for (const ev of overlayEvents.slice(0,15)) overlayHtml += `<li><strong>${new Date(ev.timestamp).toLocaleTimeString()}</strong> - Package: ${escapeHtml(ev.package)}</li>`;
+//             if (overlayEvents.length > 15) overlayHtml += `<li>... and ${overlayEvents.length-15} more</li>`;
+//             overlayHtml += '</ul><p class="text-muted" style="font-size:12px;">Apps that draw overlays during the scan are often adware or malicious.</p></div>';
+//             modalBody.insertAdjacentHTML('beforeend', overlayHtml);
+//         }
+
+//         // ========== ROOTKIT / KERNEL DETECTION ==========
+//         try {
+//             const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
+//             const rootkitData = await rootkitRes.json();
+//             if (rootkitData.rootkitIndicators) {
+//                 let rootkitHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🔒 Rootkit / Kernel Anomalies Detected</h3>';
+//                 if (rootkitData.dmesgAnomalies?.length) {
+//                     rootkitHtml += '<div><strong>⚠️ Kernel log anomalies:</strong><ul>';
+//                     for (const line of rootkitData.dmesgAnomalies.slice(0, 5)) {
+//                         rootkitHtml += `<li>${escapeHtml(line)}</li>`;
+//                     }
+//                     if (rootkitData.dmesgAnomalies.length > 5) rootkitHtml += `<li>... and ${rootkitData.dmesgAnomalies.length - 5} more</li>`;
+//                     rootkitHtml += '</ul></div>';
+//                 }
+//                 if (rootkitData.suspiciousModules?.length) {
+//                     rootkitHtml += '<div><strong>⚠️ Suspicious kernel modules loaded:</strong><ul>';
+//                     for (const mod of rootkitData.suspiciousModules.slice(0, 10)) {
+//                         rootkitHtml += `<li>${escapeHtml(mod)}</li>`;
+//                     }
+//                     rootkitHtml += '</ul></div>';
+//                 }
+//                 if (rootkitData.hiddenProcesses?.length) {
+//                     rootkitHtml += `<div><strong>⚠️ Hidden processes (PID not in ps):</strong> ${rootkitData.hiddenProcesses.join(', ')}</div>`;
+//                 }
+//                 rootkitHtml += '<p class="text-muted" style="font-size:12px;">Possible kernel‑level compromise – requires advanced removal.</p></div>';
+//                 modalBody.insertAdjacentHTML('beforeend', rootkitHtml);
+//             }
+//         } catch (err) {
+//             console.warn('Rootkit scan failed:', err);
+//         }
+
+//         // ========== FILE SYSTEM MONITORING ==========
+//         try {
+//             const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
+//             const filesData = await filesRes.json();
+//             if (filesData.suspicious && filesData.suspicious.length > 0) {
+//                 let fileHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
+//                 for (const f of filesData.suspicious.slice(0, 20)) {
+//                     fileHtml += `<li>${escapeHtml(f)}</li>`;
+//                 }
+//                 if (filesData.suspicious.length > 20) fileHtml += `<li>... and ${filesData.suspicious.length - 20} more</li>`;
+//                 fileHtml += '</ul><p class="text-muted" style="font-size:12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
+//                 modalBody.insertAdjacentHTML('beforeend', fileHtml);
+//             }
+//         } catch (err) {
+//             console.warn('File monitor failed:', err);
+//         }
+
+//         // ========== REAL‑TIME EVENTS ==========
+//         const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
+//         if (filteredEvents.length > 0) {
+//             let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
+//             for (const ev of filteredEvents.slice(0, 20)) {
+//                 const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
+//                 realTimeHtml += `<li>[${time}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
+//             }
+//             if (filteredEvents.length > 20) realTimeHtml += `<li>... and ${filteredEvents.length - 20} more</li>`;
+//             realTimeHtml += '</ul><p class="text-muted">Live events captured during the diagnostic – proves real‑time synchronization.</p></div>';
+//             modalBody.insertAdjacentHTML('beforeend', realTimeHtml);
+//         }
+
+//         modalTitle.textContent = 'Deep Diagnostic Complete';
+//     } catch (err) {
+//         console.error('[DeepDiag] Error:', err);
+//         modalTitle.textContent = 'Diagnostic Failed';
+//         let errorMessage = 'Unknown error';
+//         if (err instanceof Error) {
+//             errorMessage = err.message;
+//         } else if (err && typeof err === 'object' && err.message) {
+//             errorMessage = err.message;
+//         } else if (typeof err === 'string') {
+//             errorMessage = err;
+//         } else {
+//             errorMessage = String(err);
+//         }
+//         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
+//     } finally {
+//         if (realTimeWs && realTimeWs.readyState === WebSocket.OPEN) {
+//             realTimeWs.close();
+//         }
+//     }
+// }
 
 // ==================== STORAGE CATEGORY DETAILS ====================
 
