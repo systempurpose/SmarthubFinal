@@ -27,6 +27,12 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     }
 }
 
+function showLoading() {
+    document.getElementById('loadingOverlay').classList.add('active');
+}
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('active');
+}
 // ==================== MODERN SPINNER HELPER ====================
 function getModernSpinnerHTML(text = 'Loading...') {
     return `
@@ -41,15 +47,6 @@ function getModernSpinnerHTML(text = 'Loading...') {
         </div>
     `;
 }
-function showLoading() {
-    document.getElementById('loadingOverlay').classList.add('active');
-}
-function hideLoading() {
-    setTimeout(() => {
-        document.getElementById('loadingOverlay').classList.remove('active');
-    }, 150); // small delay to let the content settle
-}
-
 // ==================== BRAND ICON MAPPING ====================
 function getBrandIcon(brand) {
     const brandMap = {
@@ -1249,7 +1246,7 @@ async function showTemperatureModal() {
 async function showSecurityModal() {
     const modal = ensureInfoModal('securityModal', '🛡️ Security Overview');
     const body = document.getElementById('securityModalBody');
-    body.innerHTML = getModernSpinnerHTML('Loading security status...');
+body.innerHTML = getModernSpinnerHTML('Loading security status...');
     modal.style.display = 'flex';
     try {
         const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
@@ -1388,7 +1385,10 @@ async function runDeepDiagnostic() {
                         <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
                         <span class="close-button" id="closeQuickDiagModal">&times;</span>
                     </div>
-                    <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;"></div>
+                    <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
+                        <div class="spinner"></div>
+                        <p style="text-align: center;">Analyzing system...</p>
+                    </div>
                     <div class="modal-footer" style="padding: 8px 20px;">
                         <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
                     </div>
@@ -1406,28 +1406,10 @@ async function runDeepDiagnostic() {
     modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
     modal.style.display = 'flex';
 
-    // ---- Abort flag for confirmation ----
-    window._diagnosticAbort = false;
-    window._diagnosticRunning = true;
-
-    const closeModalHandler = async () => {
-        if (window._diagnosticRunning) {
-            const confirmed = await showConfirm('Stop Diagnostic', 'Are you sure you want to stop the running diagnostic?');
-            if (confirmed) {
-                window._diagnosticAbort = true;
-                window._diagnosticRunning = false;
-                modal.style.display = 'none';
-            }
-        } else {
-            modal.style.display = 'none';
-        }
-    };
-
-    document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModalHandler);
-    document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModalHandler);
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) closeModalHandler();
-    });
+    const closeModal = () => { modal.style.display = 'none'; };
+    document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
+    document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
+    window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
     // ========== ANDROID APP HELPER ==========
     async function ensureAndroidAppOpen() {
@@ -1483,16 +1465,15 @@ async function runDeepDiagnostic() {
         }
     }
 
-    // ========== ENSURE ANDROID APP IS READY ==========
+    // ========== ENSURE ANDROID APP IS READY (abort if not) ==========
     const appReady = await ensureAndroidAppOpen();
     if (!appReady) {
         modalTitle.textContent = 'Diagnostic Failed';
         modalBody.innerHTML = '<div style="color: #d32f2f; text-align: center;">SmartHub Diagnostics app is required. Please install it and try again.</div>';
-        window._diagnosticRunning = false;
         return;
     }
 
-    // ========== OVERLAY MONITORING ==========
+    // ========== OVERLAY MONITORING HELPERS ==========
     let overlayEvents = [];
     async function startOverlayMonitoring() {
         try {
@@ -1513,7 +1494,7 @@ async function runDeepDiagnostic() {
         } catch (err) { console.warn('Could not fetch overlay events:', err); }
     }
 
-    // ========== FRIDA DYNAMIC ANALYSIS ==========
+    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
     async function runFridaOnPackage(packageName, timeoutMs = 300000) {
         try {
             const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
@@ -1597,19 +1578,19 @@ async function runDeepDiagnostic() {
 
         startOverlayMonitoring();
 
-        // ---- HARDWARE CHECKS ----
+        // 1. Hardware checks – fetch data (only used for storage summary)
         const battery = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(() => ({ level: 0, health: 'unknown' }));
         const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
         const ram = await apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0' }));
 
-        // ---- STORAGE DETAILS ----
+        // Fetch storage details for breakdown
         let storageDetails = null;
         try {
             const detailsRes = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
             if (detailsRes.ok) storageDetails = await detailsRes.json();
         } catch (e) { console.warn('Could not fetch storage details:', e); }
 
-        // ---- LARGE FILES ----
+        // ---- Fetch large files (>= 500MB) ----
         let largeFiles = [];
         let largeFilesError = null;
         try {
@@ -1626,7 +1607,7 @@ async function runDeepDiagnostic() {
             console.warn('Could not fetch large files:', e);
         }
 
-        // ---- HELPERS ----
+        // ---- Helper functions ----
         function formatSize(bytes) {
             if (!bytes || bytes === '0') return '0 B';
             const num = parseFloat(bytes);
@@ -1654,7 +1635,7 @@ async function runDeepDiagnostic() {
         const storageUsedBytes = parseSize(storage.used);
         const storagePercent = storageTotalBytes > 0 ? (storageUsedBytes / storageTotalBytes) * 100 : 0;
 
-        // ---- STORAGE SUMMARY ----
+        // ---- Build storage summary (no bars) ----
         let storageHtml = `
             <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; font-size: 14px;">
@@ -1665,7 +1646,7 @@ async function runDeepDiagnostic() {
             </div>
         `;
 
-        // ---- STORAGE BREAKDOWN ----
+        // ---- Storage breakdown (clickable categories) ----
         if (storageDetails && storageDetails.breakdown) {
             const b = storageDetails.breakdown;
             const categories = [
@@ -1693,7 +1674,7 @@ async function runDeepDiagnostic() {
             storageHtml += breakdownHtml;
         }
 
-        // ---- LARGE FILES ----
+        // ---- Large files list ----
         let largeFilesHtml = '';
         if (largeFilesError) {
             largeFilesHtml = `
@@ -1733,7 +1714,7 @@ async function runDeepDiagnostic() {
         }
         storageHtml += largeFilesHtml;
 
-        // ---- FETCH SUSPICIOUS APPS ----
+        // ---- Fetch suspicious apps ----
         let suspiciousAppsList = [];
         try {
             const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
@@ -1743,8 +1724,10 @@ async function runDeepDiagnostic() {
             }
         } catch (err) { console.error('Failed to fetch suspicious apps:', err); }
 
-        // ---- SORT AND DEDUPLICATE ----
+        // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
         suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+
+        // ===== DEDUPLICATE APPS =====
         const seen = new Set();
         suspiciousAppsList = suspiciousAppsList.filter(app => {
             const key = app.packageName;
@@ -1753,7 +1736,7 @@ async function runDeepDiagnostic() {
             return true;
         });
 
-        // ---- BUILD SUMMARY BAR ----
+        // ===== BUILD SUMMARY BAR =====
         const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
         const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
         const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
@@ -1769,7 +1752,7 @@ async function runDeepDiagnostic() {
             </div>
         `;
 
-        // ---- BUILD APP CARDS ----
+        // ===== BUILD APP CARDS =====
         const escape = (str) => escapeHtml(str);
         let appsHtml = '';
         if (suspiciousAppsList.length === 0) {
@@ -1801,9 +1784,6 @@ async function runDeepDiagnostic() {
                 const riskColor = threat.color;
                 const riskBg = threat.bg;
 
-                // ---- Correct app naming ----
-                const displayName = app.displayName || app.packageName;
-
                 appsHtml += `
                     <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
                          style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
@@ -1817,20 +1797,19 @@ async function runDeepDiagnostic() {
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
                             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                                 <span id="icon-${escape(app.packageName)}" style="font-size: 20px;">${threatIcon}</span>
-                                <strong style="font-size: 15px;">${escape(displayName)}</strong>
+                                <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
                                 <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
                             </div>
-                            <div style="display: flex; gap: 6px;">
-                                <button onclick="uninstallPackage('${escape(app.packageName)}')"
-                                        style="background: #d32f2f; color: white; border: none;
-                                               border-radius: 4px; padding: 4px 16px; cursor: pointer;
-                                               font-size: 12px; white-space: nowrap;
-                                               transition: background 0.2s ease;"
-                                        onmouseover="this.style.background='#b71c1c'"
-                                        onmouseout="this.style.background='#d32f2f'">
-                                    🗑️ Uninstall
-                                </button>
-                            </div>
+                            <button onclick="uninstallPackage('${escape(app.packageName)}')"
+                                    class="delete-app"
+                                    style="background: #d32f2f; color: white; border: none;
+                                           border-radius: 20px; padding: 4px 16px; cursor: pointer;
+                                           font-size: 12px; white-space: nowrap;
+                                           transition: background 0.2s ease, transform 0.15s ease;"
+                                    onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
+                                    onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
+                                🗑️ Uninstall
+                            </button>
                         </div>
 
                         <!-- Reason -->
@@ -1870,7 +1849,7 @@ async function runDeepDiagnostic() {
         // Combine storage and apps
         modalBody.innerHTML = storageHtml + appsHtml;
 
-        // ---- PERFORM DEEP SCANS WITH VIRUSTOTAL FILTERING ----
+        // 3. Perform deep scans (unchanged)
         const appRiskMap = new Map();
         const scanPromises = suspiciousAppsList.map(async (app) => {
             try {
@@ -1887,38 +1866,29 @@ async function runDeepDiagnostic() {
                 if (data.ok) {
                     const analysis = data.staticAnalysis;
                     const riskScore = analysis.risk_score || 0;
-                    const vt = analysis.virusTotal;
+                    appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName });
 
-                    // ---- VIRUSTOTAL AUTO-FILTER ----
-                    let skipApp = false;
-                    if (vt && vt.malicious !== undefined && vt.suspicious !== undefined) {
-                        if (vt.malicious === 0 && vt.suspicious === 0) {
-                            skipApp = true;
-                        }
-                    }
-                    if (skipApp) {
+                    if (riskScore <= 29) {
                         appCard.remove();
                         const remainingCards = document.querySelectorAll('.app-card-item').length;
                         const heading = document.getElementById('suspiciousAppsHeading');
                         if (heading) {
                             heading.textContent = `⚠️ Suspicious Apps Found (${remainingCards})`;
-                            if (remainingCards === 0) heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (VirusTotal 0 detections).</p>';
+                            if (remainingCards === 0) heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
                         }
                         return;
                     }
 
-                    // ---- Store risk score ----
-                    appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName || app.packageName });
-
-                    // ---- Update card appearance ----
+                    // Update card appearance
                     const newThreat = getThreatLevel(riskScore);
                     const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
+
                     appCard.style.borderLeftColor = newThreat.color;
                     const iconSpan = document.getElementById(`icon-${app.packageName}`);
                     if (iconSpan) iconSpan.textContent = newIcon;
                     appCard.style.background = newThreat.bg;
 
-                    // ---- Deep scan details ----
+                    // Deep scan details
                     const threat = getThreatLevel(riskScore);
                     const threatTypes = analysis.malware_types || [];
                     const suspiciousIndicators = analysis.suspicious_indicators || [];
@@ -1935,29 +1905,10 @@ async function runDeepDiagnostic() {
 
                     const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
 
-                    // ---- VirusTotal summary ----
-                    let vtHtml = '';
-                    if (vt) {
-                        if (vt.malicious !== undefined) {
-                            const vtIcon = vt.malicious > 0 ? '🔴' : '🟢';
-                            vtHtml = `
-                                <div style="margin-top:6px; font-size:12px; color:#555;">
-                                    ${vtIcon} VirusTotal: ${vt.malicious} malicious, ${vt.suspicious} suspicious
-                                    <a href="${vt.link || `https://www.virustotal.com/gui/search/${app.packageName}`}" target="_blank" style="margin-left:8px; text-decoration:underline;">🔍 Details</a>
-                                </div>
-                            `;
-                        } else if (vt.notFound) {
-                            vtHtml = `<div style="margin-top:6px; font-size:12px; color:#888;">🔍 Not found in VirusTotal database</div>`;
-                        } else if (vt.error) {
-                            vtHtml = `<div style="margin-top:6px; font-size:12px; color:#d32f2f;">⚠️ VirusTotal check failed: ${vt.error}</div>`;
-                        }
-                    }
-
                     let html = `
                         <div style="margin-top: 8px;">
                             ${riskBadge} &nbsp; Risk Score: <strong>${riskScore}/100</strong>
                             ${humanSummary}
-                            ${vtHtml}
                             <details style="font-size: 12px; color: #666; margin-top: 4px;">
                                 <summary style="cursor: pointer;">🔍 Technical details</summary>
                                 <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
@@ -1981,7 +1932,7 @@ async function runDeepDiagnostic() {
         });
         await Promise.all(scanPromises);
 
-        // ---- UPDATE SUMMARY BAR ----
+        // ===== UPDATE SUMMARY BAR =====
         const remainingCards = document.querySelectorAll('.app-card-item');
         let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
         for (const card of remainingCards) {
@@ -2007,10 +1958,9 @@ async function runDeepDiagnostic() {
             `;
         }
 
-        // ---- STOP OVERLAY MONITORING ----
         await stopAndFetchOverlayEvents();
 
-        // ---- FRIDA ON HIGH-RISK APPS ----
+        // ---- Frida on high-risk apps ----
         const highRiskApps = suspiciousAppsList
             .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
             .filter(app => app.riskScore >= 40)
@@ -2020,7 +1970,7 @@ async function runDeepDiagnostic() {
             modalBody.insertAdjacentHTML('beforeend', '<div style="margin-top:20px;"><div class="spinner"></div><p>Running dynamic analysis on high-risk apps...</p></div>');
             for (const app of highRiskApps) {
                 const events = await runFridaOnPackage(app.packageName, 300000);
-                if (events.length) allFridaEvents.push({ package: app.packageName, displayName: app.displayName || app.packageName, events });
+                if (events.length) allFridaEvents.push({ package: app.packageName, displayName: app.displayName, events });
             }
             const loadingDiv = modalBody.querySelector('.spinner')?.parentElement;
             if (loadingDiv) loadingDiv.remove();
@@ -2037,7 +1987,6 @@ async function runDeepDiagnostic() {
             }
         }
 
-        // ---- OVERLAY EVENTS ----
         if (overlayEvents.length) {
             let overlayHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🕵️ Overlay / Popup Events Detected</h3><ul>';
             for (const ev of overlayEvents.slice(0,15)) overlayHtml += `<li><strong>${new Date(ev.timestamp).toLocaleTimeString()}</strong> - Package: ${escapeHtml(ev.package)}</li>`;
@@ -2046,7 +1995,7 @@ async function runDeepDiagnostic() {
             modalBody.insertAdjacentHTML('beforeend', overlayHtml);
         }
 
-        // ---- ROOTKIT / KERNEL DETECTION ----
+        // ========== ROOTKIT / KERNEL DETECTION ==========
         try {
             const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
             const rootkitData = await rootkitRes.json();
@@ -2077,7 +2026,7 @@ async function runDeepDiagnostic() {
             console.warn('Rootkit scan failed:', err);
         }
 
-        // ---- FILE SYSTEM MONITORING ----
+        // ========== FILE SYSTEM MONITORING ==========
         try {
             const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
             const filesData = await filesRes.json();
@@ -2094,7 +2043,7 @@ async function runDeepDiagnostic() {
             console.warn('File monitor failed:', err);
         }
 
-        // ---- REAL‑TIME EVENTS ----
+        // ========== REAL‑TIME EVENTS ==========
         const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
         if (filteredEvents.length > 0) {
             let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
@@ -2108,7 +2057,6 @@ async function runDeepDiagnostic() {
         }
 
         modalTitle.textContent = 'Deep Diagnostic Complete';
-        window._diagnosticRunning = false;
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';
@@ -2123,7 +2071,6 @@ async function runDeepDiagnostic() {
             errorMessage = String(err);
         }
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
-        window._diagnosticRunning = false;
     } finally {
         if (realTimeWs && realTimeWs.readyState === WebSocket.OPEN) {
             realTimeWs.close();
@@ -2481,6 +2428,8 @@ async function renderHardwareTests() {
     }
 
     // ========== TEST DEFINITIONS ==========
+    // Map test IDs to display info and the actual run function.
+    // The run functions are the same as in the existing tests array.
     const testDefs = {
         battery: {
             title: 'Battery',
@@ -2779,20 +2728,20 @@ async function renderHardwareTests() {
     };
 
     // ========== CARD UI ==========
+    // Build card HTML from testDefs
     const testIds = Object.keys(testDefs);
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const id of testIds) {
         const def = testDefs[id];
-        // Add unique IDs for status and button
         cardsHtml += `
-            <div class="test-card" id="hw-card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+            <div class="test-card" id="card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
                 <div>
                     <h3 style="margin: 0 0 4px 0; font-size: 16px;">${def.title}</h3>
                     <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${def.desc}</p>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" id="hw-status-${id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
-                    <button class="btn-secondary run-single-test" id="hw-btn-${id}" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
+                    <span class="status-text" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
+                    <button class="btn-secondary run-single-test" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
                 </div>
             </div>
         `;
@@ -2828,20 +2777,6 @@ async function renderHardwareTests() {
     `;
 
     document.getElementById('pageContent').innerHTML = fullHtml;
-
-    // ========== RESTORE SAVED RESULTS ==========
-    const savedResults = window._hardwareTestResults || {};
-    for (const [id, data] of Object.entries(savedResults)) {
-        const statusSpan = document.getElementById(`hw-status-${id}`);
-        const btn = document.getElementById(`hw-btn-${id}`);
-        if (statusSpan) {
-            const icon = data.passed ? '✅' : '❌';
-            const color = data.passed ? '#2e7d32' : '#d32f2f';
-            statusSpan.style.color = color;
-            statusSpan.textContent = `${icon} ${data.passed ? 'Passed' : 'Failed'}`;
-            if (btn) btn.textContent = data.passed ? 'Rerun' : 'Details';
-        }
-    }
 
     // ========== MODAL HELPERS ==========
     const modal = document.getElementById('hwTestModal');
@@ -2910,32 +2845,32 @@ async function renderHardwareTests() {
     }
 
     async function prepareDeviceForTest(testType) {
-        try {
-            await runAdb('settings put global zen_mode 0');
-            if (testType === 'gps') {
-                await runAdb('settings put secure location_mode 3');
-            }
-            if (testType === 'nfc') {
-                await runAdb('svc nfc enable');
-                await runAdb('settings put global nfc_on 1');
-            }
-            if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
-                try {
-                    await runAdb('cmd media_session volume --stream 3 --set 8 --show');
-                } catch (e) {
-                    await runAdb('settings put system volume_music 8');
-                }
-            }
-        } catch (e) {
-            console.warn('Device preparation failed:', e);
+    try {
+        await runAdb('settings put global zen_mode 0');
+        if (testType === 'gps') {
+            await runAdb('settings put secure location_mode 3');
         }
+        if (testType === 'nfc') {
+            await runAdb('svc nfc enable');
+            await runAdb('settings put global nfc_on 1');
+        }
+       if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
+    try {
+        await runAdb('cmd media_session volume --stream 3 --set 8 --show');
+    } catch (e) {
+        await runAdb('settings put system volume_music 8');
     }
+}
+    } catch (e) {
+        console.warn('Device preparation failed:', e);
+    }
+}
 
     // ========== RUN A SINGLE TEST ==========
     async function runSingleHardwareTest(testId) {
-        const card = document.getElementById(`hw-card-${testId}`);
-        const statusSpan = document.getElementById(`hw-status-${testId}`);
-        const btn = document.getElementById(`hw-btn-${testId}`);
+        const card = document.getElementById(`card-${testId}`);
+        const statusSpan = card.querySelector('.status-text');
+        const btn = card.querySelector('.run-single-test');
         btn.disabled = true;
         btn.textContent = '⏳ Running...';
 
@@ -2947,24 +2882,16 @@ async function renderHardwareTests() {
             if (!def) throw new Error('Test not found');
             const result = await def.run();
             const passed = result.passed;
-            // Save result
-            window._hardwareTestResults[testId] = {
-                passed: result.passed,
-                message: result.message
-            };
             const icon = passed ? '✅' : '❌';
             const color = passed ? '#2e7d32' : '#d32f2f';
             const statusText = passed ? 'Passed' : 'Failed';
             statusSpan.style.color = color;
             statusSpan.textContent = `${icon} ${statusText}`;
+            // Show message in a small tooltip or below? We'll just show an alert for now.
             alert(`${def.title}: ${result.message}`);
             btn.textContent = passed ? 'Rerun' : 'Details';
             btn.disabled = false;
         } catch (err) {
-            window._hardwareTestResults[testId] = {
-                passed: false,
-                message: err.message
-            };
             statusSpan.style.color = '#d32f2f';
             statusSpan.textContent = '❌ Error';
             alert(`Error running test: ${err.message}`);
@@ -2975,6 +2902,7 @@ async function renderHardwareTests() {
 
     // ========== RUN ALL TESTS (full suite) ==========
     async function runAllTests() {
+        // This is the same as the original runAllTests but we'll update card statuses as we go.
         const resultsContainer = document.getElementById('hwResults');
         resultsContainer.style.display = 'block';
         const cardsContainer = document.getElementById('hwCardsContainer');
@@ -2984,9 +2912,9 @@ async function renderHardwareTests() {
         await launchAndroidApp();
         for (const id of testIds) {
             const def = testDefs[id];
-            const card = document.getElementById(`hw-card-${id}`);
-            const statusSpan = document.getElementById(`hw-status-${id}`);
-            const btn = document.getElementById(`hw-btn-${id}`);
+            const card = document.getElementById(`card-${id}`);
+            const statusSpan = card.querySelector('.status-text');
+            const btn = card.querySelector('.run-single-test');
             btn.disabled = true;
             btn.textContent = '⏳ Running...';
             statusSpan.style.color = '#f59e0b';
@@ -2995,11 +2923,6 @@ async function renderHardwareTests() {
             try {
                 const result = await def.run();
                 results[id] = { name: def.title, passed: result.passed, message: result.message };
-                // Save to global store
-                window._hardwareTestResults[id] = {
-                    passed: result.passed,
-                    message: result.message
-                };
                 const passed = result.passed;
                 const icon = passed ? '✅' : '❌';
                 const color = passed ? '#2e7d32' : '#d32f2f';
@@ -3010,10 +2933,6 @@ async function renderHardwareTests() {
                 btn.disabled = false;
             } catch (err) {
                 results[id] = { name: def.title, passed: false, message: err.message };
-                window._hardwareTestResults[id] = {
-                    passed: false,
-                    message: err.message
-                };
                 statusSpan.style.color = '#d32f2f';
                 statusSpan.textContent = '❌ Error';
                 btn.textContent = 'Retry';
@@ -3022,7 +2941,7 @@ async function renderHardwareTests() {
             await new Promise(r => setTimeout(r, 500));
         }
 
-        // Show summary
+        // Show summary (same as before)
         const passedCount = Object.values(results).filter(r => r.passed).length;
         const total = testIds.length;
         const percentage = Math.round((passedCount / total) * 100);
@@ -3062,6 +2981,7 @@ async function renderHardwareTests() {
     }
 
     // ========== ATTACH EVENT LISTENERS ==========
+    // Single test buttons
     document.querySelectorAll('.run-single-test').forEach(btn => {
         btn.addEventListener('click', () => {
             const testId = btn.dataset.test;
@@ -3069,6 +2989,7 @@ async function renderHardwareTests() {
         });
     });
 
+    // Full suite button
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
 
@@ -3900,16 +3821,16 @@ async function renderConnectionTroubleshoot() {
 
     // ---- Test state ----
     let isRunning = false;
-    // We'll use window._connectionTestResults for persistence.
+    let testResults = {};
 
     // ---- Card definitions ----
     const testCards = [
-        { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity' },
-        { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer' },
-        { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity' },
+        { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity', status: 'Pending' },
+        { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer', status: 'Pending' },
+        { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity', status: 'Pending' },
     ];
 
-    // ---- Build test cards with unique IDs ----
+    // ---- Build test cards ----
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const card of testCards) {
         cardsHtml += `
@@ -3920,7 +3841,7 @@ async function renderConnectionTroubleshoot() {
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
                     <span class="status-text" id="conn-status-${card.id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
-                    <button class="btn-primary run-conn-test" id="conn-btn-${card.id}" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
+                    <button class="btn-primary run-conn-test" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
                 </div>
             </div>
         `;
@@ -3946,20 +3867,6 @@ async function renderConnectionTroubleshoot() {
         <div id="testResult" style="margin-top: 20px; display: none;"></div>
         ${fixOptionsHtml}
     `;
-
-    // ========== RESTORE SAVED RESULTS ==========
-    const savedResults = window._connectionTestResults || {};
-    for (const [id, data] of Object.entries(savedResults)) {
-        const statusSpan = document.getElementById(`conn-status-${id}`);
-        const btn = document.getElementById(`conn-btn-${id}`);
-        if (statusSpan) {
-            const icon = data.passed ? '✅' : '❌';
-            const color = data.passed ? '#2e7d32' : '#d32f2f';
-            statusSpan.style.color = color;
-            statusSpan.textContent = `${icon} ${data.passed ? 'Passed' : 'Failed'}`;
-            if (btn) btn.textContent = data.passed ? 'Rerun' : 'Retry';
-        }
-    }
 
     // ---- Build fix cards for all services ----
     function buildAllFixCards() {
@@ -3990,8 +3897,8 @@ async function renderConnectionTroubleshoot() {
                 const service = btn.dataset.service;
 
                 // ---- Warning if all services are healthy ----
-                const allPass = Object.values(window._connectionTestResults || {}).every(r => r.passed === true);
-                if (allPass && Object.keys(window._connectionTestResults || {}).length > 0) {
+                const allPass = Object.values(testResults).every(r => r === true);
+                if (allPass && Object.keys(testResults).length > 0) {
                     if (!confirm(`⚠️ All services are currently working. Are you sure you want to apply the fix "${action}"? This may temporarily disrupt connectivity.`)) {
                         return;
                     }
@@ -4040,7 +3947,7 @@ async function renderConnectionTroubleshoot() {
 
         const card = document.getElementById(`conn-card-${testId}`);
         const statusSpan = document.getElementById(`conn-status-${testId}`);
-        const btn = document.getElementById(`conn-btn-${testId}`);
+        const btn = card.querySelector('.run-conn-test');
         const resultDiv = document.getElementById('testResult');
         const warningDiv = document.getElementById('fixWarning');
 
@@ -4078,13 +3985,7 @@ async function renderConnectionTroubleshoot() {
             const resp = await fetch(`${BACKEND_URL}${endpoint}`);
             const data = await resp.json();
             const pass = data.ok === true;
-
-            // Save result
-            if (!window._connectionTestResults) window._connectionTestResults = {};
-            window._connectionTestResults[testId] = {
-                passed: pass,
-                message: pass ? data.message : (data.error || 'Failed')
-            };
+            testResults[testId] = pass;
 
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
@@ -4105,16 +4006,10 @@ async function renderConnectionTroubleshoot() {
             resultDiv.innerHTML = `<div style="background: ${pass ? '#e8f5e9' : '#ffebee'}; padding: 12px; border-radius: 8px; color: ${color};">${icon} ${msg}</div>`;
 
             // ---- Show warning if all tests passed ----
-            const allPass = Object.values(window._connectionTestResults || {}).every(r => r.passed === true);
+            const allPass = Object.values(testResults).every(r => r === true);
             warningDiv.style.display = allPass ? 'block' : 'none';
 
         } catch (err) {
-            // Save error result
-            if (!window._connectionTestResults) window._connectionTestResults = {};
-            window._connectionTestResults[testId] = {
-                passed: false,
-                message: err.message
-            };
             statusSpan.style.color = '#d32f2f';
             statusSpan.textContent = '❌ Error';
             btn.textContent = 'Retry';
@@ -4137,8 +4032,8 @@ async function renderConnectionTroubleshoot() {
         });
     });
 
-    // ---- initialise results if needed ----
-    if (!window._connectionTestResults) window._connectionTestResults = {};
+    // ---- initialise results ----
+    testResults = {};
 }
 
 async function runConnectionTest(testId) {
@@ -4380,22 +4275,15 @@ function initNavigation() {
             document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
             const page = item.dataset.page;
-            showLoading();
-            try {
-                if (page === 'dashboard') await renderDashboard();
-                else if (page === 'device-info') await renderDeviceInfo();
-                else if (page === 'hardware-tests') await renderHardwareTests();
-                else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
-                else if (page === 'ai-conclusion') await renderAIConclusion();
-                else if (page === 'repairs') await renderRepairs();
-                else if (page === 'bsod') await renderBsodDiagnosis();
-                else if (page === 'live-screen') await renderLiveScreen();
-                else await renderDashboard();
-            } catch (err) {
-                console.error('Page render error:', err);
-            } finally {
-                hideLoading();
-            }
+            if (page === 'dashboard') await renderDashboard();
+            else if (page === 'device-info') await renderDeviceInfo();
+            else if (page === 'hardware-tests') await renderHardwareTests();
+            else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
+            else if (page === 'ai-conclusion') await renderAIConclusion();
+            else if (page === 'repairs') await renderRepairs();
+            else if (page === 'bsod') await renderBsodDiagnosis();
+            else if (page === 'live-screen') await renderLiveScreen();
+            else await renderDashboard();
         });
     });
 }
