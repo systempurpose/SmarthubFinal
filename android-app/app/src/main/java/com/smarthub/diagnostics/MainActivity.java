@@ -123,6 +123,8 @@ public class MainActivity extends AppCompatActivity {
     // ==================== PERMISSION REQUEST ====================
     private void checkAndRequestPermissions() {
         String[] permissions = {
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.CAMERA,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,

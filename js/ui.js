@@ -2408,39 +2408,336 @@ async function renderHardwareTests() {
         return;
     }
 
-    // Helper to prepare device for specific tests
-    async function prepareDeviceForTest(testType) {
-        try {
-            await runAdb('settings put global zen_mode 0');
-            if (testType === 'gps') {
-                await runAdb('settings put secure location_mode 3');
+    // ========== TEST DEFINITIONS ==========
+    // Map test IDs to display info and the actual run function.
+    // The run functions are the same as in the existing tests array.
+    const testDefs = {
+        battery: {
+            title: 'Battery',
+            desc: 'Check battery level and health',
+            run: async () => {
+                const data = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
+                const level = data.level || 0;
+                const health = data.health || 'unknown';
+                const passed = (level >= 20 && health === 'good');
+                const message = passed ? `Level: ${level}%, health: ${health}` : (level < 20 ? 'Low battery (<20%)' : 'Poor battery health');
+                return { passed, message };
             }
-            if (testType === 'nfc') {
-                await runAdb('svc nfc enable');
-                await runAdb('settings put global nfc_on 1');
+        },
+        storage: {
+            title: 'Storage',
+            desc: 'Check storage space',
+            run: async () => {
+                const data = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
+                const free = data.free || '0';
+                let freeGB = 0;
+                const match = String(free).match(/(\d+(?:\.\d+)?)/);
+                if (match) freeGB = parseFloat(match[1]);
+                const passed = freeGB > 1.0;
+                const message = `Free space: ${free}`;
+                return { passed, message };
             }
-            if (testType === 'speaker' || testType === 'earpiece' || testType === 'sound') {
-                // Set media volume to comfortable level using the working command
+        },
+        sensors: {
+            title: 'Sensors',
+            desc: 'Detect accelerometer, gyro, proximity, light',
+            run: async () => {
                 try {
-                    await runAdb('cmd media_session volume --stream 3 --set 7');
-                } catch (e) {
-                    await runAdb('settings put system volume_music 7');
+                    const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
+                    const sensors = res.sensors || [];
+                    const types = sensors.map(s => s.type.toLowerCase());
+                    const hasAccel = types.some(t => t.includes('accelerometer'));
+                    const hasGyro = types.some(t => t.includes('gyroscope'));
+                    const hasProx = types.some(t => t.includes('proximity'));
+                    const hasLight = types.some(t => t.includes('light'));
+                    const passed = hasAccel && hasProx && hasLight;
+                    const missing = [];
+                    if (!hasAccel) missing.push('accelerometer');
+                    if (!hasProx) missing.push('proximity');
+                    if (!hasLight) missing.push('light');
+                    let message = passed
+                        ? `All core sensors detected (Gyro: ${hasGyro ? '✅' : '❌ optional'})`
+                        : `Missing required: ${missing.join(', ')}`;
+                    return { passed, message };
+                } catch (err) {
+                    return { passed: false, message: 'Failed to read sensors' };
                 }
             }
-        } catch (e) {
-            console.warn('Device preparation failed:', e);
+        },
+        display: {
+            title: 'Display',
+            desc: 'Check screen resolution',
+            run: async () => {
+                const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
+                let raw = await deviceRes.text();
+                try { const p = JSON.parse(raw); if (typeof p === 'string') raw = p; } catch(e) {}
+                const width = raw.match(/\[sys.logical.width\]:\s*\[(\d+)\]/)?.[1];
+                const height = raw.match(/\[sys.logical.height\]:\s*\[(\d+)\]/)?.[1];
+                const passed = width && height;
+                const message = passed ? `${width} x ${height}` : 'Could not read resolution';
+                return { passed, message };
+            }
+        },
+        proximity: {
+            title: 'Proximity Sensor',
+            desc: 'Check if proximity sensor is present',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                const hasProx = features.some(f => f === 'android.hardware.sensor.proximity');
+                if (!hasProx) {
+                    return { passed: true, message: 'Not supported (no proximity sensor)' };
+                }
+                return { passed: true, message: 'Proximity sensor present' };
+            }
+        },
+        gyro: {
+            title: 'Gyroscope / Accelerometer',
+            desc: 'Check motion sensors',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                const hasGyro = features.some(f => f === 'android.hardware.sensor.gyroscope');
+                const hasAccel = features.some(f => f === 'android.hardware.sensor.accelerometer');
+                if (!hasGyro && !hasAccel) {
+                    return { passed: true, message: 'Not supported (no motion sensors)' };
+                }
+                return { passed: true, message: `Motion sensors present (Gyro: ${hasGyro}, Accel: ${hasAccel})` };
+            }
+        },
+        microphone: {
+            title: 'Microphone',
+            desc: 'Record and playback test',
+            run: async () => {
+                await launchAndroidTest('microphone');
+                modalTitle.textContent = 'Microphone Test';
+                modalBody.innerHTML = `<p>🎤 The phone is recording and then playing back your voice.</p><p>After the recording, the sound will loop.</p><p>Did you hear your voice clearly?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await runAdb('input keyevent KEYCODE_BACK');
+                await new Promise(r => setTimeout(r, 500));
+                await launchAndroidApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed microphone working' : 'Microphone issue reported';
+                return { passed, message };
+            }
+        },
+        gps: {
+            title: 'GPS',
+            desc: 'Enable GPS and check lock',
+            run: async () => {
+                await prepareDeviceForTest('gps');
+                let passed = false;
+                let message = 'GPS did not lock';
+                try {
+                    await runAdb('cmd location set-location-enabled true');
+                    await new Promise(r => setTimeout(r, 1000));
+                    let isEnabled = false;
+                    try {
+                        const output = await runAdb('cmd location is-location-enabled');
+                        isEnabled = output.trim().toLowerCase() === 'true';
+                    } catch (e) {
+                        const mode = await runAdb('settings get secure location_mode');
+                        if (mode.trim() === '3') isEnabled = true;
+                    }
+                    if (!isEnabled) {
+                        await runAdb('settings put secure location_mode 3');
+                        await new Promise(r => setTimeout(r, 1000));
+                        const mode = await runAdb('settings get secure location_mode');
+                        if (mode.trim() === '3') isEnabled = true;
+                    }
+                    if (isEnabled) {
+                        passed = true;
+                        message = 'GPS enabled (high accuracy)';
+                        try {
+                            const dump = await runAdb('dumpsys location');
+                            if (dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null')) {
+                                message = 'GPS locked successfully';
+                            }
+                        } catch (e) {}
+                    } else {
+                        message = 'GPS could not be enabled';
+                    }
+                } catch (e) {
+                    message = 'Failed to check GPS status: ' + e.message;
+                }
+                return { passed, message };
+            }
+        },
+        fingerprint: {
+            title: 'Fingerprint',
+            desc: 'Check fingerprint hardware',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                const hasFingerprint = features.some(f => f === 'android.hardware.fingerprint');
+                return { passed: true, message: hasFingerprint ? 'Fingerprint hardware present' : 'Not supported (no fingerprint sensor)' };
+            }
+        },
+        nfc: {
+            title: 'NFC',
+            desc: 'Check NFC hardware',
+            run: async () => {
+                await prepareDeviceForTest('nfc');
+                const features = await getHardwareFeatures();
+                const hasNfc = features.some(f => f === 'android.hardware.nfc');
+                return { passed: true, message: hasNfc ? 'NFC hardware present' : 'Not supported (no NFC)' };
+            }
+        },
+        vibration: {
+            title: 'Vibration',
+            desc: 'Test vibration motor',
+            run: async () => {
+                let vibrated = false;
+                try {
+                    await runAdb('cmd vibrator_manager synced oneshot 500');
+                    vibrated = true;
+                } catch (e) {
+                    try { await runAdb('cmd vibrator vibrate 500'); vibrated = true; } catch (e2) {
+                        try { await runAdb('input vibrate 500'); vibrated = true; } catch (e3) {
+                            try { await runAdb('service call vibrator 1'); vibrated = true; } catch (e4) {}
+                        }
+                    }
+                }
+                if (!vibrated) {
+                    return { passed: false, message: 'Failed to trigger vibration' };
+                }
+                modalTitle.textContent = 'Vibration Test';
+                modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
+                return { passed, message };
+            }
+        },
+        flashlight: {
+            title: 'Flashlight',
+            desc: 'Test rear flashlight',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.camera.flash')) {
+                    return { passed: true, message: 'Not supported (no flashlight hardware)' };
+                }
+                await launchAndroidTest('flash');
+                modalTitle.textContent = 'Flashlight Test';
+                modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed flashlight' : 'User did not see light';
+                return { passed, message };
+            }
+        },
+        speaker: {
+            title: 'Speaker',
+            desc: 'Play test tone',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.audio.output')) {
+                    return { passed: true, message: 'Not supported (no audio output hardware)' };
+                }
+                await prepareDeviceForTest('speaker');
+                await launchAndroidTest('sound');
+                modalTitle.textContent = 'Speaker Test';
+                modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
+                return { passed, message };
+            }
+        },
+        camera: {
+            title: 'Camera',
+            desc: 'Open camera and preview',
+            run: async () => {
+                await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
+                modalTitle.textContent = 'Camera Test';
+                modalBody.innerHTML = `<p>📸 The phone's camera app should have opened.</p><p>Does the camera viewfinder appear and work normally?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await runAdb('input keyevent KEYCODE_HOME');
+                await new Promise(r => setTimeout(r, 500));
+                await launchAndroidApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed camera working' : 'User reported camera issues';
+                return { passed, message };
+            }
+        },
+        headphone: {
+            title: 'Headphone',
+            desc: 'Test headphone audio',
+            run: async () => {
+                await prepareDeviceForTest('headphone');
+                await launchAndroidTest('headphone');
+                modalTitle.textContent = 'Headphone Test';
+                modalBody.innerHTML = `<p>🎧 Please plug in headphones.</p><p>The phone will play a sound through the headphones.</p><p>Did you hear the sound clearly?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed headphone working' : 'Headphone issue reported';
+                return { passed, message };
+            }
+        },
+        touch: {
+            title: 'Touch Screen',
+            desc: 'Draw on screen to test',
+            run: async () => {
+                const features = await getHardwareFeatures();
+                if (!features.some(f => f === 'android.hardware.touchscreen')) {
+                    return { passed: true, message: 'Not supported (no touchscreen hardware)' };
+                }
+                await launchAndroidTest('touch');
+                modalTitle.textContent = 'Touch Screen Test';
+                modalBody.innerHTML = `<p>📱 The phone is now in touch test mode.</p><p>Draw inside the square guide on the phone.</p><p>Does the screen register your touches and draw smoothly?</p>`;
+                modal.style.display = 'flex';
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
+                return { passed, message };
+            }
         }
-    }
+    };
 
-    // ---- HTML TEMPLATE ----
-    const html = `
-        <div class="info-card" style="text-align: center;">
+    // ========== CARD UI ==========
+    // Build card HTML from testDefs
+    const testIds = Object.keys(testDefs);
+    let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
+    for (const id of testIds) {
+        const def = testDefs[id];
+        cardsHtml += `
+            <div class="test-card" id="card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+                <div>
+                    <h3 style="margin: 0 0 4px 0; font-size: 16px;">${def.title}</h3>
+                    <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${def.desc}</p>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <span class="status-text" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
+                    <button class="btn-secondary run-single-test" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
+                </div>
+            </div>
+        `;
+    }
+    cardsHtml += `</div>`;
+
+    const fullHtml = `
+        <div class="info-card" style="text-align: center; margin-bottom: 24px;">
             <div class="card-header"><i class="fas fa-microscope"></i> Hardware Diagnostics</div>
             <div class="card-content">
-                <p>Run a complete hardware test suite. The phone will perform actions automatically. Follow the instructions in the popup.</p>
-                <button id="startHwTestBtn" class="btn-primary" style="font-size: 18px;">🔍 Start Full Hardware Test</button>
+                <p>Run individual tests below or run the full suite.</p>
+                <button id="startHwTestBtn" class="btn-primary" style="font-size: 16px;">🔍 Start Full Hardware Test</button>
             </div>
         </div>
+        ${cardsHtml}
         <div id="hwResults" style="display: none;">
             <div class="cards-container" id="hwCardsContainer"></div>
             <div id="hwSummaryCard" class="info-card" style="margin-top: 24px;"></div>
@@ -2459,9 +2756,10 @@ async function renderHardwareTests() {
             </div>
         </div>
     `;
-    document.getElementById('pageContent').innerHTML = html;
 
-    // ---- Modal and helpers ----
+    document.getElementById('pageContent').innerHTML = fullHtml;
+
+    // ========== MODAL HELPERS ==========
     const modal = document.getElementById('hwTestModal');
     const modalTitle = document.getElementById('hwModalTitle');
     const modalBody = document.getElementById('hwModalBody');
@@ -2483,7 +2781,6 @@ async function renderHardwareTests() {
     closeBtn.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-    // waitForUserConfirmation – no timeout (waits forever)
     function waitForUserConfirmation() {
         return new Promise((resolve) => {
             currentTestResolver = resolve;
@@ -2528,339 +2825,152 @@ async function renderHardwareTests() {
         await launchAndroidApp();
     }
 
-    // ===== TESTS ARRAY =====
-    const tests = [
-        // ---- AUTOMATIC TESTS ----
-        { id: 'battery', name: 'Battery', run: async () => {
-            const data = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
-            const level = data.level || 0;
-            const health = data.health || 'unknown';
-            const passed = (level >= 20 && health === 'good');
-            const message = passed ? `Level: ${level}%, health: ${health}` : (level < 20 ? 'Low battery (<20%)' : 'Poor battery health');
-            return { passed, message };
-        }},
-        { id: 'storage', name: 'Storage', run: async () => {
-            const data = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
-            const free = data.free || '0';
-            let freeGB = 0;
-            const match = String(free).match(/(\d+(?:\.\d+)?)/);
-            if (match) freeGB = parseFloat(match[1]);
-            const passed = freeGB > 1.0;
-            const message = `Free space: ${free}`;
-            return { passed, message };
-        }},
-        { id: 'sensors', name: 'Sensors', run: async () => {
-            try {
-                const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
-                const sensors = res.sensors || [];
-                const types = sensors.map(s => s.type.toLowerCase());
-                const hasAccel = types.some(t => t.includes('accelerometer'));
-                const hasGyro = types.some(t => t.includes('gyroscope'));
-                const hasProx = types.some(t => t.includes('proximity'));
-                const hasLight = types.some(t => t.includes('light'));
-                const passed = hasAccel && hasProx && hasLight;
-                const missing = [];
-                if (!hasAccel) missing.push('accelerometer');
-                if (!hasProx) missing.push('proximity');
-                if (!hasLight) missing.push('light');
-                let message = passed
-                    ? `All core sensors detected (Gyro: ${hasGyro ? '✅' : '❌ optional'})`
-                    : `Missing required: ${missing.join(', ')}`;
-                return { passed, message };
-            } catch (err) {
-                return { passed: false, message: 'Failed to read sensors' };
-            }
-        }},
-        { id: 'display', name: 'Display', run: async () => {
-            const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
-            let raw = await deviceRes.text();
-            try { const p = JSON.parse(raw); if (typeof p === 'string') raw = p; } catch(e) {}
-            const width = raw.match(/\[sys.logical.width\]:\s*\[(\d+)\]/)?.[1];
-            const height = raw.match(/\[sys.logical.height\]:\s*\[(\d+)\]/)?.[1];
-            const passed = width && height;
-            const message = passed ? `${width} x ${height}` : 'Could not read resolution';
-            return { passed, message };
-        }},
-        // ---- PROXIMITY (automatic) ----
-        { id: 'proximity', name: 'Proximity Sensor', run: async () => {
-            const features = await getHardwareFeatures();
-            const hasProx = features.some(f => f === 'android.hardware.sensor.proximity');
-            if (!hasProx) {
-                return { passed: true, message: 'Not supported (no proximity sensor)' };
-            }
-            return { passed: true, message: 'Proximity sensor present' };
-        }},
-        // ---- GYROSCOPE (automatic) ----
-        { id: 'gyro', name: 'Gyroscope/Accelerometer', run: async () => {
-            const features = await getHardwareFeatures();
-            const hasGyro = features.some(f => f === 'android.hardware.sensor.gyroscope');
-            const hasAccel = features.some(f => f === 'android.hardware.sensor.accelerometer');
-            if (!hasGyro && !hasAccel) {
-                return { passed: true, message: 'Not supported (no motion sensors)' };
-            }
-            return { passed: true, message: `Motion sensors present (Gyro: ${hasGyro}, Accel: ${hasAccel})` };
-        }},
-        // ---- MICROPHONE (automatic with visualizer) ----
-        { id: 'microphone', name: 'Microphone', run: async () => {
-    await launchAndroidTest('microphone');
-    modalTitle.textContent = 'Microphone Test';
-    modalBody.innerHTML = `<p>🎤 The phone is recording and then playing back your voice.</p><p>After the recording, the sound will loop.</p><p>Did you hear your voice clearly?</p>`;
-    modal.style.display = 'flex';
-    const result = await waitForUserConfirmation(); // no timeout
-    closeModal();
-    await runAdb('input keyevent KEYCODE_BACK');
-    await new Promise(r => setTimeout(r, 500));
-    await launchAndroidApp();
-    const passed = (result === 'yes');
-    const message = passed ? 'User confirmed microphone working' : 'Microphone issue reported';
-    return { passed, message };
-}},
-        // ---- GPS (automatic with enable and longer wait) ----
-        { id: 'gps', name: 'GPS', run: async () => {
-    await prepareDeviceForTest('gps');
-    let passed = false;
-    let message = 'GPS did not lock';
-    try {
-        // 1. Enable location using modern Android command
-        await runAdb('cmd location set-location-enabled true');
-        await new Promise(r => setTimeout(r, 1000));
-
-        // 2. Check if location is enabled
-        let isEnabled = false;
+    async function prepareDeviceForTest(testType) {
         try {
-            const output = await runAdb('cmd location is-location-enabled');
-            isEnabled = output.trim().toLowerCase() === 'true';
-        } catch (e) {
-            // Fallback: check location_mode
-            const mode = await runAdb('settings get secure location_mode');
-            if (mode.trim() === '3') isEnabled = true;
-        }
-
-        // 3. If not enabled, force via settings
-        if (!isEnabled) {
-            await runAdb('settings put secure location_mode 3');
-            await new Promise(r => setTimeout(r, 1000));
-            const mode = await runAdb('settings get secure location_mode');
-            if (mode.trim() === '3') isEnabled = true;
-        }
-
-        // 4. Report result
-        if (isEnabled) {
-            passed = true;
-            message = 'GPS enabled (high accuracy)';
-            // Optionally check for a fix (no need to fail if no fix)
-            try {
-                const dump = await runAdb('dumpsys location');
-                if (dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null')) {
-                    message = 'GPS locked successfully';
+            await runAdb('settings put global zen_mode 0');
+            if (testType === 'gps') {
+                await runAdb('settings put secure location_mode 3');
+            }
+            if (testType === 'nfc') {
+                await runAdb('svc nfc enable');
+                await runAdb('settings put global nfc_on 1');
+            }
+            if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
+                try {
+                    await runAdb('cmd media_session volume --stream 3 --set 7');
+                } catch (e) {
+                    await runAdb('settings put system volume_music 7');
                 }
-            } catch (e) {}
-        } else {
-            message = 'GPS could not be enabled';
-        }
-    } catch (e) {
-        message = 'Failed to check GPS status: ' + e.message;
-    }
-    return { passed, message };
-}},
-        // ---- FINGERPRINT (automatic) ----
-        { id: 'fingerprint', name: 'Fingerprint', run: async () => {
-            const features = await getHardwareFeatures();
-            const hasFingerprint = features.some(f => f === 'android.hardware.fingerprint');
-            return { passed: true, message: hasFingerprint ? 'Fingerprint hardware present' : 'Not supported (no fingerprint sensor)' };
-        }},
-        // ---- NFC (automatic) ----
-        { id: 'nfc', name: 'NFC', run: async () => {
-            await prepareDeviceForTest('nfc');
-            const features = await getHardwareFeatures();
-            const hasNfc = features.some(f => f === 'android.hardware.nfc');
-            return { passed: true, message: hasNfc ? 'NFC hardware present' : 'Not supported (no NFC)' };
-        }},
-
-        // ---- MANUAL TESTS (no timeout) ----
-        // ---- VIBRATION ----
-        { id: 'vibration', name: 'Vibration', run: async () => {
-    // Always try the working command – skip hardware feature check
-    let vibrated = false;
-    try {
-        await runAdb('cmd vibrator_manager synced oneshot 500');
-        vibrated = true;
-    } catch (e) {
-        // Fallbacks
-        try { await runAdb('cmd vibrator vibrate 500'); vibrated = true; } catch (e2) {
-            try { await runAdb('input vibrate 500'); vibrated = true; } catch (e3) {
-                try { await runAdb('service call vibrator 1'); vibrated = true; } catch (e4) {}
             }
+        } catch (e) {
+            console.warn('Device preparation failed:', e);
         }
     }
-    if (!vibrated) {
-        return { passed: false, message: 'Failed to trigger vibration' };
-    }
-    modalTitle.textContent = 'Vibration Test';
-    modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
-    modal.style.display = 'flex';
-    const result = await waitForUserConfirmation();
-    closeModal();
-    const passed = (result === 'yes');
-    const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
-    return { passed, message };
-}},
-        // ---- FLASHLIGHT ----
-        { id: 'flashlight', name: 'Flashlight', run: async () => {
-            const features = await getHardwareFeatures();
-            if (!features.some(f => f === 'android.hardware.camera.flash')) {
-                return { passed: true, message: 'Not supported (no flashlight hardware)' };
-            }
-            await launchAndroidTest('flash');
-            modalTitle.textContent = 'Flashlight Test';
-            modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation();
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed flashlight' : 'User did not see light';
-            return { passed, message };
-        }},
-        // ---- SPEAKER ----
-        { id: 'speaker', name: 'Speaker', run: async () => {
-            const features = await getHardwareFeatures();
-            if (!features.some(f => f === 'android.hardware.audio.output')) {
-                return { passed: true, message: 'Not supported (no audio output hardware)' };
-            }
-            await prepareDeviceForTest('speaker');
-            await launchAndroidTest('sound');
-            modalTitle.textContent = 'Speaker Test';
-            modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation();
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
-            return { passed, message };
-        }},
-        // ---- CAMERA ----
-        { id: 'camera', name: 'Camera', run: async () => {
-            await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
-            modalTitle.textContent = 'Camera Test';
-            modalBody.innerHTML = `<p>📸 The phone's camera app should have opened.</p><p>Does the camera viewfinder appear and work normally?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation();
-            closeModal();
-            await runAdb('input keyevent KEYCODE_HOME');
-            await new Promise(r => setTimeout(r, 500));
-            await launchAndroidApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed camera working' : 'User reported camera issues';
-            return { passed, message };
-        }},
-        // ---- EARPIECE ----
-        { id: 'headphone', name: 'Headphone', run: async () => {
-    await prepareDeviceForTest('headphone');
-    await launchAndroidTest('headphone');
-    modalTitle.textContent = 'Headphone Test';
-    modalBody.innerHTML = `<p>🎧 Please plug in headphones.</p><p>The phone will play a sound through the headphones.</p><p>Did you hear the sound clearly?</p>`;
-    modal.style.display = 'flex';
-    const result = await waitForUserConfirmation();
-    closeModal();
-    await returnToMainApp();
-    const passed = (result === 'yes');
-    const message = passed ? 'User confirmed headphone working' : 'Headphone issue reported';
-    return { passed, message };
-}},
-        // ---- TOUCH (manual with drawing UI) ----
-        { id: 'touch', name: 'Touch Screen', run: async () => {
-            const features = await getHardwareFeatures();
-            if (!features.some(f => f === 'android.hardware.touchscreen')) {
-                return { passed: true, message: 'Not supported (no touchscreen hardware)' };
-            }
-            await launchAndroidTest('touch');
-            modalTitle.textContent = 'Touch Screen Test';
-            modalBody.innerHTML = `<p>📱 The phone is now in touch test mode.</p><p>Draw inside the square guide on the phone.</p><p>Does the screen register your touches and draw smoothly?</p>`;
-            modal.style.display = 'flex';
-            const result = await waitForUserConfirmation();
-            closeModal();
-            await returnToMainApp();
-            const passed = (result === 'yes');
-            const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
-            return { passed, message };
-        }}
-    ];
 
-    // ---- Run all tests with delays ----
-    async function runAllTests() {
-    const resultsContainer = document.getElementById('hwResults');
-    resultsContainer.style.display = 'block';
-    const cardsContainer = document.getElementById('hwCardsContainer');
-    cardsContainer.innerHTML = '';
-    const results = {};
+    // ========== RUN A SINGLE TEST ==========
+    async function runSingleHardwareTest(testId) {
+        const card = document.getElementById(`card-${testId}`);
+        const statusSpan = card.querySelector('.status-text');
+        const btn = card.querySelector('.run-single-test');
+        btn.disabled = true;
+        btn.textContent = '⏳ Running...';
 
-    await launchAndroidApp();
-    for (const test of tests) {
-        const card = document.createElement('div');
-        card.className = 'info-card';
-        card.id = `test-card-${test.id}`;
-        card.innerHTML = `<div class="card-header"><i class="fas fa-sync-alt fa-spin"></i> ${test.name}</div><div class="card-content"><p>Running test...</p></div>`;
-        cardsContainer.appendChild(card);
+        statusSpan.style.color = '#f59e0b';
+        statusSpan.textContent = '⏳ Running...';
+
         try {
-            const result = await test.run();
-            results[test.id] = { name: test.name, passed: result.passed, message: result.message };
-            const icon = result.passed ? 'fas fa-check-circle' : 'fas fa-times-circle';
-            const color = result.passed ? '#2e7d32' : '#d32f2f';
-            card.querySelector('.card-header').innerHTML = `<i class="${icon}" style="color:${color}"></i> ${test.name}`;
-            card.querySelector('.card-content').innerHTML = `<p>${escapeHtml(result.message)}</p>`;
+            const def = testDefs[testId];
+            if (!def) throw new Error('Test not found');
+            const result = await def.run();
+            const passed = result.passed;
+            const icon = passed ? '✅' : '❌';
+            const color = passed ? '#2e7d32' : '#d32f2f';
+            const statusText = passed ? 'Passed' : 'Failed';
+            statusSpan.style.color = color;
+            statusSpan.textContent = `${icon} ${statusText}`;
+            // Show message in a small tooltip or below? We'll just show an alert for now.
+            alert(`${def.title}: ${result.message}`);
+            btn.textContent = passed ? 'Rerun' : 'Details';
+            btn.disabled = false;
         } catch (err) {
-            results[test.id] = { name: test.name, passed: false, message: err.message };
-            card.querySelector('.card-header').innerHTML = `<i class="fas fa-times-circle" style="color:#d32f2f"></i> ${test.name}`;
-            card.querySelector('.card-content').innerHTML = `<p>Error: ${escapeHtml(err.message)}</p>`;
+            statusSpan.style.color = '#d32f2f';
+            statusSpan.textContent = '❌ Error';
+            alert(`Error running test: ${err.message}`);
+            btn.textContent = 'Retry';
+            btn.disabled = false;
         }
-        await new Promise(r => setTimeout(r, 1500));
     }
 
-    // ---- SUMMARY CARD (improved UI) ----
-    const passedCount = Object.values(results).filter(r => r.passed).length;
-    const total = tests.length;
-    const percentage = Math.round((passedCount / total) * 100);
+    // ========== RUN ALL TESTS (full suite) ==========
+    async function runAllTests() {
+        // This is the same as the original runAllTests but we'll update card statuses as we go.
+        const resultsContainer = document.getElementById('hwResults');
+        resultsContainer.style.display = 'block';
+        const cardsContainer = document.getElementById('hwCardsContainer');
+        cardsContainer.innerHTML = '';
+        const results = {};
 
-    const summaryDiv = document.getElementById('hwSummaryCard');
-    summaryDiv.innerHTML = `
-        <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-        <div class="card-content">
-            <!-- Overall score -->
-            <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
-                    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-                        <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
-                        <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
-                            stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
-                    </svg>
-                    <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
-                </div>
-                <div>
-                    <h3 style="margin: 0; font-size: 20px;">${passedCount}/${total} tests passed</h3>
-                    <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
-                </div>
-            </div>
+        await launchAndroidApp();
+        for (const id of testIds) {
+            const def = testDefs[id];
+            const card = document.getElementById(`card-${id}`);
+            const statusSpan = card.querySelector('.status-text');
+            const btn = card.querySelector('.run-single-test');
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            statusSpan.style.color = '#f59e0b';
+            statusSpan.textContent = '⏳ Running...';
 
-            <!-- Individual test results as cards -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
-                ${Object.values(results).map(r => `
-                    <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'}; transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: default;">
-                        <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
-                        <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; font-size: 14px;">${escapeHtml(r.name)}</div>
-                            <div style="font-size: 12px; color: #555; word-break: break-word;">${escapeHtml(r.message)}</div>
-                        </div>
+            try {
+                const result = await def.run();
+                results[id] = { name: def.title, passed: result.passed, message: result.message };
+                const passed = result.passed;
+                const icon = passed ? '✅' : '❌';
+                const color = passed ? '#2e7d32' : '#d32f2f';
+                const statusText = passed ? 'Passed' : 'Failed';
+                statusSpan.style.color = color;
+                statusSpan.textContent = `${icon} ${statusText}`;
+                btn.textContent = passed ? 'Rerun' : 'Details';
+                btn.disabled = false;
+            } catch (err) {
+                results[id] = { name: def.title, passed: false, message: err.message };
+                statusSpan.style.color = '#d32f2f';
+                statusSpan.textContent = '❌ Error';
+                btn.textContent = 'Retry';
+                btn.disabled = false;
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        // Show summary (same as before)
+        const passedCount = Object.values(results).filter(r => r.passed).length;
+        const total = testIds.length;
+        const percentage = Math.round((passedCount / total) * 100);
+
+        const summaryDiv = document.getElementById('hwSummaryCard');
+        summaryDiv.innerHTML = `
+            <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
+            <div class="card-content">
+                <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
+                        <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+                            <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
+                            <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
+                                stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
+                        </svg>
+                        <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
                     </div>
-                `).join('')}
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px;">${passedCount}/${total} tests passed</h3>
+                        <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+                    ${Object.values(results).map(r => `
+                        <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'};">
+                            <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; font-size: 14px;">${escapeHtml(r.name)}</div>
+                                <div style="font-size: 12px; color: #555; word-break: break-word;">${escapeHtml(r.message)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-        </div>
-    `;
+        `;
+        resultsContainer.scrollIntoView({ behavior: 'smooth' });
+    }
 
-    localStorage.setItem('smartHubDiagnostics', JSON.stringify({ hardwareTests: { results, timestamp: Date.now() } }));
-}
+    // ========== ATTACH EVENT LISTENERS ==========
+    // Single test buttons
+    document.querySelectorAll('.run-single-test').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const testId = btn.dataset.test;
+            runSingleHardwareTest(testId);
+        });
+    });
 
+    // Full suite button
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
 
@@ -3678,96 +3788,316 @@ async function renderConnectionTroubleshoot() {
         return;
     }
 
-    const container = document.getElementById('pageContent');
-    container.innerHTML = `
-        <div class="card" style="text-align:center; padding:20px;">
-            <h3>🔌 Connection Troubleshoot</h3>
-            <p>Run diagnostics to check WiFi, Bluetooth, and Mobile Data.</p>
-            <button id="runDiagnosticsBtn" class="btn-primary" style="font-size:16px;">🔍 Run Diagnostics</button>
+    // ---- Helper to run ADB commands ----
+    async function runAdb(command) {
+        const response = await fetch(`${BACKEND_URL}/adb-shell`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, command })
+        });
+        if (!response.ok) throw new Error(`ADB command failed: ${response.status}`);
+        const data = await response.json();
+        return data.output;
+    }
+
+    // ---- Test state ----
+    let isRunning = false;
+    let testResults = {};
+
+    // ---- Card definitions ----
+    const testCards = [
+        { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity', status: 'Pending' },
+        { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer', status: 'Pending' },
+        { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity', status: 'Pending' },
+    ];
+
+    // ---- Build test cards ----
+    let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
+    for (const card of testCards) {
+        cardsHtml += `
+            <div class="test-card" id="conn-card-${card.id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+                <div>
+                    <h3 style="margin: 0 0 4px 0; font-size: 16px;">${card.title}</h3>
+                    <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${card.desc}</p>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                    <span class="status-text" id="conn-status-${card.id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
+                    <button class="btn-primary run-conn-test" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
+                </div>
+            </div>
+        `;
+    }
+    cardsHtml += `</div>`;
+
+    // ---- Fix Options section (always visible) ----
+    const fixOptionsHtml = `
+        <div id="fixOptionsSection" style="margin-top: 24px;">
+            <h3 style="margin-bottom: 12px;">🛠️ Fix Options</h3>
+            <div id="fixCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;">
+                <!-- Built dynamically -->
+            </div>
+            <div id="fixWarning" style="margin-top: 8px; font-size: 13px; color: #6B7280; display: none;">
+                ⚠️ All services seem healthy. Fixes may temporarily disrupt connectivity.
+            </div>
         </div>
-        <div id="diagnosticProgress" style="display:none; margin-top:16px;"></div>
-        <div id="diagnosticResults" style="display:none; margin-top:16px;"></div>
-        <div id="fixButtonsContainer" style="display:none; margin-top:16px;"></div>
-        <div id="fixResult" class="card" style="display: none; margin-top: 20px;"></div>
     `;
 
-    const runBtn = document.getElementById('runDiagnosticsBtn');
-    const progressDiv = document.getElementById('diagnosticProgress');
-    const resultsDiv = document.getElementById('diagnosticResults');
-    const fixContainer = document.getElementById('fixButtonsContainer');
+    document.getElementById('pageContent').innerHTML = `
+        <h1 style="margin-bottom: 20px;">🔌 Connection Troubleshoot</h1>
+        ${cardsHtml}
+        <div id="testResult" style="margin-top: 20px; display: none;"></div>
+        ${fixOptionsHtml}
+    `;
 
-    runBtn.replaceWith(runBtn.cloneNode(true));
-    const newRunBtn = document.getElementById('runDiagnosticsBtn');
-
-    newRunBtn.addEventListener('click', async () => {
-        newRunBtn.disabled = true;
-        newRunBtn.textContent = '⏳ Running...';
-        progressDiv.style.display = 'block';
-        resultsDiv.style.display = 'none';
-        fixContainer.style.display = 'none';
-
-        const tests = [
-            { name: 'WiFi', endpoint: '/connectivity/diagnose/wifi/' },
-            { name: 'Bluetooth', endpoint: '/connectivity/diagnose/bluetooth/' },
-            { name: 'Mobile Data', endpoint: '/connectivity/diagnose/mobile/' }
-        ];
-
-        const results = {};
-
-        for (const test of tests) {
-            progressDiv.innerHTML = `<p>🔄 Testing ${test.name}...</p>`;
-            try {
-                const resp = await fetch(`${BACKEND_URL}${test.endpoint}${currentDeviceId}`);
-                const data = await resp.json();
-                results[test.name] = data;
-            } catch (err) {
-                results[test.name] = { ok: false, error: err.message };
-            }
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        progressDiv.style.display = 'none';
-        resultsDiv.style.display = 'block';
-        newRunBtn.disabled = false;
-        newRunBtn.textContent = '🔍 Run Diagnostics';
-
-        let allPass = true;
-        let html = `<div class="info-card"><div class="card-header">📊 Diagnostic Results</div><div class="card-grid">`;
-        for (const [name, data] of Object.entries(results)) {
-            const pass = data.ok === true;
-            if (!pass) allPass = false;
-            const icon = pass ? '✅' : '❌';
-            const color = pass ? '#2e7d32' : '#d32f2f';
-            let msg = pass ? data.message : (data.error || 'Failed');
-            if (name === 'Bluetooth' && pass) {
-                msg += ` | Paired: ${data.pairedCount || 0} | State: ${data.connectionState || 'Unknown'} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
-            }
-            if (name === 'Mobile Data' && data.signalStrength) {
-                msg += ` | Signal: ${data.signalStrength}`;
-            }
-            html += `<div class="card-item"><span class="item-label">${name}</span><span class="item-value" style="color:${color};">${icon} ${escapeHtml(msg)}</span></div>`;
-        }
-        html += `</div></div>`;
-        resultsDiv.innerHTML = html;
-
-        if (allPass) {
-            fixContainer.innerHTML = `
-                <div class="info-card" style="border-left:4px solid #f59e0b;">
-                    <div class="card-header"><i class="fas fa-check-circle" style="color:#2e7d32;"></i> All services are working!</div>
-                    <div class="card-content">
-                        <p style="color:#92400e;">⚠️ No issues detected. Fix buttons are available for manual troubleshooting, but they are not required.</p>
-                        <button id="showFixButtonsBtn" class="btn-secondary">Show Fix Options Anyway</button>
+    // ---- Build fix cards for all services ----
+    function buildAllFixCards() {
+        const allServices = ['wifi', 'bluetooth', 'mobile'];
+        const fixContainer = document.getElementById('fixCardsContainer');
+        let html = '';
+        for (const service of allServices) {
+            const actions = getFixActions(service);
+            const serviceTitle = service.charAt(0).toUpperCase() + service.slice(1);
+            let buttonsHtml = actions.map(a =>
+                `<button class="${a.primary ? 'btn-primary' : 'btn-secondary'} fix-btn" data-service="${service}" data-action="${a.action}" style="font-size: 12px; padding: 4px 12px;">${a.label}</button>`
+            ).join('');
+            html += `
+                <div class="fix-card" style="background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 4px solid #6B7280;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">${serviceTitle}</h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${buttonsHtml}
                     </div>
                 </div>
             `;
+        }
+        fixContainer.innerHTML = html;
+
+        // ---- Attach fix button listeners ----
+        document.querySelectorAll('.fix-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.dataset.action;
+                const service = btn.dataset.service;
+
+                // ---- Warning if all services are healthy ----
+                const allPass = Object.values(testResults).every(r => r === true);
+                if (allPass && Object.keys(testResults).length > 0) {
+                    if (!confirm(`⚠️ All services are currently working. Are you sure you want to apply the fix "${action}"? This may temporarily disrupt connectivity.`)) {
+                        return;
+                    }
+                }
+
+                try {
+                    const fixResp = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action })
+                    });
+                    const fixData = await fixResp.json();
+                    alert(fixData.message || 'Fix applied');
+                    // Re-run the test for this service
+                    await runConnectionTest(service);
+                } catch (err) {
+                    alert('Fix failed: ' + err.message);
+                }
+            });
+        });
+    }
+
+    function getFixActions(service) {
+        const actions = {
+            wifi: [
+                { action: 'wifi_reset', label: '🔄 Reset WiFi', primary: true },
+                { action: 'wifi_scan', label: '📡 Scan', primary: false },
+            ],
+            bluetooth: [
+                { action: 'bluetooth_reset', label: '🔄 Reset Bluetooth', primary: true },
+                { action: 'bluetooth_force_stop', label: '⏹️ Force Stop', primary: false },
+                { action: 'bluetooth_clear_cache', label: '🧹 Clear Cache', primary: false },
+            ],
+            mobile: [
+                { action: 'mobile_data_reset', label: '🔄 Reset Mobile Data', primary: true },
+                { action: 'set_lte', label: '📶 Force LTE', primary: false },
+            ]
+        };
+        return actions[service] || [];
+    }
+
+    // ---- Run a connection test ----
+    async function runConnectionTest(testId) {
+        if (isRunning) return;
+        isRunning = true;
+
+        const card = document.getElementById(`conn-card-${testId}`);
+        const statusSpan = document.getElementById(`conn-status-${testId}`);
+        const btn = card.querySelector('.run-conn-test');
+        const resultDiv = document.getElementById('testResult');
+        const warningDiv = document.getElementById('fixWarning');
+
+        // Disable all test buttons
+        document.querySelectorAll('.run-conn-test').forEach(b => b.disabled = true);
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Running...';
+        statusSpan.style.color = '#f59e0b';
+        statusSpan.textContent = '⏳ Running...';
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<p>🔄 Testing ${testId}...</p>`;
+
+        try {
+            // ---- Toggle radios ----
+            if (testId === 'wifi') {
+                await runAdb('svc wifi enable');
+                await runAdb('svc data disable');
+                await new Promise(r => setTimeout(r, 1500));
+            } else if (testId === 'mobile') {
+                await runAdb('svc data enable');
+                await runAdb('svc wifi disable');
+                await new Promise(r => setTimeout(r, 1500));
+            } else if (testId === 'bluetooth') {
+                try {
+                    await runAdb('svc bluetooth enable');
+                } catch {
+                    await runAdb('settings put global bluetooth_on 1');
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            // ---- Call diagnostic ----
+            const endpoint = `/connectivity/diagnose/${testId}/${currentDeviceId}`;
+            const resp = await fetch(`${BACKEND_URL}${endpoint}`);
+            const data = await resp.json();
+            const pass = data.ok === true;
+            testResults[testId] = pass;
+
+            const icon = pass ? '✅' : '❌';
+            const color = pass ? '#2e7d32' : '#d32f2f';
+            let msg = pass ? data.message : (data.error || 'Failed');
+
+            if (testId === 'bluetooth' && pass) {
+                msg += ` | Paired: ${data.pairedCount || 0} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
+            }
+            if (testId === 'mobile' && data.signalStrength) {
+                msg += ` | Signal: ${data.signalStrength}`;
+            }
+
+            statusSpan.style.color = color;
+            statusSpan.textContent = `${icon} ${pass ? 'Passed' : 'Failed'}`;
+            btn.textContent = pass ? 'Rerun' : 'Retry';
+            btn.disabled = false;
+
+            resultDiv.innerHTML = `<div style="background: ${pass ? '#e8f5e9' : '#ffebee'}; padding: 12px; border-radius: 8px; color: ${color};">${icon} ${msg}</div>`;
+
+            // ---- Show warning if all tests passed ----
+            const allPass = Object.values(testResults).every(r => r === true);
+            warningDiv.style.display = allPass ? 'block' : 'none';
+
+        } catch (err) {
+            statusSpan.style.color = '#d32f2f';
+            statusSpan.textContent = '❌ Error';
+            btn.textContent = 'Retry';
+            btn.disabled = false;
+            resultDiv.innerHTML = `<div style="background: #ffebee; padding: 12px; border-radius: 8px; color: #d32f2f;">❌ Error: ${err.message}</div>`;
+        } finally {
+            isRunning = false;
+            document.querySelectorAll('.run-conn-test').forEach(b => b.disabled = false);
+        }
+    }
+
+    // ---- Build fix cards on load ----
+    buildAllFixCards();
+
+    // ---- Attach test listeners ----
+    document.querySelectorAll('.run-conn-test').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const testId = btn.dataset.test;
+            runConnectionTest(testId);
+        });
+    });
+
+    // ---- initialise results ----
+    testResults = {};
+}
+
+async function runConnectionTest(testId) {
+    const resultDiv = document.getElementById('testResult');
+    const fixContainer = document.getElementById('fixButtonsContainer');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = `<p>🔄 Testing ${testId}...</p>`;
+    fixContainer.style.display = 'none';
+
+    // Before testing, ensure proper radio state
+    if (testId === 'wifi') {
+        // Turn on WiFi, turn off mobile data
+        await runAdb('svc wifi enable');
+        await runAdb('svc data disable');
+        await new Promise(r => setTimeout(r, 1500));
+    } else if (testId === 'mobile') {
+        // Turn on mobile data, turn off WiFi
+        await runAdb('svc data enable');
+        await runAdb('svc wifi disable');
+        await new Promise(r => setTimeout(r, 1500));
+    } else if (testId === 'bluetooth') {
+        // Ensure Bluetooth is on
+        await runAdb('svc bluetooth enable');
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // Call the diagnostic endpoint
+    const endpoint = `/connectivity/diagnose/${testId}/${currentDeviceId}`;
+    try {
+        const resp = await fetch(`${BACKEND_URL}${endpoint}`);
+        const data = await resp.json();
+        const pass = data.ok === true;
+        const icon = pass ? '✅' : '❌';
+        const color = pass ? '#2e7d32' : '#d32f2f';
+        let msg = pass ? data.message : (data.error || 'Failed');
+        // Show extra details for BT and mobile
+        if (testId === 'bluetooth' && pass) {
+            msg += ` | Paired: ${data.pairedCount || 0} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
+        }
+        if (testId === 'mobile' && data.signalStrength) {
+            msg += ` | Signal: ${data.signalStrength}`;
+        }
+        resultDiv.innerHTML = `<div style="background: ${pass ? '#e8f5e9' : '#ffebee'}; padding: 12px; border-radius: 8px; color: ${color};">${icon} ${msg}</div>`;
+
+        // Show fix buttons if test failed
+        if (!pass) {
             fixContainer.style.display = 'block';
-            document.getElementById('showFixButtonsBtn')?.addEventListener('click', () => {
-                renderFullFixPage(true);
+            fixContainer.innerHTML = `
+                <div class="info-card">
+                    <div class="card-header">🛠️ Fix Options</div>
+                    <div class="card-actions" style="display:flex; flex-wrap:wrap; gap:8px; padding:8px 16px 12px;">
+                        <button class="btn-primary fix-btn" data-action="${testId}_reset">🔄 Reset ${testId}</button>
+                        ${testId === 'wifi' ? `<button class="btn-secondary fix-btn" data-action="wifi_scan">📡 Scan</button>` : ''}
+                        ${testId === 'bluetooth' ? `<button class="btn-secondary fix-btn" data-action="bluetooth_force_stop">⏹️ Force Stop</button>` : ''}
+                        ${testId === 'bluetooth' ? `<button class="btn-secondary fix-btn" data-action="bluetooth_clear_cache">🧹 Clear Cache</button>` : ''}
+                        ${testId === 'mobile' ? `<button class="btn-secondary fix-btn" data-action="set_lte">📶 Force LTE</button>` : ''}
+                    </div>
+                </div>
+            `;
+            document.querySelectorAll('.fix-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const action = btn.dataset.action;
+                    try {
+                        const fixResp = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action })
+                        });
+                        const fixData = await fixResp.json();
+                        alert(fixData.message || 'Fix applied');
+                        // Re-run the test
+                        await runConnectionTest(testId);
+                    } catch (err) {
+                        alert('Fix failed: ' + err.message);
+                    }
+                });
             });
         } else {
-            renderFullFixPage(false);
+            fixContainer.style.display = 'none';
         }
-    });
+    } catch (err) {
+        resultDiv.innerHTML = `<div style="background: #ffebee; padding: 12px; border-radius: 8px; color: #d32f2f;">❌ Error: ${err.message}</div>`;
+    }
 }
 
 // Helper: wait for user confirmation with a custom modal
