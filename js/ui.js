@@ -1769,7 +1769,8 @@ async function runStorageAnalysis() {
 }
 
 // ==================== APP SECURITY SCAN (standalone) ====================
-async function runAppSecurityScan() {
+async function runAppSecurityScan(options = {}) {
+    const { showAll = false } = options;
     console.log('[AppSecurity] runAppSecurityScan called');
     if (!currentDeviceId) {
         await showAlert('No Device', 'Please connect a device first.');
@@ -1843,10 +1844,12 @@ async function runAppSecurityScan() {
 
         // ---- Filter by threat level (only critical, high, medium) ----
         const threatOrder = { critical: 4, high: 3, medium: 2, low: 1 };
-        suspiciousAppsList = suspiciousAppsList.filter(app => {
-            const level = (app.threatLevel || '').toLowerCase();
-            return threatOrder[level] >= 2; // keep medium, high, critical
-        });
+        if (!showAll) {
+            suspiciousAppsList = suspiciousAppsList.filter(app => {
+                const level = (app.threatLevel || '').toLowerCase();
+                return threatOrder[level] >= 2; // keep medium, high, critical
+            });
+        }
 
         // Sort by threat level descending
         suspiciousAppsList.sort((a, b) => {
@@ -1881,6 +1884,10 @@ async function runAppSecurityScan() {
                     const vt = analysis.virusTotal;
                     app._deepAnalysis = analysis;
                     app._vt = vt;
+                    // If deep analysis has a risk score, override original
+                    if (analysis.risk_score !== undefined) {
+                        app.riskScore = analysis.risk_score;
+                    }
                 }
             } catch (err) {
                 console.warn(`[AppSecurity] Deep scan failed for ${app.packageName}:`, err);
@@ -1910,8 +1917,8 @@ async function runAppSecurityScan() {
 
         if (suspiciousAppsList.length === 0) {
             html = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All flagged apps were verified safe by VirusTotal or have low threat level.</p>
-                    <p style="font-size: 13px; color: #6B7280;">To see low‑risk apps, click "Show All" below.</p>
-                    <button onclick="runAppSecurityScan({showAll: true})" class="btn-secondary">📋 Show All</button>
+                    ${!showAll ? `<p style="font-size: 13px; color: #6B7280;">To see low‑risk apps, click "Show All" below.</p>
+                    <button onclick="runAppSecurityScan({showAll: true})" class="btn-secondary">📋 Show All</button>` : ''}
                 </div>`;
             modalBody.innerHTML = html;
             return;
@@ -1921,6 +1928,7 @@ async function runAppSecurityScan() {
         const critical = suspiciousAppsList.filter(a => (a.threatLevel || '').toLowerCase() === 'critical').length;
         const high = suspiciousAppsList.filter(a => (a.threatLevel || '').toLowerCase() === 'high').length;
         const medium = suspiciousAppsList.filter(a => (a.threatLevel || '').toLowerCase() === 'medium').length;
+        const low = suspiciousAppsList.filter(a => (a.threatLevel || '').toLowerCase() === 'low').length;
 
         html = `
             <div style="margin-bottom:16px;">
@@ -1929,9 +1937,9 @@ async function runAppSecurityScan() {
                     <span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>
                     <span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>
                     <span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>
-                    <span style="color: #2e7d32;">🟢 Low (hidden – click "Show All")</span>
+                    ${!showAll ? `<span style="color: #2e7d32;">🟢 Low (hidden – click "Show All")</span>` : `<span><span style="color: #2e7d32;">🟢 ${low}</span> Low</span>`}
                 </div>
-                <button onclick="runAppSecurityScan({showAll: true})" class="btn-secondary" style="margin-top:8px;">📋 Show Low‑Risk Apps</button>
+                ${!showAll ? `<button onclick="runAppSecurityScan({showAll: true})" class="btn-secondary" style="margin-top:8px;">📋 Show Low‑Risk Apps</button>` : ''}
             </div>
             <div style="display: flex; flex-direction: column; gap: 12px;">
         `;
@@ -1982,6 +1990,10 @@ async function runAppSecurityScan() {
                 vtHtml = `<div style="margin-top:6px; font-size:12px; color:#d32f2f;">⚠️ Deep scan error: ${app._deepError}</div>`;
             }
 
+            // ---- Build card ----
+            // Use the deep analysis risk score if available, else original
+            const riskScore = app.riskScore !== undefined ? app.riskScore : 'N/A';
+
             html += `
                 <div style="padding: 16px; border-radius: 12px; border-left: 6px solid ${conf.color}; background: ${conf.bg}; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
@@ -2005,7 +2017,7 @@ async function runAppSecurityScan() {
                     </div>
                     <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
                         <span style="background: ${conf.bg}; color: ${conf.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${conf.label}</span>
-                        &nbsp; Risk Score: <strong>${app.riskScore || 'N/A'}/100</strong>
+                        ${riskScore !== 'N/A' ? `&nbsp; Risk Score: <strong>${riskScore}/100</strong>` : ''}
                     </div>
                 </div>
             `;
