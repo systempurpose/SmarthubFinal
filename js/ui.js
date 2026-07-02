@@ -765,7 +765,6 @@ async function testSuspiciousScan() {
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
 async function renderAdvancedDiagnostic() {
     const container = document.getElementById('pageContent');
-    console.log('[Advanced] renderAdvancedDiagnostic called');
 
     if (!currentDeviceId) {
         container.innerHTML = `
@@ -778,88 +777,60 @@ async function renderAdvancedDiagnostic() {
         return;
     }
 
-    // Check module
-    if (!window.SmartHub || !window.SmartHub.advanceDiagnostic) {
-        console.error('[Advanced] advanceDiagnostic module not loaded!');
+    if (!window.SmartHub?.advanceDiagnostic) {
         container.innerHTML = `
             <div class="card" style="padding: 20px; background: #ffebee; color: #c62828;">
-                ❌ Advanced diagnostic module not loaded. Check script inclusion and console for errors.
+                ❌ Advanced diagnostic module not loaded. Check script inclusion.
             </div>
         `;
         return;
     }
-    console.log('[Advanced] Module loaded successfully');
 
     const pageHtml = `
-        <h1 style="margin-bottom: 16px;">🔍 Advanced Diagnostics</h1>
-        <p style="color: #6B7280; margin-bottom: 20px;">Deep‑scan apps and check for rootkits on the selected device.</p>
-        <div style="margin: 16px 0;">
-            <button id="runAdvancedDiagBtn" class="btn-primary" style="font-size: 16px; padding: 10px 28px;">
-                <i class="fas fa-play"></i> Run Advanced Scan
-            </button>
+        <div style="margin-bottom:24px;">
+            <h1 style="margin-bottom:8px;">🔍 Advanced Diagnostics</h1>
+            <p style="color: #6B7280;">Deep‑scan apps and check for rootkits on the selected device.</p>
         </div>
-        <div id="advancedDiagContainer" style="margin-top: 20px;">
-            <div style="padding: 20px; text-align: center; color: #6B7280;">
-                <i class="fas fa-microchip" style="font-size: 40px; display: block; margin-bottom: 12px;"></i>
-                Ready to scan. Click the button above.
+        <button id="runAdvancedDiagBtn" class="btn-primary" style="font-size:18px; padding:12px 36px; border-radius:30px; box-shadow:0 4px 12px rgba(59,130,246,0.3);">
+            <i class="fas fa-play"></i> Run Advanced Scan
+        </button>
+        <div id="advancedDiagContainer" style="margin-top:24px;">
+            <div style="padding:40px; text-align:center; color:#6B7280; border:2px dashed #e5e7eb; border-radius:12px;">
+                <i class="fas fa-microchip" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.5;"></i>
+                <span style="font-size:16px;">Click the button above to start the scan.</span>
             </div>
         </div>
     `;
 
     container.innerHTML = pageHtml;
 
-    // ---- Attach button event ----
     const runBtn = document.getElementById('runAdvancedDiagBtn');
     const diagContainer = document.getElementById('advancedDiagContainer');
 
-    if (!runBtn) {
-        console.error('[Advanced] Button not found!');
-        return;
-    }
-
-    // Remove any existing listeners by cloning
-    const newBtn = runBtn.cloneNode(true);
-    runBtn.parentNode.replaceChild(newBtn, runBtn);
-
-    newBtn.addEventListener('click', async function() {
-        console.log('[Advanced] Button clicked!');
+    runBtn.addEventListener('click', async function() {
         const btn = this;
-        const containerEl = document.getElementById('advancedDiagContainer');
-
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
-
+        diagContainer.innerHTML = getModernSpinnerHTML('Initializing advanced diagnostics...');
         showLoading();
-        containerEl.innerHTML = getModernSpinnerHTML('Initializing advanced diagnostics...');
 
         try {
-            // Double-check module
-            if (!window.SmartHub?.advanceDiagnostic) {
-                throw new Error('Advanced diagnostic module not available');
-            }
-
             const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
                 currentDeviceId,
-                function(msg) {
-                    const textEl = containerEl.querySelector('.loading-text');
+                (msg) => {
+                    const textEl = diagContainer.querySelector('.loading-text');
                     if (textEl) textEl.textContent = msg;
                 }
             );
-
             hideLoading();
             window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
-            console.log('[Advanced] Scan completed successfully');
-
         } catch (err) {
             hideLoading();
-            console.error('[Advanced] Error:', err);
-            containerEl.innerHTML = `
-                <div style="color: #d32f2f; padding: 16px; background: #ffebee; border-radius: 8px; border-left: 4px solid #d32f2f;">
-                    <strong>❌ Error:</strong> ${escapeHtml(err.message || 'Unknown error')}
+            diagContainer.innerHTML = `
+                <div style="color:#d32f2f; padding:20px; background:#ffebee; border-radius:8px; border-left:4px solid #d32f2f;">
+                    <strong>❌ Error:</strong> ${escapeHtml(err.message)}
                     <br><br>
-                    <button onclick="renderAdvancedDiagnostic()" class="btn-secondary" style="padding: 4px 16px; font-size: 12px;">
-                        🔄 Retry
-                    </button>
+                    <button onclick="renderAdvancedDiagnostic()" class="btn-secondary">🔄 Retry</button>
                 </div>
             `;
         } finally {

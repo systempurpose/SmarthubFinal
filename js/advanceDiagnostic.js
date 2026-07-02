@@ -382,59 +382,38 @@
         return { summary: `Deep scan unavailable: ${lastError}` };
     }
 
-        async function performRootkitScan(deviceId) {
-        // Define candidates in order of most likely based on your other endpoints
-        const candidates = [
-            // 1. GET without /api, path param (like deep scan)
-            { url: `/rootkit-scan/${deviceId}`, method: 'GET' },
-            // 2. GET without /api, query param
-            { url: `/rootkit-scan?deviceId=${deviceId}`, method: 'GET' },
-            // 3. GET with /api, query param
-            { url: `/api/rootkit-scan?deviceId=${deviceId}`, method: 'GET' },
-            // 4. GET with /api, path param
-            { url: `/api/rootkit-scan/${deviceId}`, method: 'GET' },
-            // 5. POST with /api, JSON body (common for scans)
-            { url: `/api/rootkit-scan`, method: 'POST', body: { deviceId } },
-            // 6. POST without /api, JSON body
-            { url: `/rootkit-scan`, method: 'POST', body: { deviceId } },
-            // 7. POST with /api, path param
-            { url: `/api/rootkit-scan/${deviceId}`, method: 'POST' },
-            // 8. GET no params (maybe global scan)
-            { url: `/rootkit-scan`, method: 'GET' },
-        ];
+      async function performRootkitScan(deviceId) {
+    const primaryUrl = `/api/rootkit-scan?deviceId=${encodeURIComponent(deviceId)}`;
+    console.log(`[RootkitScan] Trying primary: GET ${primaryUrl}`);
 
-        console.log('[RootkitScan] Starting scan for device:', deviceId);
-        let lastError = 'No candidate succeeded';
+    try {
+        const res = await fetch(primaryUrl);
+        const data = await res.json().catch(() => ({}));
 
-        for (const candidate of candidates) {
-            try {
-                const options = {
-                    method: candidate.method,
-                    headers: { 'Content-Type': 'application/json' },
-                };
-                if (candidate.body) {
-                    options.body = JSON.stringify(candidate.body);
-                }
-                console.log(`[RootkitScan] Trying: ${candidate.method} ${candidate.url}`, candidate.body ? 'with body' : '');
-                const res = await fetch(candidate.url, options);
-                if (res.ok) {
-                    const data = await res.json();
-                    let summary = 'Rootkit scan completed';
-                    if (data.summary) summary = data.summary;
-                    else if (data.message) summary = data.message;
-                    else if (data.result) summary = data.result;
-                    console.log(`[RootkitScan] Success! URL: ${candidate.method} ${candidate.url}`);
-                    return { summary };
-                }
-                console.log(`[RootkitScan] Failed: ${candidate.method} ${candidate.url} → HTTP ${res.status}`);
-                lastError = `${candidate.method} ${candidate.url} → HTTP ${res.status}`;
-            } catch (e) {
-                console.log(`[RootkitScan] Error: ${candidate.method} ${candidate.url} → ${e.message}`);
-                lastError = `${candidate.method} ${candidate.url} → ${e.message}`;
-            }
+        if (res.ok) {
+            let summary = 'Rootkit scan completed';
+            if (data.summary) summary = data.summary;
+            else if (data.message) summary = data.message;
+            else if (data.result) summary = data.result;
+            else if (data.error) summary = data.error;
+            console.log(`[RootkitScan] ✅ Success`);
+            return { summary };
         }
-        return { summary: `Rootkit scan unavailable: ${lastError}` };
+
+        // Try to read error details from the response body
+        let errorDetail = `HTTP ${res.status}`;
+        if (data.error) errorDetail = data.error;
+        else if (data.message) errorDetail = data.message;
+
+        if (res.status === 500) {
+            return { summary: `Rootkit scan failed: server error – ${errorDetail}` };
+        }
+        return { summary: `Rootkit scan failed: ${errorDetail}` };
+    } catch (e) {
+        console.log(`[RootkitScan] Primary error: ${e.message}`);
+        return { summary: `Rootkit scan unavailable: ${e.message}` };
     }
+}
 
     // ---- Public API ----
     window.SmartHub = window.SmartHub || {};

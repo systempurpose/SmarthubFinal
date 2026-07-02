@@ -5,8 +5,41 @@ const router = Router();
 
 // Helper: run ADB command and return trimmed output
 async function adbShell(deviceId: string, cmd: string): Promise<string> {
-  const out = await adb(`-s ${deviceId} shell ${cmd}`);
-  return out.trim();
+  try {
+    const out = await adb('-s', deviceId, 'shell', cmd);
+    return String(out || '').trim();
+  } catch (err: any) {
+    console.warn(`[rootkit-scan] ADB shell command failed: ${cmd}`, err?.message || err);
+    return '';
+  }
+}
+
+async function checkDeviceAvailability(deviceId: string): Promise<{ connected: boolean; message: string }> {
+  try {
+    const out = await adb('devices');
+    const lines = out
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (lines[0]?.toLowerCase().includes('list of devices')) {
+      lines.shift();
+    }
+
+    const match = lines.find(line => line.split(/\s+/)[0] === deviceId);
+    if (!match) {
+      return { connected: false, message: 'Device is not currently detected by ADB.' };
+    }
+
+    const state = match.split(/\s+/)[1] || '';
+    if (!state || state.toLowerCase() !== 'device') {
+      return { connected: false, message: `Device state is "${state || 'unknown'}".` };
+    }
+
+    return { connected: true, message: '' };
+  } catch (err: any) {
+    return { connected: false, message: err?.message || 'ADB is not available.' };
+  }
 }
 
 // Check dmesg for kernel anomalies
@@ -52,6 +85,21 @@ router.get('/rootkit-scan', async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
   try {
+    const availability = await checkDeviceAvailability(deviceId);
+    if (!availability.connected) {
+      return res.json({
+        ok: false,
+        dmesgAnomalies: [],
+        suspiciousModules: [],
+        allModules: [],
+        hiddenProcesses: [],
+        rootkitIndicators: false,
+        summary: `Unable to run rootkit scan: ${availability.message}`,
+        error: availability.message,
+        unavailable: true
+      });
+    }
+
     const [dmesgAnomalies, modules, hiddenPids] = await Promise.all([
       checkDmesg(deviceId),
       checkModules(deviceId),
@@ -63,7 +111,10 @@ router.get('/rootkit-scan', async (req, res) => {
       suspiciousModules: modules.filter(m => m.suspicious).map(m => m.module),
       allModules: modules,
       hiddenProcesses: hiddenPids,
-      rootkitIndicators: (dmesgAnomalies.length > 0 || modules.some(m => m.suspicious) || hiddenPids.length > 0)
+      rootkitIndicators: (dmesgAnomalies.length > 0 || modules.some(m => m.suspicious) || hiddenPids.length > 0),
+      summary: dmesgAnomalies.length || modules.some(m => m.suspicious) || hiddenPids.length
+        ? 'Potential kernel or process anomalies were detected.'
+        : 'No obvious kernel or process anomalies were detected.'
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
