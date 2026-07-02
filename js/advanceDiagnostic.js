@@ -45,7 +45,7 @@
         return Math.floor(date.getTime() / 1000);
     }
 
-    // ---- Individual software-fixable tests ----
+    // ---- Individual software-fixable tests (unchanged) ----
 
     async function testAppCrashes() {
         try {
@@ -140,25 +140,22 @@
 
     async function testGhostTouch() {
         try {
-            // Check if screen is on – if on, test is invalid
             const screenState = await adb('dumpsys window policy | grep mDreamingLockscreen');
             const isScreenOn = screenState.output.includes('mDreamingLockscreen=false');
             if (isScreenOn) {
                 return { name: 'Ghost Touch', passed: true, message: 'Skipped (screen is on – cannot test accurately)', fix: '' };
             }
 
-            // Try getevent – may fail on some devices
             let run1, run2;
             try {
                 run1 = await adb('getevent -t -c 100');
                 await new Promise(r => setTimeout(r, 2000));
                 run2 = await adb('getevent -t -c 100');
             } catch (e) {
-                // Fallback: try dumpsys input to see if there are recent touches
                 const dump = await adb('dumpsys input');
                 const touchEvents = dump.output.match(/TOUCH: /g) || [];
                 const count = touchEvents.length;
-                const passed = count < 10; // threshold
+                const passed = count < 10;
                 return {
                     name: 'Ghost Touch',
                     passed,
@@ -357,51 +354,86 @@
         return results;
     }
 
-    // ---- Deep & Rootkit scans (FIXED) ----
+    // ---- Deep & Rootkit scans (FIXED: tries GET & POST, multiple paths) ----
     async function performDeepScan(deviceId) {
-        try {
-            // Try multiple endpoint patterns
-            let res;
+        const urls = [
+            `/deep-scan/${deviceId}/full?raw=0`,
+            `/deep-scan?deviceId=${deviceId}`,
+            `/api/deep-scan?deviceId=${deviceId}`
+        ];
+        let lastError;
+        for (const url of urls) {
             try {
-                res = await fetch(`/deep-scan/${deviceId}/full?raw=0`);
-            } catch {
-                res = await fetch(`/deep-scan?deviceId=${deviceId}`);
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    let summary = 'No issues found';
+                    if (data.health?.summary) summary = data.health.summary;
+                    else if (data.findings?.length) summary = `${data.findings.length} findings`;
+                    else if (data.summary) summary = data.summary;
+                    else if (data.message) summary = data.message;
+                    return { summary };
+                }
+                lastError = `HTTP ${res.status}: ${res.statusText}`;
+            } catch (e) {
+                lastError = e.message;
             }
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-
-            const data = await res.json();
-            let summary = 'No issues found';
-            if (data.health && data.health.summary) summary = data.health.summary;
-            else if (data.findings && data.findings.length) summary = `${data.findings.length} findings`;
-            else if (data.summary) summary = data.summary;
-            else if (data.message) summary = data.message;
-
-            return { summary };
-        } catch (err) {
-            return { summary: `Deep scan unavailable: ${err.message}` };
         }
+        return { summary: `Deep scan unavailable: ${lastError}` };
     }
 
-    async function performRootkitScan(deviceId) {
-        try {
-            let res;
+        async function performRootkitScan(deviceId) {
+        // Define candidates in order of most likely based on your other endpoints
+        const candidates = [
+            // 1. GET without /api, path param (like deep scan)
+            { url: `/rootkit-scan/${deviceId}`, method: 'GET' },
+            // 2. GET without /api, query param
+            { url: `/rootkit-scan?deviceId=${deviceId}`, method: 'GET' },
+            // 3. GET with /api, query param
+            { url: `/api/rootkit-scan?deviceId=${deviceId}`, method: 'GET' },
+            // 4. GET with /api, path param
+            { url: `/api/rootkit-scan/${deviceId}`, method: 'GET' },
+            // 5. POST with /api, JSON body (common for scans)
+            { url: `/api/rootkit-scan`, method: 'POST', body: { deviceId } },
+            // 6. POST without /api, JSON body
+            { url: `/rootkit-scan`, method: 'POST', body: { deviceId } },
+            // 7. POST with /api, path param
+            { url: `/api/rootkit-scan/${deviceId}`, method: 'POST' },
+            // 8. GET no params (maybe global scan)
+            { url: `/rootkit-scan`, method: 'GET' },
+        ];
+
+        console.log('[RootkitScan] Starting scan for device:', deviceId);
+        let lastError = 'No candidate succeeded';
+
+        for (const candidate of candidates) {
             try {
-                res = await fetch(`/rootkit-scan/${deviceId}`);
-            } catch {
-                res = await fetch(`/rootkit-scan?deviceId=${deviceId}`);
+                const options = {
+                    method: candidate.method,
+                    headers: { 'Content-Type': 'application/json' },
+                };
+                if (candidate.body) {
+                    options.body = JSON.stringify(candidate.body);
+                }
+                console.log(`[RootkitScan] Trying: ${candidate.method} ${candidate.url}`, candidate.body ? 'with body' : '');
+                const res = await fetch(candidate.url, options);
+                if (res.ok) {
+                    const data = await res.json();
+                    let summary = 'Rootkit scan completed';
+                    if (data.summary) summary = data.summary;
+                    else if (data.message) summary = data.message;
+                    else if (data.result) summary = data.result;
+                    console.log(`[RootkitScan] Success! URL: ${candidate.method} ${candidate.url}`);
+                    return { summary };
+                }
+                console.log(`[RootkitScan] Failed: ${candidate.method} ${candidate.url} → HTTP ${res.status}`);
+                lastError = `${candidate.method} ${candidate.url} → HTTP ${res.status}`;
+            } catch (e) {
+                console.log(`[RootkitScan] Error: ${candidate.method} ${candidate.url} → ${e.message}`);
+                lastError = `${candidate.method} ${candidate.url} → ${e.message}`;
             }
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-
-            const data = await res.json();
-            let summary = 'Rootkit scan completed';
-            if (data.summary) summary = data.summary;
-            else if (data.message) summary = data.message;
-            else if (data.result) summary = data.result;
-
-            return { summary };
-        } catch (err) {
-            return { summary: `Rootkit scan unavailable: ${err.message}` };
         }
+        return { summary: `Rootkit scan unavailable: ${lastError}` };
     }
 
     // ---- Public API ----
