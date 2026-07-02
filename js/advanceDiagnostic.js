@@ -45,7 +45,7 @@
         return Math.floor(date.getTime() / 1000);
     }
 
-    // ---- Individual software-fixable tests (with anti-false-positive) ----
+    // ---- Individual software-fixable tests ----
 
     async function testAppCrashes() {
         try {
@@ -357,21 +357,51 @@
         return results;
     }
 
-    // ---- Deep & Rootkit (keep existing) ----
+    // ---- Deep & Rootkit scans (FIXED) ----
     async function performDeepScan(deviceId) {
         try {
-            const res = await fetch(`/deep-scan?deviceId=${deviceId}`);
-            if (!res.ok) throw new Error('Deep scan failed');
-            return await res.json();
-        } catch { return { summary: 'Deep scan unavailable' }; }
+            // Try multiple endpoint patterns
+            let res;
+            try {
+                res = await fetch(`/deep-scan/${deviceId}/full?raw=0`);
+            } catch {
+                res = await fetch(`/deep-scan?deviceId=${deviceId}`);
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+            const data = await res.json();
+            let summary = 'No issues found';
+            if (data.health && data.health.summary) summary = data.health.summary;
+            else if (data.findings && data.findings.length) summary = `${data.findings.length} findings`;
+            else if (data.summary) summary = data.summary;
+            else if (data.message) summary = data.message;
+
+            return { summary };
+        } catch (err) {
+            return { summary: `Deep scan unavailable: ${err.message}` };
+        }
     }
 
     async function performRootkitScan(deviceId) {
         try {
-            const res = await fetch(`/rootkit-scan?deviceId=${deviceId}`);
-            if (!res.ok) throw new Error('Rootkit scan failed');
-            return await res.json();
-        } catch { return { summary: 'Rootkit scan unavailable' }; }
+            let res;
+            try {
+                res = await fetch(`/rootkit-scan/${deviceId}`);
+            } catch {
+                res = await fetch(`/rootkit-scan?deviceId=${deviceId}`);
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+            const data = await res.json();
+            let summary = 'Rootkit scan completed';
+            if (data.summary) summary = data.summary;
+            else if (data.message) summary = data.message;
+            else if (data.result) summary = data.result;
+
+            return { summary };
+        } catch (err) {
+            return { summary: `Rootkit scan unavailable: ${err.message}` };
+        }
     }
 
     // ---- Public API ----
@@ -451,10 +481,16 @@
 
             // Deep & Rootkit summaries
             if (deep) {
-                html += `<div style="margin-top:16px; padding:12px; background:#f8f9fa; border-radius:8px;"><h4 style="margin:0 0 4px 0;">🔬 Deep Scan</h4><p style="margin:0;">${escapeHtml(deep.summary || 'No issues found')}</p></div>`;
+                html += `<div style="margin-top:16px; padding:12px; background:#f8f9fa; border-radius:8px;">
+                    <h4 style="margin:0 0 4px 0;">🔬 Deep Scan</h4>
+                    <p style="margin:0;">${escapeHtml(deep.summary || 'No issues found')}</p>
+                </div>`;
             }
             if (rootkit) {
-                html += `<div style="margin-top:8px; padding:12px; background:#f8f9fa; border-radius:8px;"><h4 style="margin:0 0 4px 0;">🛡️ Rootkit Scan</h4><p style="margin:0;">${escapeHtml(rootkit.summary || 'Clean')}</p></div>`;
+                html += `<div style="margin-top:8px; padding:12px; background:#f8f9fa; border-radius:8px;">
+                    <h4 style="margin:0 0 4px 0;">🛡️ Rootkit Scan</h4>
+                    <p style="margin:0;">${escapeHtml(rootkit.summary || 'Clean')}</p>
+                </div>`;
             }
 
             container.innerHTML = html;
