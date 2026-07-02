@@ -760,6 +760,114 @@ async function testSuspiciousScan() {
 }
 
 
+// ==================== ADVANCED DIAGNOSTIC PAGE ====================
+// ==================== ADVANCED DIAGNOSTIC PAGE ====================
+// ==================== ADVANCED DIAGNOSTIC PAGE ====================
+async function renderAdvancedDiagnostic() {
+    const container = document.getElementById('pageContent');
+    console.log('[Advanced] renderAdvancedDiagnostic called');
+
+    if (!currentDeviceId) {
+        container.innerHTML = `
+            <div class="card" style="text-align: center; padding: 40px;">
+                <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
+                <h2>No Device Connected</h2>
+                <p>Please connect your Android phone via USB and enable USB debugging.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Check module
+    if (!window.SmartHub || !window.SmartHub.advanceDiagnostic) {
+        console.error('[Advanced] advanceDiagnostic module not loaded!');
+        container.innerHTML = `
+            <div class="card" style="padding: 20px; background: #ffebee; color: #c62828;">
+                ❌ Advanced diagnostic module not loaded. Check script inclusion and console for errors.
+            </div>
+        `;
+        return;
+    }
+    console.log('[Advanced] Module loaded successfully');
+
+    const pageHtml = `
+        <h1 style="margin-bottom: 16px;">🔍 Advanced Diagnostics</h1>
+        <p style="color: #6B7280; margin-bottom: 20px;">Deep‑scan apps and check for rootkits on the selected device.</p>
+        <div style="margin: 16px 0;">
+            <button id="runAdvancedDiagBtn" class="btn-primary" style="font-size: 16px; padding: 10px 28px;">
+                <i class="fas fa-play"></i> Run Advanced Scan
+            </button>
+        </div>
+        <div id="advancedDiagContainer" style="margin-top: 20px;">
+            <div style="padding: 20px; text-align: center; color: #6B7280;">
+                <i class="fas fa-microchip" style="font-size: 40px; display: block; margin-bottom: 12px;"></i>
+                Ready to scan. Click the button above.
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = pageHtml;
+
+    // ---- Attach button event ----
+    const runBtn = document.getElementById('runAdvancedDiagBtn');
+    const diagContainer = document.getElementById('advancedDiagContainer');
+
+    if (!runBtn) {
+        console.error('[Advanced] Button not found!');
+        return;
+    }
+
+    // Remove any existing listeners by cloning
+    const newBtn = runBtn.cloneNode(true);
+    runBtn.parentNode.replaceChild(newBtn, runBtn);
+
+    newBtn.addEventListener('click', async function() {
+        console.log('[Advanced] Button clicked!');
+        const btn = this;
+        const containerEl = document.getElementById('advancedDiagContainer');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+
+        showLoading();
+        containerEl.innerHTML = getModernSpinnerHTML('Initializing advanced diagnostics...');
+
+        try {
+            // Double-check module
+            if (!window.SmartHub?.advanceDiagnostic) {
+                throw new Error('Advanced diagnostic module not available');
+            }
+
+            const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
+                currentDeviceId,
+                function(msg) {
+                    const textEl = containerEl.querySelector('.loading-text');
+                    if (textEl) textEl.textContent = msg;
+                }
+            );
+
+            hideLoading();
+            window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
+            console.log('[Advanced] Scan completed successfully');
+
+        } catch (err) {
+            hideLoading();
+            console.error('[Advanced] Error:', err);
+            containerEl.innerHTML = `
+                <div style="color: #d32f2f; padding: 16px; background: #ffebee; border-radius: 8px; border-left: 4px solid #d32f2f;">
+                    <strong>❌ Error:</strong> ${escapeHtml(err.message || 'Unknown error')}
+                    <br><br>
+                    <button onclick="renderAdvancedDiagnostic()" class="btn-secondary" style="padding: 4px 16px; font-size: 12px;">
+                        🔄 Retry
+                    </button>
+                </div>
+            `;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Run Advanced Scan';
+        }
+    });
+}
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
@@ -4303,7 +4411,7 @@ function initNavigation() {
                 else if (page === 'ai-conclusion') await renderAIConclusion();
                 else if (page === 'repairs') await renderRepairs();
                 else if (page === 'bsod') await renderBsodDiagnosis();
-                else if (page === 'live-screen') await renderLiveScreen();
+                else if (page === 'advanced') await renderAdvancedDiagnostic();
                 else await renderDashboard();
             } catch (err) {
                 console.error('Page render error:', err);
