@@ -37,7 +37,6 @@
     }
 
     function parseLogcatTimestamp(line) {
-        // Matches "MM-DD HH:MM:SS.mmm" or "MM-DD HH:MM:SS"
         const match = line.match(/(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
         if (!match) return null;
         const [, month, day, hour, min, sec] = match.map(Number);
@@ -61,18 +60,16 @@
                 return { name: 'App Crashes', passed: true, message: 'No recent crashes', fix: '' };
             }
 
-            // Parse timestamps and count unique packages
             const now = await getCurrentTimeSeconds();
             const crashPackages = new Set();
             const recentCrashes = [];
 
             for (const line of lines) {
                 const ts = parseLogcatTimestamp(line);
-                if (ts && (now - ts) < 900) { // Only crashes in the last 15 minutes
+                if (ts && (now - ts) < 900) {
                     const pkgMatch = line.match(/FATAL EXCEPTION:\s+(\S+)/);
                     if (pkgMatch) {
                         const pkg = pkgMatch[1];
-                        // Ignore known benign system packages
                         if (!pkg.includes('android.process.acore') && !pkg.includes('com.android.phone')) {
                             crashPackages.add(pkg);
                             recentCrashes.push(pkg);
@@ -81,7 +78,6 @@
                 }
             }
 
-            // Only flag if >2 unique apps crashed recently
             const uniqueCount = crashPackages.size;
             const passed = uniqueCount < 3;
             const msg = passed 
@@ -92,7 +88,7 @@
                 name: 'App Crashes',
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Check the app(s) above. Clear data: `adb shell pm clear <package>` or uninstall.'
+                fix: passed ? '' : 'Clear app data: `adb shell pm clear <package>` or uninstall.'
             };
         } catch {
             return { name: 'App Crashes', passed: false, message: 'Failed to read logs', fix: 'Check ADB connection.' };
@@ -109,14 +105,7 @@
                 return { name: 'ANR (App Freezes)', passed: true, message: 'No ANR detected', fix: '' };
             }
 
-            // Check if ANR is recent (look for timestamp in output, fallback to uptime check)
-            const recentAnrs = anrMatches.filter(match => {
-                // If we can't parse timestamp, assume it's recent only if uptime < 600 (10 min)
-                // Actually, we check if there is a "Process:" line after it. Better: we rely on the fact that dumpsys anr clears on reboot.
-                // If uptime > 3600 (1 hour), ANR might be stale. Flag only if uptime < 3600.
-                return uptime < 3600;
-            });
-
+            const recentAnrs = anrMatches.filter(match => uptime < 3600);
             const passed = recentAnrs.length === 0;
             return {
                 name: 'ANR (App Freezes)',
@@ -132,14 +121,12 @@
     async function testKernelPanic() {
         try {
             const uptime = await getDeviceUptimeSeconds();
-            // If uptime > 86400 (24 hours), ignore last_kmsg (panic was long ago)
             if (uptime > 86400) {
                 return { name: 'Kernel Panic', passed: true, message: 'Uptime >24h, ignoring old panic logs', fix: '' };
             }
 
             const result = await adb('cat /proc/last_kmsg 2>/dev/null || echo "no_last_kmsg"');
             const hasPanic = result.output.includes('panic') || result.output.includes('Oops');
-            // Only flag if panic occurred in this boot cycle (implied by uptime check above)
             return {
                 name: 'Kernel Panic',
                 passed: !hasPanic || uptime > 86400,
@@ -153,32 +140,45 @@
 
     async function testGhostTouch() {
         try {
-            // Check if screen is on – if on, test is invalid (user might be touching)
+            // Check if screen is on – if on, test is invalid
             const screenState = await adb('dumpsys window policy | grep mDreamingLockscreen');
             const isScreenOn = screenState.output.includes('mDreamingLockscreen=false');
             if (isScreenOn) {
                 return { name: 'Ghost Touch', passed: true, message: 'Skipped (screen is on – cannot test accurately)', fix: '' };
             }
 
-            // Run the test twice, 2 seconds apart
-            const run1 = await adb('getevent -t -c 100');
-            await new Promise(r => setTimeout(r, 2000));
-            const run2 = await adb('getevent -t -c 100');
+            // Try getevent – may fail on some devices
+            let run1, run2;
+            try {
+                run1 = await adb('getevent -t -c 100');
+                await new Promise(r => setTimeout(r, 2000));
+                run2 = await adb('getevent -t -c 100');
+            } catch (e) {
+                // Fallback: try dumpsys input to see if there are recent touches
+                const dump = await adb('dumpsys input');
+                const touchEvents = dump.output.match(/TOUCH: /g) || [];
+                const count = touchEvents.length;
+                const passed = count < 10; // threshold
+                return {
+                    name: 'Ghost Touch',
+                    passed,
+                    message: passed ? `No ghost touch (${count} recent events)` : `Possible ghost touch (${count} events)`,
+                    fix: passed ? '' : 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity".'
+                };
+            }
 
             const count1 = run1.output.split('\n').filter(l => l.trim() && !l.includes('SYN_REPORT')).length;
             const count2 = run2.output.split('\n').filter(l => l.trim() && !l.includes('SYN_REPORT')).length;
-
-            // Only flag if BOTH runs show events (eliminates accidental interference)
             const passed = !(count1 > 3 && count2 > 3);
             const avgCount = Math.round((count1 + count2) / 2);
 
             return {
-                name: 'Ghost Touch (Driver Check)',
+                name: 'Ghost Touch',
                 passed,
                 message: passed ? `No ghost touch (avg ${avgCount} events)` : `Possible ghost touch (avg ${avgCount} events)`,
-                fix: passed ? '' : 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware (vendor.img).'
+                fix: passed ? '' : 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware.'
             };
-        } catch {
+        } catch (err) {
             return { name: 'Ghost Touch', passed: false, message: 'Failed to read touch events', fix: 'Check ADB and touch driver.' };
         }
     }
@@ -187,7 +187,6 @@
         try {
             const data = await apiCall('/hardware/storage');
             const usedPct = data.percent || 0;
-            // Only flag if >92% (leaves buffer for normal usage)
             const passed = usedPct < 92;
             return {
                 name: 'Storage Full',
@@ -207,7 +206,6 @@
                 l.includes('Service death') || l.includes('Crash')
             );
 
-            // Group by service name to count unique restarts
             const serviceCounts = {};
             for (const line of lines) {
                 const match = line.match(/Service death.*?([\w.]+)/);
@@ -217,7 +215,6 @@
                 }
             }
 
-            // Only flag if any service crashed >2 times
             const problematic = Object.entries(serviceCounts).filter(([_, count]) => count > 2);
             const passed = problematic.length === 0;
             const msg = passed ? 'Stable' : `${problematic.length} service(s) crashed repeatedly: ${problematic.map(([s]) => s).join(', ')}`;
@@ -235,12 +232,10 @@
 
     async function testUIJank() {
         try {
-            // Get device RAM to adjust threshold
             const ramData = await apiCall('/hardware/ram');
             const totalRamGB = parseFloat(ramData.total) || 4;
-            const threshold = totalRamGB < 3 ? 10 : 5; // Lower-end devices get more slack
+            const threshold = totalRamGB < 3 ? 10 : 5;
 
-            // Get foreground app
             const fgResult = await adb('dumpsys window | grep mCurrentFocus | cut -d/ -f2 | cut -d} -f1');
             const fgPkg = fgResult.output.trim() || 'com.android.systemui';
 
@@ -270,12 +265,8 @@
     async function testBackgroundWakeups() {
         try {
             const result = await adb('dumpsys deviceidle');
-            const lines = result.output.split('\n').filter(l => 
-                l.includes('Wakeup') || l.includes('wakeup')
-            );
-            // Count unique wakeups per hour (rough estimate)
+            const lines = result.output.split('\n').filter(l => l.includes('Wakeup') || l.includes('wakeup'));
             const count = lines.length;
-            // Typical idle wakeups per hour < 20. Flag if > 30.
             const passed = count < 30;
             return {
                 name: 'Excessive Wakeups (Battery Drain)',
@@ -293,7 +284,6 @@
             const result = await adb('logcat -b system -t 200 | grep -i "wifi.*crash\\|bluetooth.*crash" || echo ""');
             const lines = result.output.split('\n').filter(l => l.trim() && !l.includes('grep'));
             const count = lines.length;
-            // Only flag if >2 crashes in log window
             const passed = count <= 2;
             return {
                 name: 'WiFi/Bluetooth Stack Stability',
@@ -308,10 +298,8 @@
 
     async function testThermalThrottling() {
         try {
-            // Check if device is charging – ignore thermal if charging (normal)
             const battery = await apiCall('/hardware/battery');
             const isCharging = battery.charging === true;
-
             const temp = parseFloat(battery.temperature) || 0;
             const passed = temp < 45 || isCharging;
 
@@ -322,11 +310,10 @@
                 fix: passed ? '' : 'Disable heavy background apps. Wipe cache partition from recovery.'
             };
         } catch {
-            // Try logcat fallback
             try {
                 const result = await adb('logcat -b events -t 50 | grep thermal');
                 const lines = result.output.split('\n').filter(l => l.includes('thermal'));
-                const passed = lines.length < 2; // ignore single events
+                const passed = lines.length < 2;
                 return {
                     name: 'Thermal Throttling',
                     passed,
@@ -416,11 +403,34 @@
             const { software, deep, rootkit } = diagResults;
             let html = '';
 
+            // Overall score
+            const total = software.length;
+            const passed = software.filter(t => t.passed).length;
+            const pct = total > 0 ? Math.round((passed/total)*100) : 0;
+            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+            const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+
+            html += `
+                <div style="margin-bottom:20px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <div style="font-size:32px;">${icon}</div>
+                    <div>
+                        <strong style="font-size:20px; color:${color};">${pct}%</strong>
+                        <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
+                    </div>
+                    <div style="flex:1; min-width:100px;">
+                        <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
+                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Software cards
             if (software && software.length) {
-                html += `<h4 style="margin: 16px 0 8px;">🧪 Software Health Checks (Technician Report)</h4>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr)); gap: 12px;">`;
+                html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
                 for (const test of software) {
-                    const color = test.passed ? '#2e7d32' : '#d32f2f';
+                    const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
+                    const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
                     const icon = test.passed ? '✅' : '❌';
                     let fixHtml = '';
                     if (!test.passed && test.fix) {
@@ -429,7 +439,7 @@
                         </div>`;
                     }
                     html += `
-                        <div style="background: ${test.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 12px; border-left: 4px solid ${color};">
+                        <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
                             <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
                             <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
                             ${fixHtml}
@@ -439,24 +449,13 @@
                 html += `</div>`;
             }
 
+            // Deep & Rootkit summaries
             if (deep) {
-                html += `<div style="margin-top:16px;"><h4>🔬 Deep Scan</h4><p>${escapeHtml(deep.summary || 'No issues found')}</p></div>`;
+                html += `<div style="margin-top:16px; padding:12px; background:#f8f9fa; border-radius:8px;"><h4 style="margin:0 0 4px 0;">🔬 Deep Scan</h4><p style="margin:0;">${escapeHtml(deep.summary || 'No issues found')}</p></div>`;
             }
             if (rootkit) {
-                html += `<div><h4>🛡️ Rootkit Scan</h4><p>${escapeHtml(rootkit.summary || 'Clean')}</p></div>`;
+                html += `<div style="margin-top:8px; padding:12px; background:#f8f9fa; border-radius:8px;"><h4 style="margin:0 0 4px 0;">🛡️ Rootkit Scan</h4><p style="margin:0;">${escapeHtml(rootkit.summary || 'Clean')}</p></div>`;
             }
-
-            const total = software.length;
-            const passed = software.filter(t => t.passed).length;
-            const pct = total > 0 ? Math.round((passed/total)*100) : 0;
-            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
-            html += `
-                <div style="margin-top:20px; padding:16px; background:#f8f9fa; border-radius:8px; text-align:center;">
-                    <strong>Overall Health Score:</strong>
-                    <span style="font-size:24px; font-weight:bold; color:${color};">${pct}%</span>
-                    <span style="display:block; font-size:14px; color:#6B7280;">${passed}/${total} software checks passed</span>
-                </div>
-            `;
 
             container.innerHTML = html;
         }
