@@ -14,6 +14,10 @@ export interface ThreatInfo {
   description: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
 }
+
+interface ThreatClassificationOptions {
+  allowPackageNameSignals?: boolean;
+}
 export type Finding = {
   id: string;
   title: string;
@@ -869,44 +873,68 @@ export interface AppRiskScore {
   level: RiskLevel;
 }
 
+// Add these constants and helper function at the top of heuristics.ts (if not already there)
+
+const RISKY_COMBOS = [
+    { perms: ['READ_SMS', 'INTERNET'], weight: 25 },
+    { perms: ['CAMERA', 'RECORD_AUDIO', 'INTERNET'], weight: 30 },
+    { perms: ['ACCESS_FINE_LOCATION', 'INTERNET', 'READ_CONTACTS'], weight: 20 },
+    { perms: ['REQUEST_INSTALL_PACKAGES', 'INTERNET'], weight: 35 },
+    { perms: ['SYSTEM_ALERT_WINDOW', 'INTERNET'], weight: 20 },
+    { perms: ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'INTERNET'], weight: 15 },
+    { perms: ['READ_PHONE_STATE', 'INTERNET', 'READ_SMS'], weight: 30 },
+];
+
+function scorePermissionCombos(perms: string[]): number {
+    let extra = 0;
+    for (const combo of RISKY_COMBOS) {
+        if (combo.perms.every(p => perms.includes(p))) {
+            extra += combo.weight;
+        }
+    }
+    return Math.min(extra, 50); // cap at 50 extra points
+}
+
+// Updated scoreAppRisk function
 export function scoreAppRisk(perms: string[], path?: string): AppRiskScore {
-  const { risk, riskyPermissions, moderatePermissions } = assessAppRisk(perms);
+    const { risk, riskyPermissions, moderatePermissions } = assessAppRisk(perms);
 
-  let score = 0;
-  const riskyCount = riskyPermissions.length;
-  const moderateCount = moderatePermissions.length;
+    let score = 0;
+    const riskyCount = riskyPermissions.length;
+    const moderateCount = moderatePermissions.length;
 
-  if (risk === 'risky') {
-    // Base 60 + up to 30 extra for multiple risky permissions
-    score = 60 + Math.min(30, riskyCount * 8);
-  } else if (risk === 'moderate') {
-    // Base 30 + up to 20 extra for multiple moderate permissions
-    score = 30 + Math.min(20, moderateCount * 3);
-  } else {
-    // Safe apps with some permissions get a small base (5)
-    score = perms.length > 0 ? 5 : 0;
-  }
+    if (risk === 'risky') {
+        // Base 60 + up to 30 extra for multiple risky permissions
+        score = 60 + Math.min(30, riskyCount * 8);
+    } else if (risk === 'moderate') {
+        // Base 30 + up to 20 extra for multiple moderate permissions
+        score = 30 + Math.min(20, moderateCount * 3);
+    } else {
+        // Safe apps with some permissions get a small base (5)
+        score = perms.length > 0 ? 5 : 0;
+    }
 
-  // Penalize apps installed in user data (not system) – they are more likely to be suspicious
-  if (path && /^\/(data|mnt\/asec)/.test(path)) {
-    score += 10;
-  } else if (path && /^\/(system|product|system_ext)/.test(path)) {
-    score -= 5;
-  }
+    // Add permission combo scoring
+    const comboScore = scorePermissionCombos(perms);
+    score += comboScore;
 
-  // New: Penalize obfuscated package names (e.g., com.a.b.cd, random strings)
-  // This is a heuristic; can be refined.
-  // We'll apply this penalty only if the app is not from a legit store.
-  // For now, we add a small extra to score if the package name looks suspicious.
-  // (We'll handle the package name check outside this function for simplicity.)
+    // Penalize apps installed in user data (not system) – they are more likely to be suspicious
+    if (path && /^\/(data|mnt\/asec)/.test(path)) {
+        score += 10;
+    } else if (path && /^\/(system|product|system_ext)/.test(path)) {
+        score -= 5;
+    }
 
-  score = Math.min(100, Math.max(0, score));
-  let level: RiskLevel;
-  if (score <= 29) level = 'safe';
-  else if (score <= 69) level = 'moderate';
-  else level = 'risky';
+    // Reduce false positives: don't penalize obfuscated package names if the app is from a trusted installer
+    // (This check is usually done outside this function, but we can skip it here)
 
-  return { score, level };
+    score = Math.min(100, Math.max(0, score));
+    let level: RiskLevel;
+    if (score <= 29) level = 'safe';
+    else if (score <= 69) level = 'moderate';
+    else level = 'risky';
+
+    return { score, level };
 }
 
 export function isObfuscatedPackageName(pkg: string): boolean {
@@ -1081,8 +1109,9 @@ function isHighRiskByPermissions(upperPerms: string[]): boolean {
     upperPerms.some(p => p.includes('READ_SMS') || p.includes('SEND_SMS') || p.includes('READ_CALL_LOG') || p.includes('WRITE_CALL_LOG'))
   );
 }
-export function classifyThreatTypes(packageName: string, permissions: string[]): ThreatInfo[] {
+export function classifyThreatTypes(packageName: string, permissions: string[], options: ThreatClassificationOptions = {}): ThreatInfo[] {
   const threats: ThreatInfo[] = [];
+  const allowPackageNameSignals = options.allowPackageNameSignals !== false;
   // Normalise permissions: strip 'android.permission.' prefix
   const permsShort = permissions.map(p => p.replace(/^android\.permission\./, ''));
 
@@ -1090,7 +1119,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
   const bankingKeywords = ['bank', 'pay', 'cash', 'wallet', 'credit', 'debit', 'finance', 'vbv', 'otp', 'secure'];
   const hasSmsPerm = permsShort.includes('READ_SMS') || permsShort.includes('SEND_SMS');
   const hasInternet = permsShort.includes('INTERNET');
-  if (hasSmsPerm && hasInternet && bankingKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+  if (allowPackageNameSignals && hasSmsPerm && hasInternet && bankingKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
     threats.push({
       type: 'banking_trojan',
       description: 'May steal banking credentials, intercept OTPs, and drain financial accounts.',
@@ -1123,7 +1152,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
   // Adware / click fraud indicators
   const adwareKeywords = ['ad', 'push', 'notification', 'click', 'reward', 'offer', 'ads', 'advert'];
   const hasOverlay = permsShort.includes('SYSTEM_ALERT_WINDOW');
-  if (adwareKeywords.some(kw => packageName.toLowerCase().includes(kw)) || hasOverlay) {
+  if (hasOverlay || (allowPackageNameSignals && adwareKeywords.some(kw => packageName.toLowerCase().includes(kw)))) {
     threats.push({
       type: 'adware',
       description: 'Shows intrusive ads, may simulate clicks to generate fraudulent revenue, drains battery and data.',
@@ -1133,7 +1162,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
 
   // Cryptominer indicators
   const minerKeywords = ['miner', 'crypto', 'bitcoin', 'eth', 'monero', 'mine'];
-  if (minerKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+  if (allowPackageNameSignals && minerKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
     threats.push({
       type: 'cryptominer',
       description: 'Uses your CPU to mine cryptocurrency, causing overheating, battery drain, and potential hardware damage.',
@@ -1143,7 +1172,7 @@ export function classifyThreatTypes(packageName: string, permissions: string[]):
 
   // Ransomware indicators
   const ransomKeywords = ['ransom', 'lock', 'encrypt', 'decrypt', 'unlock'];
-  if (ransomKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
+  if (allowPackageNameSignals && ransomKeywords.some(kw => packageName.toLowerCase().includes(kw))) {
     threats.push({
       type: 'ransomware',
       description: 'May lock your device or encrypt files and demand payment.',
@@ -1192,7 +1221,16 @@ export interface SuspiciousApp {
   reason: string;
   threatLevel: 'high' | 'medium' | 'low';
   suggestedAction: string;
-  threatTypes?: ThreatInfo[]; // optional, for backwards compatibility
+  threatTypes?: ThreatInfo[];
+  // ---- New fields for detailed UI ----
+  permissions: string[];              // full list of all permissions
+  dangerousPermissions: string[];     // only dangerous ones (from DANGEROUS_PERMISSIONS_LIST)
+  dangerousPermCount: number;         // count of dangerous permissions
+  isSideloaded: boolean;              // true if not from Play Store or known store
+  installer: string | null;           // installer package name, or null
+  installDate?: string;               // install date (if available)
+  lastUsed?: string;                 // last used timestamp (if available)
+  riskScore: number;                  // computed risk score (0-100)
 }
 
 // Known Play Store / legitimate installer package names
@@ -1209,6 +1247,19 @@ export const LEGITIMATE_INSTALLERS = [
   'com.amazon.venezia',          // Amazon Appstore
 ];
 
+export function isLikelyLegitPackageIdentity(pkg: string, installer?: string | null): boolean {
+  const name = String(pkg || '').trim();
+  if (!name) return false;
+  if (TRUSTED_LEGITIMATE_PACKAGES.has(name)) return true;
+  if (TRUSTED_EXACT_PACKAGES.includes(name)) return true;
+  if (TRUSTED_PREFIXES.some(prefix => name.startsWith(prefix))) return true;
+  if (installer && LEGITIMATE_INSTALLERS.includes(installer)) return true;
+  return false;
+}
+
+// Add this after the existing imports and before any functions
+
+
 export function detectSuspiciousApps(
   apps: AppWithPerms[],
   permsByPkg: Record<string, string[]>,
@@ -1216,13 +1267,17 @@ export function detectSuspiciousApps(
 ): SuspiciousApp[] {
   const suspicious: SuspiciousApp[] = [];
 
-  // Helper: Generate display name from package name
   function displayNameFromPackage(pkg: string): string {
+    const aliases: Record<string, string> = {
+      'com.global.foodpanda.android': 'Foodpanda',
+      'net.bat.store': 'Bat Store',
+      'jp.ne.ibis.ibispaintx.app': 'ibisPaint X',
+    };
+    if (aliases[pkg]) return aliases[pkg];
     let name = pkg.split('.').pop() || pkg;
     return name.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
-  // Helper: Detect system apps by path
   function isSystemApp(app: AppWithPerms): boolean {
     if (!app.path) return false;
     const lower = app.path.toLowerCase();
@@ -1231,7 +1286,6 @@ export function detectSuspiciousApps(
            lower.startsWith('/system_ext/');
   }
 
-  // Trusted sideloaded apps (never flag)
   const TRUSTED_SIDELOADED = new Set([
     'cyou.joiplay.joiplay',
     'cyou.joiplay.runtime.rpgmaker',
@@ -1240,7 +1294,6 @@ export function detectSuspiciousApps(
     'com.termux',
   ]);
 
-  // Known legitimate apps (never flag – prevents false positives)
   const TRUSTED_LEGITIMATE = new Set([
     'org.telegram.messenger',
     'org.telegram.messenger.web',
@@ -1270,8 +1323,11 @@ export function detectSuspiciousApps(
     'us.zoom.videomeetings',
     'com.arkgames.ggplay.tlonglobal',
     'mega.privacy.android.app',
-    'com.transsnet.store',      // if this is actually legitimate? keep as is or remove
+    'com.transsnet.store',
     'com.transsnet.store.gs',
+    'com.global.foodpanda.android',
+    'net.bat.store',
+    'jp.ne.ibis.ibispaintx.app',
   ]);
 
   const SYSTEM_PACKAGE_PREFIXES = [
@@ -1289,15 +1345,11 @@ export function detectSuspiciousApps(
     const pkg = app.packageName;
     if (!pkg) continue;
 
-    // Skip system apps
     if (isSystemApp(app)) continue;
-    // Skip known system package prefixes
     if (SYSTEM_PACKAGE_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
-    // Skip trusted prefixes (Google, Microsoft, etc.)
     if (TRUSTED_PREFIXES.some(prefix => pkg.startsWith(prefix))) continue;
     if (TRUSTED_EXACT_PACKAGES.includes(pkg)) continue;
     if (TRUSTED_SIDELOADED.has(pkg)) continue;
-    // Skip known legitimate apps (false positives)
     if (TRUSTED_LEGITIMATE.has(pkg)) continue;
 
     const perms = permsByPkg[pkg] || [];
@@ -1311,13 +1363,74 @@ export function detectSuspiciousApps(
     }
     const isSideloaded = !fromLegitStore;
 
-    // ----- RULE 1: Sideloaded + spyware keyword (high risk) -----
-    if (isSideloaded && spywareKeywords.some(kw => pkg.toLowerCase().includes(kw))) {
-      const reason = "Sideloaded app with suspicious package name – possible hidden camera/spyware.";
+    const risk = scoreAppRisk(perms, app.path);
+    let riskScore = risk.score;
+    if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
+      riskScore = Math.min(100, riskScore + 15);
+    }
+    riskScore = Math.min(100, Math.max(0, riskScore));
+
+    const dangerousPerms = perms.filter(p =>
+      DANGEROUS_PERMISSIONS_LIST.some(d => p.toUpperCase().includes(d))
+    );
+
+    const baseObj = {
+      packageName: pkg,
+      displayName: displayNameFromPackage(pkg),
+      permissions: perms,
+      dangerousPermissions: dangerousPerms,
+      dangerousPermCount: dangerousPerms.length,
+      isSideloaded: isSideloaded,
+      installer: installer,
+      installDate: (app as any).installDate,
+      lastUsed: (app as any).lastUsed,
+      riskScore: riskScore,
+    };
+
+    const storeLikelyLegit = fromLegitStore || isLikelyLegitPackageIdentity(pkg, installer);
+    const allowPackageNameSignals = !storeLikelyLegit;
+
+    if (storeLikelyLegit) {
+      const hasInternet = upper.some(p => p.includes('INTERNET'));
+      const hasAccessibility = upper.some(p => p.includes('BIND_ACCESSIBILITY_SERVICE'));
+      const hasInstallPackages = upper.some(p => p.includes('REQUEST_INSTALL_PACKAGES'));
+      const hasSms = upper.some(p => p.includes('READ_SMS') || p.includes('SEND_SMS'));
+      const hasOverlay = upper.some(p => p.includes('SYSTEM_ALERT_WINDOW'));
+      const hasDeviceAdmin = upper.some(p => p.includes('DEVICE_ADMIN'));
+      const spyCount = ['CAMERA', 'RECORD_AUDIO', 'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'READ_CALL_LOG'].filter(p => upper.some(v => v.includes(p))).length;
+
+      const highConfidence =
+        (hasAccessibility && hasInternet) ||
+        (hasInstallPackages && hasInternet) ||
+        (hasSms && hasInternet) ||
+        (spyCount >= 4 && hasInternet) ||
+        ((hasOverlay || hasDeviceAdmin) && hasInternet && (dangerousPerms.length >= 4 || riskScore >= 80));
+
+      if (highConfidence) {
+        const threatTypes = classifyThreatTypes(pkg, perms, { allowPackageNameSignals });
+        suspicious.push({
+          ...baseObj,
+          reason: 'Legit-store app shows high-confidence malware behavior.',
+          threatLevel: 'high',
+          suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+          threatTypes,
+        });
+      }
+      continue;
+    }
+
+    // ============================================================
+    // UNIVERSAL RULES – apply to ALL apps (including Play Store)
+    // ============================================================
+
+    // 1. Camera + Internet (spyware / data theft)
+    if (upper.some(p => p.includes('CAMERA')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 40;
+      const updatedScore = Math.min(100, riskScore + bonus);
       suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "App requests both camera and internet permissions – classic spyware pattern.",
         threatLevel: "high",
         suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
         threatTypes: classifyThreatTypes(pkg, perms)
@@ -1325,15 +1438,14 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // ----- RULE 2: Camera + Internet permissions (high risk) -----
-    const hasCamera = upper.some(p => p.includes('CAMERA'));
-    const hasInternet = upper.some(p => p.includes('INTERNET'));
-    if (hasCamera && hasInternet) {
-      const reason = "App requests both camera and internet permissions – classic spyware pattern.";
+    // 2. Accessibility + Internet (screen control + data exfil)
+    if (upper.some(p => p.includes('BIND_ACCESSIBILITY_SERVICE')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 50;
+      const updatedScore = Math.min(100, riskScore + bonus);
       suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
-        reason,
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "App with accessibility and internet permissions – can control your screen and send data out.",
         threatLevel: "high",
         suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
         threatTypes: classifyThreatTypes(pkg, perms)
@@ -1341,13 +1453,299 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // ----- RULE 3: Sideloaded apps (low risk, catch‑all) -----
-    if (isSideloaded) {
-      const reason = `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}.`;
+    // 3. Request Install Packages + Internet (payload dropper)
+    if (upper.some(p => p.includes('REQUEST_INSTALL_PACKAGES')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 45;
+      const updatedScore = Math.min(100, riskScore + bonus);
       suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "App that can install other apps and has internet access – may download and install malware payloads.",
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 4. Read SMS + Internet (SMS stealer)
+    if (upper.some(p => p.includes('READ_SMS')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 45;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "App can read SMS messages and has internet access – may steal OTPs and messages.",
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 5. Many dangerous permissions (≥6) – regardless of installer
+    if (dangerousPerms.length >= 6) {
+      const bonus = 30;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: `App requests unusually many dangerous permissions (${dangerousPerms.length}).`,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 6. Obfuscated package name + Internet (common in malware)
+    if (isObfuscatedPackageName(pkg) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 20;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "App has an obfuscated package name (random‑looking) and internet access – often used by malware.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 7. High risk score (≥70) + Internet – even if no dangerous perms (could be packed)
+    if (riskScore >= 70 && upper.some(p => p.includes('INTERNET'))) {
+      // already high, no bonus needed but keep as is
+      suspicious.push({
+        ...baseObj,
+        reason: `High risk score (${riskScore}/100) with internet access – likely packed/obfuscated malware.`,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ============================================================
+    // SIDELOADED‑ONLY RULES (extra suspicion for sideloaded apps)
+    // ============================================================
+
+    // 8. Overlay + Internet (adware) – only if sideloaded
+    if (isSideloaded && upper.some(p => p.includes('SYSTEM_ALERT_WINDOW')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 40;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app with overlay and internet permissions – can draw pop‑up ads and load them from the web.",
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 9. Boot + Internet (persistent background)
+   // ============================================================
+// Combined hidden adware: Boot + Network State + Internet
+// ============================================================
+// ============================================================
+// Combined hidden adware: Boot + Network State + Internet
+// ============================================================
+if (isSideloaded &&
+    upper.some(p => p.includes('RECEIVE_BOOT_COMPLETED')) &&
+    upper.some(p => p.includes('ACCESS_NETWORK_STATE')) &&
+    upper.some(p => p.includes('INTERNET'))) {
+  const bonus = 55; // 5 + 55 = 60 → High risk
+  const updatedScore = Math.min(100, riskScore + bonus);
+  const reason = "Sideloaded app that auto‑starts on boot, monitors network state, and has internet – typical hidden adware that activates when WiFi/data turns on.";
+  suspicious.push({
+    ...baseObj,
+    riskScore: updatedScore,
+    reason,
+    threatLevel: updatedScore >= 60 ? "high" : "medium",
+    suggestedAction: updatedScore >= 60
+      ? `Uninstall ${displayNameFromPackage(pkg)} immediately – this is hidden adware.`
+      : `Review ${displayNameFromPackage(pkg)} – may be hidden adware.`,
+    threatTypes: classifyThreatTypes(pkg, perms)
+  });
+  continue;
+}
+
+    // 10. Read/Write Storage + Internet (data exfil)
+    if (isSideloaded && upper.some(p => p.includes('READ_EXTERNAL_STORAGE')) && upper.some(p => p.includes('WRITE_EXTERNAL_STORAGE')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 30;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app that can read/write files and access the internet – may exfiltrate personal data.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 11. Package Usage Stats + Internet
+    if (isSideloaded && upper.some(p => p.includes('PACKAGE_USAGE_STATS')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 40;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app can see which apps you use and has internet access – may send usage data to remote servers.",
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 12. Read Logs + Internet
+    if (isSideloaded && upper.some(p => p.includes('READ_LOGS')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 25;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app can read system logs and has internet access – may exfiltrate sensitive debug information.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 13. Wake Lock + Internet (cryptominer)
+    if (isSideloaded && upper.some(p => p.includes('WAKE_LOCK')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 25;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app with wake lock and internet – may keep the device awake to mine cryptocurrency or perform background tasks.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 14. Foreground Service + Internet (runs in background)
+    if (isSideloaded && upper.some(p => p.includes('FOREGROUND_SERVICE')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 25;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app with foreground service and internet – can run in the background and load content (ads) without a visible UI.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)} – may be hidden adware.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 15. Network State Monitor + Internet (triggers on WiFi/data changes)
+    if (isSideloaded && upper.some(p => p.includes('ACCESS_NETWORK_STATE')) && upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 25;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app that monitors network state and has internet – can activate (e.g., show ads) when WiFi/data is turned on.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)} – may be hidden adware.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 16. Minimal permissions + Internet (hidden app with very few perms) – now MEDIUM risk
+    if (isSideloaded && perms.length <= 3 && upper.some(p => p.includes('INTERNET')) && dangerousPerms.length === 0) {
+      const bonus = 25;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason: "Sideloaded app with minimal permissions and internet access – likely a hidden app running in the background without a launcher icon.",
+        threatLevel: "medium",
+        suggestedAction: `Review ${displayNameFromPackage(pkg)} – it may be hidden adware.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ============================================================
+    // NEW HIGH‑RISK HIDDEN ADWARE RULES (sideloaded only)
+    // ============================================================
+
+    // 17. Hidden adware: overlay + foreground service + boot + internet
+    if (isSideloaded &&
+        upper.some(p => p.includes('SYSTEM_ALERT_WINDOW')) &&
+        upper.some(p => p.includes('FOREGROUND_SERVICE')) &&
+        upper.some(p => p.includes('RECEIVE_BOOT_COMPLETED')) &&
+        upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 60;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      const reason = "Hidden adware: sideloaded app with overlay, foreground service, and boot auto‑start – can display ads over other apps and run persistently in the background.";
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
         reason,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately – this is hidden adware.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 18. Hidden app (no visible UI): overlay + foreground service + no dangerous perms
+    if (isSideloaded &&
+        upper.some(p => p.includes('SYSTEM_ALERT_WINDOW')) &&
+        upper.some(p => p.includes('FOREGROUND_SERVICE')) &&
+        dangerousPerms.length === 0) {
+      const bonus = 50;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      const reason = "Hidden app: sideloaded app with overlay and foreground service but no visible UI – likely runs in the background without user awareness.";
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} – this app hides itself and runs in the background.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // 19. Network‑triggered adware: overlay + network state + internet
+    if (isSideloaded &&
+        upper.some(p => p.includes('SYSTEM_ALERT_WINDOW')) &&
+        upper.some(p => p.includes('ACCESS_NETWORK_STATE')) &&
+        upper.some(p => p.includes('INTERNET'))) {
+      const bonus = 45;
+      const updatedScore = Math.min(100, riskScore + bonus);
+      const reason = "Network‑triggered adware: sideloaded app with overlay and network monitoring – can show ads when WiFi/data turns on.";
+      suspicious.push({
+        ...baseObj,
+        riskScore: updatedScore,
+        reason,
+        threatLevel: "high",
+        suggestedAction: `Uninstall ${displayNameFromPackage(pkg)} immediately – this app shows ads when you connect to the internet.`,
+        threatTypes: classifyThreatTypes(pkg, perms)
+      });
+      continue;
+    }
+
+    // ============================================================
+    // CATCH‑ALL SIDELOADED (low risk)
+    // ============================================================
+    if (isSideloaded && riskScore >= 30) {
+      suspicious.push({
+        ...baseObj,
+        reason: `Sideloaded app — not from an official store. Installer: ${installer || 'Unknown'}.`,
         threatLevel: "low",
         suggestedAction: `Review ${displayNameFromPackage(pkg)}.`,
         threatTypes: classifyThreatTypes(pkg, perms)
@@ -1355,14 +1753,10 @@ export function detectSuspiciousApps(
       continue;
     }
 
-    // ----- RULE 4: Other heuristics (risk score, many permissions, etc.) -----
-    const risk = scoreAppRisk(perms);
-    let riskScore = risk.score;
-    if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
-      riskScore = Math.min(100, riskScore + 15);
-    }
+    // ============================================================
+    // EXISTING HEURISTICS (moderate risk, many permissions, etc.)
+    // ============================================================
     const moderateRisk = riskScore >= 30;
-
     const dangerousPermsList = [
       'READ_SMS', 'SEND_SMS', 'RECEIVE_SMS', 'READ_CALL_LOG', 'WRITE_CALL_LOG', 'CALL_PHONE',
       'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION', 'CAMERA', 'RECORD_AUDIO',
@@ -1378,27 +1772,34 @@ export function detectSuspiciousApps(
     if (moderateRisk || manyPerms || hasDangerous) {
       let reason = '';
       let threatLevel: 'high' | 'medium' | 'low' = 'medium';
+      let bonus = 0;
 
       if (isObfuscatedPackageName(pkg) && !fromLegitStore) {
         reason += `Obfuscated package name (often used by malware). `;
+        bonus += 10;
       }
       if (moderateRisk) {
         reason += `Risk score ${riskScore}/100. `;
         threatLevel = riskScore >= 70 ? 'high' : 'medium';
+        if (riskScore >= 70) bonus += 20;
+        else bonus += 10;
       }
       if (manyPerms) {
         reason += `Asks for unusually many permissions (${totalPerms}). `;
         threatLevel = 'medium';
+        bonus += 15;
       }
       if (hasDangerous && !moderateRisk && !manyPerms) {
         const dangerousFound = dangerousPermsList.filter(d => upper.includes(d));
         reason += `Requests dangerous permissions: ${dangerousFound.join(', ')}. `;
         threatLevel = 'high';
+        bonus += 30;
       }
 
+      const updatedScore = Math.min(100, riskScore + bonus);
       suspicious.push({
-        packageName: pkg,
-        displayName: displayNameFromPackage(pkg),
+        ...baseObj,
+        riskScore: updatedScore,
         reason: reason.trim(),
         threatLevel,
         suggestedAction: threatLevel === 'high'
@@ -1408,7 +1809,8 @@ export function detectSuspiciousApps(
       });
     }
   }
-  return suspicious;
+
+  return suspicious.filter(app => app.riskScore >= 30);
 }
 
 export function detectPackerIndicators(packageName: string, apkPath?: string): { isPacked: boolean; reason: string } {

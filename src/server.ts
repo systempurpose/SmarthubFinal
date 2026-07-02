@@ -65,6 +65,7 @@ import {
   TRUSTED_EXACT_PACKAGES,
   LEGITIMATE_INSTALLERS,
 } from './heuristics';
+import { assessPackageLegitimacy } from './packageLegitimacy';
 import { classifyMalware } from './malwareClassifier';
 
 import { type SavedRun } from './lib/historyStore';
@@ -413,18 +414,30 @@ app.get('/api/suspicious-apps', async (req, res) => {
             permsByPkg[app.packageName] = await packagePermissions(deviceId, app.packageName);
         }
         const installerMap = await getInstallerMap(deviceId);
-        const suspiciousApps = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+    const suspiciousAppsRaw = detectSuspiciousApps(allApps, permsByPkg, installerMap);
+    const legitimacyChecks = await Promise.all(
+      suspiciousAppsRaw.map(app => assessPackageLegitimacy(app.packageName, app.installer ?? installerMap?.[app.packageName] ?? null))
+    );
+    const legitimacyByPkg = new Map<string, (typeof legitimacyChecks)[number]>();
+    suspiciousAppsRaw.forEach((app, index) => {
+      legitimacyByPkg.set(app.packageName, legitimacyChecks[index]);
+    });
+    const suspiciousApps = suspiciousAppsRaw
+      .map((app, index) => ({ ...app, packageLegitimacy: legitimacyChecks[index] }))
+      .filter((app, index) => legitimacyChecks[index]?.verdict !== 'trusted');
 
         // Collect debug stats
         let totalApps = allApps.length;
         let skippedByTrustedPrefix = 0;
         let skippedByTrustedExact = 0;
         let skippedByLegitStore = 0;
+    let skippedByLegitSearch = 0;
         let evaluatedSideloaded = 0;
         let evaluatedLegitStoreDangerous = 0;
         let sampleSkippedTrustedPrefix: string[] = [];
         let sampleSkippedTrustedExact: string[] = [];
         let sampleSkippedLegitStore: string[] = [];
+    let sampleSkippedLegitSearch: string[] = [];
 
         for (const app of allApps) {
             const pkg = app.packageName;
@@ -452,6 +465,12 @@ app.get('/api/suspicious-apps', async (req, res) => {
                 if (sampleSkippedLegitStore.length < 5) sampleSkippedLegitStore.push(pkg);
                 continue;
             }
+              const legitimacy = legitimacyByPkg.get(pkg);
+              if (legitimacy?.verdict === 'trusted') {
+                skippedByLegitSearch++;
+                if (sampleSkippedLegitSearch.length < 5) sampleSkippedLegitSearch.push(pkg);
+                continue;
+              }
             evaluatedSideloaded++;
         }
 
@@ -462,11 +481,13 @@ app.get('/api/suspicious-apps', async (req, res) => {
                 skippedByTrustedPrefix,
                 skippedByTrustedExact,
                 skippedByLegitStore,
+                skippedByLegitSearch,
                 evaluatedSideloaded,
                 evaluatedLegitStoreDangerous,
                 sampleSkippedTrustedPrefix,
                 sampleSkippedTrustedExact,
-                sampleSkippedLegitStore
+                sampleSkippedLegitStore,
+                sampleSkippedLegitSearch
             }
         });
     } catch (err) {
@@ -503,7 +524,6 @@ app.use(
       if (isAllowedOrigin(origin)) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     maxAge: 600,
   }),
@@ -568,17 +588,6 @@ app.post('/api/adb-forward', async (req, res) => {
   if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
   try {
     await execAsync(`adb -s ${deviceId} forward tcp:12345 tcp:8080`);
-    res.json({ ok: true });
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: errorMessage });
-  }
-});
-
-app.post('/api/install-apk', async (req, res) => {
-    const { deviceId } = req.body;
-    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
-    try {
         const apkPath = path.join(process.cwd(), '3rdpartyApp', 'app.apk');
         await fs.access(apkPath); // check existence
         const installOutput = await adb('-s', deviceId, 'install', '-r', apkPath);
@@ -1298,7 +1307,7 @@ app.get('/suspicious-apps/:id', async (req: Request, res: Response) => {
       console.error('[SuspiciousApps] Failed to get installer map:', e.message);
     }
 
-    // FAST: Only get permissions for sideloaded/suspicious apps (not all 69+)
+    // FAST: Only get permissions for apps that are not from a trusted store.
     const FAST_TRUSTED = [
       'com.google.', 'com.android.', 'com.samsung.', 'com.huawei.',
       'com.xiaomi.', 'com.oppo.', 'com.vivo.', 'com.oneplus.',
@@ -1309,24 +1318,15 @@ app.get('/suspicious-apps/:id', async (req: Request, res: Response) => {
       'com.sec.android.',
     ];
 
-    // Only check apps that are: sideloaded OR match suspicious patterns
-    const SUSPICIOUS_QUICK_PATTERNS = [
-      /cleaner|booster|optimizer/i, /battery[._-]?saver/i,
-      /super[._-]?clean/i, /fast[._-]?clean/i, /turbo[._-]?clean/i,
-      /mod[._-]?apk|crack|hack|cheat/i, /fake|virus|trojan|malware|spy/i,
-      /airpush|startapp|leadbolt|applovin/i,
-      /\.ad(s|vert|mob)|\.push|\.popup|\.banner/i,
-    ];
-
     const appsToCheck = allApps.filter(a => {
       if (!a.packageName) return false;
       const pkg = a.packageName;
       // Skip trusted prefixes
       if (FAST_TRUSTED.some(p => pkg.startsWith(p))) return false;
-      // Include if: sideloaded OR matches suspicious pattern OR is a known fake
-      const isSideloaded = pkg in installerMap && (installerMap[pkg] === null || !['com.android.vending', 'com.google.android.packageinstaller', 'com.sec.android.app.samsungapps', 'com.huawei.appmarket', 'com.xiaomi.market', 'com.oppo.market', 'com.heytap.market', 'com.bbk.appstore', 'com.amazon.venezia'].includes(installerMap[pkg]!));
-      const isPatternMatch = SUSPICIOUS_QUICK_PATTERNS.some(p => p.test(pkg));
-      return isSideloaded || isPatternMatch;
+      // Include if the app is not installed from a trusted store.
+      const installer = installerMap[pkg];
+      const isTrustedInstaller = installer !== null && ['com.android.vending', 'com.google.android.packageinstaller', 'com.sec.android.app.samsungapps', 'com.huawei.appmarket', 'com.xiaomi.market', 'com.oppo.market', 'com.heytap.market', 'com.bbk.appstore', 'com.amazon.venezia'].includes(installer!);
+      return !isTrustedInstaller;
     });
 
     console.log('[SuspiciousApps] Getting permissions for', appsToCheck.length, 'candidate apps');

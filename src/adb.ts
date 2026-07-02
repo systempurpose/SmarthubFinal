@@ -697,25 +697,26 @@ export interface ListedApp {
 }
 
 export async function listApps(deviceId: string): Promise<ListedApp[]> {
-  const raw = await adb('-s', deviceId, 'shell', 'pm', 'list', 'packages', '-f', '--user', '0');
-  return raw
-    .split('\n')
-    .map(l => l.trim())
-    .filter(Boolean)
-    .map(line => {
-      // Newer Android versions sometimes omit the apk path and only emit `package:com.foo`.
-      const pathAndPkg = line.match(/^package:(.+)=(.+)$/);
-      if (pathAndPkg) {
-        return { path: pathAndPkg[1], packageName: pathAndPkg[2], raw: line };
+  const raw = await adb('-s', deviceId, 'shell', 'pm', 'list', 'packages', '-f');
+  const apps: ListedApp[] = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^package:(.+)=(.+)$/);
+    if (match) {
+      apps.push({ path: match[1], packageName: match[2], raw: trimmed });
+    } else {
+      // fallback: just the package name
+      const pkgMatch = trimmed.match(/^package:([^=\s]+)$/);
+      if (pkgMatch) {
+        apps.push({ packageName: pkgMatch[1], raw: trimmed });
+      } else {
+        // Unknown format – log it for debugging
+        console.warn('[listApps] Unparsed line:', trimmed);
       }
-
-      const pkgOnly = line.match(/^package:([^=\s]+)$/);
-      if (pkgOnly) {
-        return { packageName: pkgOnly[1], raw: line };
-      }
-
-      return { raw: line };
-    });
+    }
+  }
+  return apps;
 }
 
 export async function packagePermissions(deviceId: string, packageName: string): Promise<string[]> {
@@ -727,7 +728,8 @@ export async function packagePermissions(deviceId: string, packageName: string):
         const lines = output.split('\n');
         const perms: string[] = [];
         for (const line of lines) {
-            const match = line.match(/android\.permission\.(\w+):\s*granted=true/);
+            // Match ANY android.permission.XXX entry (both granted and normal)
+            const match = line.match(/android\.permission\.(\w+)/);
             if (match) perms.push(match[1]);
         }
         return perms;

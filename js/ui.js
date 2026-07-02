@@ -160,12 +160,21 @@ const BACKEND_URL = (() => {
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
     try {
         return await fetch(url, {
             ...options,
             signal: controller.signal,
         });
+    } catch (err) {
+        if (timedOut || controller.signal.aborted) {
+            throw new Error(`Request timed out after ${timeoutMs} ms`);
+        }
+        throw err;
     } finally {
         clearTimeout(timeoutId);
     }
@@ -725,14 +734,19 @@ async function testSuspiciousScan() {
             }
             bodyDiv.innerHTML = debugHtml;
         } else {
-            let html = `<p>Found ${apps.length} suspicious app(s):</p><ul style="list-style: none; padding-left: 0;">`;
-            for (const app of apps) {
+            const filteredApps = apps.filter(app => (app.riskScore || 0) >= 30);
+            let html = `<p>Found ${filteredApps.length} suspicious app(s):</p><ul style="list-style: none; padding-left: 0;">`;
+            for (const app of filteredApps) {
+                const threatDescriptions = getHumanReadableThreats(app.threatTypes || [], []);
                 html += `
                     <li style="margin-bottom: 16px; padding: 12px; background: #fff3e0; border-radius: 12px;">
                         <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})<br>
                         <span style="font-size: 12px;">Reason: ${escapeHtml(app.reason)}</span><br>
                         <span style="font-size: 12px;">Threat Level: ${app.threatLevel}</span><br>
+                        ${app.packageLegitimacy?.verdict === 'trusted' ? `<span style="font-size: 12px; color: #2e7d32;">✅ Package identity verified by local web evidence</span><br>` : ''}
+                        ${app.packageLegitimacy?.verdict === 'uncertain' ? `<span style="font-size: 12px; color: #8a6d3b;">ℹ️ Package identity could not be confirmed automatically</span><br>` : ''}
                         ${app.threatTypes && app.threatTypes.length > 0 ? `<span style="font-size: 12px;">Threat Types: ${app.threatTypes.map(t => t.type).join(', ')}</span><br>` : ''}
+                        ${threatDescriptions.length > 0 ? `<div style="font-size: 12px; margin-top: 4px; color: #444;"><strong>What it can do:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${threatDescriptions.map(d => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>` : ''}
                         <span style="font-size: 12px;">Suggested Action: ${escapeHtml(app.suggestedAction)}</span>
                     </li>
                 `;
@@ -1517,20 +1531,22 @@ function getThreatLevel(riskScore) {
 function getHumanReadableThreats(malwareTypes, suspiciousIndicators) {
     const threats = [];
     const typeDescriptions = {
-        'Spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
-        'Ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
-        'Adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
-        'Banking Trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
-        'Data Stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
-        'Backdoor': '🚪 Allows remote control of your device without your permission.',
-        'Fake App': '🎭 Pretends to be a legitimate app but may steal your information.',
-        'Riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
-        'Information Stealer': '🔐 Collects your passwords, emails, and personal data.',
-        'Premium Dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
-        'Trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.'
+        'spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
+        'ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
+        'adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
+        'click_fraud': '🖱️ Simulates taps and clicks to generate fake ad revenue or drive unwanted installs.',
+        'banking_trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
+        'data stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
+        'backdoor': '🚪 Allows remote control of your device without your permission.',
+        'fake app': '🎭 Pretends to be a legitimate app but may steal your information.',
+        'riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
+        'information stealer': '🔐 Collects your passwords, emails, and personal data.',
+        'premium dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
+        'trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.',
+        'generic_risk': '⚠️ Suspicious behavior was detected, but there is not enough evidence to name one malware family.'
     };
     // Handle both array of strings and array of objects with .type
-    const types = Array.isArray(malwareTypes) ? malwareTypes.map(t => typeof t === 'string' ? t : t.type) : [];
+    const types = Array.isArray(malwareTypes) ? malwareTypes.map(t => String(typeof t === 'string' ? t : t.type || '').trim().toLowerCase()) : [];
     for (const type of types) {
         if (type && typeDescriptions[type]) {
             threats.push(typeDescriptions[type]);
@@ -1770,9 +1786,8 @@ async function runStorageAnalysis() {
 }
 
 // ==================== APP SECURITY SCAN (standalone) ====================
-
 async function runDeepDiagnostic() {
-    // Get or create modal
+    // ---- Create modal if it doesn't exist ----
     let modal = document.getElementById('quickDiagModal');
     if (!modal) {
         const modalHTML = `
@@ -1796,81 +1811,135 @@ async function runDeepDiagnostic() {
         modal = document.getElementById('quickDiagModal');
     }
 
-    modal.style.display = 'none';
+    modal.style.display = 'flex';
     const modalTitle = document.getElementById('quickDiagModalTitle');
     const modalBody = document.getElementById('quickDiagModalBody');
     modalTitle.textContent = 'Running Deep Diagnostic';
-    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system...');
-    modal.style.display = 'flex';
+    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system... this can take several minutes.');
+
+    let scanStillRunning = true;
+    const slowScanHintTimer = setTimeout(() => {
+        if (!scanStillRunning) return;
+        modalBody.innerHTML = getModernSpinnerHTML('Still analyzing... large scans can take several minutes.');
+    }, 30000);
 
     const closeModal = () => { modal.style.display = 'none'; };
     document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
     document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-    // ========== ANDROID APP HELPER (with fallback) ==========
+    // ========== ANDROID APP HELPER (Robust) ==========
     async function ensureAndroidAppOpen() {
-    try {
-        // 1. Check if app is installed
-        const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
-        const state = await stateRes.json();
-        if (!state.installed) {
-            // Show install prompt
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>SmartHub Diagnostics App Required</h3>
-                        <span class="close-button">&times;</span>
-                    </div>
-                    <div class="modal-body">
-                        <p>The SmartHub Diagnostics app is not installed on your phone.</p>
-                        <p>Please install it using one of these methods:</p>
-                        <ul>
-                            <li>Click the "Install Android App" button in the SmartHub dashboard.</li>
-                            <li>Or manually install the APK from the SmartHub installation folder.</li>
-                        </ul>
-                        <button id="installAppBtn" class="btn-primary">Go to Install</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            modal.querySelector('.close-button').onclick = () => modal.remove();
-            modal.querySelector('#installAppBtn').onclick = () => {
-                modal.remove();
-                document.getElementById('installAppBtn')?.click();
-            };
-            return false;
-        }
+        const pkg = 'com.smarthub.diagnostics';
+        const activity = '.MainActivity';
 
-        // 2. Always open via ADB (bypass the broken API)
-        console.log('[ensureAndroidAppOpen] Opening via ADB...');
-        const adbResp = await fetch(`${BACKEND_URL}/adb-shell`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                deviceId: currentDeviceId,
-                command: 'am start -n com.smarthub.diagnostics/.MainActivity'
-            })
-        });
+        try {
+            let installed = false;
+            try {
+                const pmList = await fetch(`${BACKEND_URL}/adb-shell`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deviceId: currentDeviceId,
+                        command: `pm list packages | grep ${pkg}`
+                    })
+                });
+                const data = await pmList.json();
+                installed = data.output && data.output.includes(pkg);
+            } catch (e) {
+                try {
+                    const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
+                    const state = await stateRes.json();
+                    installed = state.installed === true;
+                } catch { installed = false; }
+            }
 
-        if (adbResp.ok) {
-            // Wait 3 seconds for the app to start
+            if (!installed) {
+                const confirm = await showConfirm('App Required', 'The SmartHub Diagnostics app is not installed. Would you like to install it now?');
+                if (!confirm) return false;
+                modalBody.innerHTML = getModernSpinnerHTML('Installing SmartHub Diagnostics app...');
+                try {
+                    const installRes = await fetch(`${BACKEND_URL}/api/install-apk`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ deviceId: currentDeviceId })
+                    });
+                    const installData = await installRes.json();
+                    if (!installRes.ok) {
+                        alert('Installation failed: ' + (installData.error || 'Unknown error'));
+                        return false;
+                    }
+                    await new Promise(r => setTimeout(r, 2000));
+                    const pmList2 = await fetch(`${BACKEND_URL}/adb-shell`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            deviceId: currentDeviceId,
+                            command: `pm list packages | grep ${pkg}`
+                        })
+                    });
+                    const data2 = await pmList2.json();
+                    if (!data2.output || !data2.output.includes(pkg)) {
+                        alert('App installed but not detected. Please open it manually.');
+                        return false;
+                    }
+                    installed = true;
+                } catch (err) {
+                    alert('Failed to install app: ' + err.message);
+                    return false;
+                }
+            }
+
+            let launched = false;
+            try {
+                const amRes = await fetch(`${BACKEND_URL}/adb-shell`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deviceId: currentDeviceId,
+                        command: `am start -n ${pkg}/${activity}`
+                    })
+                });
+                const amData = await amRes.json();
+                if (amData.output && !amData.output.includes('Error')) {
+                    launched = true;
+                    console.log('[ensureAndroidAppOpen] Launched via am start');
+                }
+            } catch (e) { /* ignore */ }
+
+            if (!launched) {
+                try {
+                    const monkeyRes = await fetch(`${BACKEND_URL}/adb-shell`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            deviceId: currentDeviceId,
+                            command: `monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`
+                        })
+                    });
+                    const monkeyData = await monkeyRes.json();
+                    if (monkeyData.output && !monkeyData.output.includes('Error')) {
+                        launched = true;
+                        console.log('[ensureAndroidAppOpen] Launched via monkey');
+                    }
+                } catch (e) { /* ignore */ }
+            }
+
+            if (!launched) {
+                alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
+                return false;
+            }
+
             await new Promise(r => setTimeout(r, 3000));
             return true;
-        } else {
-            alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
+
+        } catch (err) {
+            console.error('ensureAndroidAppOpen error:', err);
+            alert('Error communicating with the device. Make sure USB debugging is enabled.');
             return false;
         }
-    } catch (err) {
-        console.error('ensureAndroidAppOpen error:', err);
-        alert('Error communicating with the device. Make sure USB debugging is enabled.');
-        return false;
     }
-}
-    // ========== ENSURE ANDROID APP IS READY (abort if not) ==========
+
     const appReady = await ensureAndroidAppOpen();
     if (!appReady) {
         modalTitle.textContent = 'Diagnostic Failed';
@@ -1878,460 +1947,134 @@ async function runDeepDiagnostic() {
         return;
     }
 
-    // ========== OVERLAY MONITORING HELPERS ==========
-    let overlayEvents = [];
-    async function startOverlayMonitoring() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/start-timeout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, durationMs: 60000 })
-            });
-            console.log('Overlay monitoring started');
-        } catch (err) { console.warn('Could not start overlay monitoring:', err); }
-    }
-    async function stopAndFetchOverlayEvents() {
-        try {
-            await fetch(`${BACKEND_URL}/api/overlay-monitor/stop`, { method: 'POST' });
-            const res = await fetch(`${BACKEND_URL}/api/overlay-monitor/events?deviceId=${currentDeviceId}`);
-            const data = await res.json();
-            overlayEvents = data.events || [];
-        } catch (err) { console.warn('Could not fetch overlay events:', err); }
-    }
-
-    // ========== FRIDA DYNAMIC ANALYSIS HELPER ==========
-    async function runFridaOnPackage(packageName, timeoutMs = 300000) {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/frida/scan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: currentDeviceId,
-                    packageName,
-                    timeoutMs,
-                    stealth: true,
-                    scriptName: 'full_monitor.js'
-                })
-            });
-            const data = await response.json();
-            return data.events || [];
-        } catch (err) {
-            console.warn('Frida scan failed:', err);
-            return [];
-        }
-    }
-
-    // ========== REAL‑TIME SYNC ==========
-    let realTimeWs = null;
-    let realTimeEvents = [];
-
-    async function setupAdbForward(deviceId) {
-        const res = await fetch(`${BACKEND_URL}/api/adb-forward`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId })
-        });
-        if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`ADB forward failed: ${res.status} ${text}`);
-        }
-        return res.json();
-    }
-
-    async function connectRealTime(deviceId) {
-        try {
-            await setupAdbForward(deviceId);
-        } catch (err) {
-            throw new Error(`ADB forward failed: ${err.message}`);
-        }
-        return new Promise((resolve, reject) => {
-            const ws = new WebSocket('ws://localhost:12345');
-            const timeout = setTimeout(() => {
-                ws.close();
-                reject(new Error('WebSocket connection timeout (5s)'));
-            }, 5000);
-            ws.onopen = () => {
-                clearTimeout(timeout);
-                console.log('Real‑time WebSocket connected');
-                realTimeWs = ws;
-                resolve();
-            };
-            ws.onerror = () => {
-                clearTimeout(timeout);
-                reject(new Error('WebSocket connection failed. Is the Android app running?'));
-            };
-            ws.onmessage = (msg) => {
-                try {
-                    const event = JSON.parse(msg.data);
-                    if (event.type !== 'heartbeat') {
-                        realTimeEvents.push(event);
-                        console.log('[RealTime]', event);
-                    }
-                } catch (e) {}
-            };
-        });
-    }
-
     try {
-        // ---- REAL‑TIME SYNC (optional) ----
-        try {
-            await connectRealTime(currentDeviceId);
-            console.log('Real‑time sync active');
-        } catch (err) {
-            console.warn('Real‑time sync unavailable:', err.message);
+        // ---- Use the full deep-scan endpoint with 180s timeout ----
+        const fullScanUrl = `${BACKEND_URL}/deep-scan/${currentDeviceId}/full?raw=0`;
+        const scanRes = await fetchWithTimeout(fullScanUrl, {}, 600000);
+        if (!scanRes.ok) throw new Error(`HTTP ${scanRes.status}`);
+        const scanData = await scanRes.json();
+
+        // ---- Extract data ----
+        const hardwareFindings = scanData.findings || [];
+        const health = scanData.health || {};
+        const appSecurity = scanData.appSecurity || {};
+        let suspiciousApps = appSecurity.suspiciousApps || [];
+        const deepAnalysis = appSecurity.deepAnalysis || [];
+
+        suspiciousApps = suspiciousApps.filter(app => (app.riskScore || 0) >= 30);
+
+        if (suspiciousApps.length === 0) {
+            modalBody.innerHTML = `<div style="padding: 20px;"><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe or have no clear risk indicators.</p></div>`;
+            modalTitle.textContent = 'Deep Diagnostic Complete';
+            return;
         }
 
-        startOverlayMonitoring();
-
-        // ---- Fetch suspicious apps ----
-        let suspiciousAppsList = [];
-        try {
-            const appsResponse = await fetch(`/api/suspicious-apps?deviceId=${currentDeviceId}`);
-            if (appsResponse.ok) {
-                const appsData = await appsResponse.json();
-                suspiciousAppsList = appsData.suspiciousApps || [];
-            }
-        } catch (err) { console.error('Failed to fetch suspicious apps:', err); }
-
-       // ===== WHITELIST: Remove the SmartHub Diagnostics app itself =====
-        suspiciousAppsList = suspiciousAppsList.filter(app => 
-            app.packageName !== 'com.smarthub.diagnostics'
-        );
-
-        // ===== SORT APPS BY RISK (HIGHEST FIRST) =====
-        suspiciousAppsList.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
-
-        // ===== DEDUPLICATE APPS =====
-        const seen = new Set();
-        suspiciousAppsList = suspiciousAppsList.filter(app => {
-            const key = app.packageName;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-       
-
-        // ===== BUILD SUMMARY BAR =====
-        const initialCritical = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 80).length;
-        const initialHigh = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 60 && (a.riskScore || 0) < 80).length;
-        const initialMedium = suspiciousAppsList.filter(a => (a.riskScore || 0) >= 35 && (a.riskScore || 0) < 60).length;
-        const initialLow = suspiciousAppsList.filter(a => (a.riskScore || 0) < 35).length;
+        // ---- Summary bar ----
+        const critical = suspiciousApps.filter(a => a.riskScore >= 80).length;
+        const high = suspiciousApps.filter(a => a.riskScore >= 60 && a.riskScore < 80).length;
+        const medium = suspiciousApps.filter(a => a.riskScore >= 35 && a.riskScore < 60).length;
+        const low = suspiciousApps.filter(a => a.riskScore < 35).length;
 
         let summaryBarHtml = `
             <div id="summaryBar" style="display: flex; gap: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-                <span><span style="color: #c62828; font-weight: bold;">🔴 ${initialCritical}</span> Critical</span>
-                <span><span style="color: #e65100; font-weight: bold;">🟠 ${initialHigh}</span> High</span>
-                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${initialMedium}</span> Medium</span>
-                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${initialLow}</span> Low</span>
-                <span style="margin-left: auto; color: #888;">Total: ${suspiciousAppsList.length} apps</span>
+                <span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>
+                <span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>
+                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>
+                ${low > 0 ? `<span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> Low</span>` : ''}
+                <span style="margin-left: auto; color: #888;">Total: ${suspiciousApps.length} apps</span>
             </div>
         `;
 
-        // ===== BUILD APP CARDS =====
+        // ---- Build app cards ----
         const escape = (str) => escapeHtml(str);
-        let appsHtml = '';
-        if (suspiciousAppsList.length === 0) {
-            appsHtml = `<div><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>No known dangerous apps detected.</p></div>`;
-        } else {
-            appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousAppsList.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
+        let appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousApps.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
 
-            for (const app of suspiciousAppsList) {
-                const threat = getThreatLevel(app.riskScore || 0);
-                const threatIcon = app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : app.riskScore >= 35 ? '🟡' : '🟢';
-                const humanReasons = getHumanFriendlyRiskReasons(app);
-                const threatSummary = (app.threatTypes || []).length > 0 || (app.suspiciousIndicators && app.suspiciousIndicators.length > 0)
-                    ? getHumanReadableThreats(app.threatTypes || [], app.suspiciousIndicators || [])
-                    : [];
+        for (const app of suspiciousApps) {
+            const riskScore = app.riskScore || 0;
+            const threat = getThreatLevel(riskScore);
+            const threatIcon = threat.icon || (riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : '🟡');
+            const malwareCapabilities = getHumanReadableThreats(app.threatTypes || [], []);
 
-                let summaryBullets = '';
-                if (threatSummary.length > 0) {
-                    summaryBullets = `<ul style="margin: 4px 0 8px 0; padding-left: 20px; font-size: 13px;">`;
-                    for (const t of threatSummary.slice(0, 3)) {
-                        summaryBullets += `<li>${t}</li>`;
-                    }
-                    if (threatSummary.length > 3) {
-                        summaryBullets += `<li>... and ${threatSummary.length - 3} more concerns</li>`;
-                    }
-                    summaryBullets += `</ul>`;
-                }
+            // ---- Deep analysis data (if available) ----
+            const deep = deepAnalysis.find(d => d.packageName === app.packageName) || {};
+            let techDetails = '';
+            if (deep.entropy) {
+                techDetails += `<div>Entropy: ${deep.entropy.toFixed(3)} ${deep.entropy > 0.85 ? '⚠️ (high → possible packing/obfuscation)' : ''}</div>`;
+            }
+            if (deep.yaraMatches && deep.yaraMatches.length) {
+                techDetails += `<div>YARA matches: ${deep.yaraMatches.length}</div>`;
+            }
 
-                const riskLabel = threat.label;
-                const riskColor = threat.color;
-                const riskBg = threat.bg;
+            // ---- Human-friendly reasons ----
+            const humanReasons = getHumanFriendlyRiskReasons(app);
 
-                appsHtml += `
-                    <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
-                         style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
-                                border-left: 6px solid ${riskColor};
-                                background: ${riskBg};
-                                box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-                                transition: transform 0.15s ease, box-shadow 0.15s ease;
-                                cursor: default;">
+            // ---- Risk factors (from app fields) ----
+            let riskFactors = [];
+            if (app.isSideloaded) riskFactors.push('📦 Sideloaded (not from Play Store)');
+            if (app.installer && app.installer.toLowerCase().includes('unknown')) riskFactors.push('❓ Unknown installer');
+            if (app.installer && app.installer.toLowerCase().includes('transsnet')) riskFactors.push('🏪 Installed via third‑party store (Transsnet)');
+            if (app.dangerousPermissions && app.dangerousPermissions.length > 5) riskFactors.push('🔓 Requests many dangerous permissions');
+            if (deep.entropy > 0.85) riskFactors.push('🧩 High code entropy (possible obfuscation/packing)');
 
-                        <!-- Header: Threat Icon + App Name -->
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                                <span id="icon-${escape(app.packageName)}" style="font-size: 20px;">${threatIcon}</span>
-                                <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
-                                <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
-                            </div>
-                            <button onclick="uninstallPackage('${escape(app.packageName)}')"
-                                    class="delete-app"
-                                    style="background: #d32f2f; color: white; border: none;
-                                           border-radius: 20px; padding: 4px 16px; cursor: pointer;
-                                           font-size: 12px; white-space: nowrap;
-                                           transition: background 0.2s ease, transform 0.15s ease;"
-                                    onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
-                                    onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
-                                🗑️ Uninstall
-                            </button>
+            let factorsHtml = riskFactors.length ? `
+                <div style="margin-top:6px; font-size:13px; color:#555; background:#f8f9fa; padding:6px 10px; border-radius:6px;">
+                    <strong>⚠️ Risk factors:</strong> ${riskFactors.join(' • ')}
+                </div>
+            ` : '';
+
+            // ---- Build card ----
+            appsHtml += `
+                <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
+                     style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
+                            border-left: 6px solid ${threat.color};
+                            background: ${threat.bg};
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-size: 20px;">${threatIcon}</span>
+                            <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
+                            <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
                         </div>
-
-                        <!-- Reason -->
-                        <div style="font-size: 13px; color: #555; margin-top: 6px;">
-                            ${escape(app.reason || '')}
-                        </div>
-
-                        <!-- Human-Friendly Risk Reasons -->
-                        ${humanReasons.length > 0 ? `
-                            <div style="font-size: 13px; margin-top: 6px; color: #424242;
-                                        background: rgba(255,255,255,0.5); padding: 6px 10px;
-                                        border-radius: 6px;">
-                                ${humanReasons.join('; ')}
-                            </div>
-                        ` : ''}
-
-                        <!-- Threat Summary Bullets -->
-                        ${summaryBullets}
-
-                        <!-- Meta Info -->
-                        <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
-                            ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
-                            ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
-                        </div>
-
-                        <!-- Deep Scan Area -->
-                        <div id="deep-${escape(app.packageName)}" style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
-                            <div class="spinner" style="width: 18px; height: 18px; margin: 0; display: inline-block;"></div>
-                            <span style="font-size: 12px; margin-left: 8px; color: #888;">Running deep scan...</span>
-                        </div>
+                        <button onclick="uninstallPackage('${escape(app.packageName)}')"
+                                class="delete-app"
+                                style="background: #d32f2f; color: white; border: none;
+                                       border-radius: 20px; padding: 4px 16px; cursor: pointer;
+                                       font-size: 12px; white-space: nowrap;
+                                       transition: background 0.2s ease, transform 0.15s ease;"
+                                onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
+                                onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
+                            🗑️ Uninstall
+                        </button>
                     </div>
-                `;
-            }
-            appsHtml += `</div></div>`;
-        }
 
-        // ---- Display apps only (no storage) ----
-        modalBody.innerHTML = appsHtml;
+                    ${app.reason ? `<div style="font-size: 13px; color: #555; margin-top: 6px;">${escape(app.reason)}</div>` : ''}
 
-        // 3. Perform deep scans (unchanged)
-        const appRiskMap = new Map();
-        const scanPromises = suspiciousAppsList.map(async (app) => {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/scan-apk`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deviceId: currentDeviceId, packageName: app.packageName })
-                });
-                const data = await response.json();
-                const container = document.getElementById(`deep-${app.packageName}`);
-                const appCard = document.getElementById(`app-card-${app.packageName}`);
-                if (!container || !appCard) return;
+                    ${humanReasons.length ? `<div style="font-size: 13px; margin-top: 4px; color: #424242; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: 6px;">${humanReasons.join('; ')}</div>` : ''}
 
-                if (data.ok) {
-                    const analysis = data.staticAnalysis;
-                    const riskScore = analysis.risk_score || 0;
-                    appRiskMap.set(app.packageName, { riskScore, displayName: app.displayName });
+                    ${malwareCapabilities.length ? `<div style="font-size: 13px; margin-top: 4px; color: #4a148c; background: rgba(255,255,255,0.65); padding: 6px 10px; border-radius: 6px;"><strong>What this malware can do:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${malwareCapabilities.map(item => `<li>${escape(item)}</li>`).join('')}</ul></div>` : ''}
 
-                    if (riskScore <= 29) {
-                        appCard.remove();
-                        const remainingCards = document.querySelectorAll('.app-card-item').length;
-                        const heading = document.getElementById('suspiciousAppsHeading');
-                        if (heading) {
-                            heading.textContent = `⚠️ Suspicious Apps Found (${remainingCards})`;
-                            if (remainingCards === 0) heading.outerHTML = '<h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe (score ≤29).</p>';
-                        }
-                        return;
-                    }
+                    ${factorsHtml}
+                    ${techDetails ? `<div style="font-size: 12px; color: #666; margin-top: 8px; background: #f5f5f5; padding: 6px 10px; border-radius: 6px;">${techDetails}</div>` : ''}
 
-                    // Update card appearance
-                    const newThreat = getThreatLevel(riskScore);
-                    const newIcon = riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : riskScore >= 35 ? '🟡' : '🟢';
+                    <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
+                        ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
+                        ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
+                    </div>
 
-                    appCard.style.borderLeftColor = newThreat.color;
-                    const iconSpan = document.getElementById(`icon-${app.packageName}`);
-                    if (iconSpan) iconSpan.textContent = newIcon;
-                    appCard.style.background = newThreat.bg;
-
-                    // Deep scan details
-                    const threat = getThreatLevel(riskScore);
-                    const threatTypes = analysis.malware_types || [];
-                    const suspiciousIndicators = analysis.suspicious_indicators || [];
-                    const humanThreats = getHumanReadableThreats(threatTypes, suspiciousIndicators);
-
-                    let humanSummary = '';
-                    if (humanThreats.length > 0) {
-                        humanSummary = `<ul style="margin: 4px 0 8px 0; padding-left: 18px; font-size: 12px;">`;
-                        for (const t of humanThreats) {
-                            humanSummary += `<li>${t}</li>`;
-                        }
-                        humanSummary += `</ul>`;
-                    }
-
-                    const riskBadge = `<span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>`;
-
-                    let html = `
-                        <div style="margin-top: 8px;">
-                            ${riskBadge} &nbsp; Risk Score: <strong>${riskScore}/100</strong>
-                            ${humanSummary}
-                            <details style="font-size: 12px; color: #666; margin-top: 4px;">
-                                <summary style="cursor: pointer;">🔍 Technical details</summary>
-                                <div style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
-                                    <strong>Permissions:</strong> ${analysis.dangerous_permissions?.length || 0} dangerous<br>
-                                    ${analysis.isPacked ? '⚠️ Packed/obfuscated code detected<br>' : ''}
-                                    ${analysis.isPolymorphic ? '⚠️ Advanced evasion techniques detected<br>' : ''}
-                                    ${analysis.yara_matches && analysis.yara_matches.length > 0 ? `YARA matches: ${analysis.yara_matches.length}<br>` : ''}
-                                    ${analysis.suspicious_indicators && analysis.suspicious_indicators.length ? `Suspicious: ${escapeHtml(analysis.suspicious_indicators.join(', '))}` : ''}
-                                </div>
-                            </details>
-                        </div>
-                    `;
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<span style="color: #d32f2f;">Deep scan failed: ${data.error}</span>`;
-                }
-            } catch (err) {
-                const container = document.getElementById(`deep-${app.packageName}`);
-                if (container) container.innerHTML = `<span style="color: #d32f2f;">Deep scan error: ${err.message}</span>`;
-            }
-        });
-        await Promise.all(scanPromises);
-
-        // ===== UPDATE SUMMARY BAR =====
-        const remainingCards = document.querySelectorAll('.app-card-item');
-        let finalCritical = 0, finalHigh = 0, finalMedium = 0, finalLow = 0;
-        for (const card of remainingCards) {
-            const pkg = card.dataset.package;
-            const info = appRiskMap.get(pkg);
-            if (info) {
-                const score = info.riskScore;
-                if (score >= 80) finalCritical++;
-                else if (score >= 60) finalHigh++;
-                else if (score >= 35) finalMedium++;
-                else finalLow++;
-            }
-        }
-
-        const summaryBar = document.getElementById('summaryBar');
-        if (summaryBar) {
-            summaryBar.innerHTML = `
-                <span><span style="color: #c62828; font-weight: bold;">🔴 ${finalCritical}</span> Critical</span>
-                <span><span style="color: #e65100; font-weight: bold;">🟠 ${finalHigh}</span> High</span>
-                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${finalMedium}</span> Medium</span>
-                <span><span style="color: #2e7d32; font-weight: bold;">🟢 ${finalLow}</span> Low</span>
-                <span style="margin-left: auto; color: #888;">Total: ${remainingCards.length} apps</span>
+                    <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                        <span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>
+                        &nbsp; Risk Score: <strong>${riskScore}/100</strong>
+                    </div>
+                </div>
             `;
         }
+        appsHtml += `</div></div>`;
 
-        await stopAndFetchOverlayEvents();
-
-        // ---- Frida on high-risk apps ----
-        const highRiskApps = suspiciousAppsList
-            .map(app => ({ ...app, riskScore: appRiskMap.get(app.packageName)?.riskScore || 0 }))
-            .filter(app => app.riskScore >= 40)
-            .sort((a, b) => b.riskScore - a.riskScore);
-        let allFridaEvents = [];
-        if (highRiskApps.length) {
-            modalBody.insertAdjacentHTML('beforeend', '<div style="margin-top:20px;"><div class="spinner"></div><p>Running dynamic analysis on high-risk apps...</p></div>');
-            for (const app of highRiskApps) {
-                const events = await runFridaOnPackage(app.packageName, 300000);
-                if (events.length) allFridaEvents.push({ package: app.packageName, displayName: app.displayName, events });
-            }
-            const loadingDiv = modalBody.querySelector('.spinner')?.parentElement;
-            if (loadingDiv) loadingDiv.remove();
-            if (allFridaEvents.length) {
-                let fridaHtml = `<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🔬 Dynamic Analysis (Frida)</h3>`;
-                for (const appEv of allFridaEvents) {
-                    fridaHtml += `<h4>📱 ${escapeHtml(appEv.displayName)} (${escapeHtml(appEv.package)})</h4><ul>`;
-                    for (const ev of appEv.events.slice(0,15)) fridaHtml += `<li>${escapeHtml(JSON.stringify(ev))}</li>`;
-                    if (appEv.events.length > 15) fridaHtml += `<li>... and ${appEv.events.length-15} more</li>`;
-                    fridaHtml += `</ul>`;
-                }
-                fridaHtml += '<p class="text-muted" style="font-size:12px;">API calls detected at runtime.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', fridaHtml);
-            }
-        }
-
-        if (overlayEvents.length) {
-            let overlayHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>🕵️ Overlay / Popup Events Detected</h3><ul>';
-            for (const ev of overlayEvents.slice(0,15)) overlayHtml += `<li><strong>${new Date(ev.timestamp).toLocaleTimeString()}</strong> - Package: ${escapeHtml(ev.package)}</li>`;
-            if (overlayEvents.length > 15) overlayHtml += `<li>... and ${overlayEvents.length-15} more</li>`;
-            overlayHtml += '</ul><p class="text-muted" style="font-size:12px;">Apps that draw overlays during the scan are often adware or malicious.</p></div>';
-            modalBody.insertAdjacentHTML('beforeend', overlayHtml);
-        }
-
-        // ========== ROOTKIT / KERNEL DETECTION ==========
-        try {
-            const rootkitRes = await fetch(`${BACKEND_URL}/api/rootkit-scan?deviceId=${currentDeviceId}`);
-            const rootkitData = await rootkitRes.json();
-            if (rootkitData.rootkitIndicators) {
-                let rootkitHtml = '<div style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;"><h3>🔒 Rootkit / Kernel Anomalies Detected</h3>';
-                if (rootkitData.dmesgAnomalies?.length) {
-                    rootkitHtml += '<div><strong>⚠️ Kernel log anomalies:</strong><ul>';
-                    for (const line of rootkitData.dmesgAnomalies.slice(0, 5)) {
-                        rootkitHtml += `<li>${escapeHtml(line)}</li>`;
-                    }
-                    if (rootkitData.dmesgAnomalies.length > 5) rootkitHtml += `<li>... and ${rootkitData.dmesgAnomalies.length - 5} more</li>`;
-                    rootkitHtml += '</ul></div>';
-                }
-                if (rootkitData.suspiciousModules?.length) {
-                    rootkitHtml += '<div><strong>⚠️ Suspicious kernel modules loaded:</strong><ul>';
-                    for (const mod of rootkitData.suspiciousModules.slice(0, 10)) {
-                        rootkitHtml += `<li>${escapeHtml(mod)}</li>`;
-                    }
-                    rootkitHtml += '</ul></div>';
-                }
-                if (rootkitData.hiddenProcesses?.length) {
-                    rootkitHtml += `<div><strong>⚠️ Hidden processes (PID not in ps):</strong> ${rootkitData.hiddenProcesses.join(', ')}</div>`;
-                }
-                rootkitHtml += '<p class="text-muted" style="font-size:12px;">Possible kernel‑level compromise – requires advanced removal.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', rootkitHtml);
-            }
-        } catch (err) {
-            console.warn('Rootkit scan failed:', err);
-        }
-
-        // ========== FILE SYSTEM MONITORING ==========
-        try {
-            const filesRes = await fetch(`${BACKEND_URL}/api/recent-files?deviceId=${currentDeviceId}&minutes=10`);
-            const filesData = await filesRes.json();
-            if (filesData.suspicious && filesData.suspicious.length > 0) {
-                let fileHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📁 Suspicious File Activity Detected</h3><ul>';
-                for (const f of filesData.suspicious.slice(0, 20)) {
-                    fileHtml += `<li>${escapeHtml(f)}</li>`;
-                }
-                if (filesData.suspicious.length > 20) fileHtml += `<li>... and ${filesData.suspicious.length - 20} more</li>`;
-                fileHtml += '</ul><p class="text-muted" style="font-size:12px;">Recently created or modified files with suspicious extensions (APK, DEX, SO, etc.) – possible payload drop.</p></div>';
-                modalBody.insertAdjacentHTML('beforeend', fileHtml);
-            }
-        } catch (err) {
-            console.warn('File monitor failed:', err);
-        }
-
-        // ========== REAL‑TIME EVENTS ==========
-        const filteredEvents = realTimeEvents.filter(ev => ev.type !== 'heartbeat');
-        if (filteredEvents.length > 0) {
-            let realTimeHtml = '<div style="margin-top:20px; border-top:1px solid #ddd; padding-top:15px;"><h3>📡 Real‑time Events (from Android app)</h3><ul>';
-            for (const ev of filteredEvents.slice(0, 20)) {
-                const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '';
-                realTimeHtml += `<li>[${time}] ${ev.type}: ${escapeHtml(JSON.stringify(ev))}</li>`;
-            }
-            if (filteredEvents.length > 20) realTimeHtml += `<li>... and ${filteredEvents.length - 20} more</li>`;
-            realTimeHtml += '</ul><p class="text-muted">Live events captured during the diagnostic – proves real‑time synchronization.</p></div>';
-            modalBody.insertAdjacentHTML('beforeend', realTimeHtml);
-        }
-
+        const finalHtml = appsHtml;
+        modalBody.innerHTML = finalHtml;
         modalTitle.textContent = 'Deep Diagnostic Complete';
+
     } catch (err) {
         console.error('[DeepDiag] Error:', err);
         modalTitle.textContent = 'Diagnostic Failed';
@@ -2347,9 +2090,8 @@ async function runDeepDiagnostic() {
         }
         modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
     } finally {
-        if (realTimeWs && realTimeWs.readyState === WebSocket.OPEN) {
-            realTimeWs.close();
-        }
+        scanStillRunning = false;
+        clearTimeout(slowScanHintTimer);
     }
 }
 
