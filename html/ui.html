@@ -185,6 +185,42 @@
         </main>
     </div>
 
+    <!-- BSOD Diagnostic Warning Modal -->
+<!-- BSOD Diagnostic Warning Modal (Improved Design) -->
+<div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+    <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
+        <!-- Header with accent bar -->
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <span style="font-size: 36px;">⚠️</span>
+                <div>
+                    <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;">BSOD Diagnostic</h3>
+                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;">Boot failure analysis tool</p>
+                </div>
+                <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
+            </div>
+        </div>
+        <!-- Body -->
+        <div style="padding: 24px 28px 28px 28px;">
+            <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;">
+                This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
+            </p>
+            <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
+                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong></li>
+                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong></li>
+                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP</li>
+                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong></li>
+                </ul>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
+                <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;">Back</button>
+                <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);">Continue</button>
+            </div>
+        </div>
+    </div>
+</div>
+
     <!-- Modal: USB Debugging Wizard (kept as is) -->
     <div id="wizardModal" class="modal">
         <div class="modal-content acrylic">
