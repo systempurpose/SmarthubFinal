@@ -2,16 +2,16 @@
   "version": 1,
   "devices": {
     "3201327b39de944a": {
-      "lastUptimeSec": 192,
-      "lastSeenMs": 1777962353985,
+      "lastUptimeSec": 6030,
+      "lastSeenMs": 1783057180124,
       "rebootEventsMs": [
         1777962353970,
         1777962353973
       ]
     },
     "11894193ce000167": {
-      "lastUptimeSec": 63960,
-      "lastSeenMs": 1782625830054
+      "lastUptimeSec": 11087,
+      "lastSeenMs": 1783047226742
     }
   }
 }

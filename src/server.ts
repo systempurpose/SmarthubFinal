@@ -19,6 +19,7 @@ import WebSocket from 'ws';
 import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
+
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
 
 // At the top with other imports
@@ -530,6 +531,7 @@ app.use(
 );
 
 app.use('/api/network', networkRoutes);
+
 app.use('/android_logo', express.static('android_logo'));
 // Extra guard: block non-local Origins on mutating requests.
 app.use((req: Request, res: Response, next) => {
@@ -1283,6 +1285,150 @@ app.get('/apps/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ---- Device state detection (no ADB required) ----
+app.get('/api/device-state', async (req, res) => {
+    try {
+        // 1. ADB
+        let adbDevices: string[] = [];
+        let hasDevice = false;
+        let hasUnauthorized = false;
+        try {
+            const { stdout } = await execAsync('adb devices', { timeout: 5000 });
+            const lines = stdout.split('\n').filter(l => l.trim() && !l.startsWith('List'));
+            hasDevice = lines.some(l => /device\s*$/.test(l) && !l.includes('unauthorized'));
+            hasUnauthorized = lines.some(l => /unauthorized/.test(l));
+            adbDevices = lines.map(l => l.split('\t')[0]).filter(Boolean);
+        } catch (_) {}
+
+        if (hasDevice) {
+            return res.json({ state: 'adb_ready', details: 'Device is booted and ADB ready', adbDevices });
+        }
+        if (hasUnauthorized) {
+            return res.json({ state: 'adb_unauthorized', details: 'ADB unauthorized – approve on phone' });
+        }
+
+        // 2. Fastboot
+        try {
+            const { stdout } = await execAsync('fastboot devices', { timeout: 3000 });
+            if (stdout.trim().length > 0) {
+                return res.json({ state: 'bootloader', details: 'Device in fastboot/bootloader mode' });
+            }
+        } catch (_) {}
+
+        // 3. USB enumeration (Windows / Linux)
+        if (process.platform === 'win32') {
+            try {
+                // Get both FriendlyName and DeviceID (which contains VID/PID)
+                const psCmd = `
+                    Get-PnpDevice | Where-Object { $_.Status -ne "Unknown" } | 
+                    ForEach-Object {
+                        $friendly = $_.FriendlyName
+                        $deviceId = $_.DeviceID
+                        $instanceId = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName "DEVPKEY_Device_InstanceId" -ErrorAction SilentlyContinue).Data
+                        if (-not $instanceId) { $instanceId = $deviceId }
+                        [PSCustomObject]@{
+                            FriendlyName = $friendly
+                            DeviceID = $deviceId
+                            InstanceId = $instanceId
+                        }
+                    } | ConvertTo-Json -Compress
+                `;
+                const { stdout } = await execAsync(`powershell -Command "${psCmd.replace(/"/g, '\\"')}"`, { timeout: 6000 });
+                const devices = JSON.parse(stdout);
+                const usbDevices = Array.isArray(devices) ? devices : [devices];
+
+                let isSamsung = false;
+                let isSamsungDownload = false;
+                let isQdloader = false;
+                let isPreloader = false;
+                let isUnknown = false;
+
+                for (const dev of usbDevices) {
+                    const friendly = (dev.FriendlyName || '').toLowerCase();
+                    const deviceId = (dev.DeviceID || '').toLowerCase();
+                    const instanceId = (dev.InstanceId || '').toLowerCase();
+
+                    // Check for Samsung VID (04E8) in DeviceID or InstanceId
+                    const hasSamsungVid = /vid_04e8/i.test(deviceId) || /vid_04e8/i.test(instanceId);
+                    const hasSamsungName = /samsung/.test(friendly);
+
+                    if (hasSamsungVid || hasSamsungName) {
+                        isSamsung = true;
+                        // Check for Download Mode specific PIDs (common: 685D, 6860, 6865, 6855)
+                        if (/pid_685d|pid_6860|pid_6865|pid_6855/i.test(deviceId) || /pid_685d|pid_6860|pid_6865|pid_6855/i.test(instanceId)) {
+                            isSamsungDownload = true;
+                            break;
+                        }
+                        // Also check FriendlyName for Download/Odin keywords
+                        if (/download|odin|mobile|composite/i.test(friendly)) {
+                            isSamsungDownload = true;
+                            break;
+                        }
+                    }
+
+                    // EDL (Qualcomm 9008)
+                    if (/qdloader|9008/i.test(friendly) || /vid_05c6/i.test(deviceId)) {
+                        isQdloader = true;
+                        break;
+                    }
+                    // MediaTek Preloader
+                    if (/preloader|mediatek.*da/i.test(friendly) || /vid_0e8d/i.test(deviceId)) {
+                        isPreloader = true;
+                        break;
+                    }
+                    // Unknown USB device
+                    if (/unknown usb device/i.test(friendly)) {
+                        isUnknown = true;
+                    }
+                }
+
+                if (isSamsungDownload) {
+                    return res.json({ state: 'samsung_download', details: 'Samsung Download Mode (Odin) – ready for firmware flash' });
+                }
+                if (isQdloader) {
+                    return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL (9008) mode – bootloader corrupted' });
+                }
+                if (isPreloader) {
+                    return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode – OS did not load' });
+                }
+                if (isUnknown) {
+                    return res.json({ state: 'unknown_enumeration', details: 'Unknown USB device – partial power but no valid driver' });
+                }
+                if (usbDevices.length > 0) {
+                    // If we have any USB device but none matched, show generic
+                    return res.json({ state: 'generic_usb_detected', details: 'USB device detected, but mode not classified' });
+                }
+            } catch (err) {
+                console.warn('[DeviceState] USB enumeration error:', err);
+            }
+        } else {
+            // Linux / macOS: lsusb with more detail
+            try {
+                const { stdout } = await execAsync('lsusb -v 2>/dev/null | grep -E "idVendor|idProduct|bcdDevice" | head -20', { timeout: 3000 });
+                // Look for Samsung VID 04E8 and common download PIDs
+                if (/idVendor\s+0x04e8/i.test(stdout) && /idProduct\s+0x685d|0x6860|0x6865|0x6855/i.test(stdout)) {
+                    return res.json({ state: 'samsung_download', details: 'Samsung Download Mode (Odin) (lsusb)' });
+                }
+                if (/idVendor\s+0x04e8/i.test(stdout)) {
+                    // Samsung VID but not specific PID – could still be download
+                    return res.json({ state: 'samsung_download', details: 'Samsung device detected (likely Download Mode)' });
+                }
+                if (/idVendor\s+0x05c6/i.test(stdout)) {
+                    return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL (9008) mode (lsusb)' });
+                }
+                if (/idVendor\s+0x0e8d/i.test(stdout)) {
+                    return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode (lsusb)' });
+                }
+            } catch (_) {}
+        }
+
+        // 4. Nothing detected
+        res.json({ state: 'no_response', details: 'No device detected in any mode' });
+    } catch (error) {
+        console.error('[DeviceState] Error:', error);
+        res.json({ state: 'no_response', details: `Error: ${(error as Error).message}` });
+    }
+});
 // ──────────────────────────────────────────────────────────
 // FAST suspicious-apps endpoint (no deep APK scan, ~5-10 seconds)
 // ──────────────────────────────────────────────────────────
