@@ -4383,6 +4383,7 @@ function initNavigation() {
                 else if (page === 'repairs') await renderRepairs();
                 else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
+                
                 else await renderDashboard();
             } catch (err) {
                 console.error('Page render error:', err);
