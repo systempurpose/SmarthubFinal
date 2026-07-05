@@ -25,8 +25,7 @@ import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
 // At the top with other imports
 import { detectPackerIndicators } from './heuristics';
 
-
-
+let httpServer: ReturnType<typeof app.listen> | undefined;
 const execAsync = promisify(exec);
 
 
@@ -112,6 +111,8 @@ import { registerAndroidConnectivityRoutes } from './routes/androidConnectivityR
 import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
+
+
 
 
 // Helper to run PowerShell scripts without quoting issues
@@ -652,7 +653,7 @@ app.get('/health', (_req: Request, res: Response) => {
 // Best-effort shutdown endpoint for the Windows desktop shell.
 // Local-only by default (loopback guard middleware applies).
 // Used to "reset" the local server on app open/close.
-let httpServer: ReturnType<typeof app.listen> | null = null;
+
 app.post('/shutdown', (_req: Request, res: Response) => {
   res.json({ ok: true, ts: Date.now() });
   // Close after responding.
@@ -705,6 +706,9 @@ app.use('/api', fridaRoutes);
 app.use('/api', overlayRoutes);
 app.use('/api/hardware', hardwareRoutes);
 app.use('/api/repair', repairRoutes);
+app.get(['/', '/ui', '/ui.html', '/html', '/html/ui.html'], (_req, res) => {
+  res.sendFile(path.join(process.cwd(), 'html', 'ui.html'));
+});
 app.use(express.static('html'));
 app.use('/css', express.static('css'));
 app.use('/js', express.static('js'));
@@ -1398,188 +1402,176 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
 }
 // ============ MAIN ROUTE ============
 
+// ---- Device state detection (no ADB) ----
+// ---- Device state detection (no ADB) ----
+// ---- Device state detection (no ADB) ----
 app.get('/api/device-state', async (req, res) => {
     try {
-        // ---- 1. ADB ----
+        // 1. ADB
         let adbDevices: string[] = [];
+        let hasDevice = false;
+        let hasUnauthorized = false;
         try {
             const { stdout } = await execAsync('adb devices', { timeout: 5000 });
             const lines = stdout.split('\n').filter(l => l.trim() && !l.startsWith('List'));
+            hasDevice = lines.some(l => /device\s*$/.test(l) && !l.includes('unauthorized'));
+            hasUnauthorized = lines.some(l => /unauthorized/.test(l));
             adbDevices = lines.map(l => l.split('\t')[0]).filter(Boolean);
-
-            const hasDevice = lines.some(l => /\bdevice\s*$/.test(l) && !l.includes('unauthorized'));
-            const hasUnauthorized = lines.some(l => /unauthorized/.test(l));
-            const hasRecovery = lines.some(l => /\brecovery\s*$/.test(l));
-            const hasSideload = lines.some(l => /\bsideload\s*$/.test(l));
-
-            if (hasDevice) {
-                return res.json({ state: 'adb_ready', details: 'Device is booted and ADB ready', adbDevices });
-            }
-            if (hasRecovery) {
-                return res.json({ state: 'recovery', details: 'Device is in recovery mode', adbDevices });
-            }
-            if (hasSideload) {
-                return res.json({ state: 'sideload', details: 'Device is in ADB sideload mode', adbDevices });
-            }
-            if (hasUnauthorized) {
-                return res.json({ state: 'adb_unauthorized', details: 'ADB unauthorized – approve on phone', adbDevices });
-            }
         } catch (_) {}
 
-        // ---- 2. Fastboot ----
+        if (hasDevice) {
+            return res.json({ state: 'adb_ready', details: 'Device is booted and ADB ready', adbDevices });
+        }
+        if (hasUnauthorized) {
+            return res.json({ state: 'adb_unauthorized', details: 'ADB unauthorized – approve on phone' });
+        }
+
+        // 2. Fastboot
         try {
             const { stdout } = await execAsync('fastboot devices', { timeout: 3000 });
             if (stdout.trim().length > 0) {
-                let unlocked: string | undefined;
-                let currentSlot: string | undefined;
-                try {
-                    const { stdout: uOut, stderr: uErr } = await execAsync('fastboot getvar unlocked', { timeout: 4000 });
-                    unlocked = ((uOut || '') + (uErr || '')).match(/unlocked:\s*(\w+)/)?.[1];
-                } catch (_) {}
-                try {
-                    const { stdout: sOut, stderr: sErr } = await execAsync('fastboot getvar current-slot', { timeout: 4000 });
-                    currentSlot = ((sOut || '') + (sErr || '')).match(/current-slot:\s*(\w+)/)?.[1];
-                } catch (_) {}
-                return res.json({
-                    state: 'bootloader',
-                    details: 'Device in fastboot/bootloader mode',
-                    unlocked: unlocked ?? null,
-                    currentSlot: currentSlot ?? null
-                });
+                return res.json({ state: 'bootloader', details: 'Device in fastboot/bootloader mode' });
             }
         } catch (_) {}
 
-        // ---- 3. USB enumeration (Windows only) via wmic ----
+        // 3. USB enumeration (Windows only)
         if (process.platform === 'win32') {
+            let stdout = '';
+            // Try PowerShell first (using the safe helper)
             try {
-                // Use wmic to get all PnP devices in CSV format
-                const { stdout } = await execAsync(
-                    'wmic path Win32_PnPEntity get DeviceID,Name /format:csv',
-                    { timeout: 6000 }
-                );
-                console.log('[DeviceState] WMIC output length:', stdout.length);
-                if (stdout.length > 0) {
-                    console.log('[DeviceState] WMIC output (first 500 chars):', stdout.substring(0, 500));
-                }
-
-                const lines = stdout.split('\n').filter(l => l.trim() !== '');
-                // Skip the header (first line: Node,DeviceID,Name)
-                const dataLines = lines.slice(1);
-                const devices: UsbDeviceInfo[] = [];
-
-                for (const line of dataLines) {
-                    // CSV format: Node,DeviceID,Name (Name may contain commas)
-                    const parts = line.split(',');
-                    if (parts.length < 3) continue;
-                    const deviceId = parts[1]?.trim() || '';
-                    // Name might have commas, so join the rest
-                    const name = parts.slice(2).join(',').trim();
-                    if (!deviceId && !name) continue;
-
-                    // Skip system devices
-                    if (/acpi|pci|system|motherboard|processor|intel|amd|nvidia|realtek|broadcom|conexant/i.test(name)) continue;
-
-                    devices.push({ friendly: name, deviceId });
-                }
-
-                console.log(`[DeviceState] Parsed ${devices.length} USB devices via wmic`);
-                for (const dev of devices) {
-                    console.log(`[DeviceState] WMIC: friendly="${dev.friendly}", deviceId="${dev.deviceId}"`);
-                    // After parsing devices
-console.log('[DeviceState] Parsed devices:', devices.map(d => d.friendly).join(', '));
-                }
-
-                if (devices.length === 0) {
-                    return res.json({ state: 'no_response', details: 'No device detected in any mode' });
-                }
-
-                // Classification and priority (same as before)
-                const priorityOrder: DeviceState[] = [
-                    'samsung_download',
-                    'edl_qualcomm',
-                    'preloader_mediatek',
-                    'recovery',
-                    'mtp_normal',
-                    'unknown_enumeration'
-                ];
-
-                // After classifying all devices
-const found = new Map<DeviceState, UsbDeviceInfo>();
-let hasNonSystemDevice = false;
-for (const dev of devices) {
-    const state = classifyUsbDevice(dev);
-    if (state) {
-        found.set(state, dev);
-        console.log(`[DeviceState] Found state ${state} for device ${dev.friendly}`);
-    } else {
-        // If it's not a system device (we already filtered in classify), but returned null,
-        // it might still be a valid MTP device. We'll track it.
-        if (!/acpi|pci|system|motherboard|processor|intel|amd|nvidia|realtek|broadcom|conexant|microsoft|usb root hub|generic usb hub/i.test(dev.friendly)) {
-            hasNonSystemDevice = true;
-            // Store as potential MTP if we don't find anything else
-            if (!found.has('mtp_normal')) {
-                found.set('mtp_normal', dev);
-            }
-        }
-    }
-}
-
-                for (const state of priorityOrder) {
-                    if (found.has(state)) {
-                        const dev = found.get(state)!;
-                        const detailsMap: Record<string, string> = {
-                            mtp_normal: 'Device booted successfully and is in MTP/file-transfer mode — OS is alive, any BSOD symptom is app/UI-level',
-                            samsung_download: 'Samsung Download Mode (Odin) – ready for firmware flash',
-                            edl_qualcomm: 'Qualcomm EDL (9008) mode – bootloader failed to load',
-                            preloader_mediatek: 'MediaTek Preloader mode – OS did not load',
-                            recovery: 'Device in recovery mode (USB class) — boot partition intact',
-                            unknown_enumeration: 'Unknown USB device – partial power but no valid driver'
-                        };
-                        return res.json({
-                            state,
-                            details: detailsMap[state] || `Detected via: ${dev.friendly}`,
-                            matchedDevice: dev.friendly
-                        });
+                const psScript = `
+                    Get-PnpDevice | ForEach-Object {
+                        $friendly = $_.FriendlyName
+                        $deviceId = $_.DeviceID
+                        if ($friendly -or $deviceId) { "$friendly|$deviceId" }
                     }
+                `;
+                stdout = await runPowerShellScript(psScript, 6000);
+            } catch (psErr) {
+                console.warn('[DeviceState] PowerShell failed, falling back to wmic', psErr);
+                // Fallback to wmic
+                try {
+                    const { stdout: wmicOut } = await execAsync('wmic path Win32_PnPEntity get DeviceID,Name /format:csv', { timeout: 6000 });
+                    // Parse CSV
+                    const lines = wmicOut.split('\n').filter(l => l.trim() !== '');
+                    const dataLines = lines.slice(1); // skip header
+                    stdout = dataLines.map(line => {
+                        const parts = line.split(',');
+                        if (parts.length < 3) return '';
+                        const name = parts.slice(2).join(',').trim();
+                        const deviceId = parts[1]?.trim() || '';
+                        return `${name}|${deviceId}`;
+                    }).filter(Boolean).join('\n');
+                } catch (wmicErr) {
+                    console.warn('[DeviceState] wmic also failed', wmicErr);
+                }
+            }
+
+            const lines = stdout.split('\n').filter(l => l.trim() !== '');
+            let isMTP = false;
+            let isSamsungDownload = false;
+            let isQdloader = false;
+            let isPreloader = false;
+            let isUnknown = false;
+            let hasUsb = false;
+
+            for (const line of lines) {
+                const parts = line.split('|');
+                if (parts.length < 2) continue;
+                const friendly = parts[0].trim().toLowerCase();
+                const deviceId = parts[1].trim().toLowerCase();
+                if (/acpi|pci|system|motherboard|processor/i.test(friendly)) continue;
+                hasUsb = true;
+
+                // ---- MTP detection ----
+                if (/mtp|portable device|android usb device|media transfer protocol|phone|smartphone|android|samsung|xiaomi|huawei|oppo|vivo|realme|oneplus|itel|infinix|tecno/i.test(friendly)) {
+                    isMTP = true;
+                    break;
                 }
 
-                // If we have devices but none matched, return generic
-                return res.json({
-                    state: 'generic_usb_detected',
-                    details: 'USB device detected, but mode not classified',
-                    devices: devices.slice(0, 10).map(d => d.friendly)
-                });
-            } catch (err) {
-                console.warn('[DeviceState] WMIC enumeration error:', err);
+                // ---- Samsung Download ----
+                if (/samsung/.test(friendly) || /vid_04e8/.test(deviceId)) {
+                    if (/download|odin|mobile|composite/.test(friendly) ||
+                        /pid_685d|pid_6860|pid_6865|pid_6855/.test(deviceId)) {
+                        isSamsungDownload = true;
+                        break;
+                    }
+                    isSamsungDownload = true;
+                    break;
+                }
+                if (/qdloader|9008/.test(friendly) || /vid_05c6/.test(deviceId)) {
+                    isQdloader = true;
+                    break;
+                }
+                if (/preloader|mediatek/.test(friendly) || /vid_0e8d/.test(deviceId)) {
+                    isPreloader = true;
+                    break;
+                }
+                if (/unknown usb device/.test(friendly)) {
+                    isUnknown = true;
+                }
+            }
+
+            if (isMTP) {
+                return res.json({ state: 'mtp_normal', details: 'MTP mode – device booted successfully' });
+            }
+            if (isSamsungDownload) {
+                return res.json({ state: 'samsung_download', details: 'Samsung Download Mode (Odin) – ready for firmware flash' });
+            }
+            if (isQdloader) {
+                return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL (9008) mode – bootloader corrupted' });
+            }
+            if (isPreloader) {
+                return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode – OS did not load' });
+            }
+            if (isUnknown) {
+                return res.json({ state: 'unknown_enumeration', details: 'Unknown USB device – partial power but no valid driver' });
+            }
+            if (hasUsb) {
+                return res.json({ state: 'generic_usb_detected', details: 'USB device detected, but mode not classified' });
             }
         } else {
-            // ---- Linux/macOS: lsusb ----
+            // Linux / macOS
             try {
-                const { stdout } = await execAsync(
-                    'lsusb -v 2>/dev/null | grep -E "idVendor|idProduct|bcdDevice" | head -20',
-                    { timeout: 3000 }
-                );
-                if (/idVendor\s+0x04e8/i.test(stdout)) {
-                    return res.json({ state: 'samsung_download', details: 'Samsung device detected (likely Download Mode) (lsusb)' });
-                }
-                if (/idVendor\s+0x05c6/i.test(stdout)) {
-                    return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL (9008) mode (lsusb)' });
-                }
-                if (/idVendor\s+0x0e8d/i.test(stdout)) {
-                    return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode (lsusb)' });
-                }
-                if (/idVendor\s+0x18d1/i.test(stdout)) {
-                    return res.json({ state: 'mtp_normal', details: 'Android device enumerated normally (lsusb)' });
-                }
+                const { stdout } = await execAsync('lsusb', { timeout: 3000 });
+                if (/04E8/i.test(stdout)) return res.json({ state: 'samsung_download', details: 'Samsung device detected (Download Mode)' });
+                if (/05c6/i.test(stdout)) return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL mode' });
+                if (/0e8d/i.test(stdout)) return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode' });
             } catch (_) {}
         }
 
-        // ---- 4. Nothing detected ----
         res.json({ state: 'no_response', details: 'No device detected in any mode' });
     } catch (error) {
         console.error('[DeviceState] Error:', error);
         res.json({ state: 'no_response', details: `Error: ${(error as Error).message}` });
     }
+});
+
+// src/server.ts
+app.get('/api/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Send a ping every 15 seconds to keep the connection alive
+    const pingInterval = setInterval(() => {
+        res.write(':\n\n'); // comment line = keep‑alive ping
+    }, 15000);
+
+    // When device state changes, send an event
+    const sendUpdate = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Store the sendUpdate function so other parts of the app can call it
+    // e.g., after USB detection or ADB changes
+    (req as any).sseSend = sendUpdate;
+
+    // Clean up on client disconnect
+    req.on('close', () => {
+        clearInterval(pingInterval);
+        res.end();
+    });
 });
 // ──────────────────────────────────────────────────────────
 // FAST suspicious-apps endpoint (no deep APK scan, ~5-10 seconds)
@@ -2258,25 +2250,47 @@ const port = Number.parseInt(String(process.env.PORT ?? ''), 10) || 3333;
 const host = allowRemote ? '0.0.0.0' : '127.0.0.1';
 
 httpServer = app.listen(port, host, async () => {
-  // eslint-disable-next-line no-console
-  const shownHost = host === '0.0.0.0' ? 'localhost' : host;
-  console.log(`Companion service listening on http://${shownHost}:${port}`);
+    const shownHost = host === '0.0.0.0' ? 'localhost' : host;
+    console.log(`Companion service listening on http://${shownHost}:${port}`);
 
-  // Record process info so the Windows shell can safely stop stale instances.
-  try {
-    const infoPath = path.join(dataRoot, 'backend-process.json');
-    const payload = {
-      pid: process.pid,
-      startedAt: Date.now(),
-      port,
-      host,
-      smarthubHome: process.env.SMARTHUB_HOME || process.env.SMART_HUB_HOME || process.cwd(),
-    };
-    await fs.writeFile(infoPath, JSON.stringify(payload, null, 2), 'utf8');
-  } catch {
-    // ignore
-  }
+    // ---- Initialize WebSocket server ----
+    const wss = new WebSocket.Server({ server: httpServer! });
+    console.log('WebSocket server initialized');
+
+    wss.on('connection', (ws) => {
+        console.log('WebSocket client connected');
+
+        ws.on('message', async (message) => {
+            try {
+                const data = JSON.parse(message.toString());
+                if (data.action === 'ping') {
+                    ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+                }
+            } catch (err) {
+                console.error('WebSocket message error:', err);
+            }
+        });
+
+        ws.on('close', () => console.log('WebSocket client disconnected'));
+    });
+
+    // ---- Record process info ----
+    try {
+        const infoPath = path.join(dataRoot, 'backend-process.json');
+        const payload = {
+            pid: process.pid,
+            startedAt: Date.now(),
+            port,
+            host,
+            smarthubHome: process.env.SMARTHUB_HOME || process.env.SMART_HUB_HOME || process.cwd(),
+        };
+        await fs.writeFile(infoPath, JSON.stringify(payload, null, 2), 'utf8');
+    } catch {
+        // ignore
+    }
 });
+
+
 
 async function cleanupProcessInfo(): Promise<void> {
   try {
@@ -2315,7 +2329,7 @@ httpServer.on('error', (err: any) => {
   // eslint-disable-next-line no-console
   console.error('Backend server error:', err);
   process.exit(1);
-  const execAsync = promisify(exec);
+  
 
 
 });

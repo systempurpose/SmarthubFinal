@@ -662,6 +662,29 @@ async function fetchDevices() {
     }
 }
 
+// js/ui.js
+function connectSSE() {
+    const eventSource = new EventSource(`${BACKEND_URL}/api/events`);
+
+    eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'deviceState') {
+            // Update device status instantly
+            currentDeviceId = data.deviceId;
+            updateConnectionStatus();  // now instant, no delay
+            renderDashboard();
+        }
+    };
+
+    eventSource.onerror = () => {
+        // Reconnect after a delay if the connection drops
+        setTimeout(connectSSE, 3000);
+    };
+}
+
+// Call this once on app start (after initNavigation)
+connectSSE();
+
 async function updateConnectionStatus() {
     console.log('[updateConnectionStatus] called');
     const statusSpan = document.querySelector('#connectionStatus span');
@@ -952,12 +975,31 @@ async function renderAdvancedDiagnostic() {
         }
     });
 }
+
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
     const container = document.getElementById('pageContent');
     if (!container) return;
 
-    // ---- If ADB device is connected, render full dashboard ----
+    // ---- Verify ADB is actually responsive ----
+    if (currentDeviceId) {
+        try {
+            const resp = await fetch(`${BACKEND_URL}/adb-shell`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: currentDeviceId, command: 'echo "ping"' })
+            });
+            if (!resp.ok) {
+                console.warn('[Dashboard] ADB ping failed, clearing currentDeviceId');
+                currentDeviceId = null;
+            }
+        } catch (e) {
+            console.warn('[Dashboard] ADB ping error, clearing currentDeviceId', e);
+            currentDeviceId = null;
+        }
+    }
+
+    // ---- If ADB is available, render full dashboard ----
     if (currentDeviceId) {
         await renderAdbDashboard(container);
         return;
@@ -971,7 +1013,6 @@ async function renderDashboard() {
         const state = stateData.state;
         const details = stateData.details || '';
 
-        // ---- State-specific dashboards ----
         const stateLabels = {
             'adb_ready': { icon: '✅', color: '#107c10', label: 'ADB Ready' },
             'adb_unauthorized': { icon: '⚠️', color: '#ed6c02', label: 'ADB Unauthorized' },
@@ -989,7 +1030,7 @@ async function renderDashboard() {
 
         const info = stateLabels[state] || { icon: '❓', color: '#6B7280', label: state || 'Unknown' };
 
-        // ---- MTP Mode – OS booted successfully (UPDATED) ----
+        // ---- MTP Mode – OS booted successfully ----
         if (state === 'mtp_normal') {
             container.innerHTML = `
                 <div class="info-card" style="text-align: left; padding: 30px; border-left: 4px solid #107c10;">
@@ -1026,7 +1067,7 @@ async function renderDashboard() {
             return;
         }
 
-        // ---- Firmware-level modes (Download, Fastboot, EDL, Preloader) ----
+        // ---- Firmware-level modes ----
         if (state === 'samsung_download' || state === 'bootloader' || state === 'edl_qualcomm' || state === 'preloader_mediatek') {
             container.innerHTML = `
                 <div class="info-card" style="text-align: center; padding: 30px; border-left: 4px solid #ed6c02;">
@@ -1099,11 +1140,9 @@ async function renderDashboard() {
 }
 
 // ---- Extracted ADB dashboard rendering (keep the existing logic) ----
-async function renderAdbDashboard(container) {
-    // This is the existing dashboard code (the part inside the `if (currentDeviceId)` block)
-    // I'll move it here for clarity. You can keep it inline if you prefer.
+// ---- RENDER FULL ADB DASHBOARD ----
 
-    // For now, I'll put the existing code here:
+async function renderAdbDashboard(container) {
     container.innerHTML = `
         <h1 style="margin-bottom: 24px;">Dashboard</h1>
         <div class="action-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -1227,43 +1266,70 @@ async function renderAdbDashboard(container) {
     const helpCard = container.querySelector('.action-card[data-action="help"]');
     if (helpCard) helpCard.addEventListener('click', showHelpModal);
 
-    // ---- Fetch and display the rest (ADB data) ----
-    await new Promise(r => setTimeout(r, 50));
-
+    // ---- Fetch and display hardware data ----
+    console.log('[Dashboard] Fetching hardware data for device:', currentDeviceId);
     try {
         const [battery, storage, ram, deviceText, wifiStatus, tempData, safetyData] = await Promise.all([
-            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ level: '?', health: 'unknown' })),
-            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ total: '?', used: '?', free: '?' })),
-            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ total: '?', used: '?' })),
-            fetchWithTimeout(`${BACKEND_URL}/device/${currentDeviceId}`, {}, 7000).then(r => r.text()).catch(() => ''),
-            fetchWithTimeout(`${BACKEND_URL}/wifi/status/${currentDeviceId}`, {}, 7000).then(r => r.json()).catch(() => null),
-            apiCall(`/hardware/temperature?deviceId=${currentDeviceId}`, { timeoutMs: 8000 }).catch(() => ({ temperature: 'Unknown' })),
-            fetch(`${BACKEND_URL}/api/software-safety?deviceId=${currentDeviceId}`).then(r => r.ok ? r.json() : null).catch(() => null)
+            apiCall(`/hardware/battery?deviceId=${currentDeviceId}`).catch(e => {
+                console.error('[Dashboard] Battery API error:', e);
+                return { level: '?', health: 'unknown' };
+            }),
+            apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(e => {
+                console.error('[Dashboard] Storage API error:', e);
+                return { total: '?', used: '?', free: '?' };
+            }),
+            apiCall(`/hardware/ram?deviceId=${currentDeviceId}`).catch(e => {
+                console.error('[Dashboard] RAM API error:', e);
+                return { total: '?', used: '?' };
+            }),
+            fetchWithTimeout(`${BACKEND_URL}/device/${currentDeviceId}`, {}, 7000)
+                .then(r => r.text())
+                .catch(e => {
+                    console.error('[Dashboard] Device props error:', e);
+                    return '';
+                }),
+            fetchWithTimeout(`${BACKEND_URL}/wifi/status/${currentDeviceId}`, {}, 7000)
+                .then(r => r.json())
+                .catch(e => {
+                    console.error('[Dashboard] WiFi status error:', e);
+                    return null;
+                }),
+            apiCall(`/hardware/temperature?deviceId=${currentDeviceId}`).catch(e => {
+                console.error('[Dashboard] Temperature error:', e);
+                return { temperature: 'Unknown' };
+            }),
+            fetch(`${BACKEND_URL}/api/software-safety?deviceId=${currentDeviceId}`)
+                .then(r => r.ok ? r.json() : null)
+                .catch(e => {
+                    console.error('[Dashboard] Software safety error:', e);
+                    return null;
+                })
         ]);
+
+        console.log('[Dashboard] Battery data:', battery);
+        console.log('[Dashboard] Storage data:', storage);
+        console.log('[Dashboard] RAM data:', ram);
+
+        await updateStatusBar();
 
         if (safetyData) {
             document.getElementById('safetyPatch').textContent = safetyData.patchDate || 'Unknown';
-            document.getElementById('safetyPatch').style.color = safetyData.patchDate && safetyData.patchDate !== 'Unknown' ? '#2e7d32' : '#d32f2f';
             document.getElementById('safetyRoot').textContent = safetyData.isRooted ? '⚠️ Rooted' : '✅ Safe';
-            document.getElementById('safetyRoot').style.color = safetyData.isRooted ? '#d32f2f' : '#2e7d32';
             document.getElementById('safetyPlayProtect').textContent = safetyData.playProtectEnabled ? '✅ On' : '⚠️ Off';
-            document.getElementById('safetyPlayProtect').style.color = safetyData.playProtectEnabled ? '#2e7d32' : '#ed6c02';
             document.getElementById('safetyUnknown').textContent = safetyData.unknownSourcesEnabled ? '⚠️ Allowed' : '✅ Disabled';
-            document.getElementById('safetyUnknown').style.color = safetyData.unknownSourcesEnabled ? '#ed6c02' : '#2e7d32';
             document.getElementById('safetyAdb').textContent = safetyData.adbDebugging ? '⚠️ Enabled' : '✅ Disabled';
-            document.getElementById('safetyAdb').style.color = safetyData.adbDebugging ? '#ed6c02' : '#2e7d32';
             const suspCount = (window._appSecurityResults && window._appSecurityResults[currentDeviceId]) 
                 ? window._appSecurityResults[currentDeviceId].length 
                 : 0;
             document.getElementById('safetySuspicious').textContent = suspCount > 0 ? `⚠️ ${suspCount}` : '✅ 0';
-            document.getElementById('safetySuspicious').style.color = suspCount > 0 ? '#d32f2f' : '#2e7d32';
         }
     } catch (err) {
-        console.error('Dashboard data error:', err);
+        console.error('[Dashboard] Error fetching data:', err);
     }
 
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
 }
+
 function ensureInfoModal(modalId, title) {
     let modal = document.getElementById(modalId);
     if (!modal) {
@@ -5348,7 +5414,27 @@ function openTutorial() {
         initNavigation();
         await updateConnectionStatus();
         setInterval(updateConnectionStatus, 5000);
+
+        // Ensure the dashboard nav item is active on startup
+        const defaultNav = document.querySelector('.nav-item[data-page="dashboard"]');
+        if (defaultNav) {
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            defaultNav.classList.add('active');
+        }
+
         await renderDashboard();
+
+        // Also refresh when the window regains focus, so the app updates automatically.
+        window.addEventListener('focus', async () => {
+            try {
+                await updateConnectionStatus();
+                if (document.querySelector('.nav-item.active')?.dataset.page === 'dashboard') {
+                    await renderDashboard();
+                }
+            } catch (err) {
+                console.error('[Window focus] refresh failed', err);
+            }
+        });
 
         // Hide loading after dashboard is rendered
         hideLoading();
