@@ -1,11 +1,40 @@
 // ==================== GLOBALS ====================
 let currentDeviceId = null;
 let wizardStep = 0;
-
+let lastUsbState = null; // Track last USB state for dashboard re-render
 // ---- Persistent test results ----
 window._hardwareTestResults = {};   // { testId: { status, message, passed } }
 window._connectionTestResults = {}; // { testId: { status, message, passed } }
+function openTutorial() {
+    // Replace the URL with your actual tutorial video
+ 
+    window.open('https://www.youtube.com/watch?v=6KbKqQVJXcQ', '_blank');
+}
 
+function toggleDeviceSections(show) {
+    const deviceCard = document.getElementById('device-info-card');
+    const statusBar = document.getElementById('status-bar');
+    if (deviceCard) {
+        deviceCard.style.display = show ? 'flex' : 'none';
+    }
+    if (statusBar) {
+        statusBar.style.display = show ? 'grid' : 'none';
+    }
+}
+
+let usbState = null; // track current USB state
+
+const PAGE_REQUIRES_ADB = {
+    'device-info': true,
+    'hardware-tests': true,
+    'connection-troubleshoot': true,
+    'ai-conclusion': true,
+    'repairs': true,
+    // bsod and advanced don't require ADB
+    'bsod': false,
+    'advanced': false,
+    'dashboard': false,
+};
 // ==================== CUSTOM ALERT & CONFIRM ====================
 // ==================== CUSTOM ALERT & CONFIRM ====================
 function showAlert(title, message) {
@@ -644,6 +673,7 @@ async function updateConnectionStatus() {
     statusSpan.style.color = '#6B7280';
     const previousDeviceId = currentDeviceId;
     let foundDevice = false;
+    let usbStateChanged = false;
 
     // 1. Try ADB
     try {
@@ -657,14 +687,25 @@ async function updateConnectionStatus() {
             statusSpan.innerText = `ADB: ${currentDeviceId}`;
             statusSpan.style.color = '#107c10';
             foundDevice = true;
+            // Clear USB state when ADB is found
+            if (lastUsbState !== null) {
+                lastUsbState = null;
+                usbStateChanged = true;
+            }
             try {
                 await updateDeviceInfo();
             } catch (deviceInfoErr) {
                 console.warn('[updateConnectionStatus] updateDeviceInfo failed', deviceInfoErr);
             }
+        } else {
+            // No ADB device – clear currentDeviceId
+            if (currentDeviceId !== null) {
+                currentDeviceId = null;
+            }
         }
     } catch (err) {
         console.warn('[updateConnectionStatus] ADB fetch failed:', err);
+        currentDeviceId = null;
     }
 
     // 2. If no ADB device, try USB state detection
@@ -688,41 +729,66 @@ async function updateConnectionStatus() {
                     'edl_qualcomm': { label: 'Qualcomm EDL', color: '#d32f2f' },
                     'preloader_mediatek': { label: 'MediaTek Preloader', color: '#d32f2f' },
                     'unknown_enumeration': { label: 'Unknown USB', color: '#6B7280' },
-                  'generic_usb_detected': { label: 'USB Detected (unclassified)', color: '#6B7280' },
+                    'generic_usb_detected': { label: 'USB Detected (unclassified)', color: '#6B7280' },
                     'no_response': { label: 'No Device', color: '#6B7280' }
                 };
                 const info = stateLabels[state] || { label: state || 'Unknown', color: '#6B7280' };
-                // Truncate details if too long (e.g., keep first 30 chars)
+                // Truncate details
                 const shortDetails = details && details.length > 40 ? details.substring(0, 40) + '…' : details;
                 const displayText = shortDetails ? `${info.label} – ${shortDetails}` : info.label;
                 statusSpan.innerText = displayText;
                 statusSpan.style.color = info.color;
+                // Track state change for dashboard re-render
+                if (lastUsbState !== state) {
+                    lastUsbState = state;
+                    usbStateChanged = true;
+                }
                 // Clear currentDeviceId since ADB not available
-                currentDeviceId = null;
-                // We don't update device info because ADB not available
+                if (currentDeviceId !== null) {
+                    currentDeviceId = null;
+                }
                 console.log('[updateConnectionStatus] USB state:', state, displayText);
-                foundDevice = true; // so we don't fall through to "No device"
+                foundDevice = true;
             } else {
                 console.warn('[updateConnectionStatus] /api/device-state returned non-OK');
+                // No USB state – ensure lastUsbState is null
+                if (lastUsbState !== null) {
+                    lastUsbState = null;
+                    usbStateChanged = true;
+                }
             }
         } catch (err) {
             console.warn('[updateConnectionStatus] USB state fetch failed:', err);
+            // No USB state – ensure lastUsbState is null
+            if (lastUsbState !== null) {
+                lastUsbState = null;
+                usbStateChanged = true;
+            }
         }
     }
 
     // 3. If nothing found at all
     if (!foundDevice) {
-        currentDeviceId = null;
+        // Ensure USB state is cleared
+        if (lastUsbState !== null) {
+            lastUsbState = null;
+            usbStateChanged = true;
+        }
+        if (currentDeviceId !== null) {
+            currentDeviceId = null;
+        }
         statusSpan.innerText = 'No device found';
         statusSpan.style.color = '#d83b01';
     }
 
-    // Re-render dashboard if needed (existing logic)
+    // 4. Re-render dashboard if needed
     const activePage = document.querySelector('.nav-item.active')?.dataset.page;
-    if (activePage === 'dashboard' && currentDeviceId && currentDeviceId !== previousDeviceId) {
-        console.log('[updateConnectionStatus] re-rendering dashboard');
+    if (activePage === 'dashboard' && (currentDeviceId !== previousDeviceId || usbStateChanged)) {
+        console.log('[updateConnectionStatus] re-rendering dashboard (ADB changed or USB state changed)');
         await renderDashboard();
     }
+    // Update visibility of device sections
+    toggleDeviceSections(!!currentDeviceId);
 }
 
 // ==================== SUSPICIOUS SCAN DEBUG ====================
@@ -891,17 +957,153 @@ async function renderDashboard() {
     const container = document.getElementById('pageContent');
     if (!container) return;
 
-    if (!currentDeviceId) {
-        container.innerHTML = `<div class="card" style="text-align: center; padding: 40px;">
+    // ---- If ADB device is connected, render full dashboard ----
+    if (currentDeviceId) {
+        await renderAdbDashboard(container);
+        return;
+    }
+
+    // ---- No ADB – check USB state ----
+    try {
+        const resp = await fetch(`${BACKEND_URL}/api/device-state`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const stateData = await resp.json();
+        const state = stateData.state;
+        const details = stateData.details || '';
+
+        // ---- State-specific dashboards ----
+        const stateLabels = {
+            'adb_ready': { icon: '✅', color: '#107c10', label: 'ADB Ready' },
+            'adb_unauthorized': { icon: '⚠️', color: '#ed6c02', label: 'ADB Unauthorized' },
+            'recovery': { icon: '🔧', color: '#ed6c02', label: 'Recovery Mode' },
+            'sideload': { icon: '🔧', color: '#ed6c02', label: 'Sideload Mode' },
+            'mtp_normal': { icon: '📁', color: '#107c10', label: 'MTP Mode (OS Booted)' },
+            'bootloader': { icon: '🔧', color: '#ed6c02', label: 'Fastboot / Bootloader' },
+            'samsung_download': { icon: '📥', color: '#ed6c02', label: 'Download Mode (Odin)' },
+            'edl_qualcomm': { icon: '🔴', color: '#c62828', label: 'Qualcomm EDL' },
+            'preloader_mediatek': { icon: '🔴', color: '#c62828', label: 'MediaTek Preloader' },
+            'unknown_enumeration': { icon: '❓', color: '#6B7280', label: 'Unknown USB' },
+            'generic_usb_detected': { icon: '🔌', color: '#6B7280', label: 'USB Detected (unclassified)' },
+            'no_response': { icon: '📴', color: '#6B7280', label: 'No Device' }
+        };
+
+        const info = stateLabels[state] || { icon: '❓', color: '#6B7280', label: state || 'Unknown' };
+
+        // ---- MTP Mode – OS booted successfully (UPDATED) ----
+        if (state === 'mtp_normal') {
+            container.innerHTML = `
+                <div class="info-card" style="text-align: left; padding: 30px; border-left: 4px solid #107c10;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div>
+                            <div style="font-size: 48px; margin-bottom: 4px;">${info.icon}</div>
+                            <h2 style="color: #1e293b; margin: 0;">${info.label}</h2>
+                        </div>
+                        <button onclick="openTutorial()" class="btn-primary" style="font-size: 14px; padding: 10px 20px; border-radius: 8px;">
+                            ▶️ Watch Tutorial
+                        </button>
+                    </div>
+                    <p style="color: #6B7280; margin-bottom: 16px;">
+                        Your phone is booted and connected in file‑transfer mode.
+                    </p>
+                    <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+                        <h3 style="margin-top: 0; color: #1e293b; font-size: 16px;">📋 How to Enable USB Debugging</h3>
+                        <ol style="margin: 0; padding-left: 20px; color: #334155; line-height: 1.8;">
+                            <li>Go to <strong>Settings</strong> → <strong>About Phone</strong></li>
+                            <li>Tap <strong>Build Number</strong> 7 times to unlock Developer Options</li>
+                            <li>Go back to <strong>Settings</strong> → <strong>Developer Options</strong></li>
+                            <li>Toggle <strong>USB Debugging</strong> <span style="color: #dc2626;">ON</span></li>
+                            <li>Connect your phone via USB and accept the RSA fingerprint prompt</li>
+                        </ol>
+                        <p style="margin: 12px 0 0 0; font-size: 13px; color: #64748b;">
+                            💡 After enabling, the sidebar will show your device and you'll have full diagnostic access.
+                        </p>
+                    </div>
+                    <p style="color: #94a3b8; font-size: 12px; margin-top: 8px;">
+                        OS is alive. Any BSOD symptom is likely app/UI-level, not a boot failure.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        // ---- Firmware-level modes (Download, Fastboot, EDL, Preloader) ----
+        if (state === 'samsung_download' || state === 'bootloader' || state === 'edl_qualcomm' || state === 'preloader_mediatek') {
+            container.innerHTML = `
+                <div class="info-card" style="text-align: center; padding: 30px; border-left: 4px solid #ed6c02;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">${info.icon}</div>
+                    <h2 style="color: #1e293b;">Device in ${info.label}</h2>
+                    <p style="color: #6B7280;">${details}</p>
+                    <p style="color: #475569; font-size: 14px; margin-top: 8px;">
+                        This device is not booted into Android. Use <strong>BSOD Diagnosis</strong> for troubleshooting.
+                    </p>
+                    <button onclick="document.querySelector('.nav-item[data-page=\\'bsod\\']')?.click()" class="btn-primary" style="margin-top: 12px;">
+                        🔍 Go to BSOD Diagnosis
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // ---- Recovery mode ----
+        if (state === 'recovery' || state === 'sideload') {
+            container.innerHTML = `
+                <div class="info-card" style="text-align: center; padding: 30px; border-left: 4px solid #ed6c02;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">${info.icon}</div>
+                    <h2 style="color: #1e293b;">${info.label}</h2>
+                    <p style="color: #6B7280;">${details}</p>
+                    <p style="color: #475569; font-size: 14px; margin-top: 8px;">
+                        Boot partition is intact. System partition may be corrupted.
+                    </p>
+                    <button onclick="document.querySelector('.nav-item[data-page=\\'bsod\\']')?.click()" class="btn-primary" style="margin-top: 12px;">
+                        🔍 Go to BSOD Diagnosis
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // ---- Generic USB detected ----
+        if (state === 'generic_usb_detected' || state === 'unknown_enumeration') {
+            container.innerHTML = `
+                <div class="info-card" style="text-align: center; padding: 30px; border-left: 4px solid #6B7280;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">${info.icon}</div>
+                    <h2 style="color: #1e293b;">${info.label}</h2>
+                    <p style="color: #6B7280;">${details}</p>
+                    <p style="color: #475569; font-size: 14px; margin-top: 8px;">
+                        A USB device was detected but could not be classified. Try reconnecting or check drivers.
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        // ---- No response ----
+        if (state === 'no_response') {
+            // Fall through to "No Device Connected" below
+        }
+    } catch (err) {
+        console.warn('[Dashboard] USB state check failed:', err);
+        // Fall through to "No Device Connected"
+    }
+
+    // ---- Fallback: No device connected ----
+    container.innerHTML = `
+        <div class="card" style="text-align: center; padding: 40px;">
             <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
             <h2>No Device Connected</h2>
             <p>Please connect your Android phone via USB and enable USB debugging.</p>
             <button id="openWizardFromDashboard" class="btn-primary">Open USB Debugging Wizard</button>
-        </div>`;
-        document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
-        return;
-    }
+        </div>
+    `;
+    document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
+}
 
+// ---- Extracted ADB dashboard rendering (keep the existing logic) ----
+async function renderAdbDashboard(container) {
+    // This is the existing dashboard code (the part inside the `if (currentDeviceId)` block)
+    // I'll move it here for clarity. You can keep it inline if you prefer.
+
+    // For now, I'll put the existing code here:
     container.innerHTML = `
         <h1 style="margin-bottom: 24px;">Dashboard</h1>
         <div class="action-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -976,12 +1178,9 @@ async function renderDashboard() {
     const storageCard = container.querySelector('.action-card[data-action="storage-analysis"]');
     if (storageCard) storageCard.addEventListener('click', runStorageAnalysis);
 
-    // *** FIX: App Security card now runs runDeepDiagnostic() ***
     const appSecurityCard = container.querySelector('.action-card[data-action="app-security"]');
     if (appSecurityCard) {
-        console.log('[Dashboard] App Security card found, attaching listener for deep diagnostic');
         appSecurityCard.addEventListener('click', function(e) {
-            console.log('[Dashboard] Deep Diagnostic card clicked');
             try {
                 runDeepDiagnostic();
             } catch (err) {
@@ -989,8 +1188,6 @@ async function renderDashboard() {
                 alert('Error: ' + err.message);
             }
         });
-    } else {
-        console.warn('[Dashboard] App Security card NOT found');
     }
 
     const installCard = container.querySelector('.action-card[data-action="install"]');
@@ -1030,7 +1227,7 @@ async function renderDashboard() {
     const helpCard = container.querySelector('.action-card[data-action="help"]');
     if (helpCard) helpCard.addEventListener('click', showHelpModal);
 
-    // ---- Fetch and display the rest ----
+    // ---- Fetch and display the rest (ADB data) ----
     await new Promise(r => setTimeout(r, 50));
 
     try {
@@ -1044,36 +1241,23 @@ async function renderDashboard() {
             fetch(`${BACKEND_URL}/api/software-safety?deviceId=${currentDeviceId}`).then(r => r.ok ? r.json() : null).catch(() => null)
         ]);
 
-        // ... (battery, storage, ram, deviceText, wifiStatus, tempData processing – same as before) ...
-
-        // ---- Software Safety data ----
         if (safetyData) {
             document.getElementById('safetyPatch').textContent = safetyData.patchDate || 'Unknown';
             document.getElementById('safetyPatch').style.color = safetyData.patchDate && safetyData.patchDate !== 'Unknown' ? '#2e7d32' : '#d32f2f';
-
             document.getElementById('safetyRoot').textContent = safetyData.isRooted ? '⚠️ Rooted' : '✅ Safe';
             document.getElementById('safetyRoot').style.color = safetyData.isRooted ? '#d32f2f' : '#2e7d32';
-
             document.getElementById('safetyPlayProtect').textContent = safetyData.playProtectEnabled ? '✅ On' : '⚠️ Off';
             document.getElementById('safetyPlayProtect').style.color = safetyData.playProtectEnabled ? '#2e7d32' : '#ed6c02';
-
             document.getElementById('safetyUnknown').textContent = safetyData.unknownSourcesEnabled ? '⚠️ Allowed' : '✅ Disabled';
             document.getElementById('safetyUnknown').style.color = safetyData.unknownSourcesEnabled ? '#ed6c02' : '#2e7d32';
-
             document.getElementById('safetyAdb').textContent = safetyData.adbDebugging ? '⚠️ Enabled' : '✅ Disabled';
             document.getElementById('safetyAdb').style.color = safetyData.adbDebugging ? '#ed6c02' : '#2e7d32';
-
-            // Suspicious apps count from cached result
             const suspCount = (window._appSecurityResults && window._appSecurityResults[currentDeviceId]) 
                 ? window._appSecurityResults[currentDeviceId].length 
                 : 0;
             document.getElementById('safetySuspicious').textContent = suspCount > 0 ? `⚠️ ${suspCount}` : '✅ 0';
             document.getElementById('safetySuspicious').style.color = suspCount > 0 ? '#d32f2f' : '#2e7d32';
         }
-
-        // Alerts (same as before)
-        // ...
-
     } catch (err) {
         console.error('Dashboard data error:', err);
     }
@@ -5077,45 +5261,100 @@ function initNavigation() {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', async (e) => {
             e.preventDefault();
-            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
             const page = item.dataset.page;
 
-            // Only show loading for pages other than 'bsod' (which has its own modal)
-            if (page !== 'bsod') {
-                showLoading();
+            // ---- ADB Required Check ----
+            const adbRequiredPages = [
+                'device-info',
+                'hardware-tests',
+                'connection-troubleshoot',
+                'ai-conclusion',
+                'repairs',
+                'advanced'
+                // Add any other pages that need ADB
+            ];
+            if (adbRequiredPages.includes(page) && !currentDeviceId) {
+                showAdbRequiredModal();
+                return; // Stop navigation
             }
 
+            // ---- Normal navigation ----
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+
+            showLoading();
             try {
                 await new Promise(r => setTimeout(r, 50));
+
+                // Clean up any intervals (e.g., BSOD polling)
+                if (window._bsodCleanup) window._bsodCleanup();
+                if (window._crashAnalysisCleanup) window._crashAnalysisCleanup();
+
+                // Render the page
                 if (page === 'dashboard') await renderDashboard();
                 else if (page === 'device-info') await renderDeviceInfo();
                 else if (page === 'hardware-tests') await renderHardwareTests();
                 else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
                 else if (page === 'ai-conclusion') await renderAIConclusion();
                 else if (page === 'repairs') await renderRepairs();
-                else if (page === 'bsod') {
-    if (window._bsodCleanup) window._bsodCleanup();
-    await renderBsodDiagnosis();
-}
+                else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
                 else await renderDashboard();
             } catch (err) {
                 console.error('Page render error:', err);
             } finally {
-                if (page !== 'bsod') {
-                    await new Promise(r => setTimeout(r, 300));
-                    hideLoading();
-                }
+                await new Promise(r => setTimeout(r, 300));
+                hideLoading();
             }
         });
     });
 }
 
+// ---- Show ADB Required modal ----
+// ---- Show ADB Required modal ----
+function showAdbRequiredModal() {
+    const modal = document.getElementById('adbRequiredModal');
+    if (!modal) {
+        // Fallback alert if modal not found
+        alert('USB Debugging (ADB) is required for this feature. Please enable it in Developer Options.');
+        return;
+    }
+    modal.style.display = 'flex';
+    const closeModal = () => { modal.style.display = 'none'; };
+    const closeBtn = document.getElementById('adbRequiredClose');
+    const okBtn = document.getElementById('adbRequiredOkBtn');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal, { once: true });
+    if (okBtn) okBtn.addEventListener('click', closeModal, { once: true });
+    const watchBtn = document.getElementById('adbRequiredWatchBtn');
+    if (watchBtn) {
+        watchBtn.addEventListener('click', () => {
+            window.open('https://www.youtube.com/watch?v=6KbKqQVJXcQ', '_blank');
+        }, { once: true });
+    }
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    }, { once: true });
+}
+
+function openTutorial() {
+    window.open('https://www.youtube.com/watch?v=6KbKqQVJXcQ', '_blank');
+}
 // ==================== INIT ====================
 (async () => {
-    initNavigation();
-    await updateConnectionStatus();
-    setInterval(updateConnectionStatus, 5000);
-    await renderDashboard();
+    try {
+        // Show loading overlay
+        showLoading();
+
+        initNavigation();
+        await updateConnectionStatus();
+        setInterval(updateConnectionStatus, 5000);
+        await renderDashboard();
+
+        // Hide loading after dashboard is rendered
+        hideLoading();
+    } catch (err) {
+        console.error('[Init] Error:', err);
+        // Hide loading even if error occurs
+        hideLoading();
+    }
 })();

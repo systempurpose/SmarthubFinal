@@ -1339,10 +1339,24 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
     const { vid, pid } = extractVidPid(deviceId);
 
     // Skip system devices
-    if (/acpi|pci|system|motherboard|processor/i.test(friendly)) return null;
+    if (/acpi|pci|system|motherboard|processor|intel|amd|nvidia|realtek|broadcom|conexant|microsoft|usb root hub|generic usb hub/i.test(friendly)) {
+        return null;
+    }
 
     // ---- MTP / Portable Device — device booted Android successfully ----
-    if (/mtp|portable device|android usb device|media transfer protocol/i.test(friendly)) {
+    // Broad pattern: any USB device that isn't a system device and not a firmware mode
+    // Many Android phones appear as "Android" or "Phone" or the model name.
+    // Also check for common MTP VID/PIDs (Google, Samsung, etc.) but we'll be more generic.
+
+    // If it contains any of these keywords or is a recognizable phone brand/model, treat as MTP.
+    // Since we already ruled out system devices, any non-system USB device that doesn't match
+    // other specific modes is likely MTP or mass storage.
+    if (/mtp|portable device|android usb device|media transfer protocol|mass storage|usb device|phone|smartphone|android|samsung|xiaomi|huawei|oppo|vivo|realme|oneplus|itel|infinix|tecno/i.test(friendly)) {
+        return 'mtp_normal';
+    }
+
+    // If friendly name contains a common phone brand or "Android" but not already caught, catch it.
+    if (/android|phone|mobile|cell|smart/i.test(friendly) && !/download|odin|preloader|edl|recovery/.test(friendly)) {
         return 'mtp_normal';
     }
 
@@ -1350,8 +1364,11 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
     if (vid === VID_SAMSUNG || /samsung/.test(friendly)) {
         if (pid && SAMSUNG_DOWNLOAD_PIDS.includes(pid)) return 'samsung_download';
         if (/download|odin/.test(friendly)) return 'samsung_download';
-        // Samsung device present but not ADB/fastboot/MTP → assume download mode
-        return 'samsung_download';
+        // If it's Samsung and not specifically download, but also not ADB/fastboot/MTP, we'll treat as download
+        // However, we already have MTP check above, so if it's Samsung and not MTP, it's likely download.
+        if (!/mtp|portable|android usb device|mass storage/.test(friendly)) {
+            return 'samsung_download';
+        }
     }
 
     // ---- Qualcomm EDL (9008) ----
@@ -1364,18 +1381,21 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
         return 'preloader_mediatek';
     }
 
-    // ---- Recovery (some custom recoveries expose a distinct USB class) ----
+    // ---- Recovery ----
     if (/recovery/i.test(friendly)) {
         return 'recovery';
     }
 
+    // ---- Unknown ----
     if (/unknown usb device/i.test(friendly)) {
         return 'unknown_enumeration';
     }
 
+    // ---- Fallback: if it's a non-system USB device, treat as generic USB ----
+    // But we want to prioritize MTP, so if we got here and it's not system, it's probably MTP.
+    // However, to avoid misclassifying, we'll return null and let it be generic.
     return null;
 }
-
 // ============ MAIN ROUTE ============
 
 app.get('/api/device-state', async (req, res) => {
@@ -1465,6 +1485,8 @@ app.get('/api/device-state', async (req, res) => {
                 console.log(`[DeviceState] Parsed ${devices.length} USB devices via wmic`);
                 for (const dev of devices) {
                     console.log(`[DeviceState] WMIC: friendly="${dev.friendly}", deviceId="${dev.deviceId}"`);
+                    // After parsing devices
+console.log('[DeviceState] Parsed devices:', devices.map(d => d.friendly).join(', '));
                 }
 
                 if (devices.length === 0) {
@@ -1481,14 +1503,26 @@ app.get('/api/device-state', async (req, res) => {
                     'unknown_enumeration'
                 ];
 
-                const found = new Map<DeviceState, UsbDeviceInfo>();
-                for (const dev of devices) {
-                    const state = classifyUsbDevice(dev);
-                    if (state && !found.has(state)) {
-                        found.set(state, dev);
-                        console.log(`[DeviceState] Found state ${state} for device ${dev.friendly}`);
-                    }
-                }
+                // After classifying all devices
+const found = new Map<DeviceState, UsbDeviceInfo>();
+let hasNonSystemDevice = false;
+for (const dev of devices) {
+    const state = classifyUsbDevice(dev);
+    if (state) {
+        found.set(state, dev);
+        console.log(`[DeviceState] Found state ${state} for device ${dev.friendly}`);
+    } else {
+        // If it's not a system device (we already filtered in classify), but returned null,
+        // it might still be a valid MTP device. We'll track it.
+        if (!/acpi|pci|system|motherboard|processor|intel|amd|nvidia|realtek|broadcom|conexant|microsoft|usb root hub|generic usb hub/i.test(dev.friendly)) {
+            hasNonSystemDevice = true;
+            // Store as potential MTP if we don't find anything else
+            if (!found.has('mtp_normal')) {
+                found.set('mtp_normal', dev);
+            }
+        }
+    }
+}
 
                 for (const state of priorityOrder) {
                     if (found.has(state)) {
