@@ -1128,15 +1128,24 @@ async function renderDashboard() {
     }
 
     // ---- Fallback: No device connected ----
-    container.innerHTML = `
-        <div class="card" style="text-align: center; padding: 40px;">
-            <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
-            <h2>No Device Connected</h2>
-            <p>Please connect your Android phone via USB and enable USB debugging.</p>
-            <button id="openWizardFromDashboard" class="btn-primary">Open USB Debugging Wizard</button>
+container.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; min-height: 400px;">
+        <div style="position: relative; width: 80px; height: 80px; margin-bottom: 24px;">
+            <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid #e5e7eb;"></div>
+            <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; animation: spin 1s linear infinite;"></div>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 32px; color: #9ca3af;">
+                <i class="fas fa-plug"></i>
+            </div>
         </div>
-    `;
-    document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
+        <h2 style="color: #1e293b; font-size: 24px; font-weight: 600; margin-bottom: 8px;">No Device Detected</h2>
+        <p style="color: #6B7280; font-size: 16px; margin-bottom: 4px;">Waiting for phone to be connected...</p>
+        <p style="color: #94a3b8; font-size: 14px;">Please connect your Android phone via USB and enable USB debugging.</p>
+        <button id="openWizardFromDashboard" class="btn-primary" style="margin-top: 20px; padding: 10px 32px; border-radius: 8px;">
+            🔌 Open USB Debugging Wizard
+        </button>
+    </div>
+`;
+document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
 }
 
 // ---- Extracted ADB dashboard rendering (keep the existing logic) ----

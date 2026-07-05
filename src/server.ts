@@ -1405,6 +1405,8 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
 // ---- Device state detection (no ADB) ----
 // ---- Device state detection (no ADB) ----
 // ---- Device state detection (no ADB) ----
+// ---- Device state detection (no ADB) ----
+// ---- Device state detection (no ADB) ----
 app.get('/api/device-state', async (req, res) => {
     try {
         // 1. ADB
@@ -1437,24 +1439,23 @@ app.get('/api/device-state', async (req, res) => {
         // 3. USB enumeration (Windows only)
         if (process.platform === 'win32') {
             let stdout = '';
-            // Try PowerShell first (using the safe helper)
             try {
                 const psScript = `
-                    Get-PnpDevice | ForEach-Object {
+                    Get-PnpDevice | Where-Object { $_.Status -eq 'OK' } | ForEach-Object {
                         $friendly = $_.FriendlyName
                         $deviceId = $_.DeviceID
                         if ($friendly -or $deviceId) { "$friendly|$deviceId" }
                     }
                 `;
                 stdout = await runPowerShellScript(psScript, 6000);
+                console.log('[DeviceState] PowerShell output length:', stdout.length);
+                console.log('[DeviceState] PowerShell output (first 500 chars):', stdout.substring(0, 500));
             } catch (psErr) {
                 console.warn('[DeviceState] PowerShell failed, falling back to wmic', psErr);
-                // Fallback to wmic
                 try {
-                    const { stdout: wmicOut } = await execAsync('wmic path Win32_PnPEntity get DeviceID,Name /format:csv', { timeout: 6000 });
-                    // Parse CSV
+                    const { stdout: wmicOut } = await execAsync('wmic path Win32_PnPEntity where "Status=\'OK\'" get DeviceID,Name /format:csv', { timeout: 6000 });
                     const lines = wmicOut.split('\n').filter(l => l.trim() !== '');
-                    const dataLines = lines.slice(1); // skip header
+                    const dataLines = lines.slice(1);
                     stdout = dataLines.map(line => {
                         const parts = line.split(',');
                         if (parts.length < 3) return '';
@@ -1462,6 +1463,7 @@ app.get('/api/device-state', async (req, res) => {
                         const deviceId = parts[1]?.trim() || '';
                         return `${name}|${deviceId}`;
                     }).filter(Boolean).join('\n');
+                    console.log('[DeviceState] wmic output length:', stdout.length);
                 } catch (wmicErr) {
                     console.warn('[DeviceState] wmic also failed', wmicErr);
                 }
@@ -1473,18 +1475,23 @@ app.get('/api/device-state', async (req, res) => {
             let isQdloader = false;
             let isPreloader = false;
             let isUnknown = false;
-            let hasUsb = false;
+            let detectedPhone = false;
 
             for (const line of lines) {
                 const parts = line.split('|');
                 if (parts.length < 2) continue;
                 const friendly = parts[0].trim().toLowerCase();
                 const deviceId = parts[1].trim().toLowerCase();
-                if (/acpi|pci|system|motherboard|processor/i.test(friendly)) continue;
-                hasUsb = true;
 
-                // ---- MTP detection ----
+                // Skip non-USB devices
+                if (!deviceId.includes('usb')) continue;
+
+                console.log(`[DeviceState] Checking USB device: friendly="${friendly}", deviceId="${deviceId}"`);
+
+                // ---- Check if this is actually a phone ----
+                // Look for phone-specific patterns: MTP, phone brands, or Android USB
                 if (/mtp|portable device|android usb device|media transfer protocol|phone|smartphone|android|samsung|xiaomi|huawei|oppo|vivo|realme|oneplus|itel|infinix|tecno/i.test(friendly)) {
+                    detectedPhone = true;
                     isMTP = true;
                     break;
                 }
@@ -1493,17 +1500,21 @@ app.get('/api/device-state', async (req, res) => {
                 if (/samsung/.test(friendly) || /vid_04e8/.test(deviceId)) {
                     if (/download|odin|mobile|composite/.test(friendly) ||
                         /pid_685d|pid_6860|pid_6865|pid_6855/.test(deviceId)) {
+                        detectedPhone = true;
                         isSamsungDownload = true;
                         break;
                     }
+                    detectedPhone = true;
                     isSamsungDownload = true;
                     break;
                 }
                 if (/qdloader|9008/.test(friendly) || /vid_05c6/.test(deviceId)) {
+                    detectedPhone = true;
                     isQdloader = true;
                     break;
                 }
                 if (/preloader|mediatek/.test(friendly) || /vid_0e8d/.test(deviceId)) {
+                    detectedPhone = true;
                     isPreloader = true;
                     break;
                 }
@@ -1512,24 +1523,35 @@ app.get('/api/device-state', async (req, res) => {
                 }
             }
 
+            // If we found USB devices but none looked like a phone, return no_response
+            if (!detectedPhone) {
+                console.log('[DeviceState] No phone detected, returning no_response');
+                return res.json({ state: 'no_response', details: 'No phone detected' });
+            }
+
             if (isMTP) {
+                console.log('[DeviceState] MTP detected');
                 return res.json({ state: 'mtp_normal', details: 'MTP mode – device booted successfully' });
             }
             if (isSamsungDownload) {
+                console.log('[DeviceState] Samsung Download detected');
                 return res.json({ state: 'samsung_download', details: 'Samsung Download Mode (Odin) – ready for firmware flash' });
             }
             if (isQdloader) {
+                console.log('[DeviceState] EDL detected');
                 return res.json({ state: 'edl_qualcomm', details: 'Qualcomm EDL (9008) mode – bootloader corrupted' });
             }
             if (isPreloader) {
+                console.log('[DeviceState] Preloader detected');
                 return res.json({ state: 'preloader_mediatek', details: 'MediaTek Preloader mode – OS did not load' });
             }
             if (isUnknown) {
+                console.log('[DeviceState] Unknown USB device detected');
                 return res.json({ state: 'unknown_enumeration', details: 'Unknown USB device – partial power but no valid driver' });
             }
-            if (hasUsb) {
-                return res.json({ state: 'generic_usb_detected', details: 'USB device detected, but mode not classified' });
-            }
+            // If we got here but detectedPhone is true and none of the above matched, it's generic
+            console.log('[DeviceState] Generic USB detected');
+            return res.json({ state: 'generic_usb_detected', details: 'USB device detected, but mode not classified' });
         } else {
             // Linux / macOS
             try {
