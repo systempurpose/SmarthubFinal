@@ -11,6 +11,13 @@ function openTutorial() {
     window.open('https://www.youtube.com/watch?v=6KbKqQVJXcQ', '_blank');
 }
 
+// ==================== SIDEBAR HIGHLIGHT ====================
+function setActiveNav(page) {
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    const target = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (target) target.classList.add('active');
+}
+
 function toggleDeviceSections(show) {
     const deviceCard = document.getElementById('device-info-card');
     const statusBar = document.getElementById('status-bar');
@@ -3547,248 +3554,315 @@ async function renderRepairs() {
 }
 
 // ==================== DEVICE INFO ====================
+// ==================== DEVICE INFO (with auto‑refresh) ====================
+// ==================== DEVICE INFO (with auto‑refresh) ====================
+// ==================== DEVICE INFO (with auto‑refresh) ====================
+// ==================== DEVICE INFO (smart auto‑refresh) ====================
+// ==================== DEVICE INFO (smart auto‑refresh) ====================
+let deviceInfoTimer = null;
+let lastDeviceInfoData = null;
+
 async function renderDeviceInfo() {
+    const container = document.getElementById('pageContent');
+
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
+        container.innerHTML = `<div class="card">No device connected.</div>`;
+        if (deviceInfoTimer) {
+            clearTimeout(deviceInfoTimer);
+            deviceInfoTimer = null;
+        }
+        lastDeviceInfoData = null;
         return;
     }
-    try {
-        const [infoRes, wifiRes] = await Promise.all([
-            fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`),
-            fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null)
-        ]);
 
-        if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
-        const infoData = await infoRes.json();
-        const props = infoData;
-
-        const wifiData = wifiRes && wifiRes.ok ? await wifiRes.json() : null;
-
-        const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
-        const boolIcon = (val) => val ? '✅' : '❌';
-
-        // ---- Existing fields ----
-        const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
-        const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
-        const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
-        const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
-        const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
-
-        // ---- Battery ----
-        const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : 'Not available';
-        const batteryHealth = infoData.batteryHealth || 'Not available';
-        const batteryVoltage = infoData.batteryVoltage ? infoData.batteryVoltage + ' mV' : 'Not available';
-        const batteryTemp = infoData.batteryTemperature ? infoData.batteryTemperature + '°C' : 'Not available';
-        const maxChargeCurrent = infoData.maxChargingCurrent ? infoData.maxChargingCurrent + ' mA' : 'Not available';
-        const maxChargeVoltage = infoData.maxChargingVoltage ? infoData.maxChargingVoltage + ' mV' : 'Not available';
-
-        // ---- Display ----
-        const refreshRate = infoData.refreshRate || 'Not available';
-
-        // ---- Camera ----
-        const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length)
-            ? infoData.cameraResolutions.join(', ')
-            : 'Not available';
-
-        // ---- MACs ----
-        const wifiMac = infoData.wifiMac || 'Not available';
-        const btMac = infoData.btMac || 'Not available';
-
-        // ---- Paired devices ----
-        const pairedDevices = infoData.pairedDevices || [];
-        const pairedCount = pairedDevices.length;
-        const pairedSummary = pairedCount > 0 ? `${pairedCount} device${pairedCount > 1 ? 's' : ''} paired` : 'None';
-
-        // ---- New fields ----
-        const widevineLevel = infoData.widevineLevel || 'Not available';
-        const drmSchemes = (infoData.drmSchemes && infoData.drmSchemes.length) ? infoData.drmSchemes.join(', ') : 'None';
-        const storageTotal = infoData.storageTotal || '?';
-        const storageUsed = infoData.storageUsed || '?';
-        const storageFree = infoData.storageFree || '?';
-        const storageType = infoData.storageType || 'Unknown';
-        const gnss = (infoData.gnssProviders && infoData.gnssProviders.length) ? infoData.gnssProviders.join(', ') : 'Unknown';
-        const hasGyroText = infoData.hasGyro ? '✅' : '❌';
-        const hasMagText = infoData.hasMagnetometer ? '✅' : '❌';
-        const hasBaroText = infoData.hasBarometer ? '✅' : '❌';
-        const usbOtg = infoData.usbOtgSupported ? '✅ Supported' : 'Not supported';
-        const localIp = infoData.localIp || 'Not connected';
-        const gateway = infoData.gateway || 'Not available';
-        const dns = (infoData.dnsServers && infoData.dnsServers.length) ? infoData.dnsServers.join(', ') : 'Not available';
-
-        // ---- Helpers ----
-        const makeCard = (title, icon, items) => `
-            <div class="info-card">
-                <div class="card-header"><i class="${icon}"></i> ${title}</div>
-                <div class="card-grid">
-                    ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
-                </div>
-            </div>
-        `;
-
-        const makeCardWithExtra = (title, icon, items, extraHtml) => `
-            <div class="info-card">
-                <div class="card-header"><i class="${icon}"></i> ${title}</div>
-                <div class="card-grid">
-                    ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
-                </div>
-                ${extraHtml ? `<div style="padding: 8px 16px 12px; text-align: right;">${extraHtml}</div>` : ''}
-            </div>
-        `;
-
-        const cards = [];
-
-        // ---- Device Overview ----
-        cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
-            { label: 'Model', value: get('ro.product.model', 'Unknown') },
-            { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
-            { label: 'Android', value: `${get('ro.build.version.release')} (SDK ${get('ro.build.version.sdk')})` },
-            { label: 'Security Patch', value: get('ro.build.version.security_patch') },
-            { label: 'Board / CPU', value: `${get('ro.product.board')} / ${get('ro.product.cpu.abi')}` },
-            { label: 'Serial', value: get('ro.serialno') },
-            { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
-        ]));
-
-        // ---- Battery ----
-        cards.push(makeCard('Battery', 'fas fa-battery-full', [
-            { label: 'Capacity', value: batteryCapacity },
-            { label: 'Health', value: batteryHealth },
-            { label: 'Voltage', value: batteryVoltage },
-            { label: 'Temperature', value: batteryTemp },
-            { label: 'Max Charge Current', value: maxChargeCurrent },
-            { label: 'Max Charge Voltage', value: maxChargeVoltage }
-        ]));
-
-        // ---- Display ----
-        cards.push(makeCard('Display', 'fas fa-desktop', [
-            { label: 'Refresh Rate', value: refreshRate },
-            { label: 'Density', value: `${get('ro.sf.lcd_density', '?')} dpi` }
-        ]));
-
-        // ---- Camera ----
-        cards.push(makeCard('Camera', 'fas fa-camera', [
-            { label: 'Resolutions', value: camRes }
-        ]));
-
-        // ---- DRM & Media ----
-        cards.push(makeCard('DRM & Media', 'fas fa-lock', [
-            { label: 'Widevine Level', value: widevineLevel },
-            { label: 'Supported DRM', value: drmSchemes }
-        ]));
-
-        // ---- Storage ----
-        cards.push(makeCard('Storage', 'fas fa-hdd', [
-            { label: 'Total (Data)', value: storageTotal },
-            { label: 'Used', value: storageUsed },
-            { label: 'Free', value: storageFree },
-            { label: 'Hardware Type', value: storageType }
-        ]));
-
-        // ---- GNSS / GPS ----
-        cards.push(makeCard('GNSS / GPS', 'fas fa-satellite', [
-            { label: 'Satellites', value: gnss }
-        ]));
-
-        // ---- Sensors (extra) ----
-        cards.push(makeCard('Sensors', 'fas fa-microchip', [
-            { label: 'Gyroscope', value: hasGyroText },
-            { label: 'Magnetometer', value: hasMagText },
-            { label: 'Barometer', value: hasBaroText }
-        ]));
-
-        // ---- USB OTG ----
-        cards.push(makeCard('USB OTG', 'fas fa-usb', [
-            { label: 'Host Mode', value: usbOtg }
-        ]));
-
-        // ---- Network Details ----
-        cards.push(makeCard('Network Details', 'fas fa-network-wired', [
-            { label: 'Local IP', value: localIp },
-            { label: 'Gateway', value: gateway },
-            { label: 'DNS Servers', value: dns }
-        ]));
-
-        // ---- Bluetooth (with Show Paired button) ----
-        let pairedExtra = '';
-        if (pairedCount > 0) {
-            pairedExtra = `<button class="btn-secondary" style="font-size:12px; padding:4px 12px;" onclick="showPairedDevicesModal()">📋 Show (${pairedCount})</button>`;
-        }
-        cards.push(makeCardWithExtra('Bluetooth', 'fab fa-bluetooth', [
-            { label: 'Enabled', value: boolIcon(bluetoothOn) },
-            { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
-            { label: 'Paired Devices', value: pairedSummary },
-            { label: 'MAC Address', value: btMac }
-        ], pairedExtra));
-
-        // ---- WiFi ----
-        let wifiItems = [];
-        if (wifiData && wifiData.wifi) {
-            const info = formatWifiStatus(wifiData.wifi);
-            wifiItems = [
-                { label: 'SSID', value: info.ssid },
-                { label: 'Status', value: info.status },
-                { label: 'Signal', value: info.signal },
-                { label: 'Link Speed', value: info.linkSpeed },
-                { label: 'Frequency', value: info.frequency },
-                { label: 'MAC Address', value: wifiMac }
-            ];
-        } else {
-            wifiItems = [
-                { label: 'Status', value: 'Unable to fetch WiFi info' },
-                { label: 'MAC Address', value: wifiMac }
-            ];
-        }
-        cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
-
-        // ---- Network & SIM ----
-        cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
-            { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
-            { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
-            { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
-            { label: 'Mobile Data (Toggle)', value: boolIcon(mobileDataToggle) },
-            { label: 'Mobile Data (Connected)', value: boolIcon(mobileDataConnected) },
-            { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
-        ]));
-
-        // ---- System & Build ----
-        cards.push(makeCard('System & Build', 'fas fa-code-branch', [
-            { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
-            { label: 'Build Date', value: get('ro.build.date', 'N/A') },
-            { label: 'Bootloader', value: get('ro.bootloader', 'unknown') },
-            { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
-        ]));
-
-        // ---- Hardware ----
-        cards.push(makeCard('Hardware', 'fas fa-microchip', [
-            { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
-            { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
-            { label: 'RAM', value: get('ro.boot.ddrsize', 'N/A') },
-            { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
-        ]));
-
-        // ---- Special Features ----
-        cards.push(makeCard('Special Features', 'fas fa-star', [
-            { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
-            { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
-            { label: 'Face Unlock', value: get('ro.faceid.support') === '1' ? '✅' : '❌' },
-            { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
-        ]));
-
-        // ---- Security & Boot ----
-        cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
-            { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
-            { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },
-            { label: 'dm‑verity', value: get('ro.boot.veritymode', 'unknown') },
-            { label: 'ADB Secure', value: get('ro.adb.secure') === '1' ? 'Yes' : 'No' }
-        ]));
-
-        const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
-        document.getElementById('pageContent').innerHTML = finalHtml;
-
-        // Store paired devices globally for the modal
-        window._pairedDevices = pairedDevices;
-    } catch (err) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
+    // Clear any existing timer
+    if (deviceInfoTimer) {
+        clearTimeout(deviceInfoTimer);
+        deviceInfoTimer = null;
     }
+
+    // ---- Function to fetch and render only if data changed ----
+    async function fetchAndRender(forceUpdate = false) {
+        // Safety: only render if still on Device Info page
+        const activePage = document.querySelector('.nav-item.active')?.dataset.page;
+        if (activePage !== 'device-info') {
+            console.log('[DeviceInfo] Not on Device Info page, skipping render');
+            return;
+        }
+
+        try {
+            const [infoRes, wifiRes] = await Promise.all([
+                fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`),
+                fetch(`${BACKEND_URL}/wifi/status/${currentDeviceId}`).catch(() => null)
+            ]);
+
+            if (!infoRes.ok) throw new Error(`HTTP ${infoRes.status}`);
+            const infoData = await infoRes.json();
+            const wifiData = wifiRes && wifiRes.ok ? await wifiRes.json() : null;
+
+            // Build hash for change detection
+            const currentDataHash = JSON.stringify({ info: infoData, wifi: wifiData });
+            if (!forceUpdate && lastDeviceInfoData === currentDataHash) {
+                console.log('[DeviceInfo] No changes, skipping re-render');
+                return;
+            }
+
+            console.log('[DeviceInfo] Data changed, re-rendering');
+
+            // ---- Build the full HTML (your existing card logic) ----
+            const props = infoData;
+            const get = (key, fallback = '?') => props[key] !== undefined ? props[key] : fallback;
+            const boolIcon = (val) => val ? '✅' : '❌';
+
+            // ---- Existing fields ----
+            const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
+            const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+            const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
+            const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
+            const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
+
+            // ---- Battery ----
+            const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : 'Not available';
+            const batteryHealth = infoData.batteryHealth || 'Not available';
+            const batteryVoltage = infoData.batteryVoltage ? infoData.batteryVoltage + ' mV' : 'Not available';
+            const batteryTemp = infoData.batteryTemperature ? infoData.batteryTemperature + '°C' : 'Not available';
+            const maxChargeCurrent = infoData.maxChargingCurrent ? infoData.maxChargingCurrent + ' mA' : 'Not available';
+            const maxChargeVoltage = infoData.maxChargingVoltage ? infoData.maxChargingVoltage + ' mV' : 'Not available';
+
+            // ---- Display ----
+            const refreshRate = infoData.refreshRate || 'Not available';
+
+            // ---- Camera ----
+            const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length)
+                ? infoData.cameraResolutions.join(', ')
+                : 'Not available';
+
+            // ---- MACs ----
+            const wifiMac = infoData.wifiMac || 'Not available';
+            const btMac = infoData.btMac || 'Not available';
+
+            // ---- Paired devices ----
+            const pairedDevices = infoData.pairedDevices || [];
+            const pairedCount = pairedDevices.length;
+            const pairedSummary = pairedCount > 0 ? `${pairedCount} device${pairedCount > 1 ? 's' : ''} paired` : 'None';
+
+            // ---- New fields ----
+            const widevineLevel = infoData.widevineLevel || 'Not available';
+            const drmSchemes = (infoData.drmSchemes && infoData.drmSchemes.length) ? infoData.drmSchemes.join(', ') : 'None';
+            const storageTotal = infoData.storageTotal || '?';
+            const storageUsed = infoData.storageUsed || '?';
+            const storageFree = infoData.storageFree || '?';
+            const storageType = infoData.storageType || 'Unknown';
+            const gnss = (infoData.gnssProviders && infoData.gnssProviders.length) ? infoData.gnssProviders.join(', ') : 'Unknown';
+            const hasGyroText = infoData.hasGyro ? '✅' : '❌';
+            const hasMagText = infoData.hasMagnetometer ? '✅' : '❌';
+            const hasBaroText = infoData.hasBarometer ? '✅' : '❌';
+            const usbOtg = infoData.usbOtgSupported ? '✅ Supported' : 'Not supported';
+            const localIp = infoData.localIp || 'Not connected';
+            const gateway = infoData.gateway || 'Not available';
+            const dns = (infoData.dnsServers && infoData.dnsServers.length) ? infoData.dnsServers.join(', ') : 'Not available';
+
+            // ---- Helpers ----
+            const makeCard = (title, icon, items) => `
+                <div class="info-card">
+                    <div class="card-header"><i class="${icon}"></i> ${title}</div>
+                    <div class="card-grid">
+                        ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
+                    </div>
+                </div>
+            `;
+
+            const makeCardWithExtra = (title, icon, items, extraHtml) => `
+                <div class="info-card">
+                    <div class="card-header"><i class="${icon}"></i> ${title}</div>
+                    <div class="card-grid">
+                        ${items.map(item => `<div class="card-item"><span class="item-label">${item.label}</span><span class="item-value">${escapeHtml(item.value)}</span></div>`).join('')}
+                    </div>
+                    ${extraHtml ? `<div style="padding: 8px 16px 12px; text-align: right;">${extraHtml}</div>` : ''}
+                </div>
+            `;
+
+            const cards = [];
+
+            // ---- Device Overview ----
+            cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
+                { label: 'Model', value: get('ro.product.model', 'Unknown') },
+                { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
+                { label: 'Android', value: `${get('ro.build.version.release')} (SDK ${get('ro.build.version.sdk')})` },
+                { label: 'Security Patch', value: get('ro.build.version.security_patch') },
+                { label: 'Board / CPU', value: `${get('ro.product.board')} / ${get('ro.product.cpu.abi')}` },
+                { label: 'Serial', value: get('ro.serialno') },
+                { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
+            ]));
+
+            // ---- Battery ----
+            cards.push(makeCard('Battery', 'fas fa-battery-full', [
+                { label: 'Capacity', value: batteryCapacity },
+                { label: 'Health', value: batteryHealth },
+                { label: 'Voltage', value: batteryVoltage },
+                { label: 'Temperature', value: batteryTemp },
+                { label: 'Max Charge Current', value: maxChargeCurrent },
+                { label: 'Max Charge Voltage', value: maxChargeVoltage }
+            ]));
+
+            // ---- Display ----
+            cards.push(makeCard('Display', 'fas fa-desktop', [
+                { label: 'Refresh Rate', value: refreshRate },
+                { label: 'Density', value: `${get('ro.sf.lcd_density', '?')} dpi` }
+            ]));
+
+            // ---- Camera ----
+            cards.push(makeCard('Camera', 'fas fa-camera', [
+                { label: 'Resolutions', value: camRes }
+            ]));
+
+            // ---- DRM & Media ----
+            cards.push(makeCard('DRM & Media', 'fas fa-lock', [
+                { label: 'Widevine Level', value: widevineLevel },
+                { label: 'Supported DRM', value: drmSchemes }
+            ]));
+
+            // ---- Storage ----
+            cards.push(makeCard('Storage', 'fas fa-hdd', [
+                { label: 'Total (Data)', value: storageTotal },
+                { label: 'Used', value: storageUsed },
+                { label: 'Free', value: storageFree },
+                { label: 'Hardware Type', value: storageType }
+            ]));
+
+            // ---- GNSS / GPS ----
+            cards.push(makeCard('GNSS / GPS', 'fas fa-satellite', [
+                { label: 'Satellites', value: gnss }
+            ]));
+
+            // ---- Sensors ----
+            cards.push(makeCard('Sensors', 'fas fa-microchip', [
+                { label: 'Gyroscope', value: hasGyroText },
+                { label: 'Magnetometer', value: hasMagText },
+                { label: 'Barometer', value: hasBaroText }
+            ]));
+
+            // ---- USB OTG ----
+            cards.push(makeCard('USB OTG', 'fas fa-usb', [
+                { label: 'Host Mode', value: usbOtg }
+            ]));
+
+            // ---- Network Details ----
+            cards.push(makeCard('Network Details', 'fas fa-network-wired', [
+                { label: 'Local IP', value: localIp },
+                { label: 'Gateway', value: gateway },
+                { label: 'DNS Servers', value: dns }
+            ]));
+
+            // ---- Bluetooth ----
+            let pairedExtra = '';
+            if (pairedCount > 0) {
+                pairedExtra = `<button class="btn-secondary" style="font-size:12px; padding:4px 12px;" onclick="showPairedDevicesModal()">📋 Show (${pairedCount})</button>`;
+            }
+            cards.push(makeCardWithExtra('Bluetooth', 'fab fa-bluetooth', [
+                { label: 'Enabled', value: boolIcon(bluetoothOn) },
+                { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
+                { label: 'Paired Devices', value: pairedSummary },
+                { label: 'MAC Address', value: btMac }
+            ], pairedExtra));
+
+            // ---- WiFi ----
+            let wifiItems = [];
+            if (wifiData && wifiData.wifi) {
+                const info = formatWifiStatus(wifiData.wifi);
+                wifiItems = [
+                    { label: 'SSID', value: info.ssid },
+                    { label: 'Status', value: info.status },
+                    { label: 'Signal', value: info.signal },
+                    { label: 'Link Speed', value: info.linkSpeed },
+                    { label: 'Frequency', value: info.frequency },
+                    { label: 'MAC Address', value: wifiMac }
+                ];
+            } else {
+                wifiItems = [
+                    { label: 'Status', value: 'Unable to fetch WiFi info' },
+                    { label: 'MAC Address', value: wifiMac }
+                ];
+            }
+            cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
+
+            // ---- Network & SIM ----
+            cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
+                { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
+                { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
+                { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
+                { label: 'Mobile Data (Toggle)', value: boolIcon(mobileDataToggle) },
+                { label: 'Mobile Data (Connected)', value: boolIcon(mobileDataConnected) },
+                { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
+            ]));
+
+            // ---- System & Build ----
+            cards.push(makeCard('System & Build', 'fas fa-code-branch', [
+                { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
+                { label: 'Build Date', value: get('ro.build.date', 'N/A') },
+                { label: 'Bootloader', value: get('ro.bootloader', 'unknown') },
+                { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
+            ]));
+
+            // ---- Hardware ----
+            cards.push(makeCard('Hardware', 'fas fa-microchip', [
+                { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
+                { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
+                { label: 'RAM', value: get('ro.boot.ddrsize', 'N/A') },
+                { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
+            ]));
+
+            // ---- Special Features ----
+            cards.push(makeCard('Special Features', 'fas fa-star', [
+                { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
+                { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
+                { label: 'Face Unlock', value: get('ro.faceid.support') === '1' ? '✅' : '❌' },
+                { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
+            ]));
+
+            // ---- Security & Boot ----
+            cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
+                { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
+                { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },
+                { label: 'dm‑verity', value: get('ro.boot.veritymode', 'unknown') },
+                { label: 'ADB Secure', value: get('ro.adb.secure') === '1' ? 'Yes' : 'No' }
+            ]));
+
+            const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
+            container.innerHTML = finalHtml;
+            window._pairedDevices = pairedDevices;
+
+            // Update the stored hash
+            lastDeviceInfoData = currentDataHash;
+
+        } catch (err) {
+            container.innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
+        }
+    }
+
+    // ---- Initial fetch (force update) ----
+    await fetchAndRender(true);
+
+    // ---- Schedule the next refresh ----
+    function scheduleNextRefresh() {
+        if (deviceInfoTimer) {
+            clearTimeout(deviceInfoTimer);
+            deviceInfoTimer = null;
+        }
+
+        const activePage = document.querySelector('.nav-item.active')?.dataset.page;
+        if (activePage === 'device-info' && currentDeviceId) {
+            deviceInfoTimer = setTimeout(async () => {
+                await fetchAndRender(false);
+                scheduleNextRefresh();
+            }, 3000);
+        } else {
+            deviceInfoTimer = null;
+            lastDeviceInfoData = null;
+        }
+    }
+
+    scheduleNextRefresh();
 }
 
 // ---- Show Paired Devices Modal ----
@@ -5338,6 +5412,13 @@ function initNavigation() {
             e.preventDefault();
             const page = item.dataset.page;
 
+            // ---- Clear any pending device info timer ----
+            if (deviceInfoTimer) {
+                clearTimeout(deviceInfoTimer);
+                deviceInfoTimer = null;
+                lastDeviceInfoData = null;
+            }
+
             // ---- ADB Required Check ----
             const adbRequiredPages = [
                 'device-info',
@@ -5346,11 +5427,10 @@ function initNavigation() {
                 'ai-conclusion',
                 'repairs',
                 'advanced'
-                // Add any other pages that need ADB
             ];
             if (adbRequiredPages.includes(page) && !currentDeviceId) {
                 showAdbRequiredModal();
-                return; // Stop navigation
+                return;
             }
 
             // ---- Normal navigation ----
