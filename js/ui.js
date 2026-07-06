@@ -3301,7 +3301,7 @@ colorsweep: {
 },
 camerafront: {
     title: 'Front Camera',
-    desc: 'Check front camera + autofocus',
+    desc: 'Check front camera',
     run: async () => {
         const hasFrontCam = await hasFeature('android.hardware.camera.front');
         if (!hasFrontCam) {
@@ -3309,10 +3309,10 @@ camerafront: {
         }
         await launchExtraHardwareTest('camera_front');
         showModal('Front Camera Test', `
-            <p>📸 The camera app will open. Check the viewfinder.</p>
-            <p><strong>Does the front camera show a clear image?</strong></p>
+            <p>📸 The front camera preview should appear on the phone.</p>
+            <p><strong>Is the preview clear and working?</strong></p>
         `);
-        const result = await waitForUserConfirmation();
+        const result = await waitForUserConfirmation(); // waits indefinitely
         closeModal();
         await returnToMainApp();
         const passed = (result === 'yes');

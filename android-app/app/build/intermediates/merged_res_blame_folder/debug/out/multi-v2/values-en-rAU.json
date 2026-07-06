@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-28:/values-en-rAU/values-en-rAU.xml",
+            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-31:/values-en-rAU/values-en-rAU.xml",
             "map": [
                 {
                     "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\4dad27fb90ee3ef09b343b34adcbbced\\transformed\\appcompat-1.6.1\\res\\values-en-rAU\\values-en-rAU.xml",

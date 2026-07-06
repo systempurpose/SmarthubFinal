@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-28:/values-v24/values-v24.xml",
+            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-31:/values-v24/values-v24.xml",
             "map": [
                 {
                     "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\4dad27fb90ee3ef09b343b34adcbbced\\transformed\\appcompat-1.6.1\\res\\values-v24\\values-v24.xml",
@@ -14,7 +14,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\51cda1f58a99dbdb0c04a43a3d77afc2\\transformed\\material-1.11.0\\res\\values-v24\\values-v24.xml",
+                    "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\37e00922a462232612ed617676083f5a\\transformed\\material-1.9.0\\res\\values-v24\\values-v24.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,9,12,15",
                         "startColumns": "4,4,4,4,4,4,4,4",

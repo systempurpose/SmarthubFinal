@@ -8,23 +8,30 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.biometrics.BiometricManager;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import android.Manifest;
 
@@ -49,9 +56,14 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     // Color sweep
     private static final String[] SWEEP_COLORS = {"Red", "Green", "Blue", "White", "Black"};
     private int sweepIndex = 0;
+    private LinearLayout rootLayout;
 
     // Camera
     private static final int REQUEST_CAMERA_PERMISSION = 200;
+    private PreviewView previewView;
+    private TextView tvCameraStatus;
+    private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
+    private boolean cameraTestFront = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,6 +87,7 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
                 tvColorName = findViewById(R.id.tvColorName);
                 tvInstruction = findViewById(R.id.tvInstruction);
                 btnNext = findViewById(R.id.btnNext);
+                rootLayout = findViewById(R.id.rootLayout);
                 btnNext.setOnClickListener(this);
                 runColorSweep();
                 return;
@@ -98,6 +111,11 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
                 tvStatus = findViewById(R.id.tvStatus);
                 runFaceUnlockCheck();
                 return;
+            case "camera_front":
+            case "camera_rear":
+                // Camera uses a different layout; handled in runCameraTest()
+                runCameraTest(mode.equals("camera_front"));
+                return;
             default:
                 setContentView(R.layout.activity_extra_hardware_test);
                 tvInstruction = findViewById(R.id.tvInstruction);
@@ -108,12 +126,6 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
         switch (mode) {
             case "buttons":
                 runButtonTest();
-                break;
-            case "camera_front":
-                runCameraTest(true);
-                break;
-            case "camera_rear":
-                runCameraTest(false);
                 break;
             case "ir_blaster":
                 runIrBlasterCheck();
@@ -174,7 +186,7 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
             case "White": color = Color.WHITE; break;
             default: color = Color.BLACK;
         }
-        findViewById(android.R.id.content).setBackgroundColor(color);
+        if (rootLayout != null) rootLayout.setBackgroundColor(color);
         tvColorName.setText(colorName);
         tvColorName.setTextColor(color == Color.WHITE || color == Color.GREEN ? Color.BLACK : Color.WHITE);
         tvInstruction.setText("Check for dead pixels. Tap 'Next' to cycle.");
@@ -219,43 +231,61 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
-    // ---- Camera tests ----
+    // ---- Camera tests using CameraX ----
     private void runCameraTest(boolean front) {
+        cameraTestFront = front;
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
-            tvInstruction.setText("Camera permission required.");
-            tvStatus.setText("Grant permission and try again.");
+            // Show a temporary message; will continue after permission grant
             return;
         }
-        Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-        if (front) {
-            intent.putExtra("android.intent.extras.CAMERA_FACING", 1);
-        }
-        if (intent.resolveActivity(getPackageManager()) != null) {
-            startActivityForResult(intent, 100);
-            tvInstruction.setText("Camera opened. Check viewfinder.");
-            tvStatus.setText("Verify camera works, then close the app.");
-        } else {
-            tvStatus.setText("No camera app found.");
-        }
+        // Switch to camera preview layout
+        setContentView(R.layout.activity_camera_preview);
+        previewView = findViewById(R.id.previewView);
+        tvCameraStatus = findViewById(R.id.tvCameraStatus);
+        tvInstruction = findViewById(R.id.tvInstruction);
+
+        startCamera(front);
+    }
+
+    private void startCamera(boolean front) {
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                Preview preview = new Preview.Builder().build();
+                preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+                CameraSelector cameraSelector = new CameraSelector.Builder()
+                        .requireLensFacing(front ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK)
+                        .build();
+
+                cameraProvider.unbindAll();
+                Camera camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview);
+
+                String facing = front ? "Front" : "Rear";
+                tvCameraStatus.setText(facing + " camera is active");
+                tvInstruction.setText("Check that the preview is clear and working.\nClose the app when done.");
+
+            } catch (ExecutionException | InterruptedException e) {
+                tvCameraStatus.setText("Camera error: " + e.getMessage());
+            }
+        }, ContextCompat.getMainExecutor(this));
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 100) {
-            tvStatus.setText("Camera returned. Did you see a clear preview?");
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                runCameraTest("camera_front".equals(mode));
+                runCameraTest(cameraTestFront);
             } else {
-                tvStatus.setText("Camera permission denied.");
+                // If permission denied, show a message and finish.
+                setContentView(R.layout.activity_extra_hardware_test);
+                tvInstruction = findViewById(R.id.tvInstruction);
+                tvStatus = findViewById(R.id.tvStatus);
+                tvInstruction.setText("Camera permission required.");
+                tvStatus.setText("Permission denied – cannot test camera.");
             }
         }
     }

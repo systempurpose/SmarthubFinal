@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-28:/values-ldrtl-v17/values-ldrtl-v17.xml",
+            "outputFile": "com.smarthub.diagnostics.app-mergeDebugResources-31:/values-ldrtl-v17/values-ldrtl-v17.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\51cda1f58a99dbdb0c04a43a3d77afc2\\transformed\\material-1.11.0\\res\\values-ldrtl-v17\\values-ldrtl-v17.xml",
+                    "source": "C:\\Users\\mark lhemuel\\.gradle\\caches\\transforms-3\\37e00922a462232612ed617676083f5a\\transformed\\material-1.9.0\\res\\values-ldrtl-v17\\values-ldrtl-v17.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",

@@ -1,33 +1,36 @@
-com.smarthub.diagnostics.app-jetified-lifecycle-viewmodel-savedstate-2.6.1-0 C:\Users\mark lhemuel\.gradle\caches\transforms-3\0212c857f239a12c2e9677deaa7d59d9\transformed\jetified-lifecycle-viewmodel-savedstate-2.6.1\res
+com.smarthub.diagnostics.app-jetified-camera-view-1.3.0-0 C:\Users\mark lhemuel\.gradle\caches\transforms-3\01d254e0f7361dda3cebaa6c8e94ef62\transformed\jetified-camera-view-1.3.0\res
 com.smarthub.diagnostics.app-fragment-1.3.6-1 C:\Users\mark lhemuel\.gradle\caches\transforms-3\0ca57bab60762a1a88df104f07ca5006\transformed\fragment-1.3.6\res
-com.smarthub.diagnostics.app-lifecycle-viewmodel-2.6.1-2 C:\Users\mark lhemuel\.gradle\caches\transforms-3\1027225681bb813b05f1067c9d871604\transformed\lifecycle-viewmodel-2.6.1\res
-com.smarthub.diagnostics.app-core-runtime-2.2.0-3 C:\Users\mark lhemuel\.gradle\caches\transforms-3\13aa5513c9329afc3e2b79e2efc8208f\transformed\core-runtime-2.2.0\res
-com.smarthub.diagnostics.app-recyclerview-1.1.0-4 C:\Users\mark lhemuel\.gradle\caches\transforms-3\13bc2545625a44a8ab57ef9bc396b818\transformed\recyclerview-1.1.0\res
-com.smarthub.diagnostics.app-jetified-appcompat-resources-1.6.1-5 C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\res
-com.smarthub.diagnostics.app-jetified-viewpager2-1.0.0-6 C:\Users\mark lhemuel\.gradle\caches\transforms-3\35d12f5b8a8742a1ead92e1b06fcecad\transformed\jetified-viewpager2-1.0.0\res
+com.smarthub.diagnostics.app-jetified-activity-1.6.0-2 C:\Users\mark lhemuel\.gradle\caches\transforms-3\100cab575766ffd905c540657c4beb40\transformed\jetified-activity-1.6.0\res
+com.smarthub.diagnostics.app-recyclerview-1.1.0-3 C:\Users\mark lhemuel\.gradle\caches\transforms-3\13bc2545625a44a8ab57ef9bc396b818\transformed\recyclerview-1.1.0\res
+com.smarthub.diagnostics.app-jetified-appcompat-resources-1.6.1-4 C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\res
+com.smarthub.diagnostics.app-jetified-viewpager2-1.0.0-5 C:\Users\mark lhemuel\.gradle\caches\transforms-3\35d12f5b8a8742a1ead92e1b06fcecad\transformed\jetified-viewpager2-1.0.0\res
+com.smarthub.diagnostics.app-jetified-camera-core-1.3.0-6 C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\res
 com.smarthub.diagnostics.app-jetified-emoji2-views-helper-1.2.0-7 C:\Users\mark lhemuel\.gradle\caches\transforms-3\371b7d38145d8d7ad062c5b0308d9a94\transformed\jetified-emoji2-views-helper-1.2.0\res
-com.smarthub.diagnostics.app-jetified-activity-1.8.0-8 C:\Users\mark lhemuel\.gradle\caches\transforms-3\38c8c5dbcf460ea685260d2ab94c23e6\transformed\jetified-activity-1.8.0\res
-com.smarthub.diagnostics.app-core-1.12.0-9 C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\res
-com.smarthub.diagnostics.app-appcompat-1.6.1-10 C:\Users\mark lhemuel\.gradle\caches\transforms-3\4dad27fb90ee3ef09b343b34adcbbced\transformed\appcompat-1.6.1\res
-com.smarthub.diagnostics.app-material-1.11.0-11 C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\res
-com.smarthub.diagnostics.app-constraintlayout-2.0.1-12 C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\res
-com.smarthub.diagnostics.app-lifecycle-runtime-2.6.1-13 C:\Users\mark lhemuel\.gradle\caches\transforms-3\688678273e3668c9e08931004e106305\transformed\lifecycle-runtime-2.6.1\res
-com.smarthub.diagnostics.app-coordinatorlayout-1.1.0-14 C:\Users\mark lhemuel\.gradle\caches\transforms-3\69d76319f28544027f62654c787a8c31\transformed\coordinatorlayout-1.1.0\res
-com.smarthub.diagnostics.app-jetified-emoji2-1.2.0-15 C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\res
+com.smarthub.diagnostics.app-material-1.9.0-8 C:\Users\mark lhemuel\.gradle\caches\transforms-3\37e00922a462232612ed617676083f5a\transformed\material-1.9.0\res
+com.smarthub.diagnostics.app-lifecycle-runtime-2.5.1-9 C:\Users\mark lhemuel\.gradle\caches\transforms-3\44eef9cdf6e6a1e07e71d4ea9531035f\transformed\lifecycle-runtime-2.5.1\res
+com.smarthub.diagnostics.app-core-1.12.0-10 C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\res
+com.smarthub.diagnostics.app-appcompat-1.6.1-11 C:\Users\mark lhemuel\.gradle\caches\transforms-3\4dad27fb90ee3ef09b343b34adcbbced\transformed\appcompat-1.6.1\res
+com.smarthub.diagnostics.app-lifecycle-viewmodel-2.5.1-12 C:\Users\mark lhemuel\.gradle\caches\transforms-3\5c3e89eb90d60fd45f8aada1605b6f8a\transformed\lifecycle-viewmodel-2.5.1\res
+com.smarthub.diagnostics.app-coordinatorlayout-1.1.0-13 C:\Users\mark lhemuel\.gradle\caches\transforms-3\69d76319f28544027f62654c787a8c31\transformed\coordinatorlayout-1.1.0\res
+com.smarthub.diagnostics.app-jetified-emoji2-1.2.0-14 C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\res
+com.smarthub.diagnostics.app-jetified-annotation-experimental-1.3.1-15 C:\Users\mark lhemuel\.gradle\caches\transforms-3\7524f21aceadd5ce8541ff8454930153\transformed\jetified-annotation-experimental-1.3.1\res
 com.smarthub.diagnostics.app-drawerlayout-1.1.1-16 C:\Users\mark lhemuel\.gradle\caches\transforms-3\80cc135965031eba6dfdc4d966279728\transformed\drawerlayout-1.1.1\res
-com.smarthub.diagnostics.app-lifecycle-livedata-core-2.6.1-17 C:\Users\mark lhemuel\.gradle\caches\transforms-3\b00cb4acf07e85b2ce4d54b51226feb2\transformed\lifecycle-livedata-core-2.6.1\res
-com.smarthub.diagnostics.app-jetified-startup-runtime-1.1.1-18 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\res
-com.smarthub.diagnostics.app-cardview-1.0.0-19 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c713ab90dffffdd43e0d27bdae381576\transformed\cardview-1.0.0\res
-com.smarthub.diagnostics.app-transition-1.2.0-20 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c7746fae12fc80d464f883dc92d30f6d\transformed\transition-1.2.0\res
-com.smarthub.diagnostics.app-jetified-profileinstaller-1.3.0-21 C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\res
-com.smarthub.diagnostics.app-jetified-core-ktx-1.12.0-22 C:\Users\mark lhemuel\.gradle\caches\transforms-3\cbf87bf6ded4a3286c0b8d918d716a55\transformed\jetified-core-ktx-1.12.0\res
-com.smarthub.diagnostics.app-jetified-lifecycle-process-2.6.1-23 C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\res
-com.smarthub.diagnostics.app-jetified-savedstate-1.2.1-24 C:\Users\mark lhemuel\.gradle\caches\transforms-3\d0c63875ed4d17ef7713fd6303d76bbb\transformed\jetified-savedstate-1.2.1\res
-com.smarthub.diagnostics.app-lifecycle-livedata-2.6.1-25 C:\Users\mark lhemuel\.gradle\caches\transforms-3\fb93bdb19076a21c64beaafb6864f51b\transformed\lifecycle-livedata-2.6.1\res
-com.smarthub.diagnostics.app-pngs-26 D:\SmartHubv14\SmartHubv5\android-app\app\build\generated\res\pngs\debug
-com.smarthub.diagnostics.app-resValues-27 D:\SmartHubv14\SmartHubv5\android-app\app\build\generated\res\resValues\debug
-com.smarthub.diagnostics.app-packageDebugResources-28 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.smarthub.diagnostics.app-packageDebugResources-29 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.smarthub.diagnostics.app-merged_res-30 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\merged_res\debug
-com.smarthub.diagnostics.app-debug-31 D:\SmartHubv14\SmartHubv5\android-app\app\src\debug\res
-com.smarthub.diagnostics.app-main-32 D:\SmartHubv14\SmartHubv5\android-app\app\src\main\res
+com.smarthub.diagnostics.app-constraintlayout-2.1.4-17 C:\Users\mark lhemuel\.gradle\caches\transforms-3\a6be9560d6c657bd6958e007a6a74411\transformed\constraintlayout-2.1.4\res
+com.smarthub.diagnostics.app-jetified-camera-camera2-1.3.0-18 C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\res
+com.smarthub.diagnostics.app-jetified-lifecycle-viewmodel-savedstate-2.5.1-19 C:\Users\mark lhemuel\.gradle\caches\transforms-3\ad391f419edc11bb21b8ea88ce59a419\transformed\jetified-lifecycle-viewmodel-savedstate-2.5.1\res
+com.smarthub.diagnostics.app-jetified-camera-video-1.3.0-20 C:\Users\mark lhemuel\.gradle\caches\transforms-3\b458da4d1d531910034ecdb2c7acecc7\transformed\jetified-camera-video-1.3.0\res
+com.smarthub.diagnostics.app-jetified-camera-lifecycle-1.3.0-21 C:\Users\mark lhemuel\.gradle\caches\transforms-3\b69ec16a62fa1a58786e9bd6ede3e500\transformed\jetified-camera-lifecycle-1.3.0\res
+com.smarthub.diagnostics.app-lifecycle-livedata-core-2.5.1-22 C:\Users\mark lhemuel\.gradle\caches\transforms-3\ba0568fe19492de5fd6fb0cc4d2b3c76\transformed\lifecycle-livedata-core-2.5.1\res
+com.smarthub.diagnostics.app-jetified-lifecycle-process-2.4.1-23 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\res
+com.smarthub.diagnostics.app-jetified-startup-runtime-1.1.1-24 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\res
+com.smarthub.diagnostics.app-cardview-1.0.0-25 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c713ab90dffffdd43e0d27bdae381576\transformed\cardview-1.0.0\res
+com.smarthub.diagnostics.app-transition-1.2.0-26 C:\Users\mark lhemuel\.gradle\caches\transforms-3\c7746fae12fc80d464f883dc92d30f6d\transformed\transition-1.2.0\res
+com.smarthub.diagnostics.app-jetified-core-ktx-1.12.0-27 C:\Users\mark lhemuel\.gradle\caches\transforms-3\cbf87bf6ded4a3286c0b8d918d716a55\transformed\jetified-core-ktx-1.12.0\res
+com.smarthub.diagnostics.app-jetified-savedstate-1.2.0-28 C:\Users\mark lhemuel\.gradle\caches\transforms-3\fd72e4fb7d0b116c368b460e3177351f\transformed\jetified-savedstate-1.2.0\res
+com.smarthub.diagnostics.app-pngs-29 D:\SmartHubv14\SmartHubv5\android-app\app\build\generated\res\pngs\debug
+com.smarthub.diagnostics.app-resValues-30 D:\SmartHubv14\SmartHubv5\android-app\app\build\generated\res\resValues\debug
+com.smarthub.diagnostics.app-packageDebugResources-31 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.smarthub.diagnostics.app-packageDebugResources-32 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.smarthub.diagnostics.app-merged_res-33 D:\SmartHubv14\SmartHubv5\android-app\app\build\intermediates\merged_res\debug
+com.smarthub.diagnostics.app-debug-34 D:\SmartHubv14\SmartHubv5\android-app\app\src\debug\res
+com.smarthub.diagnostics.app-main-35 D:\SmartHubv14\SmartHubv5\android-app\app\src\main\res
