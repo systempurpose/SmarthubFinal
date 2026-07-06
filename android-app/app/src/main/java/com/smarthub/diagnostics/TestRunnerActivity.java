@@ -119,6 +119,25 @@ public class TestRunnerActivity extends AppCompatActivity {
                 startActivity(new Intent(this, NfcTestActivity.class));
                 finish();
                 break;
+
+            // ==== Added: new hardware tests, all routed to one consolidated Activity ====
+            case "multitouch":
+            case "buttons":
+            case "colorsweep":
+            case "camera_front":
+            case "camera_rear":
+            case "magnetometer":
+            case "barometer":
+            case "wireless_charging":
+            case "ir_blaster":
+            case "face_unlock": {
+                Intent extraIntent = new Intent(this, ExtraHardwareTestActivity.class);
+                extraIntent.putExtra("mode", testType);
+                startActivity(extraIntent);
+                finish();
+                break;
+            }
+
             default:
                 Toast.makeText(this, "Unknown test: " + testType, Toast.LENGTH_SHORT).show();
                 finish();

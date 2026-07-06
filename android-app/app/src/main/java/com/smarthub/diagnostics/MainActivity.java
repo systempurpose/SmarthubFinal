@@ -2,6 +2,7 @@ package com.smarthub.diagnostics;
 
 import android.Manifest;
 import android.app.ActivityManager;
+import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -18,9 +19,11 @@ import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Environment;
 import android.os.StatFs;
-import android.provider.Settings;
+import android.telephony.SignalStrength;
+import android.telephony.TelephonyManager;
 import android.text.format.Formatter;
 import android.util.DisplayMetrics;
 import android.view.Display;
@@ -43,11 +46,13 @@ import org.json.JSONArray;
 import java.io.File;
 import java.io.FileReader;
 import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -128,7 +133,9 @@ public class MainActivity extends AppCompatActivity {
                 Manifest.permission.CAMERA,
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                // Added: needed for IMEI, signal strength, network type
+                Manifest.permission.READ_PHONE_STATE
         };
 
         List<String> missing = new ArrayList<>();
@@ -297,6 +304,7 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "BATTERY");
         appendLine(sb, "  Level: " + (level >= 0 ? level + "%" : "-"));
         if (currentNow != Integer.MIN_VALUE) appendLine(sb, "  Current now: " + currentNow + " µA (sign/device dependent)");
+        appendLine(sb, "  Cycle count: " + getBatteryCycleCount());
         appendLine(sb, "");
 
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
@@ -308,11 +316,13 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "  Total RAM: " + readableBytes(memInfo.totalMem));
         appendLine(sb, "  Available: " + readableBytes(memInfo.availMem));
         appendLine(sb, "  Low memory?: " + memInfo.lowMemory);
+        appendLine(sb, "  App memory stability (3s sample): " + testMemoryStability());
         appendLine(sb, "");
 
         appendLine(sb, "STORAGE (internal data)");
         File internal = Environment.getDataDirectory();
         appendStorageStats(sb, "  /data", internal);
+        appendLine(sb, "  Speed benchmark: " + testStorageSpeed());
         appendLine(sb, "");
 
         appendLine(sb, "OS / BUILD");
@@ -321,12 +331,24 @@ public class MainActivity extends AppCompatActivity {
         appendLine(sb, "  Fingerprint: " + Build.FINGERPRINT);
         appendLine(sb, "");
 
+        appendLine(sb, "CELLULAR / IMEI");
+        appendLine(sb, "  IMEI: " + getImeiInfo());
+        appendLine(sb, "  Signal strength: " + getSignalStrengthInfo());
+        appendLine(sb, "  Network type: " + getNetworkTypeInfo());
+        appendLine(sb, "");
+
+        appendLine(sb, "DNS RESOLUTION");
+        appendLine(sb, "  " + testDnsResolution());
+        appendLine(sb, "");
+
         SensorSummary sensorSummary = new SensorSummary(this);
         appendLine(sb, "SENSORS");
         appendLine(sb, "  Accelerometer: " + sensorSummary.hasAccelerometer);
         appendLine(sb, "  Gyroscope: " + sensorSummary.hasGyroscope);
         appendLine(sb, "  Proximity: " + sensorSummary.hasProximity);
         appendLine(sb, "  Light: " + sensorSummary.hasLight);
+        appendLine(sb, "  Magnetometer: " + sensorSummary.hasMagnetometer);
+        appendLine(sb, "  Barometer: " + sensorSummary.hasBarometer);
 
         appendLine(sb, "\nCPU");
         appendLine(sb, getCpuInfo());
@@ -351,6 +373,225 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return sb.toString().trim();
+    }
+
+    // ==== NEW: NATIVE TELEPHONY DIAGNOSTICS ====
+
+    /**
+     * TelephonyManager.getImei() works reliably here (unlike ADB shell attempts) ONLY if this
+     * app is Device Owner. Without that, Android 10+ blocks IMEI for every non-privileged app,
+     * app or shell, with no workaround. Provision once via:
+     *   adb shell dpm set-device-owner com.smarthub.diagnostics/.SmartHubDeviceAdminReceiver
+     * on a freshly factory-reset device before any account is added.
+     */
+    private String getImeiInfo() {
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        if (tm == null) return "TelephonyManager unavailable";
+
+        DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        boolean isDeviceOwner = dpm != null && dpm.isDeviceOwnerApp(getPackageName());
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            return "READ_PHONE_STATE not granted";
+        }
+
+        try {
+            String imei;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                imei = tm.getImei();
+            } else {
+                //noinspection deprecation
+                imei = tm.getDeviceId();
+            }
+            if (imei != null && imei.length() >= 14) {
+                return imei + (isDeviceOwner ? " (via Device Owner)" : "");
+            }
+            return "Not accessible" + (isDeviceOwner ? "" : " — app is not Device Owner (required on Android 10+)");
+        } catch (SecurityException e) {
+            return "Not accessible — requires Device Owner or system privilege on Android 10+ (dial *#06# to view manually)";
+        }
+    }
+
+    /**
+     * Uses TelephonyManager.getSignalStrength() (API 28+), which returns Android's own computed
+     * 0-4 level directly. This avoids the exact bug seen when parsing `dumpsys telephony.registry`
+     * text over ADB — that approach grabbed the wrong RAT block (CDMA sentinel) instead of the
+     * real LTE reading, since the CDMA "no signal" sentinel field appears first in the dump.
+     */
+    private String getSignalStrengthInfo() {
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        if (tm == null) return "TelephonyManager unavailable";
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            return "READ_PHONE_STATE not granted";
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return "Requires Android 9+ (direct signal strength API)";
+        }
+        try {
+            SignalStrength ss = tm.getSignalStrength();
+            if (ss == null) return "No signal data available (no active cellular connection)";
+            int level = ss.getLevel(); // 0 (none/unknown) .. 4 (excellent)
+            String[] labels = {"None/Unknown", "Poor", "Fair", "Good", "Excellent"};
+            int clamped = Math.max(0, Math.min(4, level));
+            return labels[clamped] + " (level " + level + "/4)";
+        } catch (SecurityException e) {
+            return "Permission denied reading signal strength";
+        }
+    }
+
+    /**
+     * Uses TelephonyManager.getDataNetworkType(), a stable enum. The ADB-side equivalent broke
+     * because `mDataNetworkType` doesn't exist at all in this device's telephony.registry dump —
+     * confirmed by direct testing. This API doesn't depend on dumpsys text format at all.
+     */
+    private String getNetworkTypeInfo() {
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        if (tm == null) return "TelephonyManager unavailable";
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            return "READ_PHONE_STATE not granted";
+        }
+        try {
+            int simState = tm.getSimState();
+            if (simState == TelephonyManager.SIM_STATE_ABSENT || simState == TelephonyManager.SIM_STATE_UNKNOWN) {
+                return "No SIM installed — mobile data not applicable";
+            }
+            int networkType = tm.getDataNetworkType();
+            return networkTypeToString(networkType);
+        } catch (SecurityException e) {
+            return "Permission denied reading network type";
+        }
+    }
+
+    private String networkTypeToString(int type) {
+        switch (type) {
+            case TelephonyManager.NETWORK_TYPE_LTE: return "LTE";
+            case TelephonyManager.NETWORK_TYPE_NR: return "NR (5G)";
+            case TelephonyManager.NETWORK_TYPE_HSPAP: return "HSPA+";
+            case TelephonyManager.NETWORK_TYPE_HSPA: return "HSPA";
+            case TelephonyManager.NETWORK_TYPE_HSDPA: return "HSDPA";
+            case TelephonyManager.NETWORK_TYPE_HSUPA: return "HSUPA";
+            case TelephonyManager.NETWORK_TYPE_UMTS: return "UMTS";
+            case TelephonyManager.NETWORK_TYPE_EDGE: return "EDGE";
+            case TelephonyManager.NETWORK_TYPE_GPRS: return "GPRS";
+            case TelephonyManager.NETWORK_TYPE_CDMA: return "CDMA";
+            case TelephonyManager.NETWORK_TYPE_EVDO_0: return "EVDO_0";
+            case TelephonyManager.NETWORK_TYPE_EVDO_A: return "EVDO_A";
+            case TelephonyManager.NETWORK_TYPE_EVDO_B: return "EVDO_B";
+            case TelephonyManager.NETWORK_TYPE_UNKNOWN: return "Unknown";
+            default: return "Type " + type;
+        }
+    }
+
+    /**
+     * In-process DNS resolution using InetAddress — no dependency on `ping`/`curl` binaries
+     * existing on-device, which the ADB-side equivalent required.
+     * Note: runs on a background thread with a join() timeout to keep this callable synchronously
+     * from the existing report-building flow; for a smoother UI this should ideally be fully async.
+     */
+    private String testDnsResolution() {
+        final String[] result = {"Not tested"};
+        Thread t = new Thread(() -> {
+            try {
+                InetAddress addr = InetAddress.getByName("google.com");
+                result[0] = "Resolved: " + addr.getHostAddress();
+            } catch (Exception e) {
+                result[0] = "Failed: " + e.getMessage();
+            }
+        });
+        t.start();
+        try {
+            t.join(5000);
+        } catch (InterruptedException ignored) {}
+        if (t.isAlive()) {
+            return "Timed out after 5s (no network route or DNS unreachable)";
+        }
+        return result[0];
+    }
+
+    /**
+     * Real write/read benchmark against the app's own cache directory. Avoids the `dd`/toybox
+     * dependency the ADB-side version needed, and works identically across every device since
+     * it uses plain java.io instead of shelling out.
+     */
+    private String testStorageSpeed() {
+        File testFile = new File(getCacheDir(), "speedtest.tmp");
+        byte[] buffer = new byte[1024 * 1024]; // 1MB buffer
+        new Random().nextBytes(buffer);
+        long totalBytes = 50L * 1024 * 1024; // 50MB test
+
+        try {
+            long writeStart = System.nanoTime();
+            try (FileOutputStream fos = new FileOutputStream(testFile)) {
+                long written = 0;
+                while (written < totalBytes) {
+                    fos.write(buffer);
+                    written += buffer.length;
+                }
+                fos.getFD().sync(); // force to storage, not just page cache
+            }
+            long writeElapsedNs = System.nanoTime() - writeStart;
+            double writeMBps = (totalBytes / (1024.0 * 1024.0)) / (writeElapsedNs / 1_000_000_000.0);
+
+            long readStart = System.nanoTime();
+            try (FileInputStream fis = new FileInputStream(testFile)) {
+                byte[] readBuf = new byte[1024 * 1024];
+                //noinspection StatementWithEmptyBody
+                while (fis.read(readBuf) != -1) { /* discard */ }
+            }
+            long readElapsedNs = System.nanoTime() - readStart;
+            double readMBps = (totalBytes / (1024.0 * 1024.0)) / (readElapsedNs / 1_000_000_000.0);
+
+            return String.format(Locale.US, "Write: %.1f MB/s, Read: %.1f MB/s", writeMBps, readMBps);
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            testFile.delete();
+        }
+    }
+
+    /**
+     * BATTERY_PROPERTY_CYCLE_COUNT was added in API 34; referenced by its literal int value (10)
+     * via reflection-free direct call so this compiles regardless of compileSdk version. Includes
+     * the same plausibility guard used on the Windows side (values above ~3000 are treated as
+     * invalid rather than trusted, since some devices misreport a different counter here).
+     */
+    private String getBatteryCycleCount() {
+        BatteryManager bm = (BatteryManager) getSystemService(Context.BATTERY_SERVICE);
+        if (bm == null) return "Not available";
+        try {
+            int cycles = bm.getIntProperty(10); // BatteryManager.BATTERY_PROPERTY_CYCLE_COUNT
+            if (cycles > 0 && cycles <= 3000) return cycles + " cycles";
+            if (cycles > 3000) return "Reported value (" + cycles + ") is not a valid cycle count on this device";
+            return "Not reported by this device";
+        } catch (Exception e) {
+            return "Not available (requires Android 14+)";
+        }
+    }
+
+    /**
+     * Tracks this app's own PSS over a short window as a lightweight stability signal.
+     * IMPORTANT: post-Android 8, apps cannot inspect other processes' memory for privacy reasons —
+     * true system-wide leak detection across arbitrary apps is only reliably available via the
+     * Windows/ADB side (`dumpsys meminfo <package>`), which has broader access. This is a
+     * same-process proxy only, not a replacement for that.
+     */
+    private String testMemoryStability() {
+        Debug.MemoryInfo mi1 = new Debug.MemoryInfo();
+        Debug.getMemoryInfo(mi1);
+        int pss1 = mi1.getTotalPss();
+
+        try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
+
+        Debug.MemoryInfo mi2 = new Debug.MemoryInfo();
+        Debug.getMemoryInfo(mi2);
+        int pss2 = mi2.getTotalPss();
+
+        int delta = pss2 - pss1;
+        return "App PSS: " + pss1 + "KB -> " + pss2 + "KB (Δ" + delta + "KB over 3s, this app's process only)";
     }
 
     // ==== HARDWARE HELPERS ====
@@ -550,17 +791,20 @@ public class MainActivity extends AppCompatActivity {
             JSONObject batteryJson = new JSONObject();
             if (level >= 0) batteryJson.put("levelPercent", level);
             if (currentNow != Integer.MIN_VALUE) batteryJson.put("currentMicroAmp", currentNow);
+            batteryJson.put("cycleCount", getBatteryCycleCount());
 
             JSONObject memoryJson = new JSONObject();
             memoryJson.put("totalBytes", memInfo.totalMem);
             memoryJson.put("availableBytes", memInfo.availMem);
             memoryJson.put("lowMemory", memInfo.lowMemory);
+            memoryJson.put("stabilitySample", testMemoryStability());
 
             JSONObject storageJson = new JSONObject();
             storageJson.put("path", internal.getPath());
             storageJson.put("totalBytes", totalBytes);
             storageJson.put("usedBytes", usedBytes);
             storageJson.put("freeBytes", freeBytes);
+            storageJson.put("speedBenchmark", testStorageSpeed());
 
             JSONObject osJson = new JSONObject();
             osJson.put("androidVersion", Build.VERSION.RELEASE);
@@ -574,6 +818,18 @@ public class MainActivity extends AppCompatActivity {
             sensorsJson.put("hasGyroscope", sensorSummary.hasGyroscope);
             sensorsJson.put("hasProximity", sensorSummary.hasProximity);
             sensorsJson.put("hasLight", sensorSummary.hasLight);
+            sensorsJson.put("hasMagnetometer", sensorSummary.hasMagnetometer);
+            sensorsJson.put("hasBarometer", sensorSummary.hasBarometer);
+
+            JSONObject cellularJson = new JSONObject();
+            cellularJson.put("imei", getImeiInfo());
+            cellularJson.put("signalStrength", getSignalStrengthInfo());
+            cellularJson.put("networkType", getNetworkTypeInfo());
+            root.put("cellular", cellularJson);
+
+            JSONObject dnsJson = new JSONObject();
+            dnsJson.put("result", testDnsResolution());
+            root.put("dns", dnsJson);
 
             JSONObject cpuJson = new JSONObject();
             cpuJson.put("info", getCpuInfo());
@@ -704,6 +960,8 @@ public class MainActivity extends AppCompatActivity {
         final boolean hasGyroscope;
         final boolean hasProximity;
         final boolean hasLight;
+        final boolean hasMagnetometer;
+        final boolean hasBarometer;
 
         SensorSummary(Context context) {
             SensorManager sm = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
@@ -711,6 +969,8 @@ public class MainActivity extends AppCompatActivity {
             boolean gyro = false;
             boolean prox = false;
             boolean light = false;
+            boolean mag = false;
+            boolean baro = false;
             if (sm != null) {
                 java.util.List<Sensor> list = sm.getSensorList(Sensor.TYPE_ALL);
                 for (Sensor s : list) {
@@ -719,12 +979,16 @@ public class MainActivity extends AppCompatActivity {
                     else if (type == Sensor.TYPE_GYROSCOPE) gyro = true;
                     else if (type == Sensor.TYPE_PROXIMITY) prox = true;
                     else if (type == Sensor.TYPE_LIGHT) light = true;
+                    else if (type == Sensor.TYPE_MAGNETIC_FIELD) mag = true;
+                    else if (type == Sensor.TYPE_PRESSURE) baro = true;
                 }
             }
             this.hasAccelerometer = accel;
             this.hasGyroscope = gyro;
             this.hasProximity = prox;
             this.hasLight = light;
+            this.hasMagnetometer = mag;
+            this.hasBarometer = baro;
         }
     }
 }
