@@ -103,9 +103,10 @@
         <!-- Added: handles multitouch, buttons, colorsweep, camera facing, magnetometer,
              barometer, wireless charging, IR blaster, and face-unlock checks -->
         <activity
-            android:name=".ExtraHardwareTestActivity"
-            android:exported="true"
-            android:theme="@style/Theme.SmartHub" />
+    android:name=".ExtraHardwareTestActivity"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <!-- Added: enables Device Owner provisioning, which is the only real way to unlock
              TelephonyManager.getImei() on Android 10+. Provisioned once via:

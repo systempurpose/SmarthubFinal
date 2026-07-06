@@ -26,14 +26,4 @@
         android:layout_marginBottom="24dp"
         android:elevation="2dp" />
 
-    <Button
-        android:id="@+id/btnDone"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Done"
-        android:visibility="gone"
-        android:padding="12dp 32dp"
-        android:backgroundTint="#2196F3"
-        android:textColor="#ffffff" />
-
 </LinearLayout>

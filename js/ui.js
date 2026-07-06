@@ -3245,102 +3245,103 @@ async function renderHardwareTests() {
             }
         },
 
-        // ===== NEW HARDWARE TESTS (auto‑result from app) =====
-        multitouch: {
-            title: 'Multi‑touch',
-            desc: 'Test 5‑point multi‑touch',
-            run: async () => {
-                showModal('Multi‑touch Test', `
-                    <p>📱 Place 5 fingers on the screen simultaneously.</p>
-                    <p>The app will show the maximum number of touches detected.</p>
-                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait 10 seconds.</p>
-                `);
-                await launchExtraHardwareTest('multitouch');
-                const result = await waitForHardwareResult(12000);
-                closeModal();
-                await returnToMainApp();
-                const passed = result.includes('PASS');
-                const message = passed ? result : 'Multi‑touch issue reported';
-                return { passed, message };
-            }
-        },
-        buttons: {
-            title: 'Physical Buttons',
-            desc: 'Test Volume Up & Down',
-            run: async () => {
-                showModal('Physical Buttons Test', `
-                    <p>🔘 Press <strong>Volume Up</strong> and <strong>Volume Down</strong> within 8 seconds.</p>
-                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
-                `);
-                await launchExtraHardwareTest('buttons');
-                const result = await waitForHardwareResult(10000);
-                closeModal();
-                await returnToMainApp();
-                const passed = result.includes('Volume Up') && result.includes('Volume Down');
-                const message = passed ? 'Both volume buttons detected' : 'Button issue reported';
-                return { passed, message };
-            }
-        },
-        colorsweep: {
-            title: 'Screen Burn‑in / Dead Pixel',
-            desc: 'Cycle through solid colors',
-            run: async () => {
-                showModal('Screen Burn‑in Test', `
-                    <p>🎨 The screen will cycle through solid colors (Red, Green, Blue, White, Black).</p>
-                    <p>Tap the screen to advance each color.</p>
-                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
-                `);
-                await launchExtraHardwareTest('colorsweep');
-                const result = await waitForHardwareResult(30000);
-                closeModal();
-                await returnToMainApp();
-                const passed = result.includes('PASS');
-                const message = passed ? 'User confirmed screen normal' : 'Screen issue reported';
-                return { passed, message };
-            }
-        },
-        camerafront: {
-            title: 'Front Camera',
-            desc: 'Check front camera + autofocus',
-            run: async () => {
-                const hasFrontCam = await hasFeature('android.hardware.camera.front');
-                if (!hasFrontCam) {
-                    return { passed: true, message: 'Not supported (no front camera hardware)' };
-                }
-                showModal('Front Camera Test', `
-                    <p>📸 The camera app will open. Check the viewfinder.</p>
-                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
-                `);
-                await launchExtraHardwareTest('camera_front');
-                const result = await waitForHardwareResult(15000);
-                closeModal();
-                await returnToMainApp();
-                const passed = result.includes('PASS');
-                const message = passed ? 'Front camera confirmed working' : 'Front camera issue reported';
-                return { passed, message };
-            }
-        },
-        camerarear: {
-            title: 'Rear Camera',
-            desc: 'Check rear camera + autofocus',
-            run: async () => {
-                const hasRearCam = await hasFeature('android.hardware.camera');
-                if (!hasRearCam) {
-                    return { passed: true, message: 'Not supported (no rear camera hardware)' };
-                }
-                showModal('Rear Camera Test', `
-                    <p>📸 The camera app will open. Check the viewfinder.</p>
-                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
-                `);
-                await launchExtraHardwareTest('camera_rear');
-                const result = await waitForHardwareResult(15000);
-                closeModal();
-                await returnToMainApp();
-                const passed = result.includes('PASS');
-                const message = passed ? 'Rear camera confirmed working' : 'Rear camera issue reported';
-                return { passed, message };
-            }
-        },
+    multitouch: {
+    title: 'Multi‑touch',
+    desc: 'Test 5‑point multi‑touch',
+    run: async () => {
+        await launchExtraHardwareTest('multitouch');
+        showModal('Multi‑touch Test', `
+            <p>📱 Place 5 fingers on the screen simultaneously.</p>
+            <p>The phone screen will show the number of touches detected.</p>
+            <p><strong>Did it detect at least 5 fingers?</strong></p>
+        `);
+        const result = await waitForUserConfirmation(); // waits indefinitely
+        closeModal();
+        await returnToMainApp();
+        const passed = (result === 'yes');
+        const message = passed ? 'User confirmed 5‑point multi‑touch' : 'Multi‑touch issue reported';
+        return { passed, message };
+    }
+},
+buttons: {
+    title: 'Physical Buttons',
+    desc: 'Test Volume Up & Down',
+    run: async () => {
+        await launchExtraHardwareTest('buttons');
+        showModal('Physical Buttons Test', `
+            <p>🔘 Press <strong>Volume Up</strong> and <strong>Volume Down</strong>.</p>
+            <p>The phone will show which buttons you pressed.</p>
+            <p><strong>Did both buttons register?</strong></p>
+        `);
+        const result = await waitForUserConfirmation();
+        closeModal();
+        await returnToMainApp();
+        const passed = (result === 'yes');
+        const message = passed ? 'User confirmed both volume buttons' : 'Button issue reported';
+        return { passed, message };
+    }
+},
+colorsweep: {
+    title: 'Screen Burn‑in / Dead Pixel',
+    desc: 'Cycle through solid colors',
+    run: async () => {
+        await launchExtraHardwareTest('colorsweep');
+        showModal('Screen Burn‑in Test', `
+            <p>🎨 The screen will cycle through solid colors (Red, Green, Blue, White, Black).</p>
+            <p>Tap the "Next" button on the phone to advance each color.</p>
+            <p><strong>Did the screen display all colors correctly without dead pixels or burn‑in?</strong></p>
+        `);
+        const result = await waitForUserConfirmation();
+        closeModal();
+        await returnToMainApp();
+        const passed = (result === 'yes');
+        const message = passed ? 'User confirmed screen normal' : 'Screen issue reported';
+        return { passed, message };
+    }
+},
+camerafront: {
+    title: 'Front Camera',
+    desc: 'Check front camera + autofocus',
+    run: async () => {
+        const hasFrontCam = await hasFeature('android.hardware.camera.front');
+        if (!hasFrontCam) {
+            return { passed: true, message: 'Not supported (no front camera hardware)' };
+        }
+        await launchExtraHardwareTest('camera_front');
+        showModal('Front Camera Test', `
+            <p>📸 The camera app will open. Check the viewfinder.</p>
+            <p><strong>Does the front camera show a clear image?</strong></p>
+        `);
+        const result = await waitForUserConfirmation();
+        closeModal();
+        await returnToMainApp();
+        const passed = (result === 'yes');
+        const message = passed ? 'User confirmed front camera working' : 'Front camera issue reported';
+        return { passed, message };
+    }
+},
+camerarear: {
+    title: 'Rear Camera',
+    desc: 'Check rear camera + autofocus',
+    run: async () => {
+        const hasRearCam = await hasFeature('android.hardware.camera');
+        if (!hasRearCam) {
+            return { passed: true, message: 'Not supported (no rear camera hardware)' };
+        }
+        await launchExtraHardwareTest('camera_rear');
+        showModal('Rear Camera Test', `
+            <p>📸 The camera app will open. Check the viewfinder.</p>
+            <p><strong>Does the rear camera show a clear image?</strong></p>
+        `);
+        const result = await waitForUserConfirmation();
+        closeModal();
+        await returnToMainApp();
+        const passed = (result === 'yes');
+        const message = passed ? 'User confirmed rear camera working' : 'Rear camera issue reported';
+        return { passed, message };
+    }
+},
+// Similarly for magnetometer, barometer, irblaster, faceunlock
         magnetometer: {
             title: 'Magnetometer',
             desc: 'Test magnetic field sensor',

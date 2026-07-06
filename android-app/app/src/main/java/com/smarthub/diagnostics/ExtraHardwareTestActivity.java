@@ -35,27 +35,23 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     private TextView tvStatus;
     private TextView tvTouchCount;
     private TextView tvReadings;
-    private Button btnDone;
-    private Button btnTestCamera;
+    private TextView tvColorName;
+    private Button btnNext;
     private SensorManager sensorManager;
     private Sensor activeSensor;
 
-    // Multi‑touch
+    // Multi-touch
     private int maxPointersSeen = 0;
 
     // Physical buttons
     private final Set<String> buttonsPressed = new HashSet<>();
-    private static final long BUTTON_TEST_TIMEOUT_MS = 8000;
 
     // Color sweep
     private static final String[] SWEEP_COLORS = {"Red", "Green", "Blue", "White", "Black"};
     private int sweepIndex = 0;
-    private TextView tvColorName;
-    private Button btnNext;
 
-    // Camera permission
+    // Camera
     private static final int REQUEST_CAMERA_PERMISSION = 200;
-    private boolean cameraStarted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,43 +63,12 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
             return;
         }
 
-        // Choose layout based on mode
         switch (mode) {
             case "multitouch":
                 setContentView(R.layout.activity_multitouch);
                 tvInstruction = findViewById(R.id.tvInstruction);
                 tvTouchCount = findViewById(R.id.tvTouchCount);
-                btnDone = findViewById(R.id.btnDone);
-                btnDone.setOnClickListener(this);
                 runMultiTouchTest();
-                return;
-            case "magnetometer":
-                setContentView(R.layout.activity_magnetometer);
-                tvInstruction = findViewById(R.id.tvInstruction);
-                tvReadings = findViewById(R.id.tvReadings);
-                tvStatus = tvReadings; // alias for generic code
-                btnDone = findViewById(R.id.btnDone);
-                btnDone.setOnClickListener(this);
-                runSensorTest(Sensor.TYPE_MAGNETIC_FIELD, "Magnetometer");
-                return;
-            case "barometer":
-                setContentView(R.layout.activity_magnetometer);
-                tvInstruction = findViewById(R.id.tvInstruction);
-                tvReadings = findViewById(R.id.tvReadings);
-                tvStatus = tvReadings;
-                btnDone = findViewById(R.id.btnDone);
-                btnDone.setOnClickListener(this);
-                runSensorTest(Sensor.TYPE_PRESSURE, "Barometer");
-                return;
-            case "face_unlock":
-                setContentView(R.layout.activity_face_unlock);
-                tvInstruction = findViewById(R.id.tvInstruction);
-                tvStatus = findViewById(R.id.tvStatus);
-                btnDone = findViewById(R.id.btnDone);
-                btnTestCamera = findViewById(R.id.btnTestCamera);
-                btnDone.setOnClickListener(this);
-                btnTestCamera.setOnClickListener(this);
-                runFaceUnlockCheck();
                 return;
             case "colorsweep":
                 setContentView(R.layout.activity_colorsweep);
@@ -113,13 +78,30 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
                 btnNext.setOnClickListener(this);
                 runColorSweep();
                 return;
+            case "magnetometer":
+                setContentView(R.layout.activity_magnetometer);
+                tvInstruction = findViewById(R.id.tvInstruction);
+                tvReadings = findViewById(R.id.tvReadings);
+                tvStatus = tvReadings;
+                runSensorTest(Sensor.TYPE_MAGNETIC_FIELD, "Magnetometer");
+                return;
+            case "barometer":
+                setContentView(R.layout.activity_magnetometer);
+                tvInstruction = findViewById(R.id.tvInstruction);
+                tvReadings = findViewById(R.id.tvReadings);
+                tvStatus = tvReadings;
+                runSensorTest(Sensor.TYPE_PRESSURE, "Barometer");
+                return;
+            case "face_unlock":
+                setContentView(R.layout.activity_face_unlock);
+                tvInstruction = findViewById(R.id.tvInstruction);
+                tvStatus = findViewById(R.id.tvStatus);
+                runFaceUnlockCheck();
+                return;
             default:
-                // Generic layout for buttons, camera, ir
                 setContentView(R.layout.activity_extra_hardware_test);
                 tvInstruction = findViewById(R.id.tvInstruction);
                 tvStatus = findViewById(R.id.tvStatus);
-                btnDone = findViewById(R.id.btnDone);
-                btnDone.setOnClickListener(this);
                 break;
         }
 
@@ -138,11 +120,10 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
                 break;
             default:
                 tvStatus.setText("Unknown test mode: " + mode);
-                btnDone.setVisibility(View.VISIBLE);
         }
     }
 
-    // ---- Multi‑touch ----
+    // ---- Multi-touch ----
     private void runMultiTouchTest() {
         tvInstruction.setText("Place up to 5 fingers on the screen.");
         tvTouchCount.setText("Touches: 0");
@@ -153,26 +134,12 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
             if (count > maxPointersSeen) maxPointersSeen = count;
             return visualizer.onTouchEvent(event);
         });
-        new Handler().postDelayed(() -> {
-            String result = maxPointersSeen >= 5 ? "PASS (5-point multitouch detected)"
-                    : maxPointersSeen >= 2 ? "PARTIAL (" + maxPointersSeen + "-point only)"
-                    : "FAIL (no multitouch detected)";
-            tvTouchCount.setText("Final: " + result);
-            writeResult(result);
-            btnDone.setVisibility(View.VISIBLE);
-        }, 10000);
     }
 
     // ---- Physical buttons ----
     private void runButtonTest() {
-        tvInstruction.setText("Press Volume Up and Volume Down within 8 seconds.");
+        tvInstruction.setText("Press Volume Up and Volume Down.");
         tvStatus.setText("Detected: (none yet)");
-        new Handler().postDelayed(() -> {
-            String result = "Detected: " + (buttonsPressed.isEmpty() ? "none" : String.join(", ", buttonsPressed));
-            tvStatus.setText(result);
-            writeResult(result);
-            btnDone.setVisibility(View.VISIBLE);
-        }, BUTTON_TEST_TIMEOUT_MS);
     }
 
     @Override
@@ -194,12 +161,8 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     private void showNextSweepColor() {
         if (sweepIndex >= SWEEP_COLORS.length) {
             tvColorName.setText("Done");
-            tvInstruction.setText("Test complete. Tap Done to finish.");
-            btnNext.setText("Done");
-            btnNext.setOnClickListener(v -> {
-                writeResult("PASS: Color sweep completed");
-                finish();
-            });
+            tvInstruction.setText("All colors shown. Close the app when done.");
+            btnNext.setVisibility(View.GONE);
             return;
         }
         String colorName = SWEEP_COLORS[sweepIndex];
@@ -214,7 +177,8 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
         findViewById(android.R.id.content).setBackgroundColor(color);
         tvColorName.setText(colorName);
         tvColorName.setTextColor(color == Color.WHITE || color == Color.GREEN ? Color.BLACK : Color.WHITE);
-        tvInstruction.setText("Check for dead pixels or burn‑in. Tap Next to continue.");
+        tvInstruction.setText("Check for dead pixels. Tap 'Next' to cycle.");
+        btnNext.setVisibility(View.VISIBLE);
     }
 
     @Override
@@ -222,37 +186,24 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
         if (v.getId() == R.id.btnNext) {
             sweepIndex++;
             showNextSweepColor();
-        } else if (v.getId() == R.id.btnDone) {
-            writeResult("DONE");
-            finish();
-        } else if (v.getId() == R.id.btnTestCamera) {
-            runCameraTest(true);
         }
     }
 
-    // ---- Sensor test (magnetometer, barometer) ----
+    // ---- Sensor tests ----
     private void runSensorTest(int sensorType, String label) {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager == null) {
             tvStatus.setText(label + ": SensorManager unavailable");
-            btnDone.setVisibility(View.VISIBLE);
             return;
         }
         activeSensor = sensorManager.getDefaultSensor(sensorType);
         if (activeSensor == null) {
             tvStatus.setText(label + ": Not present on this device");
-            writeResult("SKIP: " + label + " not present");
-            btnDone.setVisibility(View.VISIBLE);
             return;
         }
         tvInstruction.setText("Move the device to get readings.");
         tvStatus.setText(label + ": Reading sensor...");
         sensorManager.registerListener(this, activeSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        new Handler().postDelayed(() -> {
-            sensorManager.unregisterListener(this);
-            writeResult("DONE: " + label + " readings captured");
-            btnDone.setVisibility(View.VISIBLE);
-        }, 5000);
     }
 
     @Override
@@ -268,13 +219,12 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
-    // ---- Camera test (front/rear) ----
+    // ---- Camera tests ----
     private void runCameraTest(boolean front) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
             tvInstruction.setText("Camera permission required.");
             tvStatus.setText("Grant permission and try again.");
-            btnDone.setVisibility(View.VISIBLE);
             return;
         }
         Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
@@ -282,15 +232,11 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
             intent.putExtra("android.intent.extras.CAMERA_FACING", 1);
         }
         if (intent.resolveActivity(getPackageManager()) != null) {
-            cameraStarted = true;
             startActivityForResult(intent, 100);
             tvInstruction.setText("Camera opened. Check viewfinder.");
-            tvStatus.setText("Verify camera works, then press Done.");
-            btnDone.setVisibility(View.VISIBLE);
+            tvStatus.setText("Verify camera works, then close the app.");
         } else {
             tvStatus.setText("No camera app found.");
-            writeResult("FAIL: No camera app");
-            btnDone.setVisibility(View.VISIBLE);
         }
     }
 
@@ -299,7 +245,6 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 100) {
             tvStatus.setText("Camera returned. Did you see a clear preview?");
-            // We'll let the user press Done to confirm.
         }
     }
 
@@ -311,8 +256,6 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
                 runCameraTest("camera_front".equals(mode));
             } else {
                 tvStatus.setText("Camera permission denied.");
-                writeResult("FAIL: Permission denied");
-                btnDone.setVisibility(View.VISIBLE);
             }
         }
     }
@@ -321,10 +264,8 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
     private void runIrBlasterCheck() {
         PackageManager pm = getPackageManager();
         boolean hasIr = pm.hasSystemFeature(PackageManager.FEATURE_CONSUMER_IR);
-        tvInstruction.setText("Checking IR blaster hardware.");
+        tvInstruction.setText("IR blaster test.");
         tvStatus.setText("IR blaster: " + (hasIr ? "Present" : "Not present"));
-        writeResult(hasIr ? "PASS: IR blaster present" : "SKIP: No IR blaster");
-        btnDone.setVisibility(View.VISIBLE);
     }
 
     // ---- Face unlock ----
@@ -351,24 +292,7 @@ public class ExtraHardwareTestActivity extends AppCompatActivity implements Sens
         }
         String msg = "Face unlock feature flag: " + hasFaceFeature + "\nBiometric status: " + canAuth;
         tvStatus.setText(msg);
-        writeResult(hasFaceFeature ? "PASS: Face unlock hardware present" : "SKIP: No face unlock hardware");
-
-        if (hasFaceFeature) {
-            btnTestCamera.setVisibility(View.VISIBLE);
-            btnTestCamera.setText("Test Front Camera");
-        }
-        btnDone.setVisibility(View.VISIBLE);
-    }
-
-    // ---- Write result file ----
-    private void writeResult(String text) {
-        try {
-            java.io.File file = new java.io.File("/data/local/tmp/hwtest_result.txt");
-            file.getParentFile().mkdirs();
-            java.io.FileWriter fw = new java.io.FileWriter(file);
-            fw.write(text);
-            fw.close();
-        } catch (Exception ignored) {}
+        tvInstruction.setText("Face unlock hardware check.");
     }
 
     @Override
