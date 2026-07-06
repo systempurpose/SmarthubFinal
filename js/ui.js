@@ -2836,9 +2836,165 @@ async function renderHardwareTests() {
         return;
     }
 
+    // ========== HELPERS ==========
+    async function runAdb(command) {
+        const resp = await fetch('/adb-shell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, command })
+        });
+        if (!resp.ok) throw new Error(`ADB command failed: ${resp.status}`);
+        const data = await resp.json();
+        return data.output;
+    }
+
+    async function launchAndroidApp() {
+        await runAdb('am start -n com.smarthub.diagnostics/.MainActivity');
+    }
+
+    async function launchTestRunner(testType) {
+        await runAdb(`am start -n com.smarthub.diagnostics/.TestRunnerActivity --es test ${testType}`);
+    }
+
+    async function launchExtraHardwareTest(mode) {
+        await runAdb(`am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode ${mode}`);
+    }
+
+    async function returnToMainApp() {
+        await runAdb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchAndroidApp();
+    }
+
+    // ---- Hardware feature detection ----
+    let hardwareFeaturesCache = null;
+
+    async function getHardwareFeatures() {
+        if (hardwareFeaturesCache) return hardwareFeaturesCache;
+        try {
+            const out = await runAdb('pm list features');
+            const features = out.split('\n')
+                .filter(line => line.includes('feature:'))
+                .map(line => line.replace(/^feature:/, '').trim());
+            hardwareFeaturesCache = features;
+            return features;
+        } catch {
+            return [];
+        }
+    }
+
+    async function hasFeature(feature) {
+        const features = await getHardwareFeatures();
+        return features.some(f => f === feature);
+    }
+
+    async function hasSensor(sensorType) {
+        try {
+            const out = await runAdb(`dumpsys sensorservice | grep -i "${sensorType}"`);
+            return out.trim().length > 0;
+        } catch {
+            return false;
+        }
+    }
+
+    // ---- Modal helpers (self‑contained) ----
+    let modal, modalTitle, modalBody, yesBtn, noBtn, closeBtn;
+    let currentResolver = null;
+
+    function initModal() {
+        modal = document.getElementById('hwTestModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'hwTestModal';
+            modal.className = 'modal';
+            modal.style.display = 'none';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb;">
+                        <h3 id="hwModalTitle" style="margin: 0; font-size: 18px;">Hardware Test</h3>
+                        <span class="close-button" id="hwCloseModalBtn" style="cursor: pointer; font-size: 24px; color: #6B7280;">&times;</span>
+                    </div>
+                    <div class="modal-body" id="hwModalBody" style="padding: 20px; text-align: center; min-height: 150px;"></div>
+                    <div class="modal-footer" id="hwModalFooter" style="padding: 16px 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+                        <button id="hwYesBtn" class="btn-primary" style="display: none; margin: 0 8px;">✅ Yes, it worked</button>
+                        <button id="hwNoBtn" class="btn-secondary" style="display: none; margin: 0 8px;">❌ No, it failed</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        modalTitle = document.getElementById('hwModalTitle');
+        modalBody = document.getElementById('hwModalBody');
+        yesBtn = document.getElementById('hwYesBtn');
+        noBtn = document.getElementById('hwNoBtn');
+        closeBtn = document.getElementById('hwCloseModalBtn');
+
+        closeBtn.addEventListener('click', closeModal);
+        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+
+    function showModal(title, message) {
+        if (!modal) initModal();
+        modalTitle.textContent = title;
+        modalBody.innerHTML = message;
+        modal.style.display = 'flex';
+        yesBtn.style.display = 'none';
+        noBtn.style.display = 'none';
+    }
+
+    function closeModal() {
+        if (modal) modal.style.display = 'none';
+        if (currentResolver) {
+            currentResolver('no');
+            currentResolver = null;
+        }
+    }
+
+    function waitForUserConfirmation() {
+        return new Promise((resolve) => {
+            currentResolver = resolve;
+            yesBtn.style.display = 'inline-block';
+            noBtn.style.display = 'inline-block';
+            const onYes = () => { cleanup(); resolve('yes'); };
+            const onNo = () => { cleanup(); resolve('no'); };
+            const cleanup = () => {
+                yesBtn.removeEventListener('click', onYes);
+                noBtn.removeEventListener('click', onNo);
+                yesBtn.style.display = 'none';
+                noBtn.style.display = 'none';
+                currentResolver = null;
+                closeModal();
+            };
+            yesBtn.addEventListener('click', onYes);
+            noBtn.addEventListener('click', onNo);
+        });
+    }
+
+    // ---- Wait for result file from app ----
+    async function waitForHardwareResult(timeoutMs = 15000) {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const interval = setInterval(async () => {
+                try {
+                    const out = await runAdb('cat /data/local/tmp/hwtest_result.txt 2>/dev/null');
+                    const text = (out || '').trim();
+                    if (text) {
+                        clearInterval(interval);
+                        try { await runAdb('rm /data/local/tmp/hwtest_result.txt'); } catch (_) {}
+                        resolve(text);
+                    }
+                } catch (_) {}
+                if (Date.now() - start > timeoutMs) {
+                    clearInterval(interval);
+                    resolve('TIMEOUT');
+                }
+            }, 800);
+        });
+    }
+
+    initModal();
+
     // ========== TEST DEFINITIONS ==========
-    // Map test IDs to display info and the actual run function.
-    // The run functions are the same as in the existing tests array.
     const testDefs = {
         battery: {
             title: 'Battery',
@@ -2931,64 +3087,19 @@ async function renderHardwareTests() {
                 return { passed: true, message: `Motion sensors present (Gyro: ${hasGyro}, Accel: ${hasAccel})` };
             }
         },
-        microphone: {
-            title: 'Microphone',
-            desc: 'Record and playback test',
-            run: async () => {
-                await launchAndroidTest('microphone');
-                modalTitle.textContent = 'Microphone Test';
-                modalBody.innerHTML = `<p>🎤 The phone is recording and then playing back your voice.</p><p>After the recording, the sound will loop.</p><p>Did you hear your voice clearly?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await runAdb('input keyevent KEYCODE_BACK');
-                await new Promise(r => setTimeout(r, 500));
-                await launchAndroidApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed microphone working' : 'Microphone issue reported';
-                return { passed, message };
-            }
-        },
         gps: {
             title: 'GPS',
             desc: 'Enable GPS and check lock',
             run: async () => {
-                await prepareDeviceForTest('gps');
-                let passed = false;
-                let message = 'GPS did not lock';
+                // Simple: check if location services are enabled
                 try {
-                    await runAdb('cmd location set-location-enabled true');
-                    await new Promise(r => setTimeout(r, 1000));
-                    let isEnabled = false;
-                    try {
-                        const output = await runAdb('cmd location is-location-enabled');
-                        isEnabled = output.trim().toLowerCase() === 'true';
-                    } catch (e) {
-                        const mode = await runAdb('settings get secure location_mode');
-                        if (mode.trim() === '3') isEnabled = true;
-                    }
-                    if (!isEnabled) {
-                        await runAdb('settings put secure location_mode 3');
-                        await new Promise(r => setTimeout(r, 1000));
-                        const mode = await runAdb('settings get secure location_mode');
-                        if (mode.trim() === '3') isEnabled = true;
-                    }
-                    if (isEnabled) {
-                        passed = true;
-                        message = 'GPS enabled (high accuracy)';
-                        try {
-                            const dump = await runAdb('dumpsys location');
-                            if (dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null')) {
-                                message = 'GPS locked successfully';
-                            }
-                        } catch (e) {}
-                    } else {
-                        message = 'GPS could not be enabled';
-                    }
+                    await runAdb('settings put secure location_mode 3');
+                    const mode = await runAdb('settings get secure location_mode');
+                    const passed = mode.trim() === '3';
+                    return { passed, message: passed ? 'GPS enabled (high accuracy)' : 'GPS could not be enabled' };
                 } catch (e) {
-                    message = 'Failed to check GPS status: ' + e.message;
+                    return { passed: false, message: 'Failed to enable GPS' };
                 }
-                return { passed, message };
             }
         },
         fingerprint: {
@@ -3004,37 +3115,45 @@ async function renderHardwareTests() {
             title: 'NFC',
             desc: 'Check NFC hardware',
             run: async () => {
-                await prepareDeviceForTest('nfc');
                 const features = await getHardwareFeatures();
                 const hasNfc = features.some(f => f === 'android.hardware.nfc');
                 return { passed: true, message: hasNfc ? 'NFC hardware present' : 'Not supported (no NFC)' };
+            }
+        },
+
+        // ---- Tests that use TestRunnerActivity + manual confirmation ----
+        microphone: {
+            title: 'Microphone',
+            desc: 'Record and playback test',
+            run: async () => {
+                await launchTestRunner('microphone');
+                showModal('Microphone Test', `
+                    <p>🎤 The phone is recording and then playing back your voice.</p>
+                    <p>After the recording, the sound will loop.</p>
+                    <p><strong>Did you hear your voice clearly?</strong></p>
+                `);
+                const result = await waitForUserConfirmation();
+                closeModal();
+                await returnToMainApp();
+                const passed = (result === 'yes');
+                const message = passed ? 'User confirmed microphone working' : 'Microphone issue reported';
+                return { passed, message };
             }
         },
         vibration: {
             title: 'Vibration',
             desc: 'Test vibration motor',
             run: async () => {
-                let vibrated = false;
-                try {
-                    await runAdb('cmd vibrator_manager synced oneshot 500');
-                    vibrated = true;
-                } catch (e) {
-                    try { await runAdb('cmd vibrator vibrate 500'); vibrated = true; } catch (e2) {
-                        try { await runAdb('input vibrate 500'); vibrated = true; } catch (e3) {
-                            try { await runAdb('service call vibrator 1'); vibrated = true; } catch (e4) {}
-                        }
-                    }
-                }
-                if (!vibrated) {
-                    return { passed: false, message: 'Failed to trigger vibration' };
-                }
-                modalTitle.textContent = 'Vibration Test';
-                modalBody.innerHTML = `<p>📳 The phone should vibrate for a moment.</p><p>Did you feel the vibration?</p>`;
-                modal.style.display = 'flex';
+                // Trigger vibration and ask
+                try { await runAdb('cmd vibrator_manager synced oneshot 500'); } catch(e) {}
+                showModal('Vibration Test', `
+                    <p>📳 The phone should vibrate for a moment.</p>
+                    <p><strong>Did you feel the vibration?</strong></p>
+                `);
                 const result = await waitForUserConfirmation();
                 closeModal();
                 const passed = (result === 'yes');
-                const message = passed ? 'User confirmed vibration' : 'User did not feel vibration';
+                const message = passed ? 'User confirmed vibration' : 'Vibration issue reported';
                 return { passed, message };
             }
         },
@@ -3042,19 +3161,16 @@ async function renderHardwareTests() {
             title: 'Flashlight',
             desc: 'Test rear flashlight',
             run: async () => {
-                const features = await getHardwareFeatures();
-                if (!features.some(f => f === 'android.hardware.camera.flash')) {
-                    return { passed: true, message: 'Not supported (no flashlight hardware)' };
-                }
-                await launchAndroidTest('flash');
-                modalTitle.textContent = 'Flashlight Test';
-                modalBody.innerHTML = `<p>🔦 The rear flashlight should turn on briefly.</p><p>Did you see the light?</p>`;
-                modal.style.display = 'flex';
+                await launchTestRunner('flash');
+                showModal('Flashlight Test', `
+                    <p>🔦 The rear flashlight should turn on briefly.</p>
+                    <p><strong>Did you see the light?</strong></p>
+                `);
                 const result = await waitForUserConfirmation();
                 closeModal();
                 await returnToMainApp();
                 const passed = (result === 'yes');
-                const message = passed ? 'User confirmed flashlight' : 'User did not see light';
+                const message = passed ? 'User confirmed flashlight' : 'Flashlight issue reported';
                 return { passed, message };
             }
         },
@@ -3062,50 +3178,46 @@ async function renderHardwareTests() {
             title: 'Speaker',
             desc: 'Play test tone',
             run: async () => {
-                const features = await getHardwareFeatures();
-                if (!features.some(f => f === 'android.hardware.audio.output')) {
-                    return { passed: true, message: 'Not supported (no audio output hardware)' };
-                }
-                await prepareDeviceForTest('speaker');
-                await launchAndroidTest('sound');
-                modalTitle.textContent = 'Speaker Test';
-                modalBody.innerHTML = `<p>🔊 The phone should play a short test tone at medium volume.</p><p>Did you hear the sound clearly?</p>`;
-                modal.style.display = 'flex';
+                await launchTestRunner('sound');
+                showModal('Speaker Test', `
+                    <p>🔊 The phone should play a short test tone at medium volume.</p>
+                    <p><strong>Did you hear the sound clearly?</strong></p>
+                `);
                 const result = await waitForUserConfirmation();
                 closeModal();
                 await returnToMainApp();
                 const passed = (result === 'yes');
-                const message = passed ? 'User confirmed speaker' : 'User did not hear sound';
+                const message = passed ? 'User confirmed speaker' : 'Speaker issue reported';
                 return { passed, message };
             }
         },
-        camera: {
-            title: 'Camera',
-            desc: 'Open camera and preview',
-            run: async () => {
-                await runAdb('am start -a android.media.action.STILL_IMAGE_CAMERA');
-                modalTitle.textContent = 'Camera Test';
-                modalBody.innerHTML = `<p>📸 The phone's camera app should have opened.</p><p>Does the camera viewfinder appear and work normally?</p>`;
-                modal.style.display = 'flex';
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await runAdb('input keyevent KEYCODE_HOME');
-                await new Promise(r => setTimeout(r, 500));
-                await launchAndroidApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed camera working' : 'User reported camera issues';
-                return { passed, message };
-            }
-        },
+        // camera: {
+        //     title: 'Camera',
+        //     desc: 'Open camera and preview',
+        //     run: async () => {
+        //         await launchTestRunner('camera'); // or just am start camera
+        //         showModal('Camera Test', `
+        //             <p>📸 The camera app should have opened.</p>
+        //             <p><strong>Does the camera viewfinder appear and work normally?</strong></p>
+        //         `);
+        //         const result = await waitForUserConfirmation();
+        //         closeModal();
+        //         await returnToMainApp();
+        //         const passed = (result === 'yes');
+        //         const message = passed ? 'User confirmed camera working' : 'Camera issue reported';
+        //         return { passed, message };
+        //     }
+        // },
         headphone: {
             title: 'Headphone',
             desc: 'Test headphone audio',
             run: async () => {
-                await prepareDeviceForTest('headphone');
-                await launchAndroidTest('headphone');
-                modalTitle.textContent = 'Headphone Test';
-                modalBody.innerHTML = `<p>🎧 Please plug in headphones.</p><p>The phone will play a sound through the headphones.</p><p>Did you hear the sound clearly?</p>`;
-                modal.style.display = 'flex';
+                await launchTestRunner('headphone');
+                showModal('Headphone Test', `
+                    <p>🎧 Please plug in headphones.</p>
+                    <p>The phone will play a sound through the headphones.</p>
+                    <p><strong>Did you hear the sound clearly?</strong></p>
+                `);
                 const result = await waitForUserConfirmation();
                 closeModal();
                 await returnToMainApp();
@@ -3118,26 +3230,204 @@ async function renderHardwareTests() {
             title: 'Touch Screen',
             desc: 'Draw on screen to test',
             run: async () => {
-                const features = await getHardwareFeatures();
-                if (!features.some(f => f === 'android.hardware.touchscreen')) {
-                    return { passed: true, message: 'Not supported (no touchscreen hardware)' };
-                }
-                await launchAndroidTest('touch');
-                modalTitle.textContent = 'Touch Screen Test';
-                modalBody.innerHTML = `<p>📱 The phone is now in touch test mode.</p><p>Draw inside the square guide on the phone.</p><p>Does the screen register your touches and draw smoothly?</p>`;
-                modal.style.display = 'flex';
+                await launchTestRunner('touch');
+                showModal('Touch Screen Test', `
+                    <p>📱 The phone is now in touch test mode.</p>
+                    <p>Draw inside the square guide on the phone.</p>
+                    <p><strong>Does the screen register your touches and draw smoothly?</strong></p>
+                `);
                 const result = await waitForUserConfirmation();
                 closeModal();
                 await returnToMainApp();
                 const passed = (result === 'yes');
-                const message = passed ? 'User confirmed touch working' : 'User reported touch issues';
+                const message = passed ? 'User confirmed touch working' : 'Touch issues reported';
+                return { passed, message };
+            }
+        },
+
+        // ===== NEW HARDWARE TESTS (auto‑result from app) =====
+        multitouch: {
+            title: 'Multi‑touch',
+            desc: 'Test 5‑point multi‑touch',
+            run: async () => {
+                showModal('Multi‑touch Test', `
+                    <p>📱 Place 5 fingers on the screen simultaneously.</p>
+                    <p>The app will show the maximum number of touches detected.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait 10 seconds.</p>
+                `);
+                await launchExtraHardwareTest('multitouch');
+                const result = await waitForHardwareResult(12000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? result : 'Multi‑touch issue reported';
+                return { passed, message };
+            }
+        },
+        buttons: {
+            title: 'Physical Buttons',
+            desc: 'Test Volume Up & Down',
+            run: async () => {
+                showModal('Physical Buttons Test', `
+                    <p>🔘 Press <strong>Volume Up</strong> and <strong>Volume Down</strong> within 8 seconds.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('buttons');
+                const result = await waitForHardwareResult(10000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('Volume Up') && result.includes('Volume Down');
+                const message = passed ? 'Both volume buttons detected' : 'Button issue reported';
+                return { passed, message };
+            }
+        },
+        colorsweep: {
+            title: 'Screen Burn‑in / Dead Pixel',
+            desc: 'Cycle through solid colors',
+            run: async () => {
+                showModal('Screen Burn‑in Test', `
+                    <p>🎨 The screen will cycle through solid colors (Red, Green, Blue, White, Black).</p>
+                    <p>Tap the screen to advance each color.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('colorsweep');
+                const result = await waitForHardwareResult(30000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? 'User confirmed screen normal' : 'Screen issue reported';
+                return { passed, message };
+            }
+        },
+        camerafront: {
+            title: 'Front Camera',
+            desc: 'Check front camera + autofocus',
+            run: async () => {
+                const hasFrontCam = await hasFeature('android.hardware.camera.front');
+                if (!hasFrontCam) {
+                    return { passed: true, message: 'Not supported (no front camera hardware)' };
+                }
+                showModal('Front Camera Test', `
+                    <p>📸 The camera app will open. Check the viewfinder.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('camera_front');
+                const result = await waitForHardwareResult(15000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? 'Front camera confirmed working' : 'Front camera issue reported';
+                return { passed, message };
+            }
+        },
+        camerarear: {
+            title: 'Rear Camera',
+            desc: 'Check rear camera + autofocus',
+            run: async () => {
+                const hasRearCam = await hasFeature('android.hardware.camera');
+                if (!hasRearCam) {
+                    return { passed: true, message: 'Not supported (no rear camera hardware)' };
+                }
+                showModal('Rear Camera Test', `
+                    <p>📸 The camera app will open. Check the viewfinder.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('camera_rear');
+                const result = await waitForHardwareResult(15000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? 'Rear camera confirmed working' : 'Rear camera issue reported';
+                return { passed, message };
+            }
+        },
+        magnetometer: {
+            title: 'Magnetometer',
+            desc: 'Test magnetic field sensor',
+            run: async () => {
+                const hasMag = await hasSensor('Magnetic field');
+                if (!hasMag) {
+                    return { passed: true, message: 'Not supported (no magnetometer)' };
+                }
+                showModal('Magnetometer Test', `
+                    <p>🧲 Move the phone in a figure‑8 pattern to calibrate.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait 5 seconds.</p>
+                `);
+                await launchExtraHardwareTest('magnetometer');
+                const result = await waitForHardwareResult(8000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('DONE');
+                const message = passed ? 'Magnetometer readings captured' : 'Magnetometer issue reported';
+                return { passed, message };
+            }
+        },
+        barometer: {
+            title: 'Barometer',
+            desc: 'Test pressure sensor',
+            run: async () => {
+                const hasBaro = await hasSensor('Pressure');
+                if (!hasBaro) {
+                    return { passed: true, message: 'Not supported (no barometer)' };
+                }
+                showModal('Barometer Test', `
+                    <p>🌡️ The app will read pressure/altitude sensor.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait 5 seconds.</p>
+                `);
+                await launchExtraHardwareTest('barometer');
+                const result = await waitForHardwareResult(8000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('DONE');
+                const message = passed ? 'Barometer readings captured' : 'Barometer issue reported';
+                return { passed, message };
+            }
+        },
+        irblaster: {
+            title: 'IR Blaster',
+            desc: 'Detect infrared transmitter',
+            run: async () => {
+                const hasIr = await hasFeature('android.hardware.consumerir');
+                if (!hasIr) {
+                    return { passed: true, message: 'Not supported (no IR blaster)' };
+                }
+                showModal('IR Blaster Test', `
+                    <p>📡 Checking for IR blaster hardware.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('ir_blaster');
+                const result = await waitForHardwareResult(6000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? 'IR blaster present' : 'IR blaster issue reported';
+                return { passed, message };
+            }
+        },
+        faceunlock: {
+            title: 'Face Unlock',
+            desc: 'Check face recognition hardware',
+            run: async () => {
+                const hasFace = await hasFeature('android.hardware.biometrics.face');
+                if (!hasFace) {
+                    return { passed: true, message: 'Not supported (no face unlock hardware)' };
+                }
+                showModal('Face Unlock Test', `
+                    <p>👤 Checking face unlock hardware and enrollment status.</p>
+                    <p style="font-size:12px; color:#999;">Auto‑detecting... Please wait.</p>
+                `);
+                await launchExtraHardwareTest('face_unlock');
+                const result = await waitForHardwareResult(10000);
+                closeModal();
+                await returnToMainApp();
+                const passed = result.includes('PASS');
+                const message = passed ? 'Face unlock hardware available' : 'Face unlock issue reported';
                 return { passed, message };
             }
         }
     };
 
-    // ========== CARD UI ==========
-    // Build card HTML from testDefs
+    // ========== BUILD UI ==========
     const testIds = Object.keys(testDefs);
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const id of testIds) {
@@ -3170,119 +3460,17 @@ async function renderHardwareTests() {
             <div class="cards-container" id="hwCardsContainer"></div>
             <div id="hwSummaryCard" class="info-card" style="margin-top: 24px;"></div>
         </div>
-        <div id="hwTestModal" class="modal" style="display: none;">
-            <div class="modal-content" style="max-width: 500px; width: 90%;">
-                <div class="modal-header">
-                    <h3 id="hwModalTitle">Hardware Test</h3>
-                    <span class="close-button" id="hwCloseModalBtn">&times;</span>
-                </div>
-                <div class="modal-body" id="hwModalBody" style="text-align: center; min-height: 200px;"></div>
-                <div class="modal-footer" id="hwModalFooter">
-                    <button id="hwYesBtn" class="btn-primary" style="display: none;">✅ Yes, it worked</button>
-                    <button id="hwNoBtn" class="btn-secondary" style="display: none;">❌ No, it failed</button>
-                </div>
-            </div>
-        </div>
     `;
 
     document.getElementById('pageContent').innerHTML = fullHtml;
 
-    // ========== MODAL HELPERS ==========
-    const modal = document.getElementById('hwTestModal');
-    const modalTitle = document.getElementById('hwModalTitle');
-    const modalBody = document.getElementById('hwModalBody');
-    const yesBtn = document.getElementById('hwYesBtn');
-    const noBtn = document.getElementById('hwNoBtn');
-    const closeBtn = document.getElementById('hwCloseModalBtn');
-
-    let currentTestResolver = null;
-
-    function closeModal() {
-        modal.style.display = 'none';
-        if (currentTestResolver) {
-            currentTestResolver('no');
-            currentTestResolver = null;
-        }
-        yesBtn.style.display = 'none';
-        noBtn.style.display = 'none';
-    }
-    closeBtn.addEventListener('click', closeModal);
-    window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-    function waitForUserConfirmation() {
-        return new Promise((resolve) => {
-            currentTestResolver = resolve;
-            yesBtn.style.display = 'inline-block';
-            noBtn.style.display = 'inline-block';
-            const onYes = () => { cleanup(); resolve('yes'); };
-            const onNo = () => { cleanup(); resolve('no'); };
-            const cleanup = () => {
-                yesBtn.removeEventListener('click', onYes);
-                noBtn.removeEventListener('click', onNo);
-                yesBtn.style.display = 'none';
-                noBtn.style.display = 'none';
-                currentTestResolver = null;
-            };
-            yesBtn.addEventListener('click', onYes);
-            noBtn.addEventListener('click', onNo);
-        });
-    }
-
-    async function runAdb(command) {
-        const response = await fetch(`${BACKEND_URL}/adb-shell`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: currentDeviceId, command })
-        });
-        if (!response.ok) throw new Error(`ADB command failed: ${response.status}`);
-        const data = await response.json();
-        return data.output;
-    }
-
-    async function launchAndroidApp() {
-        await runAdb('am start -n com.smarthub.diagnostics/.MainActivity');
-    }
-
-    async function launchAndroidTest(testType) {
-        await runAdb(`am start -n com.smarthub.diagnostics/.TestRunnerActivity --es test ${testType}`);
-    }
-
-    async function returnToMainApp() {
-        await runAdb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchAndroidApp();
-    }
-
-    async function prepareDeviceForTest(testType) {
-    try {
-        await runAdb('settings put global zen_mode 0');
-        if (testType === 'gps') {
-            await runAdb('settings put secure location_mode 3');
-        }
-        if (testType === 'nfc') {
-            await runAdb('svc nfc enable');
-            await runAdb('settings put global nfc_on 1');
-        }
-       if (testType === 'speaker' || testType === 'headphone' || testType === 'sound') {
-    try {
-        await runAdb('cmd media_session volume --stream 3 --set 8 --show');
-    } catch (e) {
-        await runAdb('settings put system volume_music 8');
-    }
-}
-    } catch (e) {
-        console.warn('Device preparation failed:', e);
-    }
-}
-
-    // ========== RUN A SINGLE TEST ==========
-    async function runSingleHardwareTest(testId) {
+    // ========== EVENT HANDLERS ==========
+    async function runSingleTest(testId) {
         const card = document.getElementById(`card-${testId}`);
         const statusSpan = card.querySelector('.status-text');
         const btn = card.querySelector('.run-single-test');
         btn.disabled = true;
         btn.textContent = '⏳ Running...';
-
         statusSpan.style.color = '#f59e0b';
         statusSpan.textContent = '⏳ Running...';
 
@@ -3293,13 +3481,12 @@ async function renderHardwareTests() {
             const passed = result.passed;
             const icon = passed ? '✅' : '❌';
             const color = passed ? '#2e7d32' : '#d32f2f';
-            const statusText = passed ? 'Passed' : 'Failed';
             statusSpan.style.color = color;
-            statusSpan.textContent = `${icon} ${statusText}`;
-            // Show message in a small tooltip or below? We'll just show an alert for now.
-            alert(`${def.title}: ${result.message}`);
+            statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
             btn.textContent = passed ? 'Rerun' : 'Details';
             btn.disabled = false;
+            // Optional: show result in alert (or a small toast)
+            alert(`${def.title}: ${result.message}`);
         } catch (err) {
             statusSpan.style.color = '#d32f2f';
             statusSpan.textContent = '❌ Error';
@@ -3309,16 +3496,19 @@ async function renderHardwareTests() {
         }
     }
 
-    // ========== RUN ALL TESTS (full suite) ==========
     async function runAllTests() {
-        // This is the same as the original runAllTests but we'll update card statuses as we go.
         const resultsContainer = document.getElementById('hwResults');
         resultsContainer.style.display = 'block';
         const cardsContainer = document.getElementById('hwCardsContainer');
         cardsContainer.innerHTML = '';
         const results = {};
 
-        await launchAndroidApp();
+        try {
+            await launchAndroidApp();
+        } catch (e) {
+            alert('Companion app not installed. Some tests may fail.');
+        }
+
         for (const id of testIds) {
             const def = testDefs[id];
             const card = document.getElementById(`card-${id}`);
@@ -3335,9 +3525,8 @@ async function renderHardwareTests() {
                 const passed = result.passed;
                 const icon = passed ? '✅' : '❌';
                 const color = passed ? '#2e7d32' : '#d32f2f';
-                const statusText = passed ? 'Passed' : 'Failed';
                 statusSpan.style.color = color;
-                statusSpan.textContent = `${icon} ${statusText}`;
+                statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
                 btn.textContent = passed ? 'Rerun' : 'Details';
                 btn.disabled = false;
             } catch (err) {
@@ -3350,7 +3539,6 @@ async function renderHardwareTests() {
             await new Promise(r => setTimeout(r, 500));
         }
 
-        // Show summary (same as before)
         const passedCount = Object.values(results).filter(r => r.passed).length;
         const total = testIds.length;
         const percentage = Math.round((passedCount / total) * 100);
@@ -3389,16 +3577,14 @@ async function renderHardwareTests() {
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
     }
 
-    // ========== ATTACH EVENT LISTENERS ==========
-    // Single test buttons
+    // Attach events
     document.querySelectorAll('.run-single-test').forEach(btn => {
         btn.addEventListener('click', () => {
             const testId = btn.dataset.test;
-            runSingleHardwareTest(testId);
+            runSingleTest(testId);
         });
     });
 
-    // Full suite button
     document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
 

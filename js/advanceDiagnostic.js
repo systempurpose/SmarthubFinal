@@ -1279,7 +1279,302 @@
             return { name: 'Charging Type', passed: false, message: `Error: ${e.message}`, fix: 'Check charging hardware.' };
         }
     }
+    // ====== HARDWARE TESTS USING COMPANION APP ======
 
+async function testMultiTouch() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode multitouch');
+        const result = await showModalWithTimeout(
+            'Multi‑touch Test',
+            'Place 5 fingers on the screen simultaneously. The app will detect the max number of touches.',
+            12000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('PASS') || result.includes('5');
+        return {
+            name: 'Multi‑touch',
+            passed,
+            message: result || 'Multi‑touch test completed',
+            fix: passed ? '' : 'Touchscreen may not support 5‑point multitouch.'
+        };
+    } catch (e) {
+        return { name: 'Multi‑touch', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testPhysicalButtons() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode buttons');
+        const result = await showModalWithTimeout(
+            'Physical Buttons Test',
+            'Press Volume Up and Volume Down within 8 seconds.',
+            10000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Volume Up') && result.includes('Volume Down');
+        return {
+            name: 'Physical Buttons',
+            passed,
+            message: result || 'Button test completed',
+            fix: passed ? '' : 'Volume buttons may be faulty.'
+        };
+    } catch (e) {
+        return { name: 'Physical Buttons', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testColorSweep() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode colorsweep');
+        const result = await showModalWithTimeout(
+            'Screen Burn‑in / Dead Pixel Test',
+            'The screen will cycle through solid colors (Red, Green, Blue, White, Black). Tap the screen to advance each color.\nCheck for dead pixels or burn‑in.',
+            30000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('completed') || result.includes('done');
+        return {
+            name: 'Screen Burn‑in / Dead Pixel',
+            passed,
+            message: result || 'Color sweep completed',
+            fix: passed ? '' : 'Dead pixels or burn‑in detected – consider screen replacement.'
+        };
+    } catch (e) {
+        return { name: 'Screen Burn‑in', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testCameraFront() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode camera_front');
+        const result = await showModalWithTimeout(
+            'Front Camera Test',
+            'Checking front camera presence and autofocus...',
+            5000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Present');
+        return {
+            name: 'Front Camera',
+            passed,
+            message: result || 'Front camera check completed',
+            fix: passed ? '' : 'Front camera not detected.'
+        };
+    } catch (e) {
+        return { name: 'Front Camera', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testCameraRear() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode camera_rear');
+        const result = await showModalWithTimeout(
+            'Rear Camera Test',
+            'Checking rear camera presence and autofocus...',
+            5000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Present');
+        return {
+            name: 'Rear Camera',
+            passed,
+            message: result || 'Rear camera check completed',
+            fix: passed ? '' : 'Rear camera not detected.'
+        };
+    } catch (e) {
+        return { name: 'Rear Camera', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testMagnetometer() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode magnetometer');
+        const result = await showModalWithTimeout(
+            'Magnetometer Test',
+            'Reading magnetometer sensor... (move phone in a figure‑8 pattern)',
+            6000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Magnetic') && !result.includes('Not present');
+        return {
+            name: 'Magnetometer',
+            passed,
+            message: result || 'Magnetometer check completed',
+            fix: passed ? '' : 'Magnetometer not detected – compass may not work.'
+        };
+    } catch (e) {
+        return { name: 'Magnetometer', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testBarometer() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode barometer');
+        const result = await showModalWithTimeout(
+            'Barometer Test',
+            'Reading barometer sensor... (altitude/pressure)',
+            6000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Pressure') && !result.includes('Not present');
+        return {
+            name: 'Barometer',
+            passed,
+            message: result || 'Barometer check completed',
+            fix: passed ? '' : 'Barometer not detected.'
+        };
+    } catch (e) {
+        return { name: 'Barometer', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testWirelessCharging() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode wireless_charging');
+        const result = await showModalWithTimeout(
+            'Wireless Charging Test',
+            'Place the device on a wireless charger if available. Checking wireless charging capability.',
+            8000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('ACTIVE') || result.includes('place on a wireless charger');
+        return {
+            name: 'Wireless Charging',
+            passed,
+            message: result || 'Wireless charging check completed',
+            fix: passed ? '' : 'Wireless charging not supported or not detected.'
+        };
+    } catch (e) {
+        return { name: 'Wireless Charging', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testIrBlaster() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode ir_blaster');
+        const result = await showModalWithTimeout(
+            'IR Blaster Test',
+            'Checking for IR blaster hardware...',
+            4000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('Present');
+        return {
+            name: 'IR Blaster',
+            passed,
+            message: result || 'IR blaster check completed',
+            fix: passed ? '' : 'IR blaster not detected.'
+        };
+    } catch (e) {
+        return { name: 'IR Blaster', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+async function testFaceUnlock() {
+    try {
+        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode face_unlock');
+        const result = await showModalWithTimeout(
+            'Face Unlock Test',
+            'Checking for face unlock hardware and enrollment status...',
+            6000
+        );
+        await adb('input keyevent KEYCODE_BACK');
+        await new Promise(r => setTimeout(r, 500));
+        await launchCompanionApp();
+        const passed = result.includes('present') || result.includes('available');
+        return {
+            name: 'Face Unlock',
+            passed,
+            message: result || 'Face unlock check completed',
+            fix: passed ? '' : 'Face unlock hardware not detected.'
+        };
+    } catch (e) {
+        return { name: 'Face Unlock', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
+    }
+}
+
+// ---- Helper: show modal with timeout and return result ----
+async function showModalWithTimeout(title, message, timeoutMs) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('hwTestModal') || document.getElementById('advanceDiagModal');
+        if (!modal) {
+            resolve('Test completed (no modal)');
+            return;
+        }
+        const modalTitle = modal.querySelector('.modal-header h3') || modal.querySelector('h3');
+        const modalBody = modal.querySelector('.modal-body');
+        if (modalTitle) modalTitle.textContent = title;
+        if (modalBody) modalBody.innerHTML = `<p>${message}</p><p style="font-size:12px; color:#999;">Waiting for app to complete...</p>`;
+        modal.style.display = 'flex';
+        let resolved = false;
+        const timer = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                modal.style.display = 'none';
+                resolve('Timeout');
+            }
+        }, timeoutMs);
+        // Poll for result file from app (ExtraHardwareTestActivity writes to /data/local/tmp/hwtest_result.txt)
+        const pollInterval = setInterval(async () => {
+            try {
+                const result = await adb('cat /data/local/tmp/hwtest_result.txt 2>/dev/null');
+                const text = (result.output || '').trim();
+                if (text) {
+                    clearInterval(pollInterval);
+                    clearTimeout(timer);
+                    modal.style.display = 'none';
+                    resolved = true;
+                    resolve(text);
+                }
+            } catch (_) {}
+        }, 1000);
+        // Also listen for modal close (user dismisses)
+        const closeBtn = modal.querySelector('.close-button');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearInterval(pollInterval);
+                    clearTimeout(timer);
+                    modal.style.display = 'none';
+                    resolve('User closed modal');
+                }
+            });
+        }
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && !resolved) {
+                resolved = true;
+                clearInterval(pollInterval);
+                clearTimeout(timer);
+                modal.style.display = 'none';
+                resolve('User closed modal');
+            }
+        });
+    });
+}
+
+async function launchCompanionApp() {
+    await adb('am start -n com.smarthub.diagnostics/.MainActivity');
+}
     // ====== RUN ALL TESTS ======
     async function runSoftwareDiagnostics() {
     const tests = [
@@ -1298,7 +1593,7 @@
         testBatteryHealth,
         testSignalStrength,
         testNetworkType,
-        // testDnsResolution,   // <-- REMOVED
+        // testDnsResolution,   // REMOVED (unreliable)
         testStorageSpeed,
         testStorageIOErrors,
         testMemoryLeaks,

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#f5f5f5">
+
+    <TextView
+        android:id="@+id/tvInstruction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Place 5 fingers on the screen"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/tvTouchCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Touches: 0"
+        android:textSize="24sp"
+        android:textColor="#2196F3"
+        android:layout_marginBottom="16dp" />
+
+    <com.smarthub.diagnostics.TouchVisualizer
+        android:id="@+id/touchVisualizer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#ffffff"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnDone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Done"
+        android:visibility="gone"
+        android:padding="12dp 32dp"
+        android:backgroundTint="#2196F3"
+        android:textColor="#ffffff" />
+
+</LinearLayout>

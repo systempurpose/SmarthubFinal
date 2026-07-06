@@ -72,6 +72,20 @@
                     </div>
                 </div>
             </div>
+            <!-- Modal for hardware tests (add this inside the pageContent or at the end of body) -->
+<div id="hwTestModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px; width: 90%;">
+        <div class="modal-header">
+            <h3 id="hwModalTitle">Hardware Test</h3>
+            <span class="close-button" id="hwCloseModalBtn">&times;</span>
+        </div>
+        <div class="modal-body" id="hwModalBody" style="text-align: center; min-height: 200px;"></div>
+        <div class="modal-footer" id="hwModalFooter">
+            <button id="hwYesBtn" class="btn-primary" style="display: none;">✅ Yes, it worked</button>
+            <button id="hwNoBtn" class="btn-secondary" style="display: none;">❌ No, it failed</button>
+        </div>
+    </div>
+</div>
 
             <!-- Status Bar (Battery, Storage, RAM) -->
             <div id="status-bar" style="display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
