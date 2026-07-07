@@ -27,6 +27,7 @@ id connection_status
 id desktop_hint
 id diagnostic_spinner
 id drawView
+id emptyState
 id failButton
 id instructions
 id ivIcon
@@ -47,7 +48,9 @@ id tvAppName
 id tvCameraStatus
 id tvColorName
 id tvDetails
-id tvEmpty
+id tvEmptyIcon
+id tvEmptyMessage
+id tvEmptyTitle
 id tvInstruction
 id tvPackage
 id tvReadings

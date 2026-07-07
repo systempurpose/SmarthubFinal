@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -21,7 +20,7 @@
         android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Loading report..."
+        android:text="Loading..."
         android:textSize="14sp"
         android:textColor="#6b7280"
         android:layout_marginBottom="16dp" />
@@ -35,22 +34,51 @@
         android:layout_marginBottom="16dp"
         android:visibility="visible" />
 
-    <TextView
-        android:id="@+id/tvEmpty"
+    <!-- Empty State -->
+    <LinearLayout
+        android:id="@+id/emptyState"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:orientation="vertical"
         android:gravity="center"
-        android:text="✅ No suspicious apps found"
-        android:textSize="16sp"
-        android:textColor="#16a34a"
-        android:visibility="gone" />
+        android:visibility="gone">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvApps"
+        <TextView
+            android:id="@+id/tvEmptyIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🛡️"
+            android:textSize="48sp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/tvEmptyTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No Suspicious Apps"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#1e293b"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvEmptyMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="All apps appear to be safe."
+            android:textSize="14sp"
+            android:textColor="#6b7280"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <ListView
+        android:id="@+id/lvApps"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="4dp"
         android:visibility="gone" />
 
 </LinearLayout>

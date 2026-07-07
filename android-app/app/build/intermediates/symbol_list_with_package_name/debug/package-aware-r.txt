@@ -3212,6 +3212,7 @@ id edit_query
 id edit_text_id
 id elastic
 id embed
+id emptyState
 id end
 id endToStart
 id enterAlways
@@ -3533,7 +3534,9 @@ id tvAppName
 id tvCameraStatus
 id tvColorName
 id tvDetails
-id tvEmpty
+id tvEmptyIcon
+id tvEmptyMessage
+id tvEmptyTitle
 id tvInstruction
 id tvPackage
 id tvReadings

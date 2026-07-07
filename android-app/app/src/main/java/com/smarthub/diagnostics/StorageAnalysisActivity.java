@@ -12,7 +12,7 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
+import android.widget.LinearLayout;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONArray;
@@ -29,7 +29,9 @@ public class StorageAnalysisActivity extends AppCompatActivity {
 
     private ListView lvApps;
     private TextView tvSummary;
-    private TextView tvEmpty;
+    private LinearLayout emptyState;
+    private TextView tvEmptyTitle;
+    private TextView tvEmptyMessage;
     private ProgressBar progressBar;
 
     @Override
@@ -39,17 +41,20 @@ public class StorageAnalysisActivity extends AppCompatActivity {
 
         lvApps = findViewById(R.id.lvApps);
         tvSummary = findViewById(R.id.tvSummary);
-        tvEmpty = findViewById(R.id.tvEmpty);
         progressBar = findViewById(R.id.progressBar);
+        emptyState = findViewById(R.id.emptyState);
+        tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
+        tvEmptyMessage = findViewById(R.id.tvEmptyMessage);
 
         loadAndDisplayData();
     }
 
     private void loadAndDisplayData() {
-        tvSummary.setText("Scanning storage...");
+        // Show loading state
+        tvSummary.setText("📡 Waiting for Android app data...");
         progressBar.setVisibility(View.VISIBLE);
         lvApps.setVisibility(View.GONE);
-        tvEmpty.setVisibility(View.GONE);
+        emptyState.setVisibility(View.GONE);
 
         new Handler().postDelayed(() -> {
             File dir = getExternalFilesDir(null);
@@ -57,10 +62,11 @@ public class StorageAnalysisActivity extends AppCompatActivity {
             File reportFile = new File(dir, "smarthub_diagnostics.json");
 
             if (!reportFile.exists()) {
-                tvSummary.setText("No report found. Connect to desktop.");
+                // Show friendly empty state
                 progressBar.setVisibility(View.GONE);
-                tvEmpty.setVisibility(View.VISIBLE);
-                tvEmpty.setText("⚠️ No data");
+                emptyState.setVisibility(View.VISIBLE);
+                tvEmptyTitle.setText("📭 No Report Found");
+                tvEmptyMessage.setText("Connect your device to the SmartHub desktop app and run a storage scan.");
                 return;
             }
 
@@ -75,10 +81,10 @@ public class StorageAnalysisActivity extends AppCompatActivity {
                 JSONArray appStorage = root.optJSONArray("appStorage");
 
                 if (appStorage == null || appStorage.length() == 0) {
-                    tvSummary.setText("No app storage data available.");
                     progressBar.setVisibility(View.GONE);
-                    tvEmpty.setVisibility(View.VISIBLE);
-                    tvEmpty.setText("📁 No data");
+                    emptyState.setVisibility(View.VISIBLE);
+                    tvEmptyTitle.setText("📭 No App Data");
+                    tvEmptyMessage.setText("No storage data found for installed apps.");
                     return;
                 }
 
@@ -106,21 +112,22 @@ public class StorageAnalysisActivity extends AppCompatActivity {
 
                 long total = 0;
                 for (AppStorageItem item : items) total += item.totalBytes;
-                tvSummary.setText("Top " + items.size() + " apps using " + formatBytes(total));
+
+                tvSummary.setText("📊 Top " + items.size() + " apps — " + formatBytes(total) + " total");
                 progressBar.setVisibility(View.GONE);
-                tvEmpty.setVisibility(View.GONE);
+                emptyState.setVisibility(View.GONE);
                 lvApps.setVisibility(View.VISIBLE);
 
                 AppAdapter adapter = new AppAdapter(this, items);
                 lvApps.setAdapter(adapter);
 
             } catch (Exception e) {
-                tvSummary.setText("Error: " + e.getMessage());
                 progressBar.setVisibility(View.GONE);
-                tvEmpty.setVisibility(View.VISIBLE);
-                tvEmpty.setText("❌ Error");
+                emptyState.setVisibility(View.VISIBLE);
+                tvEmptyTitle.setText("⚠️ Error");
+                tvEmptyMessage.setText("Failed to load storage data: " + e.getMessage());
             }
-        }, 1500);
+        }, 1000); // slight delay to show loading state
     }
 
     private String formatBytes(long bytes) {
@@ -154,7 +161,7 @@ public class StorageAnalysisActivity extends AppCompatActivity {
             TextView text1 = convertView.findViewById(android.R.id.text1);
             TextView text2 = convertView.findViewById(android.R.id.text2);
             text1.setText(item.appName);
-            text2.setText("Total: " + formatBytes(item.totalBytes) + " | Data: " + formatBytes(item.dataBytes) + " | Cache: " + formatBytes(item.cacheBytes));
+            text2.setText("📁 Total: " + formatBytes(item.totalBytes) + " | Data: " + formatBytes(item.dataBytes) + " | Cache: " + formatBytes(item.cacheBytes));
             if (item.icon != null) {
                 text1.setCompoundDrawablesWithIntrinsicBounds(item.icon, null, null, null);
                 text1.setCompoundDrawablePadding(16);
