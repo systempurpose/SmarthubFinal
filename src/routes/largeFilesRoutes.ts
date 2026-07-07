@@ -6,8 +6,8 @@ const execFileAsync = promisify(execFile);
 const router = Router();
 
 const MIN_DEFAULT_SIZE_GB = 0.5;
-const DEFAULT_TIMEOUT_MS = 120000;
-const MAX_BUFFER = 100 * 1024 * 1024;
+const DEFAULT_TIMEOUT_MS = 300000; // 5 minutes
+const MAX_BUFFER = 200 * 1024 * 1024; // 200 MB
 const APP_BATCH_SIZE = 5;
 
 type LargeFileItem = {
@@ -44,13 +44,14 @@ function parseSizePathLine(line: string) {
   return { bytes, path };
 }
 
+// ---- Scan user storage (files) ----
 async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: number, minSizeBytes: number): Promise<Array<LargeFileItem>> {
   const files: Array<LargeFileItem> = [];
   const seenPaths = new Set<string>();
 
   for (const root of roots) {
     const command = `find ${root} -type f -size +${minSizeMb}M -printf '%s %p\\0' 2>/dev/null || (find ${root} -type f -size +${minSizeMb}M -exec ls -l {} \\; 2>/dev/null | awk '{size=$5; path=$9; for(i=10;i<=NF;i++) path=path" " $i; print size " " path}')`;
-    const stdout = await runAdbShell(deviceId, command);
+    const stdout = await runAdbShell(deviceId, command, DEFAULT_TIMEOUT_MS);
     if (!stdout) continue;
 
     const entries = stdout.includes('\0') ? stdout.split('\0') : stdout.split(/\r?\n/);
@@ -67,6 +68,7 @@ async function scanStorageRoots(deviceId: string, roots: string[], minSizeMb: nu
   return files;
 }
 
+// ---- Scan app storage – FIXED double‑counting ----
 async function scanAppStorage(deviceId: string, minSizeBytes: number): Promise<Array<LargeFileItem>> {
   const files: Array<LargeFileItem> = [];
   const seenPaths = new Set<string>();
@@ -89,26 +91,26 @@ async function scanAppStorage(deviceId: string, minSizeBytes: number): Promise<A
           if (!apkPath) return null;
 
           const apkDir = apkPath.substring(0, apkPath.lastIndexOf('/'));
+          // Use only ONE canonical path – NOT both /sdcard and /storage/emulated/0
           const dirs = [
             apkDir,
-            `/sdcard/Android/data/${pkg}`,
             `/storage/emulated/0/Android/data/${pkg}`,
-            `/sdcard/Android/obb/${pkg}`,
             `/storage/emulated/0/Android/obb/${pkg}`,
           ];
 
           let totalBytes = 0;
           for (const dir of dirs) {
-            const out = await runAdbShell(deviceId, `du -sb ${dir} 2>/dev/null | awk '{print $1}'`, 10000).catch(() => '');
-            const bytes = parseInt(out.trim(), 10);
-            if (!isNaN(bytes) && bytes > 0) totalBytes += bytes;
+            // Use `du -sk` (kilobytes) to avoid large numbers, then convert to bytes
+            const out = await runAdbShell(deviceId, `du -sk ${dir} 2>/dev/null | awk '{print $1}'`, 10000).catch(() => '');
+            const kb = parseInt(out.trim(), 10);
+            if (!isNaN(kb) && kb > 0) totalBytes += kb * 1024; // convert KB to bytes
           }
 
           if (totalBytes >= minSizeBytes) {
             const path = `package:${pkg}`;
             if (seenPaths.has(path)) return null;
             seenPaths.add(path);
-            return { path, packageName: pkg, size: formatBytes(totalBytes), bytes: totalBytes, type: 'app' } as LargeFileItem;
+            return { path, packageName: pkg, size: formatBytes(totalBytes), bytes: totalBytes, type: 'app' };
           }
         } catch {
           return null;
@@ -127,6 +129,7 @@ async function scanAppStorage(deviceId: string, minSizeBytes: number): Promise<A
   return files;
 }
 
+// ---- Main endpoint ----
 router.get('/large-files', async (req, res) => {
   const deviceId = req.query.deviceId as string;
   const minSizeGb = parseFloat(String(req.query.minSize));
@@ -138,16 +141,30 @@ router.get('/large-files', async (req, res) => {
     return res.status(400).json({ error: 'deviceId required' });
   }
 
+  const startTime = Date.now();
+
   try {
     const storageFiles = await scanStorageRoots(deviceId, ['/storage/emulated/0', '/sdcard'], minSizeMb, minSizeBytes);
     const appFiles = await scanAppStorage(deviceId, minSizeBytes);
     const allFiles = [...storageFiles, ...appFiles];
     allFiles.sort((a, b) => b.bytes - a.bytes);
-    return res.json({ files: allFiles, count: allFiles.length });
+
+    const scanTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    return res.json({
+      files: allFiles,
+      count: allFiles.length,
+      scanTime: `${scanTime}s`,
+      minSize: `${minSize} GB`,
+    });
   } catch (err: any) {
     console.error('Large files scan error:', err);
-    // Never throw 500 – return empty array with error message
-    return res.json({ files: [], count: 0, error: err.message || 'Failed to scan large files' });
+    return res.json({
+      files: [],
+      count: 0,
+      error: err.message || 'Failed to scan large files',
+      scanTime: 'N/A',
+    });
   }
 });
 

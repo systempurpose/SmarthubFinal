@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Added: needed for IMEI, signal strength, network type -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Added: needed for DNS resolution test and network-type/WiFi checks -->
@@ -46,6 +47,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+    android:name=".AppScanActivity"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <activity
+    android:name=".AppSecurityScanActivity"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <activity
             android:name=".TestRunnerActivity"
@@ -94,6 +107,12 @@
             android:name=".NfcTestActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
+
+        <activity
+    android:name=".StorageAnalysisActivity"
+    android:exported="true"
+    android:screenOrientation="portrait"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <activity
             android:name=".BluetoothTestActivity"

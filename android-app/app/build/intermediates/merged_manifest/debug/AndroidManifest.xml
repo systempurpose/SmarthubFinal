@@ -20,7 +20,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Added: needed for IMEI, signal strength, network type -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- Added: needed for DNS resolution test and network-type/WiFi checks -->
@@ -77,6 +77,16 @@
             </intent-filter>
         </activity>
         <activity
+            android:name="com.smarthub.diagnostics.AppScanActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
+            android:name="com.smarthub.diagnostics.AppSecurityScanActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+        <activity
             android:name="com.smarthub.diagnostics.TestRunnerActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
@@ -116,6 +126,11 @@
             android:name="com.smarthub.diagnostics.NfcTestActivity"
             android:exported="true"
             android:theme="@style/Theme.SmartHub" />
+        <activity
+            android:name="com.smarthub.diagnostics.StorageAnalysisActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
         <activity
             android:name="com.smarthub.diagnostics.BluetoothTestActivity"
             android:exported="true"

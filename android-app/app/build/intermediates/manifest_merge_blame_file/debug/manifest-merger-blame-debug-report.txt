@@ -42,65 +42,67 @@
 22    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 22-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:15:5-73
 22-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:15:22-70
-23
+23    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+23-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:17:5-78
+23-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:17:22-75
 24    <!-- Added: needed for IMEI, signal strength, network type -->
 25    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-25-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:18:5-75
-25-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:18:22-72
+25-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:19:5-75
+25-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:19:22-72
 26    <!-- Added: needed for DNS resolution test and network-type/WiFi checks -->
 27    <uses-permission android:name="android.permission.INTERNET" />
-27-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:20:5-67
-27-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:20:22-64
+27-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-67
+27-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:22-64
 28    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-28-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-79
-28-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:22-76
+28-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:5-79
+28-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:22-76
 29    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-29-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:5-76
-29-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:22-73
+29-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:23:5-76
+29-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:23:22-73
 30
 31    <!-- Optional hardware features -->
 32    <uses-feature
-32-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:5-90
+32-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:5-90
 33        android:name="android.hardware.fingerprint"
-33-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:19-62
+33-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:19-62
 34        android:required="false" />
-34-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:63-87
+34-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:63-87
 35    <uses-feature
-35-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:5-82
+35-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:5-82
 36        android:name="android.hardware.nfc"
-36-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:19-54
+36-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:19-54
 37        android:required="false" />
-37-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:55-79
+37-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:55-79
 38    <uses-feature
-38-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:5-88
+38-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:5-88
 39        android:name="android.hardware.bluetooth"
-39-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:19-60
+39-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:19-60
 40        android:required="false" />
-40-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:61-85
+40-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:61-85
 41    <uses-feature
-41-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:5-89
+41-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:5-89
 42        android:name="android.hardware.consumerir"
-42-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:19-61
+42-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:19-61
 43        android:required="false" />
-43-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:62-86
+43-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:62-86
 44    <uses-feature
-44-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:5-93
+44-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:5-93
 45        android:name="android.hardware.sensor.compass"
-45-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:19-65
+45-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:19-65
 46        android:required="false" />
-46-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:66-90
+46-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:66-90
 47    <uses-feature
-47-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:5-95
+47-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:5-95
 48        android:name="android.hardware.sensor.barometer"
-48-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:19-67
+48-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:19-67
 49        android:required="false" />
-49-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:68-92
+49-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:68-92
 50    <uses-feature
-50-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:5-94
+50-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:5-94
 51        android:name="android.hardware.biometrics.face"
-51-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:19-66
+51-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:19-66
 52        android:required="false" />
-52-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:67-91
+52-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:67-91
 53
 54    <permission
 54-->[androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
@@ -114,193 +116,223 @@
 58-->[androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
 59
 60    <application
-60-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:33:5-116:19
+60-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:34:5-135:19
 61        android:allowBackup="true"
-61-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:34:9-35
+61-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:35:9-35
 62        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
 62-->[androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 63        android:debuggable="true"
 64        android:extractNativeLibs="false"
 65        android:icon="@mipmap/ic_launcher"
-65-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:35:9-43
+65-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:36:9-43
 66        android:label="@string/app_name"
-66-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:36:9-41
+66-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:37:9-41
 67        android:roundIcon="@mipmap/ic_launcher_round"
-67-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:37:9-54
+67-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:38:9-54
 68        android:supportsRtl="true"
-68-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:38:9-35
+68-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:39:9-35
 69        android:theme="@style/Theme.SmartHub" >
-69-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:39:9-46
+69-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:40:9-46
 70        <activity
-70-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:41:9-48:20
+70-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:42:9-49:20
 71            android:name="com.smarthub.diagnostics.MainActivity"
-71-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:42:13-41
+71-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:13-41
 72            android:exported="true" >
-72-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:13-36
+72-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-36
 73            <intent-filter>
-73-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-47:29
+73-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:13-48:29
 74                <action android:name="android.intent.action.MAIN" />
-74-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:17-69
-74-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:25-66
+74-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:17-69
+74-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:25-66
 75
 76                <category android:name="android.intent.category.LAUNCHER" />
-76-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:17-77
-76-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:27-74
+76-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:47:17-77
+76-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:47:27-74
 77            </intent-filter>
 78        </activity>
 79        <activity
-79-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:50:9-53:53
-80            android:name="com.smarthub.diagnostics.TestRunnerActivity"
-80-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:13-47
+79-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:9-55:64
+80            android:name="com.smarthub.diagnostics.AppScanActivity"
+80-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:52:5-36
 81            android:exported="true"
-81-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:52:13-36
-82            android:theme="@style/Theme.SmartHub" />
-82-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:13-50
-83        <activity
-83-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:9-57:53
-84            android:name="com.smarthub.diagnostics.HeadphoneTestActivity"
-84-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:55:13-50
-85            android:exported="true"
-85-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:56:13-36
-86            android:theme="@style/Theme.SmartHub" />
-86-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:57:13-50
-87        <activity
-87-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:9-61:53
-88            android:name="com.smarthub.diagnostics.TouchTestActivity"
-88-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:13-46
-89            android:exported="true"
-89-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:60:13-36
-90            android:theme="@style/Theme.SmartHub" />
-90-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:13-50
-91        <activity
-91-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:63:9-66:53
-92            android:name="com.smarthub.diagnostics.ProximityTestActivity"
-92-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-50
-93            android:exported="true"
-93-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:65:13-36
-94            android:theme="@style/Theme.SmartHub" />
-94-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:66:13-50
-95        <activity
-95-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:9-71:53
-96            android:name="com.smarthub.diagnostics.GyroTestActivity"
-96-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-45
-97            android:exported="true"
-97-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:70:13-36
-98            android:theme="@style/Theme.SmartHub" />
-98-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:13-50
-99        <activity
-99-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:9-76:53
-100            android:name="com.smarthub.diagnostics.MicrophoneTestActivity"
-100-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-51
-101            android:exported="true"
-101-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:75:13-36
-102            android:theme="@style/Theme.SmartHub" />
-102-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:13-50
-103        <activity
-103-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:9-81:53
-104            android:name="com.smarthub.diagnostics.EarpieceTestActivity"
-104-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-49
-105            android:exported="true"
-105-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:80:13-36
-106            android:theme="@style/Theme.SmartHub" />
-106-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:13-50
-107        <activity
-107-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:9-86:53
-108            android:name="com.smarthub.diagnostics.GpsTestActivity"
-108-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:84:13-44
-109            android:exported="true"
-109-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:85:13-36
-110            android:theme="@style/Theme.SmartHub" />
-110-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:13-50
-111        <activity
-111-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:88:9-91:53
-112            android:name="com.smarthub.diagnostics.FingerprintTestActivity"
-112-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:89:13-52
-113            android:exported="true"
-113-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:90:13-36
-114            android:theme="@style/Theme.SmartHub" />
-114-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:91:13-50
-115        <activity
-115-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:93:9-96:53
-116            android:name="com.smarthub.diagnostics.NfcTestActivity"
-116-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:94:13-44
-117            android:exported="true"
-117-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:95:13-36
-118            android:theme="@style/Theme.SmartHub" />
-118-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:96:13-50
-119        <activity
-119-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:98:9-101:53
-120            android:name="com.smarthub.diagnostics.BluetoothTestActivity"
+81-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:5-28
+82            android:screenOrientation="portrait"
+82-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:5-41
+83            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+83-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:55:5-61
+84        <activity
+84-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:57:9-61:64
+85            android:name="com.smarthub.diagnostics.AppSecurityScanActivity"
+85-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:5-44
+86            android:exported="true"
+86-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:5-28
+87            android:screenOrientation="portrait"
+87-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:60:5-41
+88            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+88-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:5-61
+89        <activity
+89-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:63:9-66:53
+90            android:name="com.smarthub.diagnostics.TestRunnerActivity"
+90-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-47
+91            android:exported="true"
+91-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:65:13-36
+92            android:theme="@style/Theme.SmartHub" />
+92-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:66:13-50
+93        <activity
+93-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:67:9-70:53
+94            android:name="com.smarthub.diagnostics.HeadphoneTestActivity"
+94-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:13-50
+95            android:exported="true"
+95-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-36
+96            android:theme="@style/Theme.SmartHub" />
+96-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:70:13-50
+97        <activity
+97-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:9-74:53
+98            android:name="com.smarthub.diagnostics.TouchTestActivity"
+98-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:72:13-46
+99            android:exported="true"
+99-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:13-36
+100            android:theme="@style/Theme.SmartHub" />
+100-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-50
+101        <activity
+101-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:9-79:53
+102            android:name="com.smarthub.diagnostics.ProximityTestActivity"
+102-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:77:13-50
+103            android:exported="true"
+103-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:13-36
+104            android:theme="@style/Theme.SmartHub" />
+104-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-50
+105        <activity
+105-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:9-84:53
+106            android:name="com.smarthub.diagnostics.GyroTestActivity"
+106-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:82:13-45
+107            android:exported="true"
+107-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:13-36
+108            android:theme="@style/Theme.SmartHub" />
+108-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:84:13-50
+109        <activity
+109-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:9-89:53
+110            android:name="com.smarthub.diagnostics.MicrophoneTestActivity"
+110-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:87:13-51
+111            android:exported="true"
+111-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:88:13-36
+112            android:theme="@style/Theme.SmartHub" />
+112-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:89:13-50
+113        <activity
+113-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:91:9-94:53
+114            android:name="com.smarthub.diagnostics.EarpieceTestActivity"
+114-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:92:13-49
+115            android:exported="true"
+115-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:93:13-36
+116            android:theme="@style/Theme.SmartHub" />
+116-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:94:13-50
+117        <activity
+117-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:96:9-99:53
+118            android:name="com.smarthub.diagnostics.GpsTestActivity"
+118-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:97:13-44
+119            android:exported="true"
+119-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:98:13-36
+120            android:theme="@style/Theme.SmartHub" />
 120-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:99:13-50
-121            android:exported="true"
-121-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:100:13-36
-122            android:theme="@style/Theme.SmartHub" />
-122-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:101:13-50
-123
-124        <!--
-125             Added: handles multitouch, buttons, colorsweep, camera facing, magnetometer,
-126             barometer, wireless charging, IR blaster, and face-unlock checks
-127        -->
-128        <activity
-128-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:105:9-109:64
-129            android:name="com.smarthub.diagnostics.ExtraHardwareTestActivity"
-129-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:106:5-46
-130            android:exported="true"
-130-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:107:5-28
-131            android:screenOrientation="portrait"
-131-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:108:5-41
-132            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
-132-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:109:5-61
-133
-134        <!--
-135             Added: enables Device Owner provisioning, which is the only real way to unlock
-136             TelephonyManager.getImei() on Android 10+. Provisioned once via:
-137             adb shell dpm set-device-owner com.smarthub.diagnostics/.SmartHubDeviceAdminReceiver
-138             (must run on a freshly factory-reset device before any account is added).
-139        -->
-140
-141
-142        <!--
-143        Service for holding metadata. Cannot be instantiated.
-144        Metadata will be merged from other manifests.
-145        -->
-146        <service
-146-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:29:9-33:78
-147            android:name="androidx.camera.core.impl.MetadataHolderService"
-147-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:30:13-75
-148            android:enabled="false"
-148-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:31:13-36
-149            android:exported="false" >
-149-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:32:13-37
-150            <meta-data
-150-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:30:13-32:89
-151                android:name="androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER"
-151-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:31:17-103
-152                android:value="androidx.camera.camera2.Camera2Config$DefaultProvider" />
-152-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:32:17-86
-153        </service>
-154
-155        <provider
-155-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
-156            android:name="androidx.startup.InitializationProvider"
-156-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
-157            android:authorities="com.smarthub.diagnostics.androidx-startup"
-157-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
-158            android:exported="false" >
-158-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
-159            <meta-data
-159-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
-160                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-160-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
-161                android:value="androidx.startup" />
-161-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
-162            <meta-data
-162-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
-163                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-163-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
-164                android:value="androidx.startup" />
-164-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
-165        </provider>
-166    </application>
-167
-168</manifest>
+121        <activity
+121-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:101:9-104:53
+122            android:name="com.smarthub.diagnostics.FingerprintTestActivity"
+122-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:102:13-52
+123            android:exported="true"
+123-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:103:13-36
+124            android:theme="@style/Theme.SmartHub" />
+124-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:104:13-50
+125        <activity
+125-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:106:9-109:53
+126            android:name="com.smarthub.diagnostics.NfcTestActivity"
+126-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:107:13-44
+127            android:exported="true"
+127-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:108:13-36
+128            android:theme="@style/Theme.SmartHub" />
+128-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:109:13-50
+129        <activity
+129-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:111:9-115:64
+130            android:name="com.smarthub.diagnostics.StorageAnalysisActivity"
+130-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:112:5-44
+131            android:exported="true"
+131-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:113:5-28
+132            android:screenOrientation="portrait"
+132-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:114:5-41
+133            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+133-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:115:5-61
+134        <activity
+134-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:117:9-120:53
+135            android:name="com.smarthub.diagnostics.BluetoothTestActivity"
+135-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:118:13-50
+136            android:exported="true"
+136-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:119:13-36
+137            android:theme="@style/Theme.SmartHub" />
+137-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:120:13-50
+138
+139        <!--
+140             Added: handles multitouch, buttons, colorsweep, camera facing, magnetometer,
+141             barometer, wireless charging, IR blaster, and face-unlock checks
+142        -->
+143        <activity
+143-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:124:9-128:64
+144            android:name="com.smarthub.diagnostics.ExtraHardwareTestActivity"
+144-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:125:5-46
+145            android:exported="true"
+145-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:126:5-28
+146            android:screenOrientation="portrait"
+146-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:127:5-41
+147            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+147-->D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:128:5-61
+148
+149        <!--
+150             Added: enables Device Owner provisioning, which is the only real way to unlock
+151             TelephonyManager.getImei() on Android 10+. Provisioned once via:
+152             adb shell dpm set-device-owner com.smarthub.diagnostics/.SmartHubDeviceAdminReceiver
+153             (must run on a freshly factory-reset device before any account is added).
+154        -->
+155
+156
+157        <!--
+158        Service for holding metadata. Cannot be instantiated.
+159        Metadata will be merged from other manifests.
+160        -->
+161        <service
+161-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:29:9-33:78
+162            android:name="androidx.camera.core.impl.MetadataHolderService"
+162-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:30:13-75
+163            android:enabled="false"
+163-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:31:13-36
+164            android:exported="false" >
+164-->[androidx.camera:camera-core:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\36a8bbbd86a32ab97616ef1c255678aa\transformed\jetified-camera-core-1.3.0\AndroidManifest.xml:32:13-37
+165            <meta-data
+165-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:30:13-32:89
+166                android:name="androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER"
+166-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:31:17-103
+167                android:value="androidx.camera.camera2.Camera2Config$DefaultProvider" />
+167-->[androidx.camera:camera-camera2:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\aaf680d079f3d9a5ca77ddabea19c6e1\transformed\jetified-camera-camera2-1.3.0\AndroidManifest.xml:32:17-86
+168        </service>
+169
+170        <provider
+170-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+171            android:name="androidx.startup.InitializationProvider"
+171-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+172            android:authorities="com.smarthub.diagnostics.androidx-startup"
+172-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+173            android:exported="false" >
+173-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+174            <meta-data
+174-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+175                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+175-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+176                android:value="androidx.startup" />
+176-->[androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+177            <meta-data
+177-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
+178                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+178-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
+179                android:value="androidx.startup" />
+179-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c073e55559f7adfd6a87ff8a510ac8fe\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
+180        </provider>
+181    </application>
+182
+183</manifest>

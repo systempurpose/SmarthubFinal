@@ -1,0 +1,16 @@
+R_DEF: Internal format may change without notice
+local
+color black
+color purple_200
+color purple_500
+color purple_700
+color teal_200
+color teal_700
+color white
+id ad_text
+id ad_video
+id skip_button
+layout activity_main
+layout ad_overlay
+string app_name
+style Theme.AdwareDemo

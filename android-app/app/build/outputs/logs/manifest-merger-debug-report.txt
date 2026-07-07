@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-118:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-118:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-118:12
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-118:12
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-137:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-137:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-137:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:2:1-137:12
 MERGED from [com.google.android.material:material:1.9.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\37e00922a462232612ed617676083f5a\transformed\material-1.9.0\AndroidManifest.xml:17:1-26:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\mark lhemuel\.gradle\caches\transforms-3\a6be9560d6c657bd6958e007a6a74411\transformed\constraintlayout-2.1.4\AndroidManifest.xml:2:1-11:12
 MERGED from [androidx.camera:camera-video:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b458da4d1d531910034ecdb2c7acecc7\transformed\jetified-camera-video-1.3.0\AndroidManifest.xml:2:1-7:12
@@ -102,67 +102,71 @@ uses-permission#android.permission.BLUETOOTH_SCAN
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:15:5-73
 	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:15:22-70
+uses-permission#android.permission.PACKAGE_USAGE_STATS
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:17:5-78
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:17:22-75
 uses-permission#android.permission.READ_PHONE_STATE
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:18:5-75
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:19:5-75
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:18:22-72
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:19:22-72
 uses-permission#android.permission.INTERNET
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:20:5-67
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-67
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:20:22-64
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:22-64
 uses-permission#android.permission.ACCESS_NETWORK_STATE
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:5-79
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:5-79
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:21:22-76
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:22-76
 uses-permission#android.permission.ACCESS_WIFI_STATE
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:5-76
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:23:5-76
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:22:22-73
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:23:22-73
 uses-feature#android.hardware.fingerprint
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:5-90
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:5-90
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:63-87
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:63-87
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:25:19-62
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:19-62
 uses-feature#android.hardware.nfc
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:5-82
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:5-82
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:55-79
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:55-79
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:26:19-54
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:19-54
 uses-feature#android.hardware.bluetooth
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:5-88
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:5-88
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:61-85
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:61-85
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:27:19-60
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:19-60
 uses-feature#android.hardware.consumerir
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:5-89
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:5-89
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:62-86
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:62-86
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:28:19-61
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:19-61
 uses-feature#android.hardware.sensor.compass
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:5-93
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:5-93
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:66-90
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:66-90
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:29:19-65
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:19-65
 uses-feature#android.hardware.sensor.barometer
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:5-95
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:5-95
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:68-92
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:68-92
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:30:19-67
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:19-67
 uses-feature#android.hardware.biometrics.face
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:5-94
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:5-94
 	android:required
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:67-91
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:67-91
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:31:19-66
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:32:19-66
 application
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:33:5-116:19
-INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:33:5-116:19
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:34:5-135:19
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:34:5-135:19
 MERGED from [com.google.android.material:material:1.9.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\37e00922a462232612ed617676083f5a\transformed\material-1.9.0\AndroidManifest.xml:24:5-20
 MERGED from [com.google.android.material:material:1.9.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\37e00922a462232612ed617676083f5a\transformed\material-1.9.0\AndroidManifest.xml:24:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\mark lhemuel\.gradle\caches\transforms-3\a6be9560d6c657bd6958e007a6a74411\transformed\constraintlayout-2.1.4\AndroidManifest.xml:9:5-20
@@ -186,131 +190,161 @@ MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\ma
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:38:9-35
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:39:9-35
 	android:label
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:36:9-41
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:37:9-41
 	android:roundIcon
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:37:9-54
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:38:9-54
 	android:icon
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:35:9-43
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:36:9-43
 	android:allowBackup
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:34:9-35
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:35:9-35
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:39:9-46
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:40:9-46
 activity#com.smarthub.diagnostics.MainActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:41:9-48:20
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:42:9-49:20
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-36
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:42:13-41
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:43:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:44:13-47:29
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:13-48:29
 action#android.intent.action.MAIN
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:17-69
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:17-69
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:45:25-66
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:25-66
 category#android.intent.category.LAUNCHER
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:17-77
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:47:17-77
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:46:27-74
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:47:27-74
+activity#com.smarthub.diagnostics.AppScanActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:9-55:64
+	android:screenOrientation
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:5-41
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:5-28
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:55:5-61
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:52:5-36
+activity#com.smarthub.diagnostics.AppSecurityScanActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:57:9-61:64
+	android:screenOrientation
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:60:5-41
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:5-28
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:5-61
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:5-44
 activity#com.smarthub.diagnostics.TestRunnerActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:50:9-53:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:52:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:53:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:51:13-47
-activity#com.smarthub.diagnostics.HeadphoneTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:54:9-57:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:56:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:57:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:55:13-50
-activity#com.smarthub.diagnostics.TouchTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:58:9-61:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:60:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:61:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:59:13-46
-activity#com.smarthub.diagnostics.ProximityTestActivity
 ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:63:9-66:53
 	android:exported
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:65:13-36
 	android:theme
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:66:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:64:13-47
+activity#com.smarthub.diagnostics.HeadphoneTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:67:9-70:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:70:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:13-50
+activity#com.smarthub.diagnostics.TouchTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:9-74:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:72:13-46
+activity#com.smarthub.diagnostics.ProximityTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:9-79:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:77:13-50
 activity#com.smarthub.diagnostics.GyroTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:68:9-71:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:9-84:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:70:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:71:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:84:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:69:13-45
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:82:13-45
 activity#com.smarthub.diagnostics.MicrophoneTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:73:9-76:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:9-89:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:75:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:88:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:76:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:89:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:74:13-51
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:87:13-51
 activity#com.smarthub.diagnostics.EarpieceTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:78:9-81:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:91:9-94:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:80:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:93:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:81:13-50
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:94:13-50
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:79:13-49
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:92:13-49
 activity#com.smarthub.diagnostics.GpsTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:83:9-86:53
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:96:9-99:53
 	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:85:13-36
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:98:13-36
 	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:86:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:84:13-44
-activity#com.smarthub.diagnostics.FingerprintTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:88:9-91:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:90:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:91:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:89:13-52
-activity#com.smarthub.diagnostics.NfcTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:93:9-96:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:95:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:96:13-50
-	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:94:13-44
-activity#com.smarthub.diagnostics.BluetoothTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:98:9-101:53
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:100:13-36
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:101:13-50
-	android:name
 		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:99:13-50
-activity#com.smarthub.diagnostics.ExtraHardwareTestActivity
-ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:105:9-109:64
-	android:screenOrientation
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:108:5-41
-	android:exported
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:107:5-28
-	android:theme
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:109:5-61
 	android:name
-		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:106:5-46
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:97:13-44
+activity#com.smarthub.diagnostics.FingerprintTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:101:9-104:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:103:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:104:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:102:13-52
+activity#com.smarthub.diagnostics.NfcTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:106:9-109:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:108:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:109:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:107:13-44
+activity#com.smarthub.diagnostics.StorageAnalysisActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:111:9-115:64
+	android:screenOrientation
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:114:5-41
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:113:5-28
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:115:5-61
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:112:5-44
+activity#com.smarthub.diagnostics.BluetoothTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:117:9-120:53
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:119:13-36
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:120:13-50
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:118:13-50
+activity#com.smarthub.diagnostics.ExtraHardwareTestActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:124:9-128:64
+	android:screenOrientation
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:127:5-41
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:126:5-28
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:128:5-61
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml:125:5-46
 uses-sdk
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\SmartHubv14\SmartHubv5\android-app\app\src\main\AndroidManifest.xml

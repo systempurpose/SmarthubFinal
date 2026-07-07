@@ -8,7 +8,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;  
+
 import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -53,6 +56,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
+
+import android.content.pm.PackageInfo;
+import android.content.pm.Signature;
+import android.content.pm.PackageManager;
+import android.content.pm.PermissionInfo;
+import android.os.Build;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.view.accessibility.AccessibilityManager;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -761,6 +777,124 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+ * Returns a JSONArray with per‑app security metadata:
+ * packageName, appName, installer, isSystem, dangerousPermissionsCount,
+ * accessibilityEnabled, deviceAdminEnabled, securityVerdict.
+ */
+private JSONArray getAppSecurityMetadata() {
+    JSONArray result = new JSONArray();
+    PackageManager pm = getPackageManager();
+    List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+    AccessibilityManager am = (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
+    DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+
+    for (ApplicationInfo appInfo : apps) {
+        try {
+            String packageName = appInfo.packageName;
+            // Skip system apps that are part of the OS (optional)
+            // if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+
+            JSONObject obj = new JSONObject();
+            obj.put("packageName", packageName);
+            obj.put("appName", pm.getApplicationLabel(appInfo).toString());
+
+            // Installer
+            String installer = pm.getInstallerPackageName(packageName);
+            obj.put("installer", installer != null ? installer : "unknown");
+
+            // System app?
+            boolean isSystem = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+            obj.put("isSystem", isSystem);
+
+            // Dangerous permissions count
+            int dangerousCount = 0;
+            try {
+                PackageInfo pkgInfo = pm.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS);
+                String[] requestedPerms = pkgInfo.requestedPermissions;
+                if (requestedPerms != null) {
+                    for (String perm : requestedPerms) {
+                        try {
+                            PermissionInfo permInfo = pm.getPermissionInfo(perm, 0);
+                            if ((permInfo.protectionLevel & PermissionInfo.PROTECTION_DANGEROUS) != 0) {
+                                dangerousCount++;
+                            }
+                        } catch (PackageManager.NameNotFoundException ignored) {}
+                    }
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                // ignore
+            }
+            obj.put("dangerousPermissionsCount", dangerousCount);
+
+            // Accessibility enabled?
+            boolean accessibilityEnabled = false;
+            if (am != null) {
+                List<AccessibilityServiceInfo> services = am.getEnabledAccessibilityServiceList(
+                        AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+                for (AccessibilityServiceInfo service : services) {
+                    // Use getResolveInfo() method to get the ResolveInfo
+                    android.content.pm.ResolveInfo resolveInfo = service.getResolveInfo();
+                    if (resolveInfo != null && resolveInfo.serviceInfo != null) {
+                        ComponentName cn = new ComponentName(resolveInfo.serviceInfo.packageName,
+                                resolveInfo.serviceInfo.name);
+                        if (cn.getPackageName().equals(packageName)) {
+                            accessibilityEnabled = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            obj.put("accessibilityEnabled", accessibilityEnabled);
+
+            // Device admin enabled?
+            boolean deviceAdminEnabled = false;
+            if (dpm != null && dpm.isDeviceOwnerApp(packageName)) {
+                deviceAdminEnabled = true;
+            }
+            // Also check if any component is active admin
+            if (!deviceAdminEnabled) {
+                List<ComponentName> admins = dpm != null ? dpm.getActiveAdmins() : null;
+                if (admins != null) {
+                    for (ComponentName cn : admins) {
+                        if (cn.getPackageName().equals(packageName)) {
+                            deviceAdminEnabled = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            obj.put("deviceAdminEnabled", deviceAdminEnabled);
+
+            // ---- Security verdict ----
+            String verdict;
+            // Trusted installer (Play Store, Galaxy Store, etc.)
+            if (installer != null && (installer.equals("com.android.vending") ||
+                    installer.equals("com.sec.android.app.samsungapps") ||
+                    installer.equals("com.google.android.feedback") ||
+                    installer.startsWith("com.google."))) {
+                verdict = "safe";
+            }
+            // System app
+            else if (isSystem) {
+                verdict = "safe";
+            }
+            // Suspicious if high-danger permissions + accessibility/admin
+            else if (dangerousCount > 5 || accessibilityEnabled || deviceAdminEnabled) {
+                verdict = "suspicious";
+            } else {
+                verdict = "unknown";
+            }
+            obj.put("securityVerdict", verdict);
+
+            result.put(obj);
+        } catch (Exception e) {
+            // Skip this app
+        }
+    }
+    return result;
+}
+
     // ==== JSON REPORT ====
 
     private JSONObject buildJsonReport() {
@@ -788,6 +922,9 @@ public class MainActivity extends AppCompatActivity {
         SensorSummary sensorSummary = new SensorSummary(this);
 
         try {
+            JSONArray appSecurityMeta = getAppSecurityMetadata();
+            root.put("appSecurityMeta", appSecurityMeta);
+
             JSONObject batteryJson = new JSONObject();
             if (level >= 0) batteryJson.put("levelPercent", level);
             if (currentNow != Integer.MIN_VALUE) batteryJson.put("currentMicroAmp", currentNow);
@@ -852,6 +989,9 @@ public class MainActivity extends AppCompatActivity {
             root.put("externalStorage", extStorageJson);
 
             JSONObject malwareJson = new JSONObject();
+            // Keep the appStorage key with an empty array (backend scan is used)
+            root.put("appStorage", new JSONArray());
+
             try {
                 JSONObject scanResults = getMalwareScanResults();
                 malwareJson.put("totalApps", scanResults.getInt("totalApps"));
@@ -953,6 +1093,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void appendLine(StringBuilder sb, String text) {
         sb.append(text).append('\n');
+    }
+
+    // This method is now a placeholder – real data comes from backend scan
+    private JSONArray getAppStorageStats() {
+        return new JSONArray();
     }
 
     private static class SensorSummary {

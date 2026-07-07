@@ -1,0 +1,314 @@
+-- Merging decision tree log ---
+manifest
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:2:1-38:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:2:1-38:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:2:1-38:12
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:2:1-38:12
+MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
+MERGED from [androidx.appcompat:appcompat:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4dad27fb90ee3ef09b343b34adcbbced\transformed\appcompat-1.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.emoji2:emoji2-views-helper:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\371b7d38145d8d7ad062c5b0308d9a94\transformed\jetified-emoji2-views-helper-1.2.0\AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.viewpager2:viewpager2:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\35d12f5b8a8742a1ead92e1b06fcecad\transformed\jetified-viewpager2-1.0.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.fragment:fragment:1.3.6] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0ca57bab60762a1a88df104f07ca5006\transformed\fragment-1.3.6\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.activity:activity:1.8.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\38c8c5dbcf460ea685260d2ab94c23e6\transformed\jetified-activity-1.8.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.dynamicanimation:dynamicanimation:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\af6bc42aaa260be8e7a204dea1d1db2d\transformed\dynamicanimation-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.legacy:legacy-support-core-utils:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ee8a741fd573921758315150272ec961\transformed\legacy-support-core-utils-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.loader:loader:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\9a93555394cfb552d7e5d0eb6c3d96b5\transformed\loader-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.savedstate:savedstate:1.2.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\d0c63875ed4d17ef7713fd6303d76bbb\transformed\jetified-savedstate-1.2.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:17:1-35:12
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b00cb4acf07e85b2ce4d54b51226feb2\transformed\lifecycle-livedata-core-2.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\fb93bdb19076a21c64beaafb6864f51b\transformed\lifecycle-livedata-2.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\1027225681bb813b05f1067c9d871604\transformed\lifecycle-viewmodel-2.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.lifecycle:lifecycle-runtime:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\688678273e3668c9e08931004e106305\transformed\lifecycle-runtime-2.6.1\AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0212c857f239a12c2e9677deaa7d59d9\transformed\jetified-lifecycle-viewmodel-savedstate-2.6.1\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.core:core-ktx:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cbf87bf6ded4a3286c0b8d918d716a55\transformed\jetified-core-ktx-1.12.0\AndroidManifest.xml:2:1-7:12
+MERGED from [androidx.drawerlayout:drawerlayout:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\80cc135965031eba6dfdc4d966279728\transformed\drawerlayout-1.1.1\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.coordinatorlayout:coordinatorlayout:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\69d76319f28544027f62654c787a8c31\transformed\coordinatorlayout-1.1.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.transition:transition:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c7746fae12fc80d464f883dc92d30f6d\transformed\transition-1.2.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.vectordrawable:vectordrawable-animated:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f47c3588792ab78aff58abe207767124\transformed\vectordrawable-animated-1.1.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.vectordrawable:vectordrawable:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f35033bcae42075da82202488a4d61ce\transformed\vectordrawable-1.1.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.viewpager:viewpager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\41833a9bb2b6005fdf7f2aae6afb75cd\transformed\viewpager-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.recyclerview:recyclerview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13bc2545625a44a8ab57ef9bc396b818\transformed\recyclerview-1.1.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.customview:customview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4f84896227f64a9cf162c237a97e2421\transformed\customview-1.1.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:17:1-30:12
+MERGED from [androidx.interpolator:interpolator:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\3401a8fe474e44a5c2e15233ec10d97f\transformed\interpolator-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b61cf0fa2e7dcde6d32fbf9203d1a3ea\transformed\versionedparcelable-1.1.1\AndroidManifest.xml:17:1-27:12
+MERGED from [androidx.cursoradapter:cursoradapter:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\7052c113f3d8b97588421d27c9208988\transformed\cursoradapter-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.cardview:cardview:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c713ab90dffffdd43e0d27bdae381576\transformed\cardview-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:17:1-55:12
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:17:1-33:12
+MERGED from [androidx.tracing:tracing:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\a731c64922b4929f47cd53677fae828e\transformed\jetified-tracing-1.0.0\AndroidManifest.xml:17:1-24:12
+MERGED from [androidx.arch.core:core-runtime:2.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13aa5513c9329afc3e2b79e2efc8208f\transformed\core-runtime-2.2.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.documentfile:documentfile:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\423e78afca29c80194091baa36667a3c\transformed\documentfile-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\935f0d1d57db85dabc15098097b9423b\transformed\localbroadcastmanager-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.print:print:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c9984af4290d09432be8ddad75d72809\transformed\print-1.0.0\AndroidManifest.xml:17:1-22:12
+MERGED from [androidx.annotation:annotation-experimental:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f0d0f5429115a9c412e8a38a933219e6\transformed\jetified-annotation-experimental-1.3.0\AndroidManifest.xml:17:1-22:12
+	package
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+	android:versionName
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+	android:versionCode
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+	xmlns:android
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:2:11-69
+uses-permission#android.permission.RECEIVE_BOOT_COMPLETED
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:4:5-81
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:4:22-78
+uses-permission#android.permission.SYSTEM_ALERT_WINDOW
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:5:5-78
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:5:22-75
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:6:5-77
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:6:22-74
+application
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:8:5-36:19
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:8:5-36:19
+MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
+MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
+MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
+MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
+MERGED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:23:5-33:19
+MERGED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:28:5-89
+MERGED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:28:5-89
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b61cf0fa2e7dcde6d32fbf9203d1a3ea\transformed\versionedparcelable-1.1.1\AndroidManifest.xml:24:5-25:19
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b61cf0fa2e7dcde6d32fbf9203d1a3ea\transformed\versionedparcelable-1.1.1\AndroidManifest.xml:24:5-25:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:23:5-53:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
+	android:extractNativeLibs
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+	android:appComponentFactory
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+	android:supportsRtl
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:12:9-35
+	android:label
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:10:9-41
+	android:icon
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:11:9-57
+	android:allowBackup
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:9:9-35
+	android:theme
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:13:9-77
+activity#com.smarthub.labstressor.MainActivity
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:15:9-22:20
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:17:13-36
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:16:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:18:13-21:29
+action#android.intent.action.MAIN
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:19:17-69
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:19:25-66
+category#android.intent.category.LAUNCHER
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:20:17-77
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:20:27-74
+service#com.smarthub.labstressor.BlueScreenService
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:24:9-26:40
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:26:13-37
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:25:13-46
+receiver#com.smarthub.labstressor.BootReceiver
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:28:9-34:20
+	android:exported
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:30:13-37
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:29:13-41
+intent-filter#action:name:android.intent.action.BOOT_COMPLETED
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:31:13-33:29
+action#android.intent.action.BOOT_COMPLETED
+ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:32:17-79
+	android:name
+		ADDED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml:32:25-76
+uses-sdk
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:20:5-44
+MERGED from [com.google.android.material:material:1.11.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\51cda1f58a99dbdb0c04a43a3d77afc2\transformed\material-1.11.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\2ff11087704f85ecfa2878d7eb473a54\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:5:5-7:41
+MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\58b24ab27b612781118d644f23cb8d8c\transformed\constraintlayout-2.0.1\AndroidManifest.xml:5:5-7:41
+MERGED from [androidx.appcompat:appcompat:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4dad27fb90ee3ef09b343b34adcbbced\transformed\appcompat-1.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.appcompat:appcompat:1.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4dad27fb90ee3ef09b343b34adcbbced\transformed\appcompat-1.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.emoji2:emoji2-views-helper:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\371b7d38145d8d7ad062c5b0308d9a94\transformed\jetified-emoji2-views-helper-1.2.0\AndroidManifest.xml:5:5-44
+MERGED from [androidx.emoji2:emoji2-views-helper:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\371b7d38145d8d7ad062c5b0308d9a94\transformed\jetified-emoji2-views-helper-1.2.0\AndroidManifest.xml:5:5-44
+MERGED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:21:5-44
+MERGED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:21:5-44
+MERGED from [androidx.viewpager2:viewpager2:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\35d12f5b8a8742a1ead92e1b06fcecad\transformed\jetified-viewpager2-1.0.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.viewpager2:viewpager2:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\35d12f5b8a8742a1ead92e1b06fcecad\transformed\jetified-viewpager2-1.0.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.fragment:fragment:1.3.6] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0ca57bab60762a1a88df104f07ca5006\transformed\fragment-1.3.6\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.fragment:fragment:1.3.6] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0ca57bab60762a1a88df104f07ca5006\transformed\fragment-1.3.6\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.activity:activity:1.8.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\38c8c5dbcf460ea685260d2ab94c23e6\transformed\jetified-activity-1.8.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.activity:activity:1.8.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\38c8c5dbcf460ea685260d2ab94c23e6\transformed\jetified-activity-1.8.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.dynamicanimation:dynamicanimation:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\af6bc42aaa260be8e7a204dea1d1db2d\transformed\dynamicanimation-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.dynamicanimation:dynamicanimation:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\af6bc42aaa260be8e7a204dea1d1db2d\transformed\dynamicanimation-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.legacy:legacy-support-core-utils:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ee8a741fd573921758315150272ec961\transformed\legacy-support-core-utils-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.legacy:legacy-support-core-utils:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ee8a741fd573921758315150272ec961\transformed\legacy-support-core-utils-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.loader:loader:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\9a93555394cfb552d7e5d0eb6c3d96b5\transformed\loader-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.loader:loader:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\9a93555394cfb552d7e5d0eb6c3d96b5\transformed\loader-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate:1.2.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\d0c63875ed4d17ef7713fd6303d76bbb\transformed\jetified-savedstate-1.2.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.savedstate:savedstate:1.2.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\d0c63875ed4d17ef7713fd6303d76bbb\transformed\jetified-savedstate-1.2.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:21:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b00cb4acf07e85b2ce4d54b51226feb2\transformed\lifecycle-livedata-core-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata-core:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b00cb4acf07e85b2ce4d54b51226feb2\transformed\lifecycle-livedata-core-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\fb93bdb19076a21c64beaafb6864f51b\transformed\lifecycle-livedata-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-livedata:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\fb93bdb19076a21c64beaafb6864f51b\transformed\lifecycle-livedata-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\1027225681bb813b05f1067c9d871604\transformed\lifecycle-viewmodel-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\1027225681bb813b05f1067c9d871604\transformed\lifecycle-viewmodel-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\688678273e3668c9e08931004e106305\transformed\lifecycle-runtime-2.6.1\AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-runtime:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\688678273e3668c9e08931004e106305\transformed\lifecycle-runtime-2.6.1\AndroidManifest.xml:5:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0212c857f239a12c2e9677deaa7d59d9\transformed\jetified-lifecycle-viewmodel-savedstate-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\0212c857f239a12c2e9677deaa7d59d9\transformed\jetified-lifecycle-viewmodel-savedstate-2.6.1\AndroidManifest.xml:20:5-44
+MERGED from [androidx.core:core-ktx:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cbf87bf6ded4a3286c0b8d918d716a55\transformed\jetified-core-ktx-1.12.0\AndroidManifest.xml:5:5-44
+MERGED from [androidx.core:core-ktx:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cbf87bf6ded4a3286c0b8d918d716a55\transformed\jetified-core-ktx-1.12.0\AndroidManifest.xml:5:5-44
+MERGED from [androidx.drawerlayout:drawerlayout:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\80cc135965031eba6dfdc4d966279728\transformed\drawerlayout-1.1.1\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.drawerlayout:drawerlayout:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\80cc135965031eba6dfdc4d966279728\transformed\drawerlayout-1.1.1\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.coordinatorlayout:coordinatorlayout:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\69d76319f28544027f62654c787a8c31\transformed\coordinatorlayout-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.coordinatorlayout:coordinatorlayout:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\69d76319f28544027f62654c787a8c31\transformed\coordinatorlayout-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.transition:transition:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c7746fae12fc80d464f883dc92d30f6d\transformed\transition-1.2.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.transition:transition:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c7746fae12fc80d464f883dc92d30f6d\transformed\transition-1.2.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.vectordrawable:vectordrawable-animated:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f47c3588792ab78aff58abe207767124\transformed\vectordrawable-animated-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.vectordrawable:vectordrawable-animated:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f47c3588792ab78aff58abe207767124\transformed\vectordrawable-animated-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.vectordrawable:vectordrawable:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f35033bcae42075da82202488a4d61ce\transformed\vectordrawable-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.vectordrawable:vectordrawable:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f35033bcae42075da82202488a4d61ce\transformed\vectordrawable-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.viewpager:viewpager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\41833a9bb2b6005fdf7f2aae6afb75cd\transformed\viewpager-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.viewpager:viewpager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\41833a9bb2b6005fdf7f2aae6afb75cd\transformed\viewpager-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.recyclerview:recyclerview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13bc2545625a44a8ab57ef9bc396b818\transformed\recyclerview-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.recyclerview:recyclerview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13bc2545625a44a8ab57ef9bc396b818\transformed\recyclerview-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.customview:customview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4f84896227f64a9cf162c237a97e2421\transformed\customview-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.customview:customview:1.1.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\4f84896227f64a9cf162c237a97e2421\transformed\customview-1.1.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\3401a8fe474e44a5c2e15233ec10d97f\transformed\interpolator-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.interpolator:interpolator:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\3401a8fe474e44a5c2e15233ec10d97f\transformed\interpolator-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b61cf0fa2e7dcde6d32fbf9203d1a3ea\transformed\versionedparcelable-1.1.1\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.versionedparcelable:versionedparcelable:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\b61cf0fa2e7dcde6d32fbf9203d1a3ea\transformed\versionedparcelable-1.1.1\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.cursoradapter:cursoradapter:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\7052c113f3d8b97588421d27c9208988\transformed\cursoradapter-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.cursoradapter:cursoradapter:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\7052c113f3d8b97588421d27c9208988\transformed\cursoradapter-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.cardview:cardview:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c713ab90dffffdd43e0d27bdae381576\transformed\cardview-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.cardview:cardview:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c713ab90dffffdd43e0d27bdae381576\transformed\cardview-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:21:5-44
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:21:5-44
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:21:5-23:41
+MERGED from [androidx.tracing:tracing:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\a731c64922b4929f47cd53677fae828e\transformed\jetified-tracing-1.0.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.tracing:tracing:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\a731c64922b4929f47cd53677fae828e\transformed\jetified-tracing-1.0.0\AndroidManifest.xml:20:5-22:41
+MERGED from [androidx.arch.core:core-runtime:2.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13aa5513c9329afc3e2b79e2efc8208f\transformed\core-runtime-2.2.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.arch.core:core-runtime:2.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\13aa5513c9329afc3e2b79e2efc8208f\transformed\core-runtime-2.2.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.documentfile:documentfile:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\423e78afca29c80194091baa36667a3c\transformed\documentfile-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.documentfile:documentfile:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\423e78afca29c80194091baa36667a3c\transformed\documentfile-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\935f0d1d57db85dabc15098097b9423b\transformed\localbroadcastmanager-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\935f0d1d57db85dabc15098097b9423b\transformed\localbroadcastmanager-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.print:print:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c9984af4290d09432be8ddad75d72809\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.print:print:1.0.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c9984af4290d09432be8ddad75d72809\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f0d0f5429115a9c412e8a38a933219e6\transformed\jetified-annotation-experimental-1.3.0\AndroidManifest.xml:20:5-44
+MERGED from [androidx.annotation:annotation-experimental:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\f0d0f5429115a9c412e8a38a933219e6\transformed\jetified-annotation-experimental-1.3.0\AndroidManifest.xml:20:5-44
+	android:targetSdkVersion
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from D:\SmartHubv14\SmartHubv5\android-app\labstressor\src\main\AndroidManifest.xml
+provider#androidx.startup.InitializationProvider
+ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:24:9-32:20
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:26:9-30:34
+MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\c3591e6e2583c4e8787bac432d63addc\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:26:9-30:34
+	tools:node
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:28:13-31
+	android:authorities
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+	android:exported
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+	android:name
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+meta-data#androidx.emoji2.text.EmojiCompatInitializer
+ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\6e6b544b2b26c130913c6ef2927a4ebb\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+meta-data#androidx.lifecycle.ProcessLifecycleInitializer
+ADDED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\mark lhemuel\.gradle\caches\transforms-3\cca82e6564fe40b58ef77c5b63dda9b7\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:30:17-78
+permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+	android:protectionLevel
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+	android:name
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+permission#com.smarthub.labstressor.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+	android:protectionLevel
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+	android:name
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+uses-permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+	android:name
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+uses-permission#com.smarthub.labstressor.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+	android:name
+		ADDED from [androidx.core:core:1.12.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\466c713059f398c81c40492d7320349c\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+meta-data#androidx.profileinstaller.ProfileInstallerInitializer
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:29:13-31:52
+	android:value
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:31:17-49
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:30:17-85
+receiver#androidx.profileinstaller.ProfileInstallReceiver
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:34:9-52:20
+	android:enabled
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:37:13-35
+	android:exported
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:38:13-36
+	android:permission
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:39:13-57
+	android:directBootAware
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:36:13-44
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:35:13-76
+intent-filter#action:name:androidx.profileinstaller.action.INSTALL_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:40:13-42:29
+action#androidx.profileinstaller.action.INSTALL_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:41:17-91
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:41:25-88
+intent-filter#action:name:androidx.profileinstaller.action.SKIP_FILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:43:13-45:29
+action#androidx.profileinstaller.action.SKIP_FILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:44:17-85
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:44:25-82
+intent-filter#action:name:androidx.profileinstaller.action.SAVE_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:46:13-48:29
+action#androidx.profileinstaller.action.SAVE_PROFILE
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:47:17-88
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:47:25-85
+intent-filter#action:name:androidx.profileinstaller.action.BENCHMARK_OPERATION
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:49:13-51:29
+action#androidx.profileinstaller.action.BENCHMARK_OPERATION
+ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:50:17-95
+	android:name
+		ADDED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\mark lhemuel\.gradle\caches\transforms-3\ca5895b52bab92e9edcaf7ed6e570456\transformed\jetified-profileinstaller-1.3.0\AndroidManifest.xml:50:25-92

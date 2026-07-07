@@ -49,17 +49,20 @@ function showAlert(title, message) {
         let modal = document.getElementById('alertModal');
         if (!modal) {
             const modalHtml = `
-                <div id="alertModal" class="modal" style="display: none;">
-                    <div class="modal-content" style="max-width: 420px;">
-                        <div class="modal-header">
-                            <h3 id="alertModalTitle">Notice</h3>
-                            <span class="close-button" id="alertModalClose">&times;</span>
+                <div id="alertModal" class="modal" style="display: none; z-index: 99999;">
+                    <div class="modal-content" style="max-width: 420px; width: 90%; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                        <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
+                            <h3 id="alertModalTitle" style="margin: 0; font-size: 17px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+                                <span id="alertModalIcon" style="font-size: 20px;">${title.includes('Success') ? '✅' : '⚠️'}</span>
+                                <span>${title}</span>
+                            </h3>
+                            <span class="close-button" id="alertModalClose" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
                         </div>
-                        <div class="modal-body" id="alertModalBody" style="padding: 16px 0;">
-                            <p id="alertModalMessage">Message</p>
+                        <div class="modal-body" style="padding: 20px 24px; background: #ffffff;">
+                            <p id="alertModalMessage" style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151; white-space: pre-wrap; word-break: break-all;">${message}</p>
                         </div>
-                        <div class="modal-footer" style="justify-content: center;">
-                            <button id="alertModalOkBtn" class="btn-primary">OK</button>
+                        <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
+                            <button id="alertModalOkBtn" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #0d6efd; border: none; color: white;">OK</button>
                         </div>
                     </div>
                 </div>
@@ -67,8 +70,13 @@ function showAlert(title, message) {
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             modal = document.getElementById('alertModal');
         }
-        document.getElementById('alertModalTitle').textContent = title || 'Notice';
-        document.getElementById('alertModalMessage').textContent = message || '';
+        // Update icon based on title
+        const icon = document.getElementById('alertModalIcon');
+        if (icon) {
+            icon.textContent = title.toLowerCase().includes('success') ? '✅' : title.toLowerCase().includes('error') ? '❌' : '⚠️';
+        }
+        document.getElementById('alertModalTitle').textContent = title;
+        document.getElementById('alertModalMessage').textContent = message;
         modal.style.display = 'flex';
         const closeModal = () => {
             modal.style.display = 'none';
@@ -88,72 +96,31 @@ function showAlert(title, message) {
     });
 }
 
-function showConfirm(title, message) {
-    return new Promise((resolve) => {
-        let modal = document.getElementById('confirmModal');
-        if (!modal) {
-            const modalHtml = `
-                <div id="confirmModal" class="modal" style="display: none;">
-                    <div class="modal-content" style="max-width: 420px;">
-                        <div class="modal-header">
-                            <h3 id="confirmModalTitle">Confirm</h3>
-                            <span class="close-button" id="confirmModalClose">&times;</span>
-                        </div>
-                        <div class="modal-body" id="confirmModalBody" style="padding: 16px 0;">
-                            <p id="confirmModalMessage">Are you sure?</p>
-                        </div>
-                        <div class="modal-footer" style="justify-content: center; gap: 12px;">
-                            <button id="confirmModalNoBtn" class="btn-secondary">No</button>
-                            <button id="confirmModalYesBtn" class="btn-primary">Yes</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            modal = document.getElementById('confirmModal');
-        }
-        document.getElementById('confirmModalTitle').textContent = title || 'Confirm';
-        document.getElementById('confirmModalMessage').textContent = message || 'Are you sure?';
-        modal.style.display = 'flex';
-        const resolveAndClose = (result) => {
-            modal.style.display = 'none';
-            resolve(result);
-        };
-        const yesBtn = document.getElementById('confirmModalYesBtn');
-        const noBtn = document.getElementById('confirmModalNoBtn');
-        const closeBtn = document.getElementById('confirmModalClose');
-        const newYes = yesBtn.cloneNode(true);
-        const newNo = noBtn.cloneNode(true);
-        const newClose = closeBtn.cloneNode(true);
-        yesBtn.parentNode.replaceChild(newYes, yesBtn);
-        noBtn.parentNode.replaceChild(newNo, noBtn);
-        closeBtn.parentNode.replaceChild(newClose, closeBtn);
-        newYes.addEventListener('click', () => resolveAndClose(true));
-        newNo.addEventListener('click', () => resolveAndClose(false));
-        newClose.addEventListener('click', () => resolveAndClose(false));
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) resolveAndClose(false);
-        }, { once: true });
-    });
-}
-
-function showConfirm(title, message) {
+function showConfirm(title, message, options = {}) {
     return new Promise((resolve) => {
         const modal = document.getElementById('confirmModal');
         if (!modal) {
             const modalHtml = `
-                <div id="confirmModal" class="modal" style="display: none;">
-                    <div class="modal-content" style="max-width: 420px;">
-                        <div class="modal-header">
-                            <h3 id="confirmModalTitle">Confirm</h3>
-                            <span class="close-button" id="confirmModalClose">&times;</span>
+                <div id="confirmModal" class="modal" style="display: none; z-index: 99999;">
+                    <div class="modal-content" style="max-width: 480px; width: 92%; border-radius: 16px; padding: 0; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; background: #f8fafc;">
+                            <h3 id="confirmModalTitle" style="margin: 0; font-size: 17px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 10px;">
+                                <span id="confirmModalIcon" style="font-size: 20px;">❓</span>
+                                <span id="confirmModalTitleText">Confirm</span>
+                            </h3>
+                            <span class="close-button" id="confirmModalClose" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
                         </div>
-                        <div class="modal-body" id="confirmModalBody" style="padding: 16px 0;">
-                            <p id="confirmModalMessage">Are you sure?</p>
+                        <div class="modal-body" id="confirmModalBody" style="padding: 24px 24px 16px 24px; background: #ffffff;">
+                            <p id="confirmModalMessage" style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151; white-space: pre-wrap; word-break: break-all;"></p>
+                            <div id="confirmModalExtra" style="margin-top: 12px;"></div>
                         </div>
-                        <div class="modal-footer" style="justify-content: center; gap: 12px;">
-                            <button id="confirmModalNoBtn" class="btn-secondary">No</button>
-                            <button id="confirmModalYesBtn" class="btn-primary">Yes</button>
+                        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 24px 20px 24px; background: #ffffff; border-top: 1px solid #f1f3f5;">
+                            <button id="confirmModalNoBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">
+                                ${options.noText || 'No'}
+                            </button>
+                            <button id="confirmModalYesBtn" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: ${options.danger ? '#dc2626' : '#0d6efd'}; border: none; color: white; box-shadow: 0 2px 8px ${options.danger ? 'rgba(220,38,38,0.3)' : 'rgba(13,110,253,0.3)'};">
+                                ${options.yesText || 'Yes'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -161,22 +128,52 @@ function showConfirm(title, message) {
             document.body.insertAdjacentHTML('beforeend', modalHtml);
         }
         const modalEl = document.getElementById('confirmModal');
-        document.getElementById('confirmModalTitle').textContent = title || 'Confirm';
-        document.getElementById('confirmModalMessage').textContent = message || 'Are you sure?';
+        const titleEl = document.getElementById('confirmModalTitleText');
+        const iconEl = document.getElementById('confirmModalIcon');
+        const msgEl = document.getElementById('confirmModalMessage');
+        const extraEl = document.getElementById('confirmModalExtra');
+        const yesBtn = document.getElementById('confirmModalYesBtn');
+        const noBtn = document.getElementById('confirmModalNoBtn');
+        const closeBtn = document.getElementById('confirmModalClose');
+
+        // Set content
+        titleEl.textContent = title || 'Confirm';
+        iconEl.textContent = options.icon || '❓';
+        msgEl.innerHTML = message || 'Are you sure?';
+        extraEl.innerHTML = options.extra || '';
+
+        // Handle custom file path styling
+        if (options.isPath) {
+            msgEl.style.background = '#f8fafc';
+            msgEl.style.padding = '12px 16px';
+            msgEl.style.borderRadius = '8px';
+            msgEl.style.fontFamily = 'monospace';
+            msgEl.style.fontSize = '13px';
+            msgEl.style.color = '#1e293b';
+            msgEl.style.wordBreak = 'break-all';
+            msgEl.style.border = '1px solid #e5e7eb';
+        } else {
+            msgEl.style.background = 'transparent';
+            msgEl.style.padding = '0';
+            msgEl.style.fontFamily = 'inherit';
+            msgEl.style.fontSize = '15px';
+            msgEl.style.border = 'none';
+        }
+
         modalEl.style.display = 'flex';
+
         const resolveAndClose = (result) => {
             modalEl.style.display = 'none';
             resolve(result);
         };
-        const yesBtn = document.getElementById('confirmModalYesBtn');
-        const noBtn = document.getElementById('confirmModalNoBtn');
-        const closeBtn = document.getElementById('confirmModalClose');
+
         const newYes = yesBtn.cloneNode(true);
         const newNo = noBtn.cloneNode(true);
         const newClose = closeBtn.cloneNode(true);
         yesBtn.parentNode.replaceChild(newYes, yesBtn);
         noBtn.parentNode.replaceChild(newNo, noBtn);
         closeBtn.parentNode.replaceChild(newClose, closeBtn);
+
         newYes.addEventListener('click', () => resolveAndClose(true));
         newNo.addEventListener('click', () => resolveAndClose(false));
         newClose.addEventListener('click', () => resolveAndClose(false));
@@ -185,6 +182,8 @@ function showConfirm(title, message) {
         }, { once: true });
     });
 }
+
+
 // Device info will be updated when a device is selected.
 // ==================== API HELPER ====================
 const BACKEND_URL = (() => {
@@ -906,6 +905,7 @@ async function testSuspiciousScan() {
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
+// ==================== ADVANCED DIAGNOSTIC PAGE ====================
 async function renderAdvancedDiagnostic() {
     const container = document.getElementById('pageContent');
 
@@ -930,19 +930,62 @@ async function renderAdvancedDiagnostic() {
     }
 
     const pageHtml = `
-        <div style="margin-bottom:24px;">
-            <h1 style="margin-bottom:8px;">🔍 Advanced Diagnostics</h1>
-            <p style="color: #6B7280;">Deep‑scan apps and check for rootkits on the selected device.</p>
+        <div style="margin-bottom: 24px;">
+            <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;">🔍 Advanced Diagnostics</h1>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">A deeper pass across software behavior, installed apps, and rootkit indicators.</p>
         </div>
-        <button id="runAdvancedDiagBtn" class="btn-primary" style="font-size:18px; padding:12px 36px; border-radius:30px; box-shadow:0 4px 12px rgba(59,130,246,0.3);">
-            <i class="fas fa-play"></i> Run Advanced Scan
-        </button>
-        <div id="advancedDiagContainer" style="margin-top:24px;">
-            <div style="padding:40px; text-align:center; color:#6B7280; border:2px dashed #e5e7eb; border-radius:12px;">
-                <i class="fas fa-microchip" style="font-size:48px; display:block; margin-bottom:12px; opacity:0.5;"></i>
-                <span style="font-size:16px;">Click the button above to start the scan.</span>
+
+        <div style="background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
+
+            <!-- What this scan covers -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-heart-pulse" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Software Health</div>
+                        <div style="font-size: 11px; color: #9ca3af;">26 system checks</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #f0fdf4; color: #16a34a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-magnifying-glass" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Deep App Scan</div>
+                        <div style="font-size: 11px; color: #9ca3af;">Installed apps & behavior</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-shield-halved" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Rootkit Check</div>
+                        <div style="font-size: 11px; color: #9ca3af;">Kernel & process anomalies</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div style="text-align: center; padding: 8px 0 4px 0;">
+                <button id="runAdvancedDiagBtn" style="
+                    border: none; cursor: pointer;
+                    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+                    color: white; font-size: 15px; font-weight: 600;
+                    padding: 13px 40px; border-radius: 12px;
+                    box-shadow: 0 4px 14px rgba(13,110,253,0.3);
+                    transition: transform 0.15s ease, box-shadow 0.15s ease;
+                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 18px rgba(13,110,253,0.38)'"
+                   onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 14px rgba(13,110,253,0.3)'">
+                    <i class="fas fa-play"></i> Run Advanced Scan
+                </button>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 10px;">Takes a couple of minutes — the phone stays usable during the scan.</div>
             </div>
         </div>
+
+        <div id="advancedDiagContainer" style="margin-top: 20px;"></div>
     `;
 
     container.innerHTML = pageHtml;
@@ -950,11 +993,27 @@ async function renderAdvancedDiagnostic() {
     const runBtn = document.getElementById('runAdvancedDiagBtn');
     const diagContainer = document.getElementById('advancedDiagContainer');
 
+    // Spinner with a class the progress-callback can actually find and update —
+    // the shared getModernSpinnerHTML() never exposed this hook, so progress text
+    // was previously stuck on its initial message for the whole scan.
+    function progressSpinnerHTML(text) {
+        return `
+            <div style="background: white; border-radius: 16px; padding: 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
+                <div style="position: relative; width: 56px; height: 56px; margin: 0 auto;">
+                    <div style="position: absolute; inset: 0; border-radius: 50%; border: 4px solid #eef2ff; border-top-color: #0d6efd; animation: spin 0.9s linear infinite;"></div>
+                </div>
+                <p class="loading-text" style="margin-top: 18px; color: #4b5563; font-weight: 500; font-size: 14px;">${escapeHtml(text)}</p>
+            </div>
+        `;
+    }
+
     runBtn.addEventListener('click', async function() {
         const btn = this;
         btn.disabled = true;
+        btn.style.opacity = '0.75';
+        btn.style.cursor = 'not-allowed';
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
-        diagContainer.innerHTML = getModernSpinnerHTML('Initializing advanced diagnostics...');
+        diagContainer.innerHTML = progressSpinnerHTML('Initializing advanced diagnostics...');
         showLoading();
 
         try {
@@ -970,14 +1029,20 @@ async function renderAdvancedDiagnostic() {
         } catch (err) {
             hideLoading();
             diagContainer.innerHTML = `
-                <div style="color:#d32f2f; padding:20px; background:#ffebee; border-radius:8px; border-left:4px solid #d32f2f;">
-                    <strong>❌ Error:</strong> ${escapeHtml(err.message)}
-                    <br><br>
-                    <button onclick="renderAdvancedDiagnostic()" class="btn-secondary">🔄 Retry</button>
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
+                        <i class="fas fa-triangle-exclamation"></i> Scan failed
+                    </div>
+                    <div style="font-size: 13px; color: #991b1b; margin-bottom: 12px;">${escapeHtml(err.message)}</div>
+                    <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;">
+                        🔄 Retry
+                    </button>
                 </div>
             `;
         } finally {
             btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
             btn.innerHTML = '<i class="fas fa-play"></i> Run Advanced Scan';
         }
     });
@@ -1009,6 +1074,9 @@ async function renderDashboard() {
     // ---- If ADB is available, render full dashboard ----
     if (currentDeviceId) {
         await renderAdbDashboard(container);
+
+        // Add Storage Analysis button if not already present
+        
         return;
     }
 
@@ -1135,24 +1203,24 @@ async function renderDashboard() {
     }
 
     // ---- Fallback: No device connected ----
-container.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; min-height: 400px;">
-        <div style="position: relative; width: 80px; height: 80px; margin-bottom: 24px;">
-            <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid #e5e7eb;"></div>
-            <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; animation: spin 1s linear infinite;"></div>
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 32px; color: #9ca3af;">
-                <i class="fas fa-plug"></i>
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; min-height: 400px;">
+            <div style="position: relative; width: 80px; height: 80px; margin-bottom: 24px;">
+                <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid #e5e7eb;"></div>
+                <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; animation: spin 1s linear infinite;"></div>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 32px; color: #9ca3af;">
+                    <i class="fas fa-plug"></i>
+                </div>
             </div>
+            <h2 style="color: #1e293b; font-size: 24px; font-weight: 600; margin-bottom: 8px;">No Device Detected</h2>
+            <p style="color: #6B7280; font-size: 16px; margin-bottom: 4px;">Waiting for phone to be connected...</p>
+            <p style="color: #94a3b8; font-size: 14px;">Please connect your Android phone via USB and enable USB debugging.</p>
+            <button id="openWizardFromDashboard" class="btn-primary" style="margin-top: 20px; padding: 10px 32px; border-radius: 8px;">
+                🔌 Open USB Debugging Wizard
+            </button>
         </div>
-        <h2 style="color: #1e293b; font-size: 24px; font-weight: 600; margin-bottom: 8px;">No Device Detected</h2>
-        <p style="color: #6B7280; font-size: 16px; margin-bottom: 4px;">Waiting for phone to be connected...</p>
-        <p style="color: #94a3b8; font-size: 14px;">Please connect your Android phone via USB and enable USB debugging.</p>
-        <button id="openWizardFromDashboard" class="btn-primary" style="margin-top: 20px; padding: 10px 32px; border-radius: 8px;">
-            🔌 Open USB Debugging Wizard
-        </button>
-    </div>
-`;
-document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
+    `;
+    document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
 }
 
 // ---- Extracted ADB dashboard rendering (keep the existing logic) ----
@@ -1168,9 +1236,9 @@ async function renderAdbDashboard(container) {
                 <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Check storage usage & large files</div>
             </div>
             <div class="action-card" data-action="app-security" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
-                <div style="font-size: 32px; margin-bottom: 8px;">🔬</div>
-                <div style="font-weight: 600; font-size: 15px;">Deep Diagnostic</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Full system & app scan</div>
+                <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
+<div style="font-weight: 600; font-size: 15px;">App Scan</div>
+<div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Scan for suspicious apps</div>
             </div>
             <div class="action-card" data-action="install" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
@@ -1235,14 +1303,32 @@ async function renderAdbDashboard(container) {
 
     const appSecurityCard = container.querySelector('.action-card[data-action="app-security"]');
     if (appSecurityCard) {
-        appSecurityCard.addEventListener('click', function(e) {
-            try {
-                runDeepDiagnostic();
-            } catch (err) {
-                console.error('[Dashboard] Error running deep diagnostic:', err);
-                alert('Error: ' + err.message);
-            }
-        });
+       appSecurityCard.addEventListener('click', function(e) {
+    try {
+        if (typeof window.runAppScan === 'function') {
+            window.runAppScan();
+        } else {
+            // The module might not have loaded yet – try loading it dynamically
+            console.warn('[Dashboard] App scan module not loaded, attempting to load...');
+            const script = document.createElement('script');
+            script.src = 'js/appScan.js';
+            script.onload = () => {
+                if (typeof window.runAppScan === 'function') {
+                    window.runAppScan();
+                } else {
+                    alert('Failed to load App Scan module. Please refresh.');
+                }
+            };
+            script.onerror = () => {
+                alert('Failed to load App Scan module. Please check the file path.');
+            };
+            document.head.appendChild(script);
+        }
+    } catch (err) {
+        console.error('[Dashboard] Error running app scan:', err);
+        alert('Error: ' + err.message);
+    }
+});
     }
 
     const installCard = container.querySelector('.action-card[data-action="install"]');
@@ -1526,6 +1612,7 @@ async function showBatteryModal() {
     }
 }
 // Storage modal – pie chart using canvas (simple, no external lib)
+// Storage modal – redesigned with a single segmented bar instead of a canvas pie chart
 async function showStorageModal() {
     const modal = ensureInfoModal('storageModal', '💾 Storage Details');
     const body = document.getElementById('storageModalBody');
@@ -1540,141 +1627,92 @@ async function showStorageModal() {
         const b = data.breakdown || {};
         const total = b.total?.human || '?';
         const used = b.used?.human || '?';
-        const usedBytes = Number(b.used?.bytes) || 0;
         const free = b.free?.human || '?';
         const freeBytes = Number(b.free?.bytes) || 0;
-        const apps = b.apps || { percent: 0, human: '0 KB', bytes: 0 };
-        const media = b.media || { percent: 0, human: '0 KB', bytes: 0 };
-        const system = b.system || { percent: 0, human: '0 KB', bytes: 0 };
-        const other = b.other || { percent: 0, human: '0 KB', bytes: 0 };
 
-        // Include "Free" as a separate slice
-        const segments = [
-            { label: 'Apps', percent: apps.percent, bytes: apps.bytes, human: apps.human, color: '#0d6efd', icon: '📱' },
-            { label: 'Media', percent: media.percent, bytes: media.bytes, human: media.human, color: '#198754', icon: '🎬' },
-            { label: 'System', percent: system.percent, bytes: system.bytes, human: system.human, color: '#0dcaf0', icon: '⚙️' },
-            { label: 'Other', percent: other.percent, bytes: other.bytes, human: other.human, color: '#6c757d', icon: '📦' },
-            { label: 'Free', percent: 0, bytes: freeBytes, human: free, color: '#e9ecef', icon: '🟩' }
-        ];
+        const categories = [
+            { key: 'apps', label: 'Apps', icon: '📱', color: '#0d6efd', data: b.apps },
+            { key: 'media', label: 'Media', icon: '🎬', color: '#198754', data: b.media },
+            { key: 'system', label: 'System', icon: '⚙️', color: '#0dcaf0', data: b.system },
+            { key: 'other', label: 'Other', icon: '📦', color: '#6c757d', data: b.other }
+        ].map(cat => ({
+            ...cat,
+            bytes: Number(cat.data?.bytes) || 0,
+            human: cat.data?.human || '0 KB'
+        }));
 
-        // Calculate actual percentages based on total bytes
-        const totalBytesAll = segments.reduce((sum, s) => sum + (s.bytes || 0), 0);
-        if (totalBytesAll > 0) {
-            for (const seg of segments) {
-                seg.percent = (seg.bytes / totalBytesAll) * 100;
-            }
-        }
+        const totalBytesAll = categories.reduce((sum, c) => sum + c.bytes, 0) + freeBytes;
+        const segments = totalBytesAll > 0
+            ? [...categories, { key: 'free', label: 'Free', icon: '🟩', color: '#e5e7eb', bytes: freeBytes, human: free }]
+                .map(s => ({ ...s, percent: (s.bytes / totalBytesAll) * 100 }))
+            : [];
 
-        // Sort: used categories first, then free at the end
-        const usedSegments = segments.filter(s => s.label !== 'Free');
-        const freeSegment = segments.find(s => s.label === 'Free');
-        const sortedSegments = [...usedSegments, freeSegment];
+        // Sort the legend by size descending (free space always shown last, regardless of size)
+        const sortedCategories = [...categories].sort((a, b2) => b2.bytes - a.bytes);
+        const freeSegment = segments.find(s => s.key === 'free');
 
-        // Build HTML with improved layout
+        // Free-space status color: this is the actual question a technician is asking
+        const freePercent = freeSegment ? freeSegment.percent : 0;
+        const freeStatusColor = freePercent < 10 ? '#dc3545' : freePercent < 20 ? '#f59e0b' : '#198754';
+        const freeStatusLabel = freePercent < 10 ? 'Low' : freePercent < 20 ? 'Getting full' : 'Healthy';
+
         const html = `
-            <div style="display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; padding: 8px 0;">
-                <!-- Left: Pie chart -->
-                <div style="flex: 0 0 auto; text-align: center;">
-                    <canvas id="storagePieCanvas" width="240" height="240" style="max-width: 100%; height: auto;"></canvas>
-                </div>
-                <!-- Right: Legend & Overview -->
-                <div style="flex: 1; min-width: 200px;">
-                    <!-- Overview cards -->
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;">
-                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: #6B7280;">Total</div>
-                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(total)}</div>
-                        </div>
-                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: #6B7280;">Used</div>
-                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(used)}</div>
-                        </div>
-                        <div style="background: #f8f9fa; border-radius: 8px; padding: 8px; text-align: center;">
-                            <div style="font-size: 11px; color: #6B7280;">Free</div>
-                            <div style="font-size: 18px; font-weight: 600;">${escapeHtml(free)}</div>
-                        </div>
+            <div style="padding: 4px 0;">
+                <!-- Headline numbers -->
+                <div style="margin-bottom: 20px;">
+                    <div style="font-size: 32px; font-weight: 700; color: #1f2937; line-height: 1.1;">
+                        ${escapeHtml(total)} <span style="font-size: 16px; font-weight: 500; color: #9ca3af;">total</span>
                     </div>
+                    <div style="font-size: 14px; color: #6b7280; margin-top: 6px;">
+                        <strong style="color: #374151;">${escapeHtml(used)}</strong> used ·
+                        <strong style="color: #374151;">${escapeHtml(free)}</strong> free
+                        <span style="display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: ${freeStatusColor}18; color: ${freeStatusColor};">
+                            ${freeStatusLabel}
+                        </span>
+                    </div>
+                </div>
 
-                    <!-- Legend with progress bars -->
-                    <div style="background: #f8f9fa; border-radius: 8px; padding: 12px;">
-                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px;">Detailed Usage</div>
-                        ${sortedSegments.map(segment => `
-                            <div style="margin-bottom: 8px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                                    <span>${segment.icon} ${segment.label}</span>
-                                    <span>${escapeHtml(segment.human)} (${segment.percent.toFixed(1)}%)</span>
-                                </div>
-                                <div style="background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
-                                    <div style="width: ${Math.max(0.5, segment.percent)}%; background: ${segment.color}; height: 100%;"></div>
-                                </div>
+                <!-- Segmented storage bar -->
+                <div style="display: flex; width: 100%; height: 14px; border-radius: 8px; overflow: hidden; background: #f1f3f5; margin-bottom: 20px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);">
+                    ${segments.map(s => `
+                        <div title="${escapeHtml(s.label)}: ${escapeHtml(s.human)}"
+                             style="width: ${Math.max(s.percent, s.bytes > 0 ? 0.6 : 0)}%; background: ${s.color}; transition: width 0.3s ease;">
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Category legend -->
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    ${sortedCategories.map(cat => {
+                        const pct = segments.find(s => s.key === cat.key)?.percent || 0;
+                        return `
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid #f1f3f5;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="width: 10px; height: 10px; border-radius: 3px; background: ${cat.color}; flex-shrink: 0;"></span>
+                                <span style="font-size: 14px; color: #374151;">${cat.icon} ${escapeHtml(cat.label)}</span>
                             </div>
-                        `).join('')}
+                            <div style="text-align: right;">
+                                <span style="font-size: 14px; font-weight: 600; color: #1f2937;">${escapeHtml(cat.human)}</span>
+                                <span style="font-size: 12px; color: #9ca3af; margin-left: 6px;">${pct.toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    `;
+                    }).join('')}
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 4px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="width: 10px; height: 10px; border-radius: 3px; background: #e5e7eb; flex-shrink: 0;"></span>
+                            <span style="font-size: 14px; color: #9ca3af;">🟩 Free</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 14px; font-weight: 600; color: #6b7280;">${escapeHtml(free)}</span>
+                            <span style="font-size: 12px; color: #9ca3af; margin-left: 6px;">${freePercent.toFixed(1)}%</span>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
 
         body.innerHTML = html;
-
-        // Draw the pie chart
-        const canvas = document.getElementById('storagePieCanvas');
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            const w = 240, h = 240, cx = 120, cy = 120, r = 90;
-            const innerRadius = 50; // for donut style
-            ctx.clearRect(0, 0, w, h);
-
-            let start = -0.5 * Math.PI;
-            const usedTotal = sortedSegments.filter(s => s.label !== 'Free').reduce((sum, s) => sum + s.percent, 0);
-            // Ensure free is last slice
-            const sortedForPie = [...sortedSegments.filter(s => s.label !== 'Free'), sortedSegments.find(s => s.label === 'Free')];
-
-            for (const segment of sortedForPie) {
-                const angle = (segment.percent / 100) * 2 * Math.PI;
-                if (angle <= 0) continue;
-                const end = start + angle;
-                // Draw donut slice
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, start, end);
-                ctx.arc(cx, cy, innerRadius, end, start, true);
-                ctx.closePath();
-                ctx.fillStyle = segment.color;
-                ctx.fill();
-                // Draw white stroke between slices
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Draw percentage label in the middle of the slice
-                const midAngle = start + angle / 2;
-                const labelRadius = (r + innerRadius) / 2;
-                const labelX = cx + labelRadius * Math.cos(midAngle);
-                const labelY = cy + labelRadius * Math.sin(midAngle);
-                ctx.fillStyle = '#1f1f1f';
-                ctx.font = 'bold 11px "Segoe UI", sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                if (segment.percent > 5) { // only show if slice is large enough
-                    ctx.fillText(segment.percent.toFixed(0) + '%', labelX, labelY);
-                }
-
-                start = end;
-            }
-
-            // Inner circle text
-            ctx.beginPath();
-            ctx.arc(cx, cy, innerRadius - 2, 0, 2 * Math.PI);
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            ctx.fillStyle = '#1f1f1f';
-            ctx.font = 'bold 14px "Segoe UI", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Storage', cx, cy - 10);
-            ctx.font = '13px "Segoe UI", sans-serif';
-            ctx.fillStyle = '#555';
-            ctx.fillText(`${total}`, cx, cy + 12);
-        }
     } catch (err) {
         console.error('Storage modal error:', err);
         body.innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(err.message)}</div>`;
@@ -2008,484 +2046,11 @@ function getHumanFriendlyRiskReasons(app) {
 // ==================== DEEP DIAGNOSTIC ====================
 
 // ==================== STORAGE ANALYSIS (standalone) ====================
-async function runStorageAnalysis() {
-    if (!currentDeviceId) {
-        await showAlert('No Device', 'Please connect a device first.');
-        return;
-    }
+// ==================== STORAGE ANALYSIS (standalone) ====================
 
-    // Create modal
-    let modal = document.getElementById('storageAnalysisModal');
-    if (!modal) {
-        const modalHTML = `
-            <div id="storageAnalysisModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
-                    <div class="modal-header" style="padding: 12px 20px;">
-                        <h3 id="storageAnalysisTitle">Storage Analysis</h3>
-                        <span class="close-button" id="closeStorageModal">&times;</span>
-                    </div>
-                    <div id="storageAnalysisBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;"></div>
-                    <div class="modal-footer" style="padding: 8px 20px;">
-                        <button id="closeStorageModalBtn" class="btn-secondary">Close</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        modal = document.getElementById('storageAnalysisModal');
-        document.getElementById('closeStorageModal').addEventListener('click', () => modal.style.display = 'none');
-        document.getElementById('closeStorageModalBtn').addEventListener('click', () => modal.style.display = 'none');
-        window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-    }
-
-    modal.style.display = 'flex';
-    const modalBody = document.getElementById('storageAnalysisBody');
-    const modalTitle = document.getElementById('storageAnalysisTitle');
-    modalTitle.textContent = 'Storage Analysis';
-    modalBody.innerHTML = getModernSpinnerHTML('Analyzing storage...');
-
-    try {
-        // ---- Fetch storage data ----
-        const storage = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`).catch(() => ({ total: '0', used: '0', free: '0' }));
-        let storageDetails = null;
-        try {
-            const detailsRes = await fetchWithTimeout(`${BACKEND_URL}/api/hardware/storage-details?deviceId=${currentDeviceId}`, {}, 15000);
-            if (detailsRes.ok) storageDetails = await detailsRes.json();
-        } catch (e) { console.warn('Could not fetch storage details:', e); }
-
-        let largeFiles = [];
-        let largeFilesError = null;
-        try {
-            const filesRes = await fetch(`${BACKEND_URL}/api/large-files?deviceId=${encodeURIComponent(currentDeviceId)}&minSize=0.5`);
-            if (filesRes.ok) {
-                const filesData = await filesRes.json();
-                largeFiles = filesData.files || [];
-            } else {
-                largeFilesError = `Failed to load large files: ${filesRes.status} ${filesRes.statusText}`;
-            }
-        } catch (e) {
-            largeFilesError = `Could not fetch large files: ${e.message}`;
-        }
-
-        // ---- Helpers ----
-        function formatSize(bytes) {
-            if (!bytes || bytes === '0') return '0 B';
-            const num = parseFloat(bytes);
-            if (isNaN(num)) return bytes;
-            if (num >= 1024 * 1024 * 1024) return (num / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-            if (num >= 1024 * 1024) return (num / (1024 * 1024)).toFixed(1) + ' MB';
-            if (num >= 1024) return (num / 1024).toFixed(1) + ' KB';
-            return num + ' B';
-        }
-
-        function parseSize(str) {
-            if (!str || str === '?') return 0;
-            const trimmed = String(str).trim();
-            const match = trimmed.match(/^([\d.]+)\s*([GMK]?)/i);
-            if (!match) return 0;
-            let val = parseFloat(match[1]);
-            const unit = (match[2] || '').toUpperCase();
-            if (unit === 'G') return val * 1024 * 1024 * 1024;
-            if (unit === 'M') return val * 1024 * 1024;
-            if (unit === 'K') return val * 1024;
-            return val;
-        }
-
-        const storageTotalBytes = parseSize(storage.total);
-        const storageUsedBytes = parseSize(storage.used);
-        const storagePercent = storageTotalBytes > 0 ? (storageUsedBytes / storageTotalBytes) * 100 : 0;
-
-        // ---- Build HTML ----
-        let html = `
-            <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; font-size: 14px;">
-                    <span><strong>💾 Storage</strong> ${formatSize(storageUsedBytes)} / ${formatSize(storageTotalBytes)}</span>
-                    <span style="color: ${storagePercent > 90 ? '#dc3545' : '#28a745'};">${storagePercent.toFixed(1)}% used</span>
-                </div>
-                ${storagePercent > 90 ? `<div style="color: #d32f2f; font-size: 13px; margin-top: 4px;">⚠️ Storage is nearly full.</div>` : ''}
-            </div>
-        `;
-
-        // ---- Storage breakdown ----
-        if (storageDetails && storageDetails.breakdown) {
-            const b = storageDetails.breakdown;
-            const categories = [
-                { key: 'apps', label: '📱 Apps' },
-                { key: 'media', label: '🎬 Media' },
-                { key: 'system', label: '⚙️ System' },
-                { key: 'other', label: '📦 Other' }
-            ];
-            let breakdownHtml = `
-                <div class="storage-section" style="margin-top: 8px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📂 Storage Breakdown</h4>
-                    <div style="display: grid; gap: 6px;">
-            `;
-            for (const cat of categories) {
-                const data = b[cat.key] || { percent: 0, human: '0 KB', bytes: 0 };
-                breakdownHtml += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid #f1f3f5; background: #fafbfc; border-radius: 6px;">
-                        <span>${cat.label}</span>
-                        <span style="color: #6c757d; font-size: 12px;">${data.human}</span>
-                    </div>
-                `;
-            }
-            breakdownHtml += `</div></div>`;
-            html += breakdownHtml;
-        }
-
-        // ---- Large files ----
-        if (largeFilesError) {
-            html += `
-                <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeeba; color: #856404;">
-                    <strong>⚠️ Large files unavailable.</strong><br>
-                    ${escapeHtml(largeFilesError)}
-                </div>
-            `;
-        } else if (largeFiles.length > 0) {
-            html += `
-                <div style="margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; border: 1px solid #e5e7eb;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 15px;">📁 Large Files (≥500MB)</h4>
-                    <div style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">Combined scan across available storage roots.</div>
-                    <div style="max-height: 300px; overflow-y: auto;">
-                        ${largeFiles.map(file => {
-                            const isApp = file.type === 'app';
-                            const actionArg = JSON.stringify(file.packageName || file.path);
-                            return `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f3f5; font-size: 13px;">
-                                <span style="word-break: break-all; flex: 1; margin-right: 10px;">${escapeHtml(file.path)}</span>
-                                <span style="white-space: nowrap; margin-right: 10px; color: #555;">${escapeHtml(file.size)}</span>
-                                ${isApp
-                                    ? `<button onclick='uninstallPackage(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Uninstall</button>`
-                                    : `<button onclick='deleteFile(${actionArg})' style="background: #dc3545; color: white; border: none; border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer;">🗑️ Delete</button>`}
-                            </div>
-                        `}).join('')}
-                    </div>
-                    <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">Total: ${largeFiles.length} large files</div>
-                </div>
-            `;
-        } else {
-            html += `
-                <div style="margin-top: 12px; font-size: 13px; color: #28a745; padding: 8px; background: #e8f5e9; border-radius: 6px;">
-                    ✅ No large files (≥500MB) found.
-                </div>
-            `;
-        }
-
-        modalBody.innerHTML = html;
-    } catch (err) {
-        modalBody.innerHTML = `<div style="color: #d32f2f;">Error: ${escapeHtml(err.message)}</div>`;
-    }
-}
 
 // ==================== APP SECURITY SCAN (standalone) ====================
-async function runDeepDiagnostic() {
-    // ---- Create modal if it doesn't exist ----
-    let modal = document.getElementById('quickDiagModal');
-    if (!modal) {
-        const modalHTML = `
-            <div id="quickDiagModal" class="modal" style="display: none;">
-                <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
-                    <div class="modal-header" style="padding: 12px 20px;">
-                        <h3 id="quickDiagModalTitle">Deep Diagnostic Result</h3>
-                        <span class="close-button" id="closeQuickDiagModal">&times;</span>
-                    </div>
-                    <div id="quickDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 16px 20px;">
-                        <div class="spinner"></div>
-                        <p style="text-align: center;">Analyzing system...</p>
-                    </div>
-                    <div class="modal-footer" style="padding: 8px 20px;">
-                        <button id="closeQuickDiagModalBtn" class="btn-secondary">Close</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        modal = document.getElementById('quickDiagModal');
-    }
 
-    modal.style.display = 'flex';
-    const modalTitle = document.getElementById('quickDiagModalTitle');
-    const modalBody = document.getElementById('quickDiagModalBody');
-    modalTitle.textContent = 'Running Deep Diagnostic';
-    modalBody.innerHTML = getModernSpinnerHTML('Analyzing system... this can take several minutes.');
-
-    let scanStillRunning = true;
-    const slowScanHintTimer = setTimeout(() => {
-        if (!scanStillRunning) return;
-        modalBody.innerHTML = getModernSpinnerHTML('Still analyzing... large scans can take several minutes.');
-    }, 30000);
-
-    const closeModal = () => { modal.style.display = 'none'; };
-    document.getElementById('closeQuickDiagModal')?.addEventListener('click', closeModal);
-    document.getElementById('closeQuickDiagModalBtn')?.addEventListener('click', closeModal);
-    window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-    // ========== ANDROID APP HELPER (Robust) ==========
-    async function ensureAndroidAppOpen() {
-        const pkg = 'com.smarthub.diagnostics';
-        const activity = '.MainActivity';
-
-        try {
-            let installed = false;
-            try {
-                const pmList = await fetch(`${BACKEND_URL}/adb-shell`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        deviceId: currentDeviceId,
-                        command: `pm list packages | grep ${pkg}`
-                    })
-                });
-                const data = await pmList.json();
-                installed = data.output && data.output.includes(pkg);
-            } catch (e) {
-                try {
-                    const stateRes = await fetch(`${BACKEND_URL}/mobile-app-state/${currentDeviceId}`);
-                    const state = await stateRes.json();
-                    installed = state.installed === true;
-                } catch { installed = false; }
-            }
-
-            if (!installed) {
-                const confirm = await showConfirm('App Required', 'The SmartHub Diagnostics app is not installed. Would you like to install it now?');
-                if (!confirm) return false;
-                modalBody.innerHTML = getModernSpinnerHTML('Installing SmartHub Diagnostics app...');
-                try {
-                    const installRes = await fetch(`${BACKEND_URL}/api/install-apk`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deviceId: currentDeviceId })
-                    });
-                    const installData = await installRes.json();
-                    if (!installRes.ok) {
-                        alert('Installation failed: ' + (installData.error || 'Unknown error'));
-                        return false;
-                    }
-                    await new Promise(r => setTimeout(r, 2000));
-                    const pmList2 = await fetch(`${BACKEND_URL}/adb-shell`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            deviceId: currentDeviceId,
-                            command: `pm list packages | grep ${pkg}`
-                        })
-                    });
-                    const data2 = await pmList2.json();
-                    if (!data2.output || !data2.output.includes(pkg)) {
-                        alert('App installed but not detected. Please open it manually.');
-                        return false;
-                    }
-                    installed = true;
-                } catch (err) {
-                    alert('Failed to install app: ' + err.message);
-                    return false;
-                }
-            }
-
-            let launched = false;
-            try {
-                const amRes = await fetch(`${BACKEND_URL}/adb-shell`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        deviceId: currentDeviceId,
-                        command: `am start -n ${pkg}/${activity}`
-                    })
-                });
-                const amData = await amRes.json();
-                if (amData.output && !amData.output.includes('Error')) {
-                    launched = true;
-                    console.log('[ensureAndroidAppOpen] Launched via am start');
-                }
-            } catch (e) { /* ignore */ }
-
-            if (!launched) {
-                try {
-                    const monkeyRes = await fetch(`${BACKEND_URL}/adb-shell`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            deviceId: currentDeviceId,
-                            command: `monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`
-                        })
-                    });
-                    const monkeyData = await monkeyRes.json();
-                    if (monkeyData.output && !monkeyData.output.includes('Error')) {
-                        launched = true;
-                        console.log('[ensureAndroidAppOpen] Launched via monkey');
-                    }
-                } catch (e) { /* ignore */ }
-            }
-
-            if (!launched) {
-                alert('Failed to open the SmartHub Diagnostics app. Please open it manually.');
-                return false;
-            }
-
-            await new Promise(r => setTimeout(r, 3000));
-            return true;
-
-        } catch (err) {
-            console.error('ensureAndroidAppOpen error:', err);
-            alert('Error communicating with the device. Make sure USB debugging is enabled.');
-            return false;
-        }
-    }
-
-    const appReady = await ensureAndroidAppOpen();
-    if (!appReady) {
-        modalTitle.textContent = 'Diagnostic Failed';
-        modalBody.innerHTML = '<div style="color: #d32f2f; text-align: center;">SmartHub Diagnostics app is required. Please install it and try again.</div>';
-        return;
-    }
-
-    try {
-        // ---- Use the full deep-scan endpoint with 180s timeout ----
-        const fullScanUrl = `${BACKEND_URL}/deep-scan/${currentDeviceId}/full?raw=0`;
-        const scanRes = await fetchWithTimeout(fullScanUrl, {}, 600000);
-        if (!scanRes.ok) throw new Error(`HTTP ${scanRes.status}`);
-        const scanData = await scanRes.json();
-
-        // ---- Extract data ----
-        const hardwareFindings = scanData.findings || [];
-        const health = scanData.health || {};
-        const appSecurity = scanData.appSecurity || {};
-        let suspiciousApps = appSecurity.suspiciousApps || [];
-        const deepAnalysis = appSecurity.deepAnalysis || [];
-
-        suspiciousApps = suspiciousApps.filter(app => (app.riskScore || 0) >= 30);
-
-        if (suspiciousApps.length === 0) {
-            modalBody.innerHTML = `<div style="padding: 20px;"><h3 style="color: #2e7d32;">✅ No Suspicious Apps Found</h3><p>All apps are safe or have no clear risk indicators.</p></div>`;
-            modalTitle.textContent = 'Deep Diagnostic Complete';
-            return;
-        }
-
-        // ---- Summary bar ----
-        const critical = suspiciousApps.filter(a => a.riskScore >= 80).length;
-        const high = suspiciousApps.filter(a => a.riskScore >= 60 && a.riskScore < 80).length;
-        const medium = suspiciousApps.filter(a => a.riskScore >= 35 && a.riskScore < 60).length;
-        const low = suspiciousApps.filter(a => a.riskScore < 35).length;
-
-        let summaryBarHtml = `
-            <div id="summaryBar" style="display: flex; gap: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-                <span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>
-                <span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>
-                <span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>
-                ${low > 0 ? `<span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> Low</span>` : ''}
-                <span style="margin-left: auto; color: #888;">Total: ${suspiciousApps.length} apps</span>
-            </div>
-        `;
-
-        // ---- Build app cards ----
-        const escape = (str) => escapeHtml(str);
-        let appsHtml = `<div><h3 id="suspiciousAppsHeading" style="color: #ed6c02; margin-bottom: 8px;">⚠️ Suspicious Apps Found (${suspiciousApps.length})</h3>${summaryBarHtml}<div id="appsContainer" style="display: flex; flex-direction: column; gap: 12px;">`;
-
-        for (const app of suspiciousApps) {
-            const riskScore = app.riskScore || 0;
-            const threat = getThreatLevel(riskScore);
-            const threatIcon = threat.icon || (riskScore >= 80 ? '🔴' : riskScore >= 60 ? '🟠' : '🟡');
-            const malwareCapabilities = getHumanReadableThreats(app.threatTypes || [], []);
-
-            // ---- Deep analysis data (if available) ----
-            const deep = deepAnalysis.find(d => d.packageName === app.packageName) || {};
-            let techDetails = '';
-            if (deep.entropy) {
-                techDetails += `<div>Entropy: ${deep.entropy.toFixed(3)} ${deep.entropy > 0.85 ? '⚠️ (high → possible packing/obfuscation)' : ''}</div>`;
-            }
-            if (deep.yaraMatches && deep.yaraMatches.length) {
-                techDetails += `<div>YARA matches: ${deep.yaraMatches.length}</div>`;
-            }
-
-            // ---- Human-friendly reasons ----
-            const humanReasons = getHumanFriendlyRiskReasons(app);
-
-            // ---- Risk factors (from app fields) ----
-            let riskFactors = [];
-            if (app.isSideloaded) riskFactors.push('📦 Sideloaded (not from Play Store)');
-            if (app.installer && app.installer.toLowerCase().includes('unknown')) riskFactors.push('❓ Unknown installer');
-            if (app.installer && app.installer.toLowerCase().includes('transsnet')) riskFactors.push('🏪 Installed via third‑party store (Transsnet)');
-            if (app.dangerousPermissions && app.dangerousPermissions.length > 5) riskFactors.push('🔓 Requests many dangerous permissions');
-            if (deep.entropy > 0.85) riskFactors.push('🧩 High code entropy (possible obfuscation/packing)');
-
-            let factorsHtml = riskFactors.length ? `
-                <div style="margin-top:6px; font-size:13px; color:#555; background:#f8f9fa; padding:6px 10px; border-radius:6px;">
-                    <strong>⚠️ Risk factors:</strong> ${riskFactors.join(' • ')}
-                </div>
-            ` : '';
-
-            // ---- Build card ----
-            appsHtml += `
-                <div id="app-card-${escape(app.packageName)}" class="app-card-item" data-package="${escape(app.packageName)}"
-                     style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
-                            border-left: 6px solid ${threat.color};
-                            background: ${threat.bg};
-                            box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <span style="font-size: 20px;">${threatIcon}</span>
-                            <strong style="font-size: 15px;">${escape(app.displayName)}</strong>
-                            <span style="font-size: 12px; color: #888; font-family: monospace;">${escape(app.packageName)}</span>
-                        </div>
-                        <button onclick="uninstallPackage('${escape(app.packageName)}')"
-                                class="delete-app"
-                                style="background: #d32f2f; color: white; border: none;
-                                       border-radius: 20px; padding: 4px 16px; cursor: pointer;
-                                       font-size: 12px; white-space: nowrap;
-                                       transition: background 0.2s ease, transform 0.15s ease;"
-                                onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
-                                onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
-                            🗑️ Uninstall
-                        </button>
-                    </div>
-
-                    ${app.reason ? `<div style="font-size: 13px; color: #555; margin-top: 6px;">${escape(app.reason)}</div>` : ''}
-
-                    ${humanReasons.length ? `<div style="font-size: 13px; margin-top: 4px; color: #424242; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: 6px;">${humanReasons.join('; ')}</div>` : ''}
-
-                    ${malwareCapabilities.length ? `<div style="font-size: 13px; margin-top: 4px; color: #4a148c; background: rgba(255,255,255,0.65); padding: 6px 10px; border-radius: 6px;"><strong>What this malware can do:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${malwareCapabilities.map(item => `<li>${escape(item)}</li>`).join('')}</ul></div>` : ''}
-
-                    ${factorsHtml}
-                    ${techDetails ? `<div style="font-size: 12px; color: #666; margin-top: 8px; background: #f5f5f5; padding: 6px 10px; border-radius: 6px;">${techDetails}</div>` : ''}
-
-                    <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
-                        ${app.installer ? `<span>📦 Installed via: ${escape(app.installer)}</span>` : ''}
-                        ${app.installDate ? `<span>📅 Installed: ${escape(app.installDate)}</span>` : ''}
-                    </div>
-
-                    <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
-                        <span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>
-                        &nbsp; Risk Score: <strong>${riskScore}/100</strong>
-                    </div>
-                </div>
-            `;
-        }
-        appsHtml += `</div></div>`;
-
-        const finalHtml = appsHtml;
-        modalBody.innerHTML = finalHtml;
-        modalTitle.textContent = 'Deep Diagnostic Complete';
-
-    } catch (err) {
-        console.error('[DeepDiag] Error:', err);
-        modalTitle.textContent = 'Diagnostic Failed';
-        let errorMessage = 'Unknown error';
-        if (err instanceof Error) {
-            errorMessage = err.message;
-        } else if (err && typeof err === 'object' && err.message) {
-            errorMessage = err.message;
-        } else if (typeof err === 'string') {
-            errorMessage = err;
-        } else {
-            errorMessage = String(err);
-        }
-        modalBody.innerHTML = `<div style="color: #d32f2f; text-align: center;">Error: ${escapeHtml(errorMessage)}</div>`;
-    } finally {
-        scanStillRunning = false;
-        clearTimeout(slowScanHintTimer);
-    }
-}
 
 // ==================== STORAGE CATEGORY DETAILS ====================
 
@@ -2678,8 +2243,16 @@ function renderCategoryDetails(category, items) {
 // ==================== FILE OPERATIONS ====================
 
 // ---- Delete a file ----
+// ---- Delete a file ----
 async function deleteFile(filePath) {
-    if (!confirm(`Are you sure you want to delete:\n${filePath}?`)) return;
+    // Use the custom modal
+    const confirmed = await showConfirm(
+        'Delete File',
+        `Are you sure you want to delete this file?\n\n${filePath}`,
+        { icon: '🗑️', danger: true, yesText: 'Delete', isPath: true }
+    );
+    if (!confirmed) return;
+
     try {
         const response = await fetch(`${BACKEND_URL}/api/delete-file`, {
             method: 'POST',
@@ -2688,34 +2261,7 @@ async function deleteFile(filePath) {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('File deleted successfully.');
-            // Refresh the details view if a category is open
-            const activeCategory = document.querySelector('.storage-category.active');
-            if (activeCategory) {
-                showCategoryDetails(activeCategory.dataset.category);
-            } else {
-                runDeepDiagnostic(); // fallback
-            }
-        } else {
-            alert('Failed to delete: ' + data.error);
-        }
-    } catch (err) {
-        alert('Error: ' + err.message);
-    }
-}
-
-// ---- Uninstall an app ----
-async function uninstallPackage(packageName) {
-    if (!confirm(`Are you sure you want to uninstall ${packageName}?`)) return;
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: currentDeviceId, packageName })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            alert(`Successfully uninstalled ${packageName}`);
+            await showAlert('Success', 'File deleted successfully.');
             // Refresh the details view if a category is open
             const activeCategory = document.querySelector('.storage-category.active');
             if (activeCategory) {
@@ -2724,10 +2270,53 @@ async function uninstallPackage(packageName) {
                 runDeepDiagnostic();
             }
         } else {
-            alert(`Failed to uninstall: ${data.error}`);
+            await showAlert('Error', `Failed to delete: ${data.error}`);
         }
     } catch (err) {
-        alert(`Error: ${err.message}`);
+        await showAlert('Error', `Error: ${err.message}`);
+    }
+}
+
+// ---- Uninstall an app ----
+// ---- Uninstall an app ----
+// ---- Uninstall an app (with optional success callback) ----
+// ---- Uninstall an app (with optional success callback) ----
+async function uninstallPackage(packageName, onSuccess) {
+    const confirmed = await showConfirm(
+        'Uninstall App',
+        `Are you sure you want to uninstall this app?\n\n📱 ${packageName}`,
+        { icon: '🗑️', danger: true, yesText: 'Uninstall', isPath: false }
+    );
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/uninstall-package`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, packageName })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            await showAlert('Success', `Successfully uninstalled ${packageName}`);
+            // Call the success callback if provided
+            if (typeof onSuccess === 'function') {
+                onSuccess(packageName);
+            }
+            // Refresh the details view if a category is open
+            const activeCategory = document.querySelector('.storage-category.active');
+            if (activeCategory) {
+                showCategoryDetails(activeCategory.dataset.category);
+            } else {
+                // Only call runDeepDiagnostic if it exists (may not be defined in some contexts)
+                if (typeof runDeepDiagnostic === 'function') {
+                    runDeepDiagnostic();
+                }
+            }
+        } else {
+            await showAlert('Error', `Failed to uninstall: ${data.error}`);
+        }
+    } catch (err) {
+        await showAlert('Error', `Error: ${err.message}`);
     }
 }
 
@@ -2739,6 +2328,8 @@ function openAppManager() {
 }
 
 // ==================== HELP MODAL ====================
+// Help modal – redesigned with a connected vertical stepper (ADB setup is a real sequence,
+// so numbered steps earn their place here) and a segmented pill control instead of plain tabs.
 function showHelpModal() {
     const modal = document.getElementById('helpModal');
     if (!modal) createHelpModal();
@@ -2746,59 +2337,122 @@ function showHelpModal() {
 }
 
 function createHelpModal() {
+    const steps = [
+        { title: 'Open Developer Options', desc: 'Settings → About Phone → tap "Build Number" 7 times.' },
+        { title: 'Turn on USB Debugging', desc: 'Settings → Developer Options → enable USB Debugging.' },
+        { title: 'Connect via USB', desc: 'Plug in the phone and accept the RSA key fingerprint on its screen.' },
+        { title: 'Confirm the connection', desc: 'The device appears as "Connected" in the sidebar.' }
+    ];
+
+    const uiFields = [
+        { icon: 'fa-gauge-high', name: 'Dashboard', desc: 'Battery, storage, RAM, network status, and quick actions.' },
+        { icon: 'fa-mobile-screen', name: 'Device Info', desc: 'Detailed hardware and software properties.' },
+        { icon: 'fa-microscope', name: 'Hardware Tests', desc: 'Runs diagnostic tests on individual components.' },
+        { icon: 'fa-network-wired', name: 'Connection Troubleshoot', desc: 'Resets Wi-Fi, Bluetooth, and mobile data.' },
+        { icon: 'fa-brain', name: 'AI Conclusion', desc: 'Analyzes test results and suggests fixes.' },
+        { icon: 'fa-broom', name: 'Repairs', desc: 'Debloating and cleanup tools.' },
+        { icon: 'fa-triangle-exclamation', name: 'BSOD Diagnosis', desc: 'Analyzes boot failures on unresponsive devices.' }
+    ];
+
     const modalHTML = `
         <div id="helpModal" class="modal" style="display: none;">
-            <div class="modal-content" style="max-width: 600px;">
-                <div class="modal-header">
-                    <h3><i class="fas fa-question-circle"></i> SmartHub Help Guide</h3>
-                    <span class="close-button" id="closeHelpModalBtn">&times;</span>
+            <div class="modal-content" style="max-width: 560px; padding: 0; border-radius: 16px; overflow: hidden;">
+
+                <!-- Header -->
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f3f5;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-circle-question" style="font-size: 20px; color: #0d6efd;"></i>
+                        <h3 style="margin: 0; font-size: 17px; font-weight: 600; color: #1f2937;">SmartHub Help Guide</h3>
+                    </div>
+                    <span id="closeHelpModalBtn" style="cursor: pointer; font-size: 22px; color: #9ca3af; line-height: 1;">&times;</span>
                 </div>
-                <div class="modal-body">
-                    <div class="help-tabs">
-                        <button class="help-tab active" data-tab="adb">ADB Setup</button>
-                        <button class="help-tab" data-tab="ui">UI Fields</button>
-                    </div>
-                    <div id="helpTabAdb" class="help-tab-content active">
-                        <h4>How to Enable USB Debugging</h4>
-                        <ol>
-                            <li>Go to Settings → About Phone → Tap "Build Number" 7 times.</li>
-                            <li>Return to Settings → Developer Options → Enable USB Debugging.</li>
-                            <li>Connect your phone via USB and accept the RSA key fingerprint.</li>
-                            <li>Your device should appear as "Connected" in the sidebar.</li>
-                        </ol>
-                    </div>
-                    <div id="helpTabUi" class="help-tab-content">
-                        <h4>UI Sections Overview</h4>
-                        <ul>
-                            <li><strong>Dashboard:</strong> Shows battery, storage, RAM, network status, and quick actions.</li>
-                            <li><strong>Device Info:</strong> Displays detailed hardware and software properties.</li>
-                            <li><strong>Hardware Tests:</strong> Runs diagnostic tests on components.</li>
-                            <li><strong>Connection Troubleshoot:</strong> Reset Wi-Fi, Bluetooth, and mobile data.</li>
-                            <li><strong>AI Conclusion:</strong> Analyzes test results and suggests fixes.</li>
-                            <li><strong>Repairs:</strong> Debloating tools.</li>
-                            <li><strong>BSOD Diagnosis:</strong> Analyzes boot failures.</li>
-                        </ul>
+
+                <!-- Segmented tab switcher -->
+                <div style="padding: 16px 24px 0 24px;">
+                    <div style="display: inline-flex; background: #f1f3f5; border-radius: 10px; padding: 3px; gap: 2px;">
+                        <button class="help-tab-btn active" data-tab="adb" style="border: none; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.08); color: #1f2937; font-weight: 600; font-size: 13px; padding: 7px 16px; border-radius: 8px; cursor: pointer; transition: all 0.15s ease;">
+                            ADB Setup
+                        </button>
+                        <button class="help-tab-btn" data-tab="ui" style="border: none; background: transparent; box-shadow: none; color: #6b7280; font-weight: 500; font-size: 13px; padding: 7px 16px; border-radius: 8px; cursor: pointer; transition: all 0.15s ease;">
+                            UI Fields
+                        </button>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button id="closeHelpModalBtnFooter" class="btn-secondary">Close</button>
+
+                <!-- Body -->
+                <div style="padding: 20px 24px 24px 24px; max-height: 60vh; overflow-y: auto;">
+
+                    <!-- ADB Setup: connected stepper -->
+                    <div id="helpPanelAdb" class="help-panel">
+                        <div style="display: flex; flex-direction: column;">
+                            ${steps.map((step, i) => `
+                                <div style="display: flex; gap: 14px;">
+                                    <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0;">
+                                        <div style="width: 26px; height: 26px; border-radius: 50%; background: #0d6efd; color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;">
+                                            ${i + 1}
+                                        </div>
+                                        ${i < steps.length - 1 ? '<div style="width: 2px; flex: 1; background: #e5e7eb; margin: 4px 0;"></div>' : ''}
+                                    </div>
+                                    <div style="padding-bottom: ${i < steps.length - 1 ? '22px' : '2px'};">
+                                        <div style="font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 2px;">${escapeHtml(step.title)}</div>
+                                        <div style="font-size: 13px; color: #6b7280; line-height: 1.5;">${escapeHtml(step.desc)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- UI Fields: reference list -->
+                    <div id="helpPanelUi" class="help-panel" style="display: none;">
+                        <div style="display: flex; flex-direction: column;">
+                            ${uiFields.map(f => `
+                                <div style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f1f3f5;">
+                                    <div style="width: 30px; height: 30px; border-radius: 8px; background: #eff6ff; color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px;">
+                                        <i class="fas ${f.icon}"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 14px; font-weight: 600; color: #1f2937;">${escapeHtml(f.name)}</div>
+                                        <div style="font-size: 13px; color: #6b7280; margin-top: 1px; line-height: 1.4;">${escapeHtml(f.desc)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-    document.querySelectorAll('.help-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.help-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            document.querySelectorAll('.help-tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById(`helpTab${tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)}`).classList.add('active');
+
+    // ---- Tab switching ----
+    const tabButtons = document.querySelectorAll('.help-tab-btn');
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabButtons.forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'transparent';
+                b.style.boxShadow = 'none';
+                b.style.color = '#6b7280';
+                b.style.fontWeight = '500';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'white';
+            btn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+            btn.style.color = '#1f2937';
+            btn.style.fontWeight = '600';
+
+            document.querySelectorAll('.help-panel').forEach(p => p.style.display = 'none');
+            const target = btn.dataset.tab === 'adb' ? 'helpPanelAdb' : 'helpPanelUi';
+            document.getElementById(target).style.display = 'block';
         });
     });
+
+    // ---- Close handlers ----
     const closeModal = () => document.getElementById('helpModal').style.display = 'none';
     document.getElementById('closeHelpModalBtn')?.addEventListener('click', closeModal);
-    document.getElementById('closeHelpModalBtnFooter')?.addEventListener('click', closeModal);
     window.addEventListener('click', (e) => { if (e.target === document.getElementById('helpModal')) closeModal(); });
+
     document.getElementById('helpModal').style.display = 'flex';
 }
 

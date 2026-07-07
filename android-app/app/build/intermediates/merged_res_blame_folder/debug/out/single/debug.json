@@ -12,6 +12,10 @@
         "source": "com.smarthub.diagnostics.app-main-35:/mipmap-mdpi/ic_launcher_foreground.png"
     },
     {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_app_security_scan.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_app_security_scan.xml"
+    },
+    {
         "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_gps_test.xml.flat",
         "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_gps_test.xml"
     },
@@ -92,6 +96,14 @@
         "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_face_unlock.xml"
     },
     {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_app_scan.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_app_scan.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/drawable_bg_verdict.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/drawable/bg_verdict.xml"
+    },
+    {
         "merged": "com.smarthub.diagnostics.app-merged_res-33:/mipmap-mdpi_ic_launcher.png.flat",
         "source": "com.smarthub.diagnostics.app-main-35:/mipmap-mdpi/ic_launcher.png"
     },
@@ -108,8 +120,24 @@
         "source": "com.smarthub.diagnostics.app-main-35:/mipmap-xxhdpi/ic_launcher_foreground.png"
     },
     {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/drawable_bg_verdict_unknown.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/drawable/bg_verdict_unknown.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_storage_analysis.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_storage_analysis.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/drawable_bg_verdict_suspicious.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/drawable/bg_verdict_suspicious.xml"
+    },
+    {
         "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_main.xml.flat",
         "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_item_app_security.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/layout/item_app_security.xml"
     },
     {
         "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_activity_multitouch.xml.flat",
