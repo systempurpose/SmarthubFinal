@@ -3,14 +3,23 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
+    android:padding="24dp"
+    android:gravity="center"
     android:background="#f8fafc">
 
     <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="match_parent"
+        android:id="@+id/tvIcon"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="🔍 App Security Scan"
+        android:text="🛡️"
+        android:textSize="48sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="App Security Scan"
         android:textSize="22sp"
         android:textStyle="bold"
         android:textColor="#1e293b"
@@ -18,11 +27,12 @@
 
     <TextView
         android:id="@+id/tvStatus"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Loading..."
+        android:text="📡 Assisting SmartHub Windows app..."
         android:textSize="14sp"
         android:textColor="#6b7280"
+        android:gravity="center"
         android:layout_marginBottom="16dp" />
 
     <ProgressBar
@@ -34,51 +44,14 @@
         android:layout_marginBottom="16dp"
         android:visibility="visible" />
 
-    <!-- Empty State -->
-    <LinearLayout
-        android:id="@+id/emptyState"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
+    <TextView
+        android:id="@+id/tvMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="The SmartHub Windows app is analyzing your device."
+        android:textSize="14sp"
+        android:textColor="#6b7280"
         android:gravity="center"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/tvEmptyIcon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🛡️"
-            android:textSize="48sp"
-            android:layout_marginBottom="16dp" />
-
-        <TextView
-            android:id="@+id/tvEmptyTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="No Suspicious Apps"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#1e293b"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/tvEmptyMessage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="All apps appear to be safe."
-            android:textSize="14sp"
-            android:textColor="#6b7280"
-            android:gravity="center" />
-    </LinearLayout>
-
-    <ListView
-        android:id="@+id/lvApps"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:divider="@android:color/transparent"
-        android:dividerHeight="4dp"
         android:visibility="gone" />
 
 </LinearLayout>
