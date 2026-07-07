@@ -5,6 +5,19 @@ let lastUsbState = null; // Track last USB state for dashboard re-render
 // ---- Persistent test results ----
 window._hardwareTestResults = {};   // { testId: { status, message, passed } }
 window._connectionTestResults = {}; // { testId: { status, message, passed } }
+
+// Expose save/load functions globally
+// Expose storage functions globally
+window.saveStorageResults = saveStorageResults;
+window.loadStorageResults = loadStorageResults;
+window.renderStorageResults = renderStorageResults;
+
+// Also for app scan
+window.saveAppScanResults = saveAppScanResults;
+window.loadAppScanResults = loadAppScanResults;
+window.renderAppScanResults = renderAppScanResults;
+
+
 function openTutorial() {
     // Replace the URL with your actual tutorial video
  
@@ -192,6 +205,7 @@ const BACKEND_URL = (() => {
     }
     return 'http://127.0.0.1:3333';
 })();
+window.BACKEND_URL = BACKEND_URL;   // ← ADD THIS LINE
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     const controller = new AbortController();
@@ -906,6 +920,8 @@ async function testSuspiciousScan() {
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
 // ==================== ADVANCED DIAGNOSTIC PAGE ====================
+// In js/advanceDiagnostic.js – replace the renderAdvancedDiagnostic function
+
 async function renderAdvancedDiagnostic() {
     const container = document.getElementById('pageContent');
 
@@ -993,18 +1009,31 @@ async function renderAdvancedDiagnostic() {
     const runBtn = document.getElementById('runAdvancedDiagBtn');
     const diagContainer = document.getElementById('advancedDiagContainer');
 
-    // Spinner with a class the progress-callback can actually find and update —
-    // the shared getModernSpinnerHTML() never exposed this hook, so progress text
-    // was previously stuck on its initial message for the whole scan.
-    function progressSpinnerHTML(text) {
-        return `
-            <div style="background: white; border-radius: 16px; padding: 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
-                <div style="position: relative; width: 56px; height: 56px; margin: 0 auto;">
-                    <div style="position: absolute; inset: 0; border-radius: 50%; border: 4px solid #eef2ff; border-top-color: #0d6efd; animation: spin 0.9s linear infinite;"></div>
+    // ---- Create the polished modal for scan progress (same as storage analysis) ----
+    function ensureScanModal() {
+        let modal = document.getElementById('advancedDiagModal');
+        if (!modal) {
+            const modalHTML = `
+                <div id="advancedDiagModal" class="modal" style="display: none; z-index: 99999;">
+                    <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
+                        <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                            <h3 id="advancedDiagModalTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">Advanced Diagnostics</h3>
+                            <span class="close-button" id="closeAdvancedDiagModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
+                        </div>
+                        <div id="advancedDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
+                        <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
+                            <button id="closeAdvancedDiagModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">Close</button>
+                        </div>
+                    </div>
                 </div>
-                <p class="loading-text" style="margin-top: 18px; color: #4b5563; font-weight: 500; font-size: 14px;">${escapeHtml(text)}</p>
-            </div>
-        `;
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById('advancedDiagModal');
+            document.getElementById('closeAdvancedDiagModal').addEventListener('click', () => modal.style.display = 'none');
+            document.getElementById('closeAdvancedDiagModalBtn').addEventListener('click', () => modal.style.display = 'none');
+            window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+        }
+        return modal;
     }
 
     runBtn.addEventListener('click', async function() {
@@ -1013,21 +1042,32 @@ async function renderAdvancedDiagnostic() {
         btn.style.opacity = '0.75';
         btn.style.cursor = 'not-allowed';
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
-        diagContainer.innerHTML = progressSpinnerHTML('Initializing advanced diagnostics...');
-        showLoading();
+
+        // Show modal with spinner
+        const modal = ensureScanModal();
+        const modalTitle = document.getElementById('advancedDiagModalTitle');
+        const modalBody = document.getElementById('advancedDiagModalBody');
+        modalTitle.textContent = 'Advanced Diagnostics';
+        modalBody.innerHTML = window.getModernSpinnerHTML('Running advanced diagnostics... This may take 2-3 minutes.');
+        modal.style.display = 'flex';
+
+        // Also show a small indicator in the container (optional)
+        diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;">⏳ Scan in progress... See modal for details.</div>`;
 
         try {
             const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
                 currentDeviceId,
                 (msg) => {
-                    const textEl = diagContainer.querySelector('.loading-text');
+                    // Update modal spinner text
+                    const textEl = modalBody.querySelector('.loading-text');
                     if (textEl) textEl.textContent = msg;
                 }
             );
-            hideLoading();
+            // Hide modal and show results in container
+            modal.style.display = 'none';
             window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
         } catch (err) {
-            hideLoading();
+            modal.style.display = 'none';
             diagContainer.innerHTML = `
                 <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
                     <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
@@ -1237,8 +1277,8 @@ async function renderAdbDashboard(container) {
             </div>
             <div class="action-card" data-action="app-security" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
-<div style="font-weight: 600; font-size: 15px;">App Scan</div>
-<div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Scan for suspicious apps</div>
+                <div style="font-weight: 600; font-size: 15px;">App Security Scan</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Detect suspicious & risky apps</div>
             </div>
             <div class="action-card" data-action="install" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
@@ -1287,6 +1327,14 @@ async function renderAdbDashboard(container) {
             </div>
         </div>
 
+        <!-- ===== SCAN RESULTS SECTION ===== -->
+        <div id="scanResultsSection" style="margin-top: 24px;">
+            <!-- App Security Scan Results -->
+            <div id="appScanResults" style="display: none; margin-bottom: 16px;"></div>
+            <!-- Storage Analysis Results -->
+            <div id="storageResults" style="display: none;"></div>
+        </div>
+
         <div id="deviceOverview" class="card" style="display: none;"></div>
         <div id="networkStatus" class="card" style="display: none;"></div>
         <div id="phoneSummary" class="card" style="display: none;">
@@ -1297,39 +1345,42 @@ async function renderAdbDashboard(container) {
         <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
+    // ---- Load saved results from localStorage ----
+    loadSavedScanResults();
+
     // ---- Attach event listeners ----
     const storageCard = container.querySelector('.action-card[data-action="storage-analysis"]');
     if (storageCard) storageCard.addEventListener('click', runStorageAnalysis);
 
     const appSecurityCard = container.querySelector('.action-card[data-action="app-security"]');
-    if (appSecurityCard) {
-       appSecurityCard.addEventListener('click', function(e) {
-    try {
-        if (typeof window.runAppScan === 'function') {
-            window.runAppScan();
-        } else {
-            // The module might not have loaded yet – try loading it dynamically
-            console.warn('[Dashboard] App scan module not loaded, attempting to load...');
-            const script = document.createElement('script');
-            script.src = 'js/appScan.js';
-            script.onload = () => {
-                if (typeof window.runAppScan === 'function') {
-                    window.runAppScan();
-                } else {
-                    alert('Failed to load App Scan module. Please refresh.');
-                }
-            };
-            script.onerror = () => {
-                alert('Failed to load App Scan module. Please check the file path.');
-            };
-            document.head.appendChild(script);
+if (appSecurityCard) {
+    appSecurityCard.addEventListener('click', function(e) {
+        try {
+            if (typeof window.runAppScan === 'function') {
+                window.runAppScan();
+            } else {
+                // Load dynamically with correct path
+                const script = document.createElement('script');
+               script.src = '../js/appScan.js';
+script.onload = () => {
+    if (typeof window.runAppScan === 'function') {
+        window.runAppScan();
+    } else {
+        alert('AppScan module loaded but function not found. Refresh the page.');
+    }
+};
+                script.onerror = () => {
+                    console.error('Failed to load appScan.js');
+                    alert('Failed to load AppScan module. Please refresh the page.');
+                };
+                document.head.appendChild(script);
+            }
+        } catch (err) {
+            console.error('[Dashboard] Error running app scan:', err);
+            alert('Error: ' + err.message);
         }
-    } catch (err) {
-        console.error('[Dashboard] Error running app scan:', err);
-        alert('Error: ' + err.message);
-    }
-});
-    }
+    });
+}
 
     const installCard = container.querySelector('.action-card[data-action="install"]');
     if (installCard) {
@@ -1368,7 +1419,7 @@ async function renderAdbDashboard(container) {
     const helpCard = container.querySelector('.action-card[data-action="help"]');
     if (helpCard) helpCard.addEventListener('click', showHelpModal);
 
-    // ---- Fetch and display hardware data ----
+    // ---- Fetch and display hardware data (unchanged) ----
     console.log('[Dashboard] Fetching hardware data for device:', currentDeviceId);
     try {
         const [battery, storage, ram, deviceText, wifiStatus, tempData, safetyData] = await Promise.all([
@@ -1430,6 +1481,312 @@ async function renderAdbDashboard(container) {
     }
 
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
+}
+
+// ===== SAVE/LOAD SCAN RESULTS =====
+
+function saveAppScanResults(results) {
+    if (results) {
+        localStorage.setItem('smartHubAppScanResults', JSON.stringify(results));
+    } else {
+        localStorage.removeItem('smartHubAppScanResults');
+    }
+}
+
+function loadAppScanResults() {
+    try {
+        const data = localStorage.getItem('smartHubAppScanResults');
+        return data ? JSON.parse(data) : null;
+    } catch { return null; }
+}
+
+function saveStorageResults(results) {
+    if (results) {
+        localStorage.setItem('smartHubStorageResults', JSON.stringify(results));
+    } else {
+        localStorage.removeItem('smartHubStorageResults');
+    }
+}
+
+function loadStorageResults() {
+    try {
+        const data = localStorage.getItem('smartHubStorageResults');
+        return data ? JSON.parse(data) : null;
+    } catch { return null; }
+}
+
+function loadSavedScanResults() {
+    // Load App Security Scan results
+    const appResults = loadAppScanResults();
+    if (appResults) {
+        renderAppScanResults(appResults);
+    }
+    // Load Storage Analysis results
+    const storageResults = loadStorageResults();
+    if (storageResults) {
+        renderStorageResults(storageResults);
+    }
+}
+
+function clearScanResults(type) {
+    if (type === 'app') {
+        localStorage.removeItem('smartHubAppScanResults');
+        document.getElementById('appScanResults').style.display = 'none';
+        document.getElementById('appScanResults').innerHTML = '';
+    } else if (type === 'storage') {
+        localStorage.removeItem('smartHubStorageResults');
+        document.getElementById('storageResults').style.display = 'none';
+        document.getElementById('storageResults').innerHTML = '';
+    }
+}
+
+// ===== RENDER SCAN RESULTS ON DASHBOARD =====
+
+function renderAppScanResults(results) {
+    const container = document.getElementById('appScanResults');
+    if (!container) return;
+
+    if (!results || !results.suspiciousApps || results.suspiciousApps.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const apps = results.suspiciousApps;
+    const total = apps.length;
+    const critical = apps.filter(a => a.riskScore >= 80).length;
+    const high = apps.filter(a => a.riskScore >= 60 && a.riskScore < 80).length;
+    const medium = apps.filter(a => a.riskScore >= 35 && a.riskScore < 60).length;
+    const low = apps.filter(a => a.riskScore < 35).length;
+
+    let html = `
+        <div class="card" style="border-left: 4px solid ${total > 0 ? '#dc2626' : '#16a34a'}; margin-bottom: 16px;">
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span><i class="fas fa-shield-halved"></i> App Security Scan</span>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
+                    ${total > 0 ? `<span style="color: #dc2626;">⚠️ ${total} suspicious app(s)</span>` : '<span style="color: #16a34a;">✅ All clear</span>'}
+                    <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
+                    <button onclick="clearScanResults('app')" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px;">✕</button>
+                </div>
+            </div>
+            <div class="card-content">
+                <!-- Summary bar -->
+                <div style="display: flex; gap: 16px; padding: 8px 0; flex-wrap: wrap;">
+                    ${critical > 0 ? `<span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>` : ''}
+                    ${high > 0 ? `<span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>` : ''}
+                    ${medium > 0 ? `<span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>` : ''}
+                    ${low > 0 ? `<span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> Low</span>` : ''}
+                </div>
+                <!-- App list -->
+                <div style="max-height: 500px; overflow-y: auto;">
+                    ${apps.map(app => {
+                        const threat = window.getThreatLevel(app.riskScore);
+                        const threatIcon = threat.icon || (app.riskScore >= 80 ? '🔴' : app.riskScore >= 60 ? '🟠' : '🟡');
+                        const malwareCapabilities = window.getHumanReadableThreats(app.threatTypes || [], []);
+                        const humanReasons = window.getHumanFriendlyRiskReasons(app);
+
+                        let riskFactors = [];
+                        if (app.isSideloaded) riskFactors.push('📦 Sideloaded (not from Play Store)');
+                        if (app.installer && app.installer.toLowerCase().includes('unknown')) riskFactors.push('❓ Unknown installer');
+                        if (app.dangerousPermissions && app.dangerousPermissions.length > 5) riskFactors.push('🔓 Requests many dangerous permissions');
+                        if (app.entropy && app.entropy > 0.85) riskFactors.push('🧩 High code entropy (possible obfuscation/packing)');
+
+                        const pkg = app.packageName;
+                        const onclickHandler = `
+                            window.uninstallPackage('${escapeHtml(pkg)}', window.removeAppCard);
+                        `;
+
+                        return `
+                            <div id="app-card-${escapeHtml(pkg)}" class="app-card-item" data-package="${escapeHtml(pkg)}"
+                                 style="margin-bottom: 12px; padding: 16px; border-radius: 12px;
+                                        border-left: 6px solid ${threat.color};
+                                        background: ${threat.bg};
+                                        box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                        <span style="font-size: 20px;">${threatIcon}</span>
+                                        <strong style="font-size: 15px;">${escapeHtml(app.displayName)}</strong>
+                                        <span style="font-size: 12px; color: #888; font-family: monospace;">${escapeHtml(app.packageName)}</span>
+                                    </div>
+                                    <button onclick="${onclickHandler}"
+                                            class="delete-app"
+                                            style="background: #d32f2f; color: white; border: none;
+                                                   border-radius: 20px; padding: 4px 16px; cursor: pointer;
+                                                   font-size: 12px; white-space: nowrap;
+                                                   transition: background 0.2s ease, transform 0.15s ease;"
+                                            onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
+                                            onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
+                                        🗑️ Uninstall
+                                    </button>
+                                </div>
+
+                                ${app.reason ? `<div style="font-size: 13px; color: #555; margin-top: 6px;">${escapeHtml(app.reason)}</div>` : ''}
+
+                                ${humanReasons.length ? `<div style="font-size: 13px; margin-top: 4px; color: #424242; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: 6px;">${humanReasons.join('; ')}</div>` : ''}
+
+                                ${malwareCapabilities.length ? `<div style="font-size: 13px; margin-top: 4px; color: #4a148c; background: rgba(255,255,255,0.65); padding: 6px 10px; border-radius: 6px;"><strong>What this malware can do:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${malwareCapabilities.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+
+                                ${riskFactors.length ? `
+                                    <div style="margin-top:6px; font-size:13px; color:#555; background:#f8f9fa; padding:6px 10px; border-radius:6px;">
+                                        <strong>⚠️ Risk factors:</strong> ${riskFactors.join(' • ')}
+                                    </div>
+                                ` : ''}
+
+                                ${app.entropy ? `<div style="font-size: 12px; color: #666; margin-top: 8px; background: #f5f5f5; padding: 6px 10px; border-radius: 6px;">Entropy: ${app.entropy.toFixed(3)} ${app.entropy > 0.85 ? '⚠️ (high → possible packing/obfuscation)' : ''}</div>` : ''}
+
+                                <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
+                                    ${app.installer ? `<span>📦 Installed via: ${escapeHtml(app.installer)}</span>` : ''}
+                                    ${app.installDate ? `<span>📅 Installed: ${escapeHtml(app.installDate)}</span>` : ''}
+                                </div>
+
+                                <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
+                                    <span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>
+                                    &nbsp; Risk Score: <strong>${app.riskScore}/100</strong>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            <div style="padding: 8px 16px 12px; font-size: 12px; color: #6b7280; border-top: 1px solid #f1f3f5; display: flex; justify-content: space-between; align-items: center;">
+                <span>Last scan: ${results.scanTime || 'N/A'}</span>
+                <button onclick="window.runAppScan()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 Rescan</button>
+            </div>
+        </div>
+    `;
+
+    container.style.display = 'block';
+    container.innerHTML = html;
+}
+
+
+function renderStorageResults(results) {
+    const container = document.getElementById('storageResults');
+    if (!container) return;
+
+    // --- If no results or empty, show a friendly message ---
+    if (!results || !results.files || results.files.length === 0) {
+        container.style.display = 'block';
+        container.innerHTML = `
+            <div class="card" style="border-left: 4px solid #22c55e; margin-bottom: 16px;">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    <span><i class="fas fa-hdd"></i> Storage Analysis</span>
+                    <span style="color: #6b7280; font-size: 12px;">${results ? results.scanTime : 'N/A'}</span>
+                </div>
+                <div class="card-content" style="padding: 16px; text-align: center; color: #6b7280;">
+                    ✅ No large files (>500 MB) found on your device.
+                    ${results ? `<br><small>Last scan: ${results.scanTime}</small>` : ''}
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // --- Existing code for displaying files (keep as is) ---
+    const files = results.files;
+    const totalSize = files.reduce((sum, f) => sum + (f.bytes || 0), 0);
+    const count = files.length;
+
+    // ---- Group files by category ----
+    const categories = {
+        'DCIM': { label: '📸 Camera (DCIM)', files: [] },
+        'Movies': { label: '🎬 Movies', files: [] },
+        'Music': { label: '🎵 Music', files: [] },
+        'Pictures': { label: '🖼️ Pictures', files: [] },
+        'Download': { label: '📥 Downloads', files: [] },
+        'Android/obb': { label: '🎮 Game OBB', files: [] },
+        'Android/data': { label: '📂 App Data (Games)', files: [] },
+        'Documents': { label: '📄 Documents', files: [] },
+        'Other': { label: '📦 Other', files: [] }
+    };
+
+    files.forEach(file => {
+        const path = file.path || '';
+        let category = 'Other';
+        if (path.includes('/DCIM/')) category = 'DCIM';
+        else if (path.includes('/Movies/')) category = 'Movies';
+        else if (path.includes('/Music/')) category = 'Music';
+        else if (path.includes('/Pictures/')) category = 'Pictures';
+        else if (path.includes('/Download/')) category = 'Download';
+        else if (path.includes('/Android/obb/')) category = 'Android/obb';
+        else if (path.includes('/Android/data/')) category = 'Android/data';
+        else if (path.includes('/Documents/')) category = 'Documents';
+        categories[category].files.push(file);
+    });
+
+    let html = `
+        <div class="card" style="border-left: 4px solid #f59e0b; margin-bottom: 16px;">
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span><i class="fas fa-hdd"></i> Storage Analysis</span>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
+                    <span style="color: #f59e0b;">📁 ${count} large files (${formatSize(totalSize)})</span>
+                    <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
+                    <button onclick="clearScanResults('storage')" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px;">✕</button>
+                </div>
+            </div>
+            <div class="card-content">
+                <!-- Storage summary -->
+                <div style="margin-bottom: 12px; padding: 12px; background: #f8fafc; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                        <span><strong>💾 Storage</strong> ${results.storageUsed || '?'} / ${results.storageTotal || '?'}</span>
+                        <span style="color: ${(results.percentUsed || 0) > 90 ? '#dc2626' : '#22c55e'};">${(results.percentUsed || 0).toFixed(1)}% used</span>
+                    </div>
+                    <div style="margin-top: 4px; background: #e5e7eb; border-radius: 8px; height: 6px; overflow: hidden;">
+                        <div style="width: ${Math.min(results.percentUsed || 0, 100)}%; background: ${(results.percentUsed || 0) > 90 ? '#dc2626' : '#22c55e'}; height: 100%; border-radius: 8px;"></div>
+                    </div>
+                </div>
+    `;
+
+    // ---- Render categories ----
+    for (const [key, cat] of Object.entries(categories)) {
+        if (cat.files.length === 0) continue;
+        const catSize = cat.files.reduce((sum, f) => sum + (f.bytes || 0), 0);
+        html += `
+            <div style="margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #ffffff;">
+                <div style="background: #f8fafc; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                    <span><strong>${cat.label}</strong> (${cat.files.length} files)</span>
+                    <span style="color: #6b7280; font-size: 13px;">${formatSize(catSize)}</span>
+                </div>
+                <div style="padding: 6px 12px; display: block; max-height: 300px; overflow-y: auto;">
+                    ${cat.files.map(file => {
+                        const path = file.path || '';
+                        const name = file.name || path || 'Unnamed';
+                        const size = file.size || formatSize(file.bytes);
+                        const isApp = path.startsWith('package:');
+                        const displayPath = isApp ? path.replace('package:', '') : path;
+                        const buttonLabel = isApp ? '🗑️ Uninstall' : '🗑️ Delete';
+                        const icon = isApp ? '📱' : getFileIcon(path);
+                        const sizeColor = getSizeColor(file.bytes || 0);
+                        const onClick = isApp
+                            ? `window._handleUninstall('${escapeHtml(displayPath)}', this)`
+                            : `window._handleDelete('${escapeHtml(path)}', this)`;
+                        return `
+                            <div class="storage-item" data-path="${escapeHtml(path)}" data-bytes="${file.bytes || 0}" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; border-bottom: 1px solid #f1f3f5; font-size: 13px; transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                <span style="display: flex; align-items: center; gap: 8px; word-break: break-all; flex: 1; margin-right: 12px;">
+                                    <span style="font-size: 16px;">${icon}</span>
+                                    <span style="color: #1f2937;">${escapeHtml(name)}</span>
+                                </span>
+                                <span style="white-space: nowrap; margin-right: 12px; color: ${sizeColor}; font-weight: 500;">${escapeHtml(size)}</span>
+                                <button onclick="${onClick}" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 4px 14px; font-size: 11px; cursor: pointer; transition: background 0.15s ease; flex-shrink: 0;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">${buttonLabel}</button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    html += `
+            </div>
+            <div style="padding: 8px 16px 12px; font-size: 12px; color: #6b7280; border-top: 1px solid #f1f3f5; display: flex; justify-content: space-between; align-items: center;">
+                <span>Last scan: ${results.scanTime || 'N/A'}</span>
+                <button onclick="window.runStorageAnalysis()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 Rescan</button>
+            </div>
+        </div>
+    `;
+
+    container.style.display = 'block';
+    container.innerHTML = html;
 }
 
 function ensureInfoModal(modalId, title) {

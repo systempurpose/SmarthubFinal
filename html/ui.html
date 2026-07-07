@@ -40,7 +40,6 @@
                 <a href="#" class="nav-item" data-page="bsod">
                     <i class="fas fa-exclamation-triangle"></i> BSOD Diagnosis
                 </a>
-                
                 <a href="#" class="nav-item" data-page="advanced">
                     <i class="fas fa-microchip"></i> Advanced
                 </a>
@@ -54,7 +53,7 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Device Info Card (still used for quick device summary) -->
+            <!-- Device Info Card -->
             <div id="device-info-card" style="display: none; align-items: center; gap: 16px; background: white; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
                 <div id="brand-icon" style="font-size: 48px; width: 60px; text-align: center;">
                     <!-- logo or text -->
@@ -72,22 +71,23 @@
                     </div>
                 </div>
             </div>
-            <!-- Modal for hardware tests (add this inside the pageContent or at the end of body) -->
-<div id="hwTestModal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 500px; width: 90%;">
-        <div class="modal-header">
-            <h3 id="hwModalTitle">Hardware Test</h3>
-            <span class="close-button" id="hwCloseModalBtn">&times;</span>
-        </div>
-        <div class="modal-body" id="hwModalBody" style="text-align: center; min-height: 200px;"></div>
-        <div class="modal-footer" id="hwModalFooter">
-            <button id="hwYesBtn" class="btn-primary" style="display: none;">✅ Yes, it worked</button>
-            <button id="hwNoBtn" class="btn-secondary" style="display: none;">❌ No, it failed</button>
-        </div>
-    </div>
-</div>
 
-            <!-- Status Bar (Battery, Storage, RAM) -->
+            <!-- Modal for hardware tests -->
+            <div id="hwTestModal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 500px; width: 90%;">
+                    <div class="modal-header">
+                        <h3 id="hwModalTitle">Hardware Test</h3>
+                        <span class="close-button" id="hwCloseModalBtn">&times;</span>
+                    </div>
+                    <div class="modal-body" id="hwModalBody" style="text-align: center; min-height: 200px;"></div>
+                    <div class="modal-footer" id="hwModalFooter">
+                        <button id="hwYesBtn" class="btn-primary" style="display: none;">✅ Yes, it worked</button>
+                        <button id="hwNoBtn" class="btn-secondary" style="display: none;">❌ No, it failed</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
             <div id="status-bar" style="display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
                 <div class="status-card" style="background: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
                     <div style="font-size: 12px; color: #6B7280;">Battery</div>
@@ -193,88 +193,85 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Other pages (device-info, connection-troubleshoot, etc.) will be injected by JS if needed -->
             </div>
         </main>
     </div>
 
     <!-- ADB Required Modal -->
-<div id="adbRequiredModal" class="modal" style="display: none; z-index: 99998; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-    <div class="modal-content acrylic" style="max-width: 500px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-            <div style="display: flex; align-items: center; gap: 14px;">
-                <span style="font-size: 32px;">🔌</span>
-                <div>
-                    <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #0369a1;">ADB Required</h3>
-                    <p style="margin: 2px 0 0 0; font-size: 13px; color: #0c4a6e; opacity: 0.8;">USB Debugging is needed for this feature</p>
+    <div id="adbRequiredModal" class="modal" style="display: none; z-index: 99998; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <div class="modal-content acrylic" style="max-width: 500px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span style="font-size: 32px;">🔌</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #0369a1;">ADB Required</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #0c4a6e; opacity: 0.8;">USB Debugging is needed for this feature</p>
+                    </div>
+                    <button id="adbRequiredClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #0c4a6e; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
                 </div>
-                <button id="adbRequiredClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #0c4a6e; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
             </div>
-        </div>
-        <!-- Body -->
-        <div style="padding: 24px 28px 28px 28px;">
-            <p style="font-size: 15px; color: #1e293b; margin: 0 0 16px 0; line-height: 1.6;">
-                <strong>USB Debugging (ADB)</strong> is required to access this diagnostic feature.
-            </p>
-            <div style="background: #f0f9ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; border-left: 3px solid #0ea5e9;">
-                <p style="margin: 0 0 8px 0; font-size: 13px; color: #0369a1; font-weight: 600;">📋 How to Enable USB Debugging:</p>
-                <ol style="margin: 0; padding-left: 20px; color: #1e293b; font-size: 13px; line-height: 1.8;">
-                    <li>Go to <strong>Settings</strong> → <strong>About Phone</strong></li>
-                    <li>Tap <strong>Build Number</strong> 7 times to unlock Developer Options</li>
-                    <li>Go to <strong>Settings</strong> → <strong>Developer Options</strong></li>
-                    <li>Toggle <strong>USB Debugging</strong> <span style="color: #dc2626;">ON</span></li>
-                    <li>Accept the RSA fingerprint prompt on your phone</li>
-                </ol>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
-                <button id="adbRequiredWatchBtn" class="btn-secondary" style="padding: 10px 20px; font-size: 13px; border-radius: 10px; display: flex; align-items: center; gap: 8px;">
-                    ▶️ Watch Tutorial
-                </button>
-                <button id="adbRequiredOkBtn" class="btn-primary" style="padding: 10px 28px; font-size: 13px; border-radius: 10px; font-weight: 500; background: #0ea5e9; border-color: #0ea5e9;">Got It</button>
+            <!-- Body -->
+            <div style="padding: 24px 28px 28px 28px;">
+                <p style="font-size: 15px; color: #1e293b; margin: 0 0 16px 0; line-height: 1.6;">
+                    <strong>USB Debugging (ADB)</strong> is required to access this diagnostic feature.
+                </p>
+                <div style="background: #f0f9ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; border-left: 3px solid #0ea5e9;">
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #0369a1; font-weight: 600;">📋 How to Enable USB Debugging:</p>
+                    <ol style="margin: 0; padding-left: 20px; color: #1e293b; font-size: 13px; line-height: 1.8;">
+                        <li>Go to <strong>Settings</strong> → <strong>About Phone</strong></li>
+                        <li>Tap <strong>Build Number</strong> 7 times to unlock Developer Options</li>
+                        <li>Go to <strong>Settings</strong> → <strong>Developer Options</strong></li>
+                        <li>Toggle <strong>USB Debugging</strong> <span style="color: #dc2626;">ON</span></li>
+                        <li>Accept the RSA fingerprint prompt on your phone</li>
+                    </ol>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
+                    <button id="adbRequiredWatchBtn" class="btn-secondary" style="padding: 10px 20px; font-size: 13px; border-radius: 10px; display: flex; align-items: center; gap: 8px;">
+                        ▶️ Watch Tutorial
+                    </button>
+                    <button id="adbRequiredOkBtn" class="btn-primary" style="padding: 10px 28px; font-size: 13px; border-radius: 10px; font-weight: 500; background: #0ea5e9; border-color: #0ea5e9;">Got It</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <!-- BSOD Diagnostic Warning Modal -->
-<!-- BSOD Diagnostic Warning Modal (Improved Design) -->
-<div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-    <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
-        <!-- Header with accent bar -->
-        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-            <div style="display: flex; align-items: center; gap: 14px;">
-                <span style="font-size: 36px;">⚠️</span>
-                <div>
-                    <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;">BSOD Diagnostic</h3>
-                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;">Boot failure analysis tool</p>
+    <div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span style="font-size: 36px;">⚠️</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;">BSOD Diagnostic</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;">Boot failure analysis tool</p>
+                    </div>
+                    <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
                 </div>
-                <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
             </div>
-        </div>
-        <!-- Body -->
-        <div style="padding: 24px 28px 28px 28px;">
-            <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;">
-                This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
-            </p>
-            <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
-                <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
-                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong></li>
-                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong></li>
-                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP</li>
-                    <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong></li>
-                </ul>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
-                <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;">Back</button>
-                <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);">Continue</button>
+            <!-- Body -->
+            <div style="padding: 24px 28px 28px 28px;">
+                <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;">
+                    This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
+                </p>
+                <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                    <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
+                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong></li>
+                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong></li>
+                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP</li>
+                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong></li>
+                    </ul>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
+                    <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;">Back</button>
+                    <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);">Continue</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-    <!-- Modal: USB Debugging Wizard (kept as is) -->
+    <!-- Modal: USB Debugging Wizard -->
     <div id="wizardModal" class="modal">
         <div class="modal-content acrylic">
             <div class="modal-header">
@@ -292,7 +289,7 @@
         </div>
     </div>
 
-    <!-- New Modal: Diagnostic Results -->
+    <!-- Modal: Diagnostic Results -->
     <div id="diagnosticModal" class="modal">
         <div class="modal-content acrylic" style="max-width: 800px;">
             <div class="modal-header">
@@ -319,12 +316,14 @@
         </div>
     </div>
 
-    <!-- Load scripts in correct order -->
+    <!-- ... (everything before scripts is unchanged) ... -->
+
+    <!-- ============ LOAD SCRIPTS (FIXED PATHS) ============ -->
     <script src="../js/ui.js"></script>
-    <script src="js/storageAnalysis.js"></script>
+    <script src="../js/storageAnalysis.js"></script>
     <script src="../js/advanceDiagnostic.js"></script>
-    <script src="js/appScan.js"></script>
-    
+    <script src="../js/appScan.js"></script>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay">
         <div class="loading-spinner">

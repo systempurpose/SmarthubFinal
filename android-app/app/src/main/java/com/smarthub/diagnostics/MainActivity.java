@@ -776,11 +776,12 @@ public class MainActivity extends AppCompatActivity {
             return error;
         }
     }
-
-    /**
- * Returns a JSONArray with per‑app security metadata:
- * packageName, appName, installer, isSystem, dangerousPermissionsCount,
- * accessibilityEnabled, deviceAdminEnabled, securityVerdict.
+/**
+ * Returns a JSONArray with per‑app security metadata.
+ * Now more conservative: only marks as "suspicious" if:
+ *   - dangerous permissions ≥ 3 AND (accessibility OR deviceAdmin) AND not from Play Store
+ *   - OR obfuscated package name + dangerous permissions ≥ 2
+ * Also checks for launcher icon to reduce false positives.
  */
 private JSONArray getAppSecurityMetadata() {
     JSONArray result = new JSONArray();
@@ -792,9 +793,6 @@ private JSONArray getAppSecurityMetadata() {
     for (ApplicationInfo appInfo : apps) {
         try {
             String packageName = appInfo.packageName;
-            // Skip system apps that are part of the OS (optional)
-            // if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
-
             JSONObject obj = new JSONObject();
             obj.put("packageName", packageName);
             obj.put("appName", pm.getApplicationLabel(appInfo).toString());
@@ -833,7 +831,6 @@ private JSONArray getAppSecurityMetadata() {
                 List<AccessibilityServiceInfo> services = am.getEnabledAccessibilityServiceList(
                         AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
                 for (AccessibilityServiceInfo service : services) {
-                    // Use getResolveInfo() method to get the ResolveInfo
                     android.content.pm.ResolveInfo resolveInfo = service.getResolveInfo();
                     if (resolveInfo != null && resolveInfo.serviceInfo != null) {
                         ComponentName cn = new ComponentName(resolveInfo.serviceInfo.packageName,
@@ -852,7 +849,6 @@ private JSONArray getAppSecurityMetadata() {
             if (dpm != null && dpm.isDeviceOwnerApp(packageName)) {
                 deviceAdminEnabled = true;
             }
-            // Also check if any component is active admin
             if (!deviceAdminEnabled) {
                 List<ComponentName> admins = dpm != null ? dpm.getActiveAdmins() : null;
                 if (admins != null) {
@@ -866,24 +862,48 @@ private JSONArray getAppSecurityMetadata() {
             }
             obj.put("deviceAdminEnabled", deviceAdminEnabled);
 
-            // ---- Security verdict ----
+            // ---- Check if app has launcher icon (reduces false positives) ----
+            boolean hasLauncher = false;
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+            intent.setPackage(packageName);
+            List<ResolveInfo> resolveInfos = pm.queryIntentActivities(intent, 0);
+            hasLauncher = resolveInfos != null && !resolveInfos.isEmpty();
+            obj.put("hasLauncher", hasLauncher);
+
+            // ---- Security verdict (more conservative) ----
             String verdict;
             // Trusted installer (Play Store, Galaxy Store, etc.)
-            if (installer != null && (installer.equals("com.android.vending") ||
+            boolean fromLegitStore = installer != null && (
+                    installer.equals("com.android.vending") ||
                     installer.equals("com.sec.android.app.samsungapps") ||
                     installer.equals("com.google.android.feedback") ||
-                    installer.startsWith("com.google."))) {
-                verdict = "safe";
-            }
-            // System app
-            else if (isSystem) {
-                verdict = "safe";
-            }
-            // Suspicious if high-danger permissions + accessibility/admin
-            else if (dangerousCount > 5 || accessibilityEnabled || deviceAdminEnabled) {
-                verdict = "suspicious";
+                    installer.startsWith("com.google.")
+            );
+
+            // Obfuscated package name check (simple)
+            boolean isObfuscated = packageName.split("\\.").length > 4 ||
+                    packageName.chars().filter(c -> c == '.').count() > 4 ||
+                    packageName.matches(".*[0-9a-f]{8,}.*");
+
+            // Only mark as suspicious if:
+            //   - dangerous permissions >= 3 AND (accessibility OR deviceAdmin) AND not from legit store
+            //   - OR obfuscated AND dangerous permissions >= 2 AND not from legit store
+            if (!isSystem && !fromLegitStore) {
+                boolean highRisk = (dangerousCount >= 3 && (accessibilityEnabled || deviceAdminEnabled));
+                boolean obfuscatedRisk = isObfuscated && dangerousCount >= 2;
+                if (highRisk || obfuscatedRisk) {
+                    // If it has a launcher, reduce suspicion (assume it's a normal app with many perms)
+                    if (hasLauncher) {
+                        verdict = "unknown"; // not safe, but not high risk
+                    } else {
+                        verdict = "suspicious";
+                    }
+                } else {
+                    verdict = "unknown";
+                }
             } else {
-                verdict = "unknown";
+                verdict = "safe";
             }
             obj.put("securityVerdict", verdict);
 

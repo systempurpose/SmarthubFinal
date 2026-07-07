@@ -11,29 +11,29 @@
         android:id="@+id/tvIcon"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="💾"
-        android:textSize="48sp"
-        android:layout_marginBottom="16dp" />
+        android:text="🛡️"
+        android:textSize="64sp"
+        android:layout_marginBottom="24dp" />
 
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Storage Analysis"
+        android:text="App Security Scan Helper"
         android:textSize="22sp"
         android:textStyle="bold"
         android:textColor="#1e293b"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="12dp" />
 
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="📡 Assisting SmartHub Windows app..."
-        android:textSize="14sp"
+        android:text="Connecting to SmartHub desktop..."
+        android:textSize="16sp"
         android:textColor="#6b7280"
-        android:gravity="center"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="24dp"
+        android:gravity="center" />
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -41,17 +41,26 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:indeterminate="true"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="24dp"
         android:visibility="visible" />
 
     <TextView
-        android:id="@+id/tvMessage"
+        android:id="@+id/tvHelperMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="The SmartHub Windows app is analyzing your storage."
+        android:text="The Windows app is scanning for suspicious apps.\nResults will appear on your desktop."
         android:textSize="14sp"
         android:textColor="#6b7280"
         android:gravity="center"
-        android:visibility="gone" />
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tvHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="💡 You can close this screen – the scan continues on your PC."
+        android:textSize="13sp"
+        android:textColor="#94a3b8"
+        android:gravity="center" />
 
 </LinearLayout>

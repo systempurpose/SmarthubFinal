@@ -136,6 +136,10 @@
         "source": "com.smarthub.diagnostics.app-main-35:/layout/activity_main.xml"
     },
     {
+        "merged": "com.smarthub.diagnostics.app-merged_res-33:/drawable_ic_shield_scan.xml.flat",
+        "source": "com.smarthub.diagnostics.app-main-35:/drawable/ic_shield_scan.xml"
+    },
+    {
         "merged": "com.smarthub.diagnostics.app-merged_res-33:/layout_item_app_security.xml.flat",
         "source": "com.smarthub.diagnostics.app-main-35:/layout/item_app_security.xml"
     },

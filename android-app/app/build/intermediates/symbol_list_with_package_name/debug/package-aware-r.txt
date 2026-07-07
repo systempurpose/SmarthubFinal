@@ -2949,6 +2949,7 @@ drawable ic_mtrl_chip_checked_black
 drawable ic_mtrl_chip_checked_circle
 drawable ic_mtrl_chip_close_circle
 drawable ic_search_black_24
+drawable ic_shield_scan
 drawable m3_appbar_background
 drawable m3_avd_hide_password
 drawable m3_avd_show_password
@@ -3212,7 +3213,6 @@ id edit_query
 id edit_text_id
 id elastic
 id embed
-id emptyState
 id end
 id endToStart
 id enterAlways
@@ -3285,7 +3285,6 @@ id line3
 id linear
 id listMode
 id list_item
-id lvApps
 id m3_side_sheet
 id marquee
 id masked
@@ -3534,14 +3533,14 @@ id tvAppName
 id tvCameraStatus
 id tvColorName
 id tvDetails
-id tvEmptyIcon
-id tvEmptyMessage
-id tvEmptyTitle
+id tvHelperMessage
+id tvHint
+id tvIcon
 id tvInstruction
+id tvMessage
 id tvPackage
 id tvReadings
 id tvStatus
-id tvSummary
 id tvTitle
 id tvTouchCount
 id tvVerdict
