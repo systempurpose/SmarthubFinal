@@ -17,6 +17,14 @@ window.saveAppScanResults = saveAppScanResults;
 window.loadAppScanResults = loadAppScanResults;
 window.renderAppScanResults = renderAppScanResults;
 
+window.saveHardwareResults = saveHardwareResults;
+window.loadHardwareResults = loadHardwareResults;
+
+window.saveConnectionResults = saveConnectionResults;
+window.loadConnectionResults = loadConnectionResults;
+
+window.saveAdvancedResults = saveAdvancedResults;
+window.loadAdvancedResults = loadAdvancedResults;
 
 function openTutorial() {
     // Replace the URL with your actual tutorial video
@@ -945,6 +953,18 @@ async function renderAdvancedDiagnostic() {
         return;
     }
 
+    // ---- ADB helper ----
+    async function runAdb(command) {
+        const resp = await fetch('/adb-shell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDeviceId, command })
+        });
+        if (!resp.ok) throw new Error(`ADB command failed: ${resp.status}`);
+        const data = await resp.json();
+        return data.output;
+    }
+
     const pageHtml = `
         <div style="margin-bottom: 24px;">
             <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;">🔍 Advanced Diagnostics</h1>
@@ -952,8 +972,6 @@ async function renderAdvancedDiagnostic() {
         </div>
 
         <div style="background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
-
-            <!-- What this scan covers -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
                 <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
                     <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -984,7 +1002,6 @@ async function renderAdvancedDiagnostic() {
                 </div>
             </div>
 
-            <!-- CTA -->
             <div style="text-align: center; padding: 8px 0 4px 0;">
                 <button id="runAdvancedDiagBtn" style="
                     border: none; cursor: pointer;
@@ -1009,7 +1026,6 @@ async function renderAdvancedDiagnostic() {
     const runBtn = document.getElementById('runAdvancedDiagBtn');
     const diagContainer = document.getElementById('advancedDiagContainer');
 
-    // ---- Create the polished modal for scan progress (same as storage analysis) ----
     function ensureScanModal() {
         let modal = document.getElementById('advancedDiagModal');
         if (!modal) {
@@ -1043,7 +1059,14 @@ async function renderAdvancedDiagnostic() {
         btn.style.cursor = 'not-allowed';
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
 
-        // Show modal with spinner
+        // ---- LAUNCH ANDROID APP ----
+        try {
+            await runAdb('am start -n com.smarthub.diagnostics/.MainActivity');
+            console.log('[Advanced] Android app launched');
+        } catch (e) {
+            console.warn('[Advanced] Could not launch Android app:', e);
+        }
+
         const modal = ensureScanModal();
         const modalTitle = document.getElementById('advancedDiagModalTitle');
         const modalBody = document.getElementById('advancedDiagModalBody');
@@ -1051,21 +1074,34 @@ async function renderAdvancedDiagnostic() {
         modalBody.innerHTML = window.getModernSpinnerHTML('Running advanced diagnostics... This may take 2-3 minutes.');
         modal.style.display = 'flex';
 
-        // Also show a small indicator in the container (optional)
         diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;">⏳ Scan in progress... See modal for details.</div>`;
 
         try {
             const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
                 currentDeviceId,
                 (msg) => {
-                    // Update modal spinner text
                     const textEl = modalBody.querySelector('.loading-text');
                     if (textEl) textEl.textContent = msg;
                 }
             );
-            // Hide modal and show results in container
+
+            // ---- 🧠 REMOVE AI DIAGNOSIS SECTION ----
+            // Remove the 'ai' property so it won't be rendered or saved
+            if (results && results.ai) {
+                delete results.ai;
+            }
+
             modal.style.display = 'none';
             window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
+
+            // ---- SAVE ADVANCED RESULTS (without AI) ----
+            const advancedResults = {
+                software: results.software ? results.software.map(r => ({ name: r.name, passed: r.passed })) : [],
+                // ai intentionally omitted
+                scanTime: new Date().toLocaleString()
+            };
+            saveAdvancedResults(advancedResults);
+
         } catch (err) {
             modal.style.display = 'none';
             diagContainer.innerHTML = `
@@ -1086,7 +1122,19 @@ async function renderAdvancedDiagnostic() {
             btn.innerHTML = '<i class="fas fa-play"></i> Run Advanced Scan';
         }
     });
+
+    // ---- On mount: restore previous advanced results ----
+    const savedAdv = loadAdvancedResults();
+    if (savedAdv) {
+        diagContainer.innerHTML = `
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">
+                Last scan: ${new Date(savedAdv.date).toLocaleString()}
+            </div>
+        `;
+    }
 }
+
+
 
 // ==================== DASHBOARD ====================
 async function renderDashboard() {
@@ -1327,12 +1375,13 @@ async function renderAdbDashboard(container) {
             </div>
         </div>
 
-        <!-- ===== SCAN RESULTS SECTION ===== -->
+        <!-- ===== SCAN RESULTS SECTION (UPDATED) ===== -->
         <div id="scanResultsSection" style="margin-top: 24px;">
-            <!-- App Security Scan Results -->
             <div id="appScanResults" style="display: none; margin-bottom: 16px;"></div>
-            <!-- Storage Analysis Results -->
-            <div id="storageResults" style="display: none;"></div>
+            <div id="storageResults" style="display: none; margin-bottom: 16px;"></div>
+            <div id="hardwareResults" style="display: none; margin-bottom: 16px;"></div>
+            <div id="connectionResults" style="display: none; margin-bottom: 16px;"></div>
+            <div id="advancedResults" style="display: none; margin-bottom: 16px;"></div>
         </div>
 
         <div id="deviceOverview" class="card" style="display: none;"></div>
@@ -1345,42 +1394,40 @@ async function renderAdbDashboard(container) {
         <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
 
-    // ---- Load saved results from localStorage ----
     loadSavedScanResults();
 
-    // ---- Attach event listeners ----
+    // Attach event listeners (unchanged)
     const storageCard = container.querySelector('.action-card[data-action="storage-analysis"]');
     if (storageCard) storageCard.addEventListener('click', runStorageAnalysis);
 
     const appSecurityCard = container.querySelector('.action-card[data-action="app-security"]');
-if (appSecurityCard) {
-    appSecurityCard.addEventListener('click', function(e) {
-        try {
-            if (typeof window.runAppScan === 'function') {
-                window.runAppScan();
-            } else {
-                // Load dynamically with correct path
-                const script = document.createElement('script');
-               script.src = '../js/appScan.js';
-script.onload = () => {
-    if (typeof window.runAppScan === 'function') {
-        window.runAppScan();
-    } else {
-        alert('AppScan module loaded but function not found. Refresh the page.');
-    }
-};
-                script.onerror = () => {
-                    console.error('Failed to load appScan.js');
-                    alert('Failed to load AppScan module. Please refresh the page.');
-                };
-                document.head.appendChild(script);
+    if (appSecurityCard) {
+        appSecurityCard.addEventListener('click', function(e) {
+            try {
+                if (typeof window.runAppScan === 'function') {
+                    window.runAppScan();
+                } else {
+                    const script = document.createElement('script');
+                    script.src = '../js/appScan.js';
+                    script.onload = () => {
+                        if (typeof window.runAppScan === 'function') {
+                            window.runAppScan();
+                        } else {
+                            alert('AppScan module loaded but function not found. Refresh the page.');
+                        }
+                    };
+                    script.onerror = () => {
+                        console.error('Failed to load appScan.js');
+                        alert('Failed to load AppScan module. Please refresh the page.');
+                    };
+                    document.head.appendChild(script);
+                }
+            } catch (err) {
+                console.error('[Dashboard] Error running app scan:', err);
+                alert('Error: ' + err.message);
             }
-        } catch (err) {
-            console.error('[Dashboard] Error running app scan:', err);
-            alert('Error: ' + err.message);
-        }
-    });
-}
+        });
+    }
 
     const installCard = container.querySelector('.action-card[data-action="install"]');
     if (installCard) {
@@ -1419,7 +1466,7 @@ script.onload = () => {
     const helpCard = container.querySelector('.action-card[data-action="help"]');
     if (helpCard) helpCard.addEventListener('click', showHelpModal);
 
-    // ---- Fetch and display hardware data (unchanged) ----
+    // Fetch hardware data (unchanged)
     console.log('[Dashboard] Fetching hardware data for device:', currentDeviceId);
     try {
         const [battery, storage, ram, deviceText, wifiStatus, tempData, safetyData] = await Promise.all([
@@ -1508,6 +1555,92 @@ function saveStorageResults(results) {
     }
 }
 
+// ---- Hardware Test Results ----
+function saveHardwareResults(summary) {
+    // merge with whatever is already stored, so a single-test run
+    // doesn't wipe out previously saved results for other tests
+    const existing = loadHardwareResults();
+    const mergedResults = {
+        ...(existing?.results || {}),
+        ...window._hardwareTestResults
+    };
+
+    const payload = {
+        timestamp: Date.now(),
+        date: new Date().toISOString(),
+        summary: summary || existing?.summary || null,
+        results: mergedResults
+    };
+    try {
+        localStorage.setItem('hardwareTestResults', JSON.stringify(payload));
+    } catch (e) {
+        console.error('Failed to save hardware results:', e);
+    }
+    window._hardwareTestResults = mergedResults;
+    return payload;
+}
+
+function loadHardwareResults() {
+    try {
+        const raw = localStorage.getItem('hardwareTestResults');
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// ---- Connection Test Results ----
+function saveConnectionResults(testId, result) {
+    window._connectionTestResults[testId] = result;
+    const payload = {
+        timestamp: Date.now(),
+        date: new Date().toISOString(),
+        results: window._connectionTestResults
+    };
+    try {
+        localStorage.setItem('connectionTestResults', JSON.stringify(payload));
+    } catch (e) {
+        console.error('Failed to save connection results:', e);
+    }
+    return payload;
+}
+
+function loadConnectionResults() {
+    try {
+        const raw = localStorage.getItem('connectionTestResults');
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        console.error('Failed to load connection results:', e);
+        return null;
+    }
+}
+
+// ---- Advanced Diagnostic Results (app scan + storage analysis) ----
+function saveAdvancedResults(scanData) {
+  const payload = {
+    timestamp: Date.now(),
+    date: new Date().toISOString(),
+    appScan: scanData.appScan || null,       // app scan output
+    storageAnalysis: scanData.storageAnalysis || null // storage analysis output
+  };
+  try {
+    localStorage.setItem('advancedDiagnosticResults', JSON.stringify(payload));
+  } catch (e) {
+    console.error('Failed to save advanced diagnostic results:', e);
+  }
+  return payload;
+}
+
+function loadAdvancedResults() {
+  try {
+    const raw = localStorage.getItem('advancedDiagnosticResults');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.error('Failed to load advanced diagnostic results:', e);
+    return null;
+  }
+}
+
 function loadStorageResults() {
     try {
         const data = localStorage.getItem('smartHubStorageResults');
@@ -1516,16 +1649,25 @@ function loadStorageResults() {
 }
 
 function loadSavedScanResults() {
-    // Load App Security Scan results
+    // App Security Scan
     const appResults = loadAppScanResults();
-    if (appResults) {
-        renderAppScanResults(appResults);
-    }
-    // Load Storage Analysis results
+    if (appResults) renderAppScanResults(appResults);
+
+    // Storage Analysis
     const storageResults = loadStorageResults();
-    if (storageResults) {
-        renderStorageResults(storageResults);
-    }
+    if (storageResults) renderStorageResults(storageResults);
+
+    // Hardware Tests
+    const hardwareResults = loadHardwareResults();
+    if (hardwareResults) renderHardwareResults(hardwareResults);
+
+    // Connection Troubleshoot
+    const connectionResults = loadConnectionResults();
+    if (connectionResults) renderConnectionResults(connectionResults);
+
+    // Advanced Diagnostic
+    const advancedResults = loadAdvancedResults();
+    if (advancedResults) renderAdvancedResults(advancedResults);
 }
 
 function clearScanResults(type) {
@@ -2983,9 +3125,8 @@ async function renderHardwareTests() {
 
     initModal();
 
-    // ========== TEST DEFINITIONS ==========
+    // ========== TEST DEFINITIONS (unchanged) ==========
     const testDefs = {
-        // ---- Auto / API tests ----
         battery: {
             title: 'Battery',
             desc: 'Check battery level and health',
@@ -3082,16 +3223,13 @@ async function renderHardwareTests() {
             desc: 'Enable GPS and check lock',
             run: async () => {
                 try {
-                    // Enable high accuracy location mode
                     await runAdb('settings put secure location_mode 3');
                     await new Promise(r => setTimeout(r, 1000));
-                    // Check if location is enabled
                     const mode = await runAdb('settings get secure location_mode');
                     const enabled = mode.trim() === '3';
                     if (!enabled) {
                         return { passed: false, message: 'GPS could not be enabled' };
                     }
-                    // Check for a GPS fix via dumpsys location
                     const dump = await runAdb('dumpsys location');
                     const hasFix = dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null');
                     const passed = hasFix;
@@ -3120,8 +3258,6 @@ async function renderHardwareTests() {
                 return { passed: true, message: hasNfc ? 'NFC hardware present' : 'Not supported (no NFC)' };
             }
         },
-
-        // ---- Manual confirmation tests (using TestRunnerActivity) ----
         microphone: {
             title: 'Microphone',
             desc: 'Record and playback test',
@@ -3226,8 +3362,6 @@ async function renderHardwareTests() {
                 return { passed, message };
             }
         },
-
-        // ---- New hardware tests using ExtraHardwareTestActivity ----
         multitouch: {
             title: 'Multi‑touch',
             desc: 'Test 5‑point multi‑touch',
@@ -3449,46 +3583,101 @@ async function renderHardwareTests() {
 
     document.getElementById('pageContent').innerHTML = fullHtml;
 
-    // ========== EVENT HANDLERS ==========
-    async function runSingleTest(testId) {
-        const card = document.getElementById(`card-${testId}`);
-        const statusSpan = card.querySelector('.status-text');
-        const msgSpan = card.querySelector('.result-message');
-        const btn = card.querySelector('.run-single-test');
-        btn.disabled = true;
-        btn.textContent = '⏳ Running...';
-        statusSpan.style.color = '#f59e0b';
-        statusSpan.textContent = '⏳ Running...';
-        msgSpan.style.display = 'none';
-
-        try {
-            const def = testDefs[testId];
-            if (!def) throw new Error('Test not found');
-            const result = await def.run();
-            const passed = result.passed;
-            const icon = passed ? '✅' : '❌';
-            const color = passed ? '#2e7d32' : '#d32f2f';
+    // ========== RESTORE SAVED RESULTS ON MOUNT ==========
+    const saved = loadHardwareResults();
+    if (saved && saved.results) {
+        window._hardwareTestResults = saved.results;
+        Object.entries(saved.results).forEach(([id, r]) => {
+            const card = document.getElementById(`card-${id}`);
+            if (!card) return;
+            const statusSpan = card.querySelector('.status-text');
+            const msgSpan = card.querySelector('.result-message');
+            const btn = card.querySelector('.run-single-test');
+            const color = r.passed ? '#2e7d32' : '#d32f2f';
             statusSpan.style.color = color;
-            statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
-            // Show the message
-            msgSpan.textContent = result.message || '';
+            statusSpan.textContent = `${r.passed ? '✅ Passed' : '❌ Failed'}`;
+            msgSpan.textContent = r.message || '';
             msgSpan.style.display = 'block';
             msgSpan.style.color = color;
-            btn.textContent = passed ? 'Rerun' : 'Details';
-            btn.disabled = false;
-        } catch (err) {
-            statusSpan.style.color = '#d32f2f';
-            statusSpan.textContent = '❌ Error';
-            msgSpan.textContent = err.message || '';
-            msgSpan.style.display = 'block';
-            msgSpan.style.color = '#d32f2f';
-            alert(`Error: ${err.message}`);
-            btn.textContent = 'Retry';
-            btn.disabled = false;
+            if (btn) btn.textContent = r.passed ? 'Rerun' : 'Details';
+        });
+        if (saved.summary) {
+            const summaryDiv = document.getElementById('hwSummaryCard');
+            if (summaryDiv) {
+                const { total, passed, percentage } = saved.summary;
+                summaryDiv.innerHTML = `
+                    <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
+                    <div class="card-content">
+                        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                            <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
+                                <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
+                                        stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
+                                </svg>
+                                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 20px;">${passed}/${total} tests passed</h3>
+                                <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
         }
     }
 
-    async function runAllTests() {
+    // ========== SINGLE TEST HANDLER (with per‑test save) ==========
+    document.querySelectorAll('.run-single-test').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const testId = this.dataset.test;
+            const card = document.getElementById(`card-${testId}`);
+            const statusSpan = card.querySelector('.status-text');
+            const msgSpan = card.querySelector('.result-message');
+            const btn = card.querySelector('.run-single-test');
+            const def = testDefs[testId];
+            if (!def) return;
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            statusSpan.style.color = '#f59e0b';
+            statusSpan.textContent = '⏳ Running...';
+            msgSpan.style.display = 'none';
+
+            try {
+                const result = await def.run();
+                const passed = result.passed;
+                const icon = passed ? '✅' : '❌';
+                const color = passed ? '#2e7d32' : '#d32f2f';
+                statusSpan.style.color = color;
+                statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
+                msgSpan.textContent = result.message || '';
+                msgSpan.style.display = 'block';
+                msgSpan.style.color = color;
+                btn.textContent = passed ? 'Rerun' : 'Details';
+
+                // ---- SAVE THIS SINGLE TEST RESULT ----
+                window._hardwareTestResults[testId] = { name: def.title, passed, message: result.message };
+                saveHardwareResults(null); // keep existing summary
+            } catch (err) {
+                statusSpan.style.color = '#d32f2f';
+                statusSpan.textContent = '❌ Error';
+                msgSpan.textContent = err.message || '';
+                msgSpan.style.display = 'block';
+                msgSpan.style.color = '#d32f2f';
+                btn.textContent = 'Retry';
+
+                window._hardwareTestResults[testId] = { name: def.title, passed: false, message: err.message };
+                saveHardwareResults(null);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    // ========== FULL SUITE HANDLER (with summary save) ==========
+    document.getElementById('startHwTestBtn').addEventListener('click', async function() {
         const resultsContainer = document.getElementById('hwResults');
         resultsContainer.style.display = 'block';
         const cardsContainer = document.getElementById('hwCardsContainer');
@@ -3575,17 +3764,12 @@ async function renderHardwareTests() {
             </div>
         `;
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
-    }
 
-    // Attach events
-    document.querySelectorAll('.run-single-test').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const testId = btn.dataset.test;
-            runSingleTest(testId);
-        });
+        // ---- SAVE FULL SUITE SUMMARY ----
+        const summary = { total, passed: passedCount, percentage };
+        window._hardwareTestResults = results;
+        saveHardwareResults(summary);
     });
-
-    document.getElementById('startHwTestBtn').addEventListener('click', runAllTests);
 }
 
 // ==================== LIVE SCREEN ====================
@@ -4187,68 +4371,617 @@ async function forgetBluetoothDevice(mac) {
 }
 // ==================== AI CONCLUSION ====================
 async function renderAIConclusion() {
-    if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected.</div>`;
-        return;
-    }
-    const storedResults = JSON.parse(localStorage.getItem('smartHubDiagnostics') || '{}');
-    const reports = [];
-    if (storedResults.hardwareTests) reports.push({ id: 'hardware', name: 'Hardware Tests', data: storedResults.hardwareTests });
-    if (storedResults.bsod) reports.push({ id: 'bsod', name: 'BSOD Diagnosis', data: storedResults.bsod });
-    if (storedResults.network) reports.push({ id: 'network', name: 'Network Troubleshoot', data: storedResults.network });
-    if (storedResults.deviceInfo) reports.push({ id: 'device', name: 'Device Info', data: storedResults.deviceInfo });
-    const reportsHtml = reports.map(r => `<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"><input type="checkbox" value="${r.id}" data-report='${JSON.stringify(r.data)}'> ${r.name}</label>`).join('');
+    const container = document.getElementById('pageContent');
 
-    const html = `
-        <div class="cards-container">
-            <div class="info-card">
-                <div class="card-header"><i class="fas fa-brain"></i> AI Conclusion</div>
-                <div class="card-content">
-                    <p>Select which diagnostic results you want the AI to analyze:</p>
-                    <div id="reportsList">${reportsHtml || '<p>No diagnostic results yet. Run some tests first.</p>'}</div>
-                    <button id="runAIConclusion" class="btn-primary" style="margin-top: 16px;">🔍 Get AI Conclusion</button>
+    // ---- Collect all available diagnostic results ----
+    const availableReports = [];
+
+    // 1. App Security Scan
+    try {
+        const appData = loadAppScanResults();
+        if (appData && appData.suspiciousApps && appData.suspiciousApps.length > 0) {
+            availableReports.push({
+                id: 'app',
+                name: 'App Security Scan',
+                summary: `${appData.suspiciousApps.length} suspicious app(s) found`,
+                data: appData,
+                icon: '🛡️',
+                timestamp: appData.date || appData.timestamp
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // 2. Storage Analysis
+    try {
+        const storageData = loadStorageResults();
+        if (storageData && storageData.files && storageData.files.length > 0) {
+            const totalSize = storageData.files.reduce((s, f) => s + (f.bytes || 0), 0);
+            availableReports.push({
+                id: 'storage',
+                name: 'Storage Analysis',
+                summary: `${storageData.files.length} large files (${formatSize(totalSize)})`,
+                data: storageData,
+                icon: '💾',
+                timestamp: storageData.date || storageData.timestamp
+            });
+        } else if (storageData) {
+            availableReports.push({
+                id: 'storage',
+                name: 'Storage Analysis',
+                summary: 'No large files (>500MB) found',
+                data: storageData,
+                icon: '💾',
+                timestamp: storageData.date || storageData.timestamp
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // 3. Hardware Tests
+    try {
+        const hwData = loadHardwareResults();
+        if (hwData && hwData.results) {
+            const total = Object.keys(hwData.results).length;
+            const passed = Object.values(hwData.results).filter(r => r.passed).length;
+            availableReports.push({
+                id: 'hardware',
+                name: 'Hardware Tests',
+                summary: `${passed}/${total} tests passed`,
+                data: hwData,
+                icon: '🔬',
+                timestamp: hwData.date || hwData.timestamp
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // 4. Connection Troubleshoot
+    try {
+        const connData = loadConnectionResults();
+        if (connData && connData.results) {
+            const total = Object.keys(connData.results).length;
+            const passed = Object.values(connData.results).filter(r => r.passed).length;
+            availableReports.push({
+                id: 'connection',
+                name: 'Connection Troubleshoot',
+                summary: `${passed}/${total} services healthy`,
+                data: connData,
+                icon: '📶',
+                timestamp: connData.date || connData.timestamp
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // 5. Advanced Diagnostic
+    try {
+        const advData = loadAdvancedResults();
+        if (advData && advData.software) {
+            const total = advData.software.length;
+            const passed = advData.software.filter(r => r.passed).length;
+            availableReports.push({
+                id: 'advanced',
+                name: 'Advanced Diagnostic',
+                summary: `${passed}/${total} software checks passed`,
+                data: advData,
+                icon: '🔍',
+                timestamp: advData.date || advData.timestamp
+            });
+        }
+    } catch (e) { /* ignore */ }
+
+    // ---- Helper: relative time ----
+    function timeAgo(iso) {
+        if (!iso) return '';
+        const diffMs = Date.now() - new Date(iso).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        return `${days}d ago`;
+    }
+
+    // ---- Build the UI ----
+    let reportsHtml = '';
+    if (availableReports.length === 0) {
+        reportsHtml = `
+            <div style="text-align: center; padding: 48px 20px;">
+                <div style="font-size: 44px; margin-bottom: 10px; opacity: 0.6;">📭</div>
+                <h3 style="margin: 0; color: #1f2937; font-size: 17px;">No diagnostic results yet</h3>
+                <p style="margin: 6px 0 20px; color: #6B7280; font-size: 14px;">Run at least one diagnostic below, then come back here for an AI‑powered analysis.</p>
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="navigateTo && navigateTo('hardware')" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; color: #374151; font-size: 13px; cursor: pointer;">🔬 Hardware Tests</button>
+                    <button onclick="navigateTo && navigateTo('connection')" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; color: #374151; font-size: 13px; cursor: pointer;">📶 Connection Troubleshoot</button>
+                    <button onclick="navigateTo && navigateTo('advanced')" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; color: #374151; font-size: 13px; cursor: pointer;">🔍 Advanced Diagnostics</button>
                 </div>
             </div>
-            <div id="aiResult" class="info-card" style="display: none;">
-                <div class="card-header"><i class="fas fa-comment-dots"></i> AI Analysis</div>
-                <div class="card-content" id="aiResultContent"></div>
+        `;
+    } else {
+        reportsHtml = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                <p style="color: #6B7280; font-size: 14px; margin: 0;">Select the diagnostic results you want the AI to analyze:</p>
+                <div style="display: flex; gap: 6px;">
+                    <button id="selectAllReportsBtn" style="padding: 5px 12px; border-radius: 7px; border: 1px solid #e5e7eb; background: white; color: #0d6efd; font-size: 12px; font-weight: 600; cursor: pointer;">Select all</button>
+                    <button id="clearReportsBtn" style="padding: 5px 12px; border-radius: 7px; border: 1px solid #e5e7eb; background: white; color: #6B7280; font-size: 12px; font-weight: 600; cursor: pointer;">Clear</button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+                ${availableReports.map(report => `
+                    <div class="report-card"
+                         data-report-id="${report.id}"
+                         role="checkbox"
+                         aria-checked="false"
+                         tabindex="0"
+                         style="
+                            background: white;
+                            border-radius: 12px;
+                            padding: 16px;
+                            border: 2px solid #e5e7eb;
+                            cursor: pointer;
+                            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+                            outline: none;
+                        "
+                        onclick="toggleReportCard(this)"
+                        onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleReportCard(this);}"
+                    >
+                        <div style="display: flex; align-items: flex-start; gap: 12px;">
+                            <span style="font-size: 26px; line-height: 1;">${report.icon}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; font-size: 14.5px; color: #1f2937;">${escapeHtml(report.name)}</div>
+                                <div style="font-size: 12.5px; color: #6B7280; margin-top: 2px;">${escapeHtml(report.summary)}</div>
+                                ${report.timestamp ? `<div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">${timeAgo(report.timestamp)}</div>` : ''}
+                            </div>
+                            <div class="report-checkbox" style="
+                                width: 20px; height: 20px; border-radius: 6px;
+                                border: 2px solid #d1d5db; background: white;
+                                display: flex; align-items: center; justify-content: center;
+                                flex-shrink: 0; transition: all 0.15s ease;
+                            ">
+                                <span class="checkmark" style="display: none; color: white; font-size: 13px; font-weight: 700;">✓</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- ===== USER INPUT SECTION ===== -->
+            <div style="margin-top: 22px;">
+                <label for="aiUserInput" style="font-weight: 500; font-size: 14px; color: #1f2937; display: block; margin-bottom: 4px;">
+                    📝 Describe the issue or symptoms
+                </label>
+                <p style="font-size: 12px; color: #6B7280; margin: 0 0 8px 0;">
+                    What is the phone doing (or not doing)? The more detail you provide, the better the AI diagnosis.
+                </p>
+                <textarea id="aiUserInput" rows="3" style="
+                    width: 100%;
+                    padding: 12px 14px;
+                    border-radius: 10px;
+                    border: 1px solid #e5e7eb;
+                    font-size: 14px;
+                    font-family: inherit;
+                    resize: vertical;
+                    transition: border-color 0.15s ease;
+                    outline: none;
+                    background: white;
+                " placeholder="e.g. Phone is overheating and randomly rebooting, battery drains fast, and the camera app crashes when opened."></textarea>
+            </div>
+
+            <div style="margin-top: 22px; text-align: center;">
+                <button id="runAIConclusionBtn" class="btn-primary" style="padding: 12px 40px; font-size: 15px; font-weight: 600; border-radius: 12px; border: none; background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(13,110,253,0.3);">
+                    🧠 <span id="runAIConclusionBtnLabel">Analyze ${availableReports.length} report${availableReports.length !== 1 ? 's' : ''}</span>
+                </button>
+                <div id="runAIConclusionHint" style="font-size: 12px; color: #9ca3af; margin-top: 8px;">All reports selected by default — deselect any you don't want included.</div>
+            </div>
+        `;
+    }
+
+    const html = `
+        <div style="margin-bottom: 24px;">
+            <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;">🧠 AI Conclusion</h1>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">Aggregate your diagnostic results and get an AI‑powered root‑cause analysis.</p>
+        </div>
+
+        <div class="card" style="padding: 24px;">
+            ${reportsHtml}
+        </div>
+
+        <div id="aiResultContainer" style="margin-top: 24px; display: none;">
+            <div id="aiResultCard" class="card" style="padding: 24px; border-left: 4px solid #0d6efd; position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px; flex-wrap: wrap;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">🧠 AI Analysis</h3>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="aiTimestamp" style="font-size: 12px; color: #9ca3af;"></span>
+                        <button id="copyAiResultBtn" title="Copy analysis" style="display: none; border: 1px solid #e5e7eb; background: white; color: #6B7280; font-size: 12px; padding: 5px 10px; border-radius: 7px; cursor: pointer;">📋 Copy</button>
+                    </div>
+                </div>
+                <div id="aiResultContent" style="line-height: 1.7; color: #374151;"></div>
             </div>
         </div>
     `;
-    document.getElementById('pageContent').innerHTML = html;
 
-    document.getElementById('runAIConclusion')?.addEventListener('click', async () => {
-        const selected = [];
-        document.querySelectorAll('#reportsList input:checked').forEach(cb => {
-            const reportData = JSON.parse(cb.getAttribute('data-report') || '{}');
-            selected.push(reportData);
+    container.innerHTML = html;
+
+    // ---- Toggle report card selection ----
+    window.toggleReportCard = function(card) {
+        const checkmark = card.querySelector('.checkmark');
+        const box = card.querySelector('.report-checkbox');
+        const isSelected = checkmark.style.display === 'inline';
+        checkmark.style.display = isSelected ? 'none' : 'inline';
+        card.setAttribute('aria-checked', String(!isSelected));
+        card.style.borderColor = isSelected ? '#e5e7eb' : '#0d6efd';
+        card.style.background = isSelected ? 'white' : '#f0f7ff';
+        card.style.boxShadow = isSelected ? '0 1px 3px rgba(0,0,0,0.06)' : '0 2px 8px rgba(13,110,253,0.15)';
+        box.style.background = isSelected ? 'white' : '#0d6efd';
+        box.style.borderColor = isSelected ? '#d1d5db' : '#0d6efd';
+        updateRunButtonState();
+    };
+
+    function updateRunButtonState() {
+        const btn = document.getElementById('runAIConclusionBtn');
+        const label = document.getElementById('runAIConclusionBtnLabel');
+        const hint = document.getElementById('runAIConclusionHint');
+        if (!btn) return;
+        const count = document.querySelectorAll('.report-card[aria-checked="true"]').length;
+        label.textContent = count === 0 ? 'Select reports to analyze' : `Analyze ${count} report${count !== 1 ? 's' : ''}`;
+        btn.style.opacity = count === 0 ? '0.5' : '1';
+        btn.style.pointerEvents = count === 0 ? 'none' : 'auto';
+        hint.textContent = count === 0
+            ? 'Select at least one report above.'
+            : `${count} of ${availableReports.length} report${availableReports.length !== 1 ? 's' : ''} selected.`;
+    }
+
+    // ---- Select all / clear ----
+    const selectAllBtn = document.getElementById('selectAllReportsBtn');
+    const clearBtn = document.getElementById('clearReportsBtn');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => {
+            document.querySelectorAll('.report-card[aria-checked="false"]').forEach(card => toggleReportCard(card));
         });
-        if (selected.length === 0) { alert('Please select at least one diagnostic result.'); return; }
-        const resultDiv = document.getElementById('aiResult');
-        const resultContent = document.getElementById('aiResultContent');
-        resultDiv.style.display = 'block';
-        resultContent.innerHTML = '<div class="spinner"></div><p>AI is analyzing...</p>';
-        try {
-            const diagStages = { hardware: selected.find(s => s.hardwareTests)?.hardwareTests || null, bsod: selected.find(s => s.bsod)?.bsod || null, network: selected.find(s => s.network)?.network || null };
-            const response = await fetch(`${BACKEND_URL}/ai-adb-conclude`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId: currentDeviceId, diagStages, diagDetails: { selectedReports: selected.map(s => s.type) } })
-            });
-            const data = await response.json();
-            if (data.ok && data.conclusion) {
-                const conclusion = data.conclusion;
-                resultContent.innerHTML = `<div><strong>Conclusion:</strong> ${escapeHtml(conclusion.humanSummary || conclusion.likelyCause || 'No clear cause')}</div>
-                    <div style="margin-top:12px;"><strong>Recommended Fixes:</strong></div>
-                    <ul>${(conclusion.actions || ['Run full hardware test']).map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
-                    ${conclusion.nextStep ? `<div><strong>Next Step:</strong> ${escapeHtml(conclusion.nextStep)}</div>` : ''}`;
-            } else {
-                resultContent.innerHTML = '<p>AI could not generate a conclusion. Please try again later.</p>';
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            document.querySelectorAll('.report-card[aria-checked="true"]').forEach(card => toggleReportCard(card));
+        });
+    }
+
+    // ---- Handle AI conclusion button ----
+    const runBtn = document.getElementById('runAIConclusionBtn');
+    const resultContainer = document.getElementById('aiResultContainer');
+    const resultCard = document.getElementById('aiResultCard');
+    const resultContent = document.getElementById('aiResultContent');
+    const timestampEl = document.getElementById('aiTimestamp');
+    const copyBtn = document.getElementById('copyAiResultBtn');
+
+    if (runBtn) {
+        runBtn.addEventListener('click', async function() {
+            const selectedCards = document.querySelectorAll('.report-card[aria-checked="true"]');
+            const selectedIds = Array.from(selectedCards).map(card => card.dataset.reportId);
+
+            if (selectedIds.length === 0) {
+                return;
             }
-        } catch (err) {
-            resultContent.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
+
+            // Collect user input
+            const userInput = document.getElementById('aiUserInput')?.value?.trim() || '';
+
+            const payload = {
+                deviceId: currentDeviceId,
+                selectedReports: selectedIds,
+                userInput: userInput,
+                reports: availableReports
+                    .filter(r => selectedIds.includes(r.id))
+                    .reduce((acc, r) => {
+                        acc[r.id] = r.data;
+                        return acc;
+                    }, {})
+            };
+
+            resultContainer.style.display = 'block';
+            resultCard.style.borderLeftColor = '#0d6efd';
+            resultContent.innerHTML = window.getModernSpinnerHTML('AI is analyzing your diagnostic data and symptoms...');
+            timestampEl.textContent = '';
+            copyBtn.style.display = 'none';
+            resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/ai-adb-conclude`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.ok && data.conclusion) {
+                    const c = data.conclusion;
+                    let conclusionHtml = '';
+
+                    let sevColor = '#0d6efd', sevBg = '#eff6ff', sevLabel = null;
+                    if (c.confidence !== undefined && c.confidence !== null) {
+                        const confPercent = (c.confidence * 100).toFixed(0);
+                        if (confPercent >= 70) { sevColor = '#16a34a'; sevBg = '#f0fdf4'; sevLabel = 'High confidence'; }
+                        else if (confPercent >= 40) { sevColor = '#d97706'; sevBg = '#fffbeb'; sevLabel = 'Moderate confidence'; }
+                        else { sevColor = '#dc2626'; sevBg = '#fef2f2'; sevLabel = 'Low confidence'; }
+                        resultCard.style.borderLeftColor = sevColor;
+                    }
+
+                    if (c.humanSummary || c.likelyCause) {
+                        conclusionHtml += `
+                            <div style="margin-bottom: 16px; padding: 16px; background: ${sevBg}; border-radius: 8px; border-left: 4px solid ${sevColor};">
+                                <div style="display:flex; align-items:center; gap:8px; justify-content:space-between;">
+                                    <div style="font-weight: 600; font-size: 16px; color: #1f2937;">📋 Conclusion</div>
+                                    ${sevLabel ? `<span style="font-size:11px; font-weight:600; color:${sevColor}; background:white; padding:2px 8px; border-radius:999px; border:1px solid ${sevColor}33;">${sevLabel}</span>` : ''}
+                                </div>
+                                <div style="margin-top: 6px; color: #374151;">${escapeHtml(c.humanSummary || c.likelyCause || 'No clear cause identified')}</div>
+                            </div>
+                        `;
+                    }
+
+                    if (c.confidence !== undefined && c.confidence !== null) {
+                        const confPercent = (c.confidence * 100).toFixed(0);
+                        conclusionHtml += `
+                            <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+                                <span style="font-size: 13px; font-weight: 500; color: #6B7280; flex-shrink:0;">Confidence</span>
+                                <div style="flex: 1; max-width: 220px; background: #e5e7eb; border-radius: 10px; height: 8px; overflow: hidden;">
+                                    <div style="width: ${confPercent}%; background: ${sevColor}; height: 100%; border-radius: 10px; transition: width 0.4s ease;"></div>
+                                </div>
+                                <span style="font-weight: 600; font-size: 13px; color: #1f2937;">${confPercent}%</span>
+                            </div>
+                        `;
+                    }
+
+                    if (c.actions && c.actions.length > 0) {
+                        conclusionHtml += `
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-weight: 600; font-size: 15px; color: #1f2937;">🔧 Recommended Actions</div>
+                                <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #374151;">
+                                    ${c.actions.map(a => `<li style="margin-bottom: 4px;">${escapeHtml(a)}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    if (c.nextStep) {
+                        conclusionHtml += `
+                            <div style="margin-top: 12px; padding: 12px 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
+                                <span style="font-weight: 600;">📌 Next Step:</span>
+                                <span style="color: #374151;">${escapeHtml(c.nextStep)}</span>
+                            </div>
+                        `;
+                    }
+
+                    if (c.details) {
+                        conclusionHtml += `
+                            <div style="margin-top: 12px; padding: 12px 16px; background: #f1f5f9; border-radius: 8px; border-left: 4px solid #6B7280;">
+                                <div style="font-weight: 600; font-size: 14px; color: #1f2937;">📊 Additional Details</div>
+                                <div style="margin-top: 4px; color: #374151; white-space: pre-wrap; font-size: 13px;">${escapeHtml(c.details)}</div>
+                            </div>
+                        `;
+                    }
+
+                    // Show user input if provided
+                    if (userInput) {
+                        conclusionHtml += `
+                            <div style="margin-top: 12px; padding: 12px 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                                <div style="font-weight: 600; font-size: 14px; color: #92400e;">📝 Your Symptom Description</div>
+                                <div style="margin-top: 4px; color: #78350f; font-size: 13px;">${escapeHtml(userInput)}</div>
+                            </div>
+                        `;
+                    }
+
+                    resultContent.innerHTML = conclusionHtml;
+                    timestampEl.textContent = `Analyzed at ${new Date().toLocaleString()}`;
+
+                    const includedNames = selectedIds.map(id => {
+                        const found = availableReports.find(r => r.id === id);
+                        return found ? found.name : id;
+                    });
+                    resultContent.innerHTML += `
+                        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
+                            Included: ${includedNames.join(', ')}
+                        </div>
+                    `;
+
+                    copyBtn.style.display = 'inline-block';
+                    copyBtn.onclick = () => {
+                        const plainText = resultContent.innerText;
+                        navigator.clipboard.writeText(plainText).then(() => {
+                            copyBtn.textContent = '✅ Copied';
+                            setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+                        });
+                    };
+
+                } else {
+                    throw new Error(data.error || 'AI could not generate a conclusion.');
+                }
+            } catch (err) {
+                resultCard.style.borderLeftColor = '#dc2626';
+                resultContent.innerHTML = `
+                    <div style="color: #991b1b; padding: 14px 16px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #dc2626;">
+                        <div style="font-weight:600; margin-bottom:4px;">❌ Something went wrong</div>
+                        <div style="font-size: 13px;">${escapeHtml(err.message)}</div>
+                        <button onclick="document.getElementById('runAIConclusionBtn').click()" style="margin-top:10px; border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    // ---- Auto-select all reports by default ----
+    document.querySelectorAll('.report-card').forEach(card => toggleReportCard(card));
+}
+
+// ==================== SETTINGS PAGE ====================
+function renderSettings() {
+    const container = document.getElementById('pageContent');
+
+    // Load saved settings (or defaults)
+    const settings = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en","themeColor":"#0d6efd","adbPath":"","autoRefresh":3}');
+
+    const languageOptions = [
+        { code: 'en', label: 'English' },
+        { code: 'es', label: 'Español' },
+        { code: 'fr', label: 'Français' },
+        { code: 'de', label: 'Deutsch' },
+        { code: 'zh', label: '中文' },
+    ];
+
+    const themeColors = [
+        '#0d6efd', // blue
+        '#6f42c1', // purple
+        '#dc3545', // red
+        '#28a745', // green
+        '#fd7e14', // orange
+        '#20c997', // teal
+        '#e83e8c', // pink
+        '#6610f2', // indigo
+    ];
+
+    const html = `
+        <div style="margin-bottom:24px;">
+            <h1 style="margin-bottom:6px; font-size:24px; font-weight:700; color:#1f2937;">⚙️ Settings</h1>
+            <p style="color:#6b7280; font-size:14px; margin:0;">Customize SmartHub to your preferences.</p>
+        </div>
+
+        <div class="card" style="padding:24px;">
+
+            <!-- Language -->
+            <div style="margin-bottom:24px;">
+                <label style="font-weight:600; font-size:15px; display:block; margin-bottom:6px;">🌐 Language</label>
+                <select id="settingsLanguage" style="padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; width:100%; max-width:280px; font-size:14px;">
+                    ${languageOptions.map(opt =>
+                        `<option value="${opt.code}" ${settings.language === opt.code ? 'selected' : ''}>${opt.label}</option>`
+                    ).join('')}
+                </select>
+                <p style="font-size:12px; color:#9ca3af; margin-top:4px;">UI language (translations are work in progress).</p>
+            </div>
+
+            <!-- Theme Color -->
+            <div style="margin-bottom:24px;">
+                <label style="font-weight:600; font-size:15px; display:block; margin-bottom:6px;">🎨 Theme Color</label>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                    ${themeColors.map(color => `
+                        <button class="theme-color-btn" data-color="${color}" style="
+                            width:36px; height:36px; border-radius:50%; border:3px solid ${settings.themeColor === color ? '#1f2937' : 'transparent'};
+                            background:${color}; cursor:pointer; transition: transform 0.15s;
+                        " onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'"></button>
+                    `).join('')}
+                    <input type="color" id="customThemeColor" value="${settings.themeColor}" style="width:40px; height:40px; border:none; padding:0; cursor:pointer; background:none;">
+                </div>
+                <p style="font-size:12px; color:#9ca3af; margin-top:4px;">Choose a primary color for buttons and highlights.</p>
+            </div>
+
+            <!-- ADB Path -->
+            <div style="margin-bottom:24px;">
+                <label style="font-weight:600; font-size:15px; display:block; margin-bottom:6px;">📂 ADB Path (optional)</label>
+                <input id="settingsAdbPath" type="text" value="${settings.adbPath || ''}" placeholder="e.g. C:\\adb\\adb.exe" style="padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; width:100%; max-width:400px; font-size:14px;">
+                <p style="font-size:12px; color:#9ca3af; margin-top:4px;">Leave empty to use ADB from system PATH.</p>
+            </div>
+
+            <!-- Auto‑refresh interval -->
+            <div style="margin-bottom:24px;">
+                <label style="font-weight:600; font-size:15px; display:block; margin-bottom:6px;">⏱️ Auto‑Refresh (seconds)</label>
+                <input id="settingsAutoRefresh" type="number" value="${settings.autoRefresh || 3}" min="1" max="30" style="padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; width:100%; max-width:120px; font-size:14px;">
+                <p style="font-size:12px; color:#9ca3af; margin-top:4px;">Interval for automatic device info updates.</p>
+            </div>
+
+            <!-- Reset to defaults -->
+            <div style="border-top:1px solid #e5e7eb; padding-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
+                <button id="saveSettingsBtn" class="btn-primary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:none; background:#0d6efd; color:white; cursor:pointer; font-weight:600;">💾 Save Settings</button>
+                <button id="resetSettingsBtn" class="btn-secondary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:1px solid #e5e7eb; background:white; color:#374151; cursor:pointer;">↩️ Reset to Defaults</button>
+            </div>
+
+            <!-- Feedback -->
+            <div id="settingsFeedback" style="margin-top:16px; font-size:14px;"></div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+
+    // ---- Apply theme color from saved settings ----
+    applyThemeColor(settings.themeColor);
+
+    // ---- Event listeners ----
+
+    // Theme color buttons
+    document.querySelectorAll('.theme-color-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const color = this.dataset.color;
+            document.querySelectorAll('.theme-color-btn').forEach(b => b.style.borderColor = 'transparent');
+            this.style.borderColor = '#1f2937';
+            document.getElementById('customThemeColor').value = color;
+            applyThemeColor(color);
+        });
+    });
+
+    document.getElementById('customThemeColor').addEventListener('input', function() {
+        const color = this.value;
+        document.querySelectorAll('.theme-color-btn').forEach(b => b.style.borderColor = 'transparent');
+        applyThemeColor(color);
+    });
+
+    // Save
+    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+        const language = document.getElementById('settingsLanguage').value;
+        const themeColor = document.getElementById('customThemeColor').value;
+        const adbPath = document.getElementById('settingsAdbPath').value.trim();
+        const autoRefresh = parseInt(document.getElementById('settingsAutoRefresh').value) || 3;
+
+        const newSettings = { language, themeColor, adbPath, autoRefresh };
+        localStorage.setItem('smartHubSettings', JSON.stringify(newSettings));
+        applyThemeColor(themeColor);
+
+        const feedback = document.getElementById('settingsFeedback');
+        feedback.innerHTML = `<span style="color:#16a34a;">✅ Settings saved successfully!</span>`;
+        setTimeout(() => feedback.innerHTML = '', 3000);
+    });
+
+    // Reset
+    document.getElementById('resetSettingsBtn').addEventListener('click', function() {
+        const defaults = { language: 'en', themeColor: '#0d6efd', adbPath: '', autoRefresh: 3 };
+        localStorage.setItem('smartHubSettings', JSON.stringify(defaults));
+        // Reload the page to reflect defaults
+        renderSettings();
+        applyThemeColor(defaults.themeColor);
+        const feedback = document.getElementById('settingsFeedback');
+        feedback.innerHTML = `<span style="color:#16a34a;">✅ Settings reset to defaults.</span>`;
+        setTimeout(() => feedback.innerHTML = '', 3000);
+    });
+}
+
+// Helper: apply theme color to CSS variables
+function applyThemeColor(color) {
+    document.documentElement.style.setProperty('--primary-color', color);
+    // Update existing elements (optional)
+    const primaryButtons = document.querySelectorAll('.btn-primary, .btn-primary:not([style*="background"])');
+    primaryButtons.forEach(btn => {
+        if (!btn.style.background || btn.style.background === '') {
+            btn.style.background = `linear-gradient(135deg, ${color} 0%, ${adjustColor(color, -20)} 100%)`;
         }
     });
+    // Also update any card borders, etc. if needed – you can expand.
+}
+
+// Helper to darken a hex color by a percentage (for gradient)
+function adjustColor(hex, percent) {
+    // Simple darken: convert to RGB, reduce each channel
+    let r, g, b;
+    if (hex.startsWith('#')) {
+        const full = hex.length === 7 ? hex : `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+        r = parseInt(full.slice(1,3), 16);
+        g = parseInt(full.slice(3,5), 16);
+        b = parseInt(full.slice(5,7), 16);
+    } else {
+        // fallback
+        return '#0b5ed7';
+    }
+    const darken = (val) => Math.max(0, Math.min(255, val + percent));
+    const newHex = `#${darken(r).toString(16).padStart(2,'0')}${darken(g).toString(16).padStart(2,'0')}${darken(b).toString(16).padStart(2,'0')}`;
+    return newHex;
 }
 
 // ==================== CONNECTION TROUBLESHOOT ====================
@@ -4469,7 +5202,6 @@ async function renderConnectionTroubleshoot() {
         return;
     }
 
-    // ---- Helper to run ADB commands ----
     async function runAdb(command) {
         const response = await fetch(`${BACKEND_URL}/adb-shell`, {
             method: 'POST',
@@ -4481,28 +5213,40 @@ async function renderConnectionTroubleshoot() {
         return data.output;
     }
 
-    // ---- Test state ----
     let isRunning = false;
     let testResults = {};
 
-    // ---- Card definitions ----
+    // ---- Load saved results from localStorage ----
+    const savedData = loadConnectionResults();
+    if (savedData && savedData.results) {
+        testResults = savedData.results;
+        // Also populate the global window variable if needed
+        window._connectionTestResults = testResults;
+    }
+
     const testCards = [
         { id: 'wifi', title: 'WiFi', desc: 'Test WiFi connectivity', status: 'Pending' },
         { id: 'bluetooth', title: 'Bluetooth', desc: 'Test Bluetooth file transfer', status: 'Pending' },
         { id: 'mobile', title: 'Mobile Data', desc: 'Test mobile data connectivity', status: 'Pending' },
     ];
 
-    // ---- Build test cards ----
     let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">`;
     for (const card of testCards) {
+        const saved = testResults[card.id];
+        let statusText = '⏳ Pending';
+        let color = '#6B7280';
+        if (saved) {
+            statusText = saved.passed ? '✅ Passed' : '❌ Failed';
+            color = saved.passed ? '#2e7d32' : '#d32f2f';
+        }
         cardsHtml += `
-            <div class="test-card" id="conn-card-${card.id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+            <div class="test-card" id="conn-card-${card.id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid ${saved && saved.passed ? '#2e7d32' : '#6B7280'};">
                 <div>
                     <h3 style="margin: 0 0 4px 0; font-size: 16px;">${card.title}</h3>
                     <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${card.desc}</p>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" id="conn-status-${card.id}" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
+                    <span class="status-text" id="conn-status-${card.id}" style="font-weight: 600; color: ${color}; font-size: 14px;">${statusText}</span>
                     <button class="btn-primary run-conn-test" data-test="${card.id}" style="font-size: 12px; padding: 4px 16px;">Test</button>
                 </div>
             </div>
@@ -4510,13 +5254,10 @@ async function renderConnectionTroubleshoot() {
     }
     cardsHtml += `</div>`;
 
-    // ---- Fix Options section (always visible) ----
     const fixOptionsHtml = `
         <div id="fixOptionsSection" style="margin-top: 24px;">
             <h3 style="margin-bottom: 12px;">🛠️ Fix Options</h3>
-            <div id="fixCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;">
-                <!-- Built dynamically -->
-            </div>
+            <div id="fixCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;"></div>
             <div id="fixWarning" style="margin-top: 8px; font-size: 13px; color: #6B7280; display: none;">
                 ⚠️ All services seem healthy. Fixes may temporarily disrupt connectivity.
             </div>
@@ -4530,7 +5271,6 @@ async function renderConnectionTroubleshoot() {
         ${fixOptionsHtml}
     `;
 
-    // ---- Build fix cards for all services ----
     function buildAllFixCards() {
         const allServices = ['wifi', 'bluetooth', 'mobile'];
         const fixContainer = document.getElementById('fixCardsContainer');
@@ -4552,20 +5292,16 @@ async function renderConnectionTroubleshoot() {
         }
         fixContainer.innerHTML = html;
 
-        // ---- Attach fix button listeners ----
         document.querySelectorAll('.fix-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const action = btn.dataset.action;
                 const service = btn.dataset.service;
-
-                // ---- Warning if all services are healthy ----
-                const allPass = Object.values(testResults).every(r => r === true);
+                const allPass = Object.values(testResults).every(r => r && r.passed === true);
                 if (allPass && Object.keys(testResults).length > 0) {
                     if (!confirm(`⚠️ All services are currently working. Are you sure you want to apply the fix "${action}"? This may temporarily disrupt connectivity.`)) {
                         return;
                     }
                 }
-
                 try {
                     const fixResp = await fetch(`${BACKEND_URL}/android-connectivity/fix/${currentDeviceId}`, {
                         method: 'POST',
@@ -4574,7 +5310,6 @@ async function renderConnectionTroubleshoot() {
                     });
                     const fixData = await fixResp.json();
                     alert(fixData.message || 'Fix applied');
-                    // Re-run the test for this service
                     await runConnectionTest(service);
                 } catch (err) {
                     alert('Fix failed: ' + err.message);
@@ -4602,7 +5337,6 @@ async function renderConnectionTroubleshoot() {
         return actions[service] || [];
     }
 
-    // ---- Run a connection test ----
     async function runConnectionTest(testId) {
         if (isRunning) return;
         isRunning = true;
@@ -4613,9 +5347,7 @@ async function renderConnectionTroubleshoot() {
         const resultDiv = document.getElementById('testResult');
         const warningDiv = document.getElementById('fixWarning');
 
-        // Disable all test buttons
         document.querySelectorAll('.run-conn-test').forEach(b => b.disabled = true);
-
         btn.disabled = true;
         btn.textContent = '⏳ Running...';
         statusSpan.style.color = '#f59e0b';
@@ -4647,12 +5379,14 @@ async function renderConnectionTroubleshoot() {
             const resp = await fetch(`${BACKEND_URL}${endpoint}`);
             const data = await resp.json();
             const pass = data.ok === true;
-            testResults[testId] = pass;
+            testResults[testId] = { passed: pass, status: pass ? 'pass' : 'fail', message: data.message || '' };
+
+            // ---- SAVE THIS TEST ----
+            saveConnectionResults(testId, testResults[testId]);
 
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
             let msg = pass ? data.message : (data.error || 'Failed');
-
             if (testId === 'bluetooth' && pass) {
                 msg += ` | Paired: ${data.pairedCount || 0} | OPP: ${data.oppSupported ? '✅' : '❌'}`;
             }
@@ -4664,11 +5398,12 @@ async function renderConnectionTroubleshoot() {
             statusSpan.textContent = `${icon} ${pass ? 'Passed' : 'Failed'}`;
             btn.textContent = pass ? 'Rerun' : 'Retry';
             btn.disabled = false;
-
             resultDiv.innerHTML = `<div style="background: ${pass ? '#e8f5e9' : '#ffebee'}; padding: 12px; border-radius: 8px; color: ${color};">${icon} ${msg}</div>`;
 
-            // ---- Show warning if all tests passed ----
-            const allPass = Object.values(testResults).every(r => r === true);
+            // Update card border color
+            card.style.borderLeftColor = color;
+
+            const allPass = Object.values(testResults).every(r => r && r.passed === true);
             warningDiv.style.display = allPass ? 'block' : 'none';
 
         } catch (err) {
@@ -4683,10 +5418,8 @@ async function renderConnectionTroubleshoot() {
         }
     }
 
-    // ---- Build fix cards on load ----
     buildAllFixCards();
 
-    // ---- Attach test listeners ----
     document.querySelectorAll('.run-conn-test').forEach(btn => {
         btn.addEventListener('click', () => {
             const testId = btn.dataset.test;
@@ -4694,8 +5427,15 @@ async function renderConnectionTroubleshoot() {
         });
     });
 
-    // ---- initialise results ----
-    testResults = {};
+    // ---- Restore previous results on mount ----
+    // (already done via the savedData load at the top)
+    // If any test had a saved result, ensure the card border is updated
+    for (const [id, result] of Object.entries(testResults)) {
+        const card = document.getElementById(`conn-card-${id}`);
+        if (card) {
+            card.style.borderLeftColor = result.passed ? '#2e7d32' : '#d32f2f';
+        }
+    }
 }
 
 async function runConnectionTest(testId) {
@@ -5640,6 +6380,7 @@ function initNavigation() {
                 else if (page === 'repairs') await renderRepairs();
                 else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
+                else if (page === 'settings') await renderSettings();
                 else await renderDashboard();
             } catch (err) {
                 console.error('Page render error:', err);

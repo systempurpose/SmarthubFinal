@@ -1315,3 +1315,10 @@ pre {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+:root {
+    --primary-color: #0d6efd;
+}
+.btn-primary {
+    background: var(--primary-color) !important;
+    /* other styles */
+}
