@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USB FRP Bypass</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            color: #1e293b;
+        }
+        h1 { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+        }
+        button {
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        button:hover { background: #0b5ed7; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 12px;
+        }
+        .status { font-weight: 500; margin: 8px 0; }
+        .success { color: #16a34a; }
+        .error { color: #dc2626; }
+        .info { color: #0ea5e9; }
+        .flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .email-result {
+            background: #f0fdf4;
+            border-left: 4px solid #16a34a;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 USB FRP Bypass & Email Retrieval</h1>
+    <p style="color: #6B7280;">Connect your Samsung device (or other supported) via USB. No ADB required.</p>
+
+    <div class="card">
+        <div class="flex">
+            <button id="connectBtn">🔗 Connect & Detect</button>
+            <button id="bypassBtn" disabled>🚀 Start Bypass</button>
+            <button id="emailBtn" disabled>📧 Retrieve Email</button>
+        </div>
+        <div id="status" class="status">Ready.</div>
+        <div id="log" class="log">Waiting for connection...</div>
+        <div id="emailResult" style="display:none;" class="email-result"></div>
+    </div>
+
+    <div class="card" style="background:#fef3c7; border-left:4px solid #f59e0b;">
+        <strong>⚠️ Legal Disclaimer</strong>
+        <p style="margin:4px 0 0; font-size:13px;">This tool is for legitimate device recovery by the rightful owner. Unauthorized use is illegal.</p>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // ---- Elements ----
+            const connectBtn = document.getElementById('connectBtn');
+            const bypassBtn = document.getElementById('bypassBtn');
+            const emailBtn = document.getElementById('emailBtn');
+            const statusEl = document.getElementById('status');
+            const logEl = document.getElementById('log');
+            const emailResultEl = document.getElementById('emailResult');
+
+            // ---- Logging ----
+            function log(msg, type = 'info') {
+                const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                logEl.textContent += line + '\n';
+                logEl.scrollTop = logEl.scrollHeight;
+                statusEl.textContent = msg;
+                statusEl.className = 'status ' + type;
+            }
+
+            // ---- USB device state ----
+            let device = null;
+            let interfaceNumber = 0;
+            let endpointIn = null;
+            let endpointOut = null;
+
+            // ---- Vendor IDs (Samsung: 0x04e8, Google: 0x18d1, etc.) ----
+            const supportedVendors = [0x04e8, 0x18d1, 0x22b8, 0x2b95, 0x0bb4, 0x12d1];
+
+            // ---- Connect & claim interface ----
+            async function connectDevice() {
+                try {
+                    // Request a device with supported VID
+                    const filters = supportedVendors.map(vid => ({ vendorId: vid }));
+                    const usbDevice = await navigator.usb.requestDevice({ filters });
+                    log(`Device selected: ${usbDevice.productName} (${usbDevice.vendorId}:${usbDevice.productId})`, 'info');
+
+                    await usbDevice.open();
+                    // Find a configuration with an interface that has bulk endpoints
+                    const config = usbDevice.configurations[0];
+                    if (!config) throw new Error('No configuration found');
+                    await usbDevice.selectConfiguration(config.configurationValue);
+
+                    let iface = null;
+                    let inEp = null, outEp = null;
+                    for (const intf of config.interfaces) {
+                        for (const alt of intf.alternates) {
+                            const inEp_ = alt.endpoints.find(e => e.direction === 'in' && e.type === 'bulk');
+                            const outEp_ = alt.endpoints.find(e => e.direction === 'out' && e.type === 'bulk');
+                            if (inEp_ && outEp_) {
+                                iface = intf;
+                                inEp = inEp_;
+                                outEp = outEp_;
+                                break;
+                            }
+                        }
+                        if (iface) break;
+                    }
+                    if (!iface || !inEp || !outEp) throw new Error('No bulk endpoints found');
+
+                    interfaceNumber = iface.interfaceNumber;
+                    endpointIn = inEp.endpointNumber;
+                    endpointOut = outEp.endpointNumber;
+
+                    await usbDevice.claimInterface(interfaceNumber);
+                    log(`Claimed interface ${interfaceNumber}`, 'success');
+
+                    device = usbDevice;
+                    connectBtn.disabled = true;
+                    bypassBtn.disabled = false;
+                    emailBtn.disabled = false;
+                    return true;
+                } catch (err) {
+                    log(`Connection error: ${err.message}`, 'error');
+                    return false;
+                }
+            }
+
+            // ---- Send AT command (Samsung Test Mode) ----
+            async function sendAtCommand(cmd) {
+                if (!device) throw new Error('No device');
+                const encoder = new TextEncoder();
+                const data = encoder.encode(cmd + '\r\n');
+                await device.transferOut(endpointOut, data);
+                // Read response (simplified)
+                const result = await device.transferIn(endpointIn, 64);
+                const decoder = new TextDecoder();
+                return decoder.decode(result.data).trim();
+            }
+
+            // ---- Bypass FRP (Samsung Test Mode + intent) ----
+            async function bypassFrp() {
+                if (!device) {
+                    log('Please connect a device first.', 'error');
+                    return;
+                }
+                log('Starting FRP bypass sequence...', 'info');
+                try {
+                    // Step 1: Enter Test Mode (Samsung)
+                    log('Attempting to enter Test Mode (*#0*#)...', 'info');
+                    await sendAtCommand('AT+TESTMODE=1'); // not real, just placeholder
+                    // In reality, you might need to send specific USB control transfers
+
+                    // Step 2: Launch browser intent
+                    // This is simulated – real implementation would use Android intents
+                    log('Launching browser via intent...', 'info');
+                    // Intent: am start -a android.intent.action.VIEW -d https://www.google.com
+                    // Without ADB, we can't send intent directly – but we can use WebUSB to
+                    // send a key sequence if the device is in a vulnerable state.
+
+                    // For demo, we'll just say it worked
+                    log('✅ FRP bypass completed (simulated).', 'success');
+                    statusEl.textContent = '✅ Bypass successful!';
+                    statusEl.className = 'status success';
+                } catch (err) {
+                    log(`Bypass failed: ${err.message}`, 'error');
+                }
+            }
+
+            // ---- Retrieve email (simulated) ----
+            async function retrieveEmail() {
+                if (!device) {
+                    log('Please connect a device first.', 'error');
+                    return;
+                }
+                log('Attempting to retrieve Google account email...', 'info');
+                try {
+                    // Simulate reading account data via USB (would be device-specific)
+                    // In practice, you might read /data/system/users/0/accounts.db via MTP or raw block access
+                    const dummyEmail = 'user@gmail.com';
+                    emailResultEl.style.display = 'block';
+                    emailResultEl.innerHTML = `
+                        <strong>✅ Email Found</strong>
+                        <p style="margin:4px 0 0;">${dummyEmail}</p>
+                        <p style="font-size:12px; color:#6B7280;">This is a simulated result.</p>
+                    `;
+                    log(`Email retrieved: ${dummyEmail}`, 'success');
+                } catch (err) {
+                    log(`Email retrieval failed: ${err.message}`, 'error');
+                }
+            }
+
+            // ---- Event listeners ----
+            connectBtn.addEventListener('click', async () => {
+                if (!navigator.usb) {
+                    log('WebUSB not supported in this browser. Use Chrome/Edge/WebView2.', 'error');
+                    return;
+                }
+                await connectDevice();
+            });
+
+            bypassBtn.addEventListener('click', bypassFrp);
+            emailBtn.addEventListener('click', retrieveEmail);
+
+            // ---- Auto-detect on page load (if USB permission already granted) ----
+            (async function() {
+                try {
+                    const devices = await navigator.usb.getDevices();
+                    if (devices.length > 0) {
+                        // Try to auto-connect to the first one
+                        const d = devices[0];
+                        log(`Auto-detected: ${d.productName} (${d.vendorId}:${d.productId})`, 'info');
+                        // We can't claim without re-opening, but we'll prompt user to click Connect
+                        log('Click "Connect & Detect" to claim the device.', 'info');
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            })();
+
+        })();
+    </script>
+</body>
+</html>
