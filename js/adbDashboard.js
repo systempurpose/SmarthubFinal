@@ -89,7 +89,7 @@ async function renderAdbDashboard(container) {
         applyLanguage(window._activeLang || savedLang);
     }
 
-    loadSavedScanResults();
+    
 
     // Attach event listeners (unchanged)
     const storageCard = container.querySelector('.action-card[data-action="storage-analysis"]');

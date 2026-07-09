@@ -319,7 +319,7 @@
 
             const files = (largeFiles.files || []).sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
 
-            // Save results
+            // Build results object
             const results = {
                 files: files.map(f => ({
                     name: f.name || f.path || 'Unnamed',
@@ -332,6 +332,18 @@
                 storageTotal: formatSize(totalBytes),
                 percentUsed: percent
             };
+
+            // 👇 NEW CODE: Save results to Supabase (compressed + encrypted)
+            try {
+    const { saveStorageAnalysisToSupabase } = await import('./storage_analysis_sb.js');
+    await saveStorageAnalysisToSupabase(results, deviceId);  // 👈 Pass deviceId
+    console.log('[StorageAnalysis] Results saved to Supabase');
+} catch (saveErr) {
+    console.warn('[StorageAnalysis] Could not save results to Supabase:', saveErr);
+}
+            // 👆 END NEW CODE
+
+            // Save to localStorage (existing behavior)
             if (typeof saveStorageResults === 'function') {
                 saveStorageResults(results);
             } else {

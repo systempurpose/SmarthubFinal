@@ -1,11 +1,7 @@
-// js/supabase.js
 // ============================================================
-// This module imports encrypted keys from a local file that is NOT committed.
+// supabase.js – Encrypted Supabase client with fallback
 // ============================================================
 
-import { ENCRYPTED_SUPABASE_URL, ENCRYPTED_SUPABASE_ANON_KEY } from './encrypted-keys.js';
-
-// ---- Default passphrase and salt (can be overridden via localStorage) ----
 const DEFAULT_PASSPHRASE = 'SmartHub2026!SecureKey';
 const DEFAULT_SALT_HEX = 'a1b2c3d4e5f67890a1b2c3d4e5f67890';
 
@@ -25,7 +21,6 @@ function getSaltHex() {
     return DEFAULT_SALT_HEX;
 }
 
-// ---- Helper: hex to Uint8Array ----
 function hexToUint8(hex) {
     const bytes = new Uint8Array(hex.length / 2);
     for (let i = 0; i < hex.length; i += 2) {
@@ -42,7 +37,7 @@ function base64Decode(str) {
     return Uint8Array.from(atob(str), c => c.charCodeAt(0));
 }
 
-// ---- Derive AES key ----
+// ---- ✅ FIXED: allow both encrypt and decrypt ----
 async function deriveKey(passphrase, salt) {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey(
@@ -62,11 +57,11 @@ async function deriveKey(passphrase, salt) {
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
         false,
-        ['decrypt']
+        ['encrypt', 'decrypt']
     );
 }
 
-// ---- Decrypt a single encrypted string ----
+// ---- Decrypt ----
 async function decryptSecret(encryptedData, passphrase) {
     const saltHex = getSaltHex();
     const salt = hexToUint8(saltHex);
@@ -88,27 +83,109 @@ async function decryptSecret(encryptedData, passphrase) {
     return decoder.decode(decrypted);
 }
 
+// ---- Encrypt ----
+async function encryptSecret(plaintext, passphrase) {
+    const saltHex = getSaltHex();
+    const salt = hexToUint8(saltHex);
+    const enc = new TextEncoder();
+    const data = enc.encode(plaintext);
+
+    const key = await deriveKey(passphrase, salt);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        data
+    );
+
+    const ivBase64 = base64Encode(iv);
+    const ctBase64 = base64Encode(new Uint8Array(ciphertext));
+    return `${ivBase64}:${ctBase64}`;
+}
+
 // ---- Lazy-load Supabase client ----
 let supabaseClient = null;
+let supabaseError = null;
 
 async function getSupabaseClient() {
     if (supabaseClient) return supabaseClient;
+    if (supabaseError) throw supabaseError;
+
+    let url, anonKey;
 
     try {
-        const passphrase = getPassphrase();
-        // Decrypt using the imported encrypted constants
-        const url = await decryptSecret(ENCRYPTED_SUPABASE_URL, passphrase);
-        const anonKey = await decryptSecret(ENCRYPTED_SUPABASE_ANON_KEY, passphrase);
+        const keys = await import('./encrypted-keys.js');
+        const encryptedUrl = keys.ENCRYPTED_SUPABASE_URL;
+        const encryptedAnon = keys.ENCRYPTED_SUPABASE_ANON_KEY;
 
+        if (!encryptedUrl || encryptedUrl === 'your_encrypted_url_here') {
+            throw new Error('encrypted-keys.js contains placeholder values.');
+        }
+        if (!encryptedAnon || encryptedAnon === 'your_encrypted_anon_key_here') {
+            throw new Error('encrypted-keys.js contains placeholder values.');
+        }
+
+        const passphrase = getPassphrase();
+        url = await decryptSecret(encryptedUrl, passphrase);
+        anonKey = await decryptSecret(encryptedAnon, passphrase);
+    } catch (err) {
+        console.warn('Failed to decrypt from encrypted-keys.js, trying localStorage:', err.message);
+
+        try {
+            const storedUrl = localStorage.getItem('smarthub.supabase.url');
+            const storedAnon = localStorage.getItem('smarthub.supabase.anonKey');
+            if (storedUrl && storedAnon) {
+                url = storedUrl;
+                anonKey = storedAnon;
+                console.log('Using Supabase credentials from localStorage.');
+            } else {
+                throw new Error('No Supabase credentials found in localStorage.');
+            }
+        } catch (e) {
+            const msg = 'Supabase is not configured. Please set up encrypted-keys.js or localStorage.';
+            supabaseError = new Error(msg);
+            throw supabaseError;
+        }
+    }
+
+    // ---- Sanitize URL ----
+    try {
+        const urlObj = new URL(url);
+        url = urlObj.origin;
+        console.log('✅ Sanitized Supabase URL:', url);
+    } catch (e) {
+        const msg = 'Invalid Supabase URL format.';
+        supabaseError = new Error(msg);
+        throw supabaseError;
+    }
+
+    if (!url || !url.startsWith('https://') || !url.includes('supabase.co')) {
+        const msg = 'Invalid Supabase URL. Please check your encrypted keys.';
+        supabaseError = new Error(msg);
+        throw supabaseError;
+    }
+    if (!anonKey || anonKey.length < 20) {
+        const msg = 'Invalid Supabase anon key.';
+        supabaseError = new Error(msg);
+        throw supabaseError;
+    }
+
+    try {
         const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
         supabaseClient = createClient(url, anonKey);
-        console.log('✅ Supabase client initialized (encrypted keys from local file)');
+        console.log('✅ Supabase client initialized with base URL:', url);
         return supabaseClient;
     } catch (err) {
-        console.error('❌ Failed to decrypt Supabase keys:', err);
-        throw new Error('Could not initialize Supabase client.');
+        supabaseError = new Error(`Failed to create Supabase client: ${err.message}`);
+        throw supabaseError;
     }
 }
 
-// ---- Export ----
-export { getSupabaseClient, decryptSecret, getPassphrase, getSaltHex };
+// ---- ✅ EXPORT ----
+export {
+    getSupabaseClient,
+    decryptSecret,
+    encryptSecret,
+    getPassphrase,
+    getSaltHex
+};

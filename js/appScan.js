@@ -148,11 +148,23 @@
             // Apply risk score threshold
             suspiciousApps = suspiciousApps.filter(app => (app.riskScore || 0) >= 30);
 
-            // Save results
+            // Build results object
             const results = {
                 suspiciousApps: suspiciousApps,
                 scanTime: new Date().toLocaleString()
             };
+
+            // 👇 NEW CODE: Save results to Supabase (compressed + encrypted)
+           // Inside the try block, after building results
+try {
+    const { saveAppScanToSupabase } = await import('./app_scan_sb.js');
+    await saveAppScanToSupabase(results, deviceId);  // 👈 Pass deviceId
+    console.log('[AppScan] Results saved to Supabase');
+} catch (saveErr) {
+    console.warn('[AppScan] Could not save results to Supabase:', saveErr);
+}
+
+            // Save to localStorage (existing behavior)
             if (typeof saveAppScanResults === 'function') {
                 saveAppScanResults(results);
             } else {

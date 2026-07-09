@@ -22,12 +22,13 @@ async function renderDashboard() {
 
     // ---- If ADB is available, render full dashboard ----
     if (currentDeviceId) {
-        await renderAdbDashboard(container);
-
-        // Add Storage Analysis button if not already present
-        
-        return;
+    await renderAdbDashboard(container);
+    // 👇 Load saved scan results from Supabase (or localStorage fallback)
+    if (typeof loadSavedScanResults === 'function') {
+        await loadSavedScanResults();
     }
+    return;
+}
 
     // ---- No ADB – check USB state ----
     try {

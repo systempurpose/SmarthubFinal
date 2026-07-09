@@ -11,6 +11,105 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <!-- Supabase library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- bcrypt for password hashing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+    <!-- CryptoJS for SHA‑256 (if needed, but we use built‑in Web Crypto) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <!-- Auth widget styling (self-contained so it doesn't depend on ui.css) -->
+    <style>
+        #authStatus {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .auth-login-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 9px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 2px 10px rgba(13, 110, 253, 0.35);
+        }
+        .auth-login-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(13, 110, 253, 0.45);
+        }
+        .auth-login-btn:active { transform: translateY(0); }
+
+        .auth-user-chip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 8px 10px;
+        }
+        .auth-avatar {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+        .auth-user-meta {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+        }
+        .auth-email {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #e2e8f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .auth-role {
+            display: block;
+            font-size: 10.5px;
+            color: #94a3b8;
+        }
+        .auth-logout-btn {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid rgba(252, 165, 165, 0.4);
+            color: #fca5a5;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .auth-logout-btn:hover {
+            background: rgba(252, 165, 165, 0.15);
+            color: #fecaca;
+        }
+
+        [hidden] { display: none !important; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -56,6 +155,22 @@
             <div class="sidebar-footer">
                 <div class="connection-status" id="connectionStatus">
                     <i class="fas fa-plug"></i> <span data-i18n="connection.disconnected">Disconnected</span>
+                </div>
+                <!-- Authentication Status / Login Button -->
+                <div id="authStatus">
+                    <button id="loginBtn" class="auth-login-btn" type="button">
+                        <i class="fas fa-sign-in-alt"></i> <span data-i18n="auth.login">Login</span>
+                    </button>
+                    <div id="userInfo" class="auth-user-chip" hidden>
+                        <div class="auth-avatar" id="userAvatar">U</div>
+                        <div class="auth-user-meta">
+                            <span id="userEmailDisplay" class="auth-email"></span>
+                            <span class="auth-role" data-i18n="auth.signedIn">Signed in</span>
+                        </div>
+                        <button id="logoutBtn" class="auth-logout-btn" type="button" title="Logout" data-i18n-title="auth.logout">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -206,6 +321,8 @@
         </main>
     </div>
 
+    <!-- ============ MODALS ============ -->
+
     <!-- ADB Required Modal -->
     <div id="adbRequiredModal" class="modal" style="display: none; z-index: 99998; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
         <div class="modal-content acrylic" style="max-width: 500px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
@@ -244,48 +361,47 @@
     </div>
 
     <!-- BSOD Diagnostic Warning Modal -->
-    <!-- BSOD Diagnostic Warning Modal -->
-<div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-    <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-            <div style="display: flex; align-items: center; gap: 14px;">
-                <span style="font-size: 36px;">⚠️</span>
-                <div>
-                    <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;" data-i18n="bsodWarning.title">BSOD Diagnostic</h3>
-                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;" data-i18n="bsodWarning.subtitle">Boot failure analysis tool</p>
+    <div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span style="font-size: 36px;">⚠️</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;" data-i18n="bsodWarning.title">BSOD Diagnostic</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;" data-i18n="bsodWarning.subtitle">Boot failure analysis tool</p>
+                    </div>
+                    <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
                 </div>
-                <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
             </div>
-        </div>
-        <!-- Body -->
-        <div style="padding: 24px 28px 28px 28px;">
-            <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;" data-i18n-html="bsodWarning.body">
-                This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
-            </p>
-            <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
-                <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
-                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item1">
-                        <span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong>
-                    </li>
-                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item2">
-                        <span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong>
-                    </li>
-                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item3">
-                        <span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP
-                    </li>
-                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item4">
-                        <span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong>
-                    </li>
-                </ul>
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
-                <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;" data-i18n="bsodWarning.back">Back</button>
-                <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);" data-i18n="bsodWarning.continue">Continue</button>
+            <!-- Body -->
+            <div style="padding: 24px 28px 28px 28px;">
+                <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;" data-i18n-html="bsodWarning.body">
+                    This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
+                </p>
+                <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                    <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
+                        <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item1">
+                            <span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong>
+                        </li>
+                        <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item2">
+                            <span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong>
+                        </li>
+                        <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item3">
+                            <span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP
+                        </li>
+                        <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item4">
+                            <span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong>
+                        </li>
+                    </ul>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
+                    <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;" data-i18n="bsodWarning.back">Back</button>
+                    <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);" data-i18n="bsodWarning.continue">Continue</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <!-- Modal: USB Debugging Wizard -->
     <div id="wizardModal" class="modal">
@@ -332,6 +448,84 @@
         </div>
     </div>
 
+    <!-- ============ AUTHENTICATION MODALS ============ -->
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal" style="display: none; z-index: 100000; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
+            <div style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); padding: 20px 24px 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 28px;">🔐</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: white;" data-i18n="auth.login.title">Login</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #b0d4ff;" data-i18n="auth.login.subtitle">Sign in to your SmartHub account</p>
+                    </div>
+                    <button id="loginModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: white; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
+                </div>
+            </div>
+            <div style="padding: 24px 28px 28px 28px;">
+                <form id="loginForm" autocomplete="off">
+                    <div style="margin-bottom: 16px;">
+                        <label for="loginEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
+                        <input type="email" id="loginEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label for="loginPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.password">Password</label>
+                        <input type="password" id="loginPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #0d6efd; border: none; color: white; cursor: pointer;">
+                        <span data-i18n="auth.login.btn">Login</span>
+                    </button>
+                </form>
+                <p style="margin-top: 16px; text-align: center; font-size: 14px; color: #64748b;">
+                    <span data-i18n="auth.login.noAccount">Don't have an account?</span>
+                    <a href="#" id="switchToRegister" style="color: #0d6efd; font-weight: 600; text-decoration: none;">Register</a>
+                </p>
+                <div id="loginError" style="color: #dc2626; font-size: 13px; margin-top: 12px; text-align: center; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div id="registerModal" class="modal" style="display: none; z-index: 100000; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
+            <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 20px 24px 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 28px;">📝</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: white;" data-i18n="auth.register.title">Register</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #a7f3d0;" data-i18n="auth.register.subtitle">Create your SmartHub account</p>
+                    </div>
+                    <button id="registerModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: white; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
+                </div>
+            </div>
+            <div style="padding: 24px 28px 28px 28px;">
+                <form id="registerForm" autocomplete="off">
+                    <div style="margin-bottom: 16px;">
+                        <label for="registerEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
+                        <input type="email" id="registerEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label for="registerPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.password">Password</label>
+                        <input type="password" id="registerPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label for="registerConfirmPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.confirmPassword">Confirm Password</label>
+                        <input type="password" id="registerConfirmPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #16a34a; border: none; color: white; cursor: pointer;">
+                        <span data-i18n="auth.register.btn">Register</span>
+                    </button>
+                </form>
+                <p style="margin-top: 16px; text-align: center; font-size: 14px; color: #64748b;">
+                    <span data-i18n="auth.register.hasAccount">Already have an account?</span>
+                    <a href="#" id="switchToLogin" style="color: #0d6efd; font-weight: 600; text-decoration: none;">Login</a>
+                </p>
+                <div id="registerError" style="color: #dc2626; font-size: 13px; margin-top: 12px; text-align: center; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay">
         <div class="loading-spinner">
@@ -343,6 +537,8 @@
         </div>
     </div>
 
+    <!-- ============ SCRIPTS ============ -->
+
     <!-- 1. Language files (only en and fil) -->
     <script src="js/lang/eng_lang.js"></script>
     <script src="js/lang/fil_lang.js"></script>
@@ -350,9 +546,13 @@
     <!-- 2. Central i18n loader -->
     <script src="js/i18n.js"></script>
 
+    <!-- 3. Supabase & encryption -->
+    <!-- ✅ NEW (looks in root/js/) -->
+<script type="module" src="../js/supabase.js"></script>
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/login.js"></script>
 
-    <!-- ============ SCRIPTS ============ -->
-    <!-- Load order is important: ui.js defines core, then settings.js provides I18N, then modules -->
+    <!-- 5. Other scripts (load order matters – ui.js defines core) -->
     <script src="../js/ui.js"></script>
     <script src="../js/storageAnalysis.js"></script>
     <script src="../js/advanceDiagnostic.js"></script>
@@ -367,22 +567,21 @@
     <script src="js/temperatureModal.js"></script>
     <script src="js/bsodDiagnose.js"></script>
     <script src="js/connectionTroubleshoot.js"></script>
-    <script src="js/setting.js"></script>
+    <script type="module" src="js/setting.js"></script>
     <script src="js/aiConclusion.js"></script>
-    <script src="js/supabase.js"></script>
     <script src="js/hardwareTest.js"></script>
-    <script src="js/advanceDiagnostic.js"></script>
-    <!-- Initial language apply (will be called inside ui.js after DOM ready) -->
+    <!-- Note: advanceDiagnostic.js is already loaded above, remove duplicate -->
+
+    <!-- 6. Final initialization (apply language) -->
     <script>
-        // Ensure language is applied after all scripts are loaded
         document.addEventListener('DOMContentLoaded', function() {
-            // The applyLanguage function is defined in setting.js (loaded above)
-            // ui.js already calls applyLanguage on init, but we can call it again to be safe.
-            if (typeof applyLanguage === 'function') {
-                const saved = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}');
-                applyLanguage(saved.language || 'en');
-            }
-        });
+    const settings = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en","themeColor":"#0d6efd","bgColor":"#ffffff","textColor":"#1f2937"}');
+    applyTheme(settings);
+    applyLanguage(settings.language);
+});
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+    <!-- LZ‑String for compression (lightweight) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </body>
 </html>

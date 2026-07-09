@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🔐 SmartHub Secret Encrypter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        body {
+            background: #f1f5f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #ffffff;
+            max-width: 700px;
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+            padding: 32px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .sub {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .field {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 14px;
+            color: #1e293b;
+            margin-bottom: 5px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border 0.2s;
+            background: #fafcff;
+            font-family: inherit;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .row button {
+            flex: 1;
+            min-width: 120px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: #e2e8f0;
+            color: #1e293b;
+        }
+        button.primary {
+            background: #0d6efd;
+            color: white;
+            box-shadow: 0 4px 12px rgba(13,110,253,0.25);
+        }
+        button.primary:hover {
+            background: #0b5ed7;
+            transform: translateY(-1px);
+        }
+        button.success {
+            background: #16a34a;
+            color: white;
+        }
+        button.success:hover {
+            background: #15803d;
+        }
+        button.danger {
+            background: #dc2626;
+            color: white;
+        }
+        button.danger:hover {
+            background: #b91c1c;
+        }
+        .output-area {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            min-height: 60px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #0f172a;
+        }
+        .output-area .placeholder {
+            color: #94a3b8;
+        }
+        .copy-feedback {
+            font-size: 12px;
+            color: #16a34a;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .copy-feedback.show {
+            opacity: 1;
+        }
+        .sep {
+            border-top: 1px solid #e2e8f0;
+            margin: 24px 0 16px;
+        }
+        .badge {
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 999px;
+            margin-left: 8px;
+        }
+        .note {
+            background: #fef9c3;
+            border-left: 4px solid #f59e0b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #92400e;
+            margin: 16px 0 8px;
+        }
+        .note strong {
+            color: #78350f;
+        }
+        .flex {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .flex .spacer {
+            flex: 1;
+        }
+        @media (max-width: 480px) {
+            .container { padding: 20px; }
+            .row button { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>
+        🔐 SmartHub Secret Encrypter
+        <span class="badge">AES‑GCM + PBKDF2</span>
+    </h1>
+    <p class="sub">
+        Encrypt secrets using the same method as the SmartHub app.
+        The output format is <code>iv:encrypted</code> (both base64).
+    </p>
+
+    <!-- Passphrase -->
+    <div class="field">
+        <label for="passphrase">🔑 Passphrase</label>
+        <input type="text" id="passphrase" value="SmartHub2026!SecureKey" placeholder="e.g. MySuperSecretPassphrase" />
+        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">
+            Must match the passphrase used in <code>supabase.js</code>.
+        </div>
+    </div>
+
+    <!-- Salt (optional) -->
+    <div class="field">
+        <label for="salt">🧂 Salt (hex, 16 bytes)</label>
+        <input type="text" id="salt" value="a1b2c3d4e5f67890a1b2c3d4e5f67890" placeholder="32 hex characters" />
+        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">
+            Must be 32 hex characters (16 bytes). Use a random value and keep it consistent.
+        </div>
+    </div>
+
+    <!-- Plaintext -->
+    <div class="field">
+        <label for="plaintext">📝 Secret to Encrypt</label>
+        <textarea id="plaintext" placeholder="e.g. https://your-project.supabase.co or your-anon-key"></textarea>
+    </div>
+
+    <!-- Actions -->
+    <div class="row">
+        <button id="encryptBtn" class="primary">🔒 Encrypt</button>
+        <button id="decryptBtn" class="danger">🔓 Decrypt</button>
+        <button id="clearBtn">🗑️ Clear</button>
+    </div>
+
+    <!-- Output -->
+    <div class="field" style="margin-top:20px;">
+        <div class="flex">
+            <label style="margin:0;">📦 Encrypted Output</label>
+            <span class="spacer"></span>
+            <button id="copyBtn" class="success" style="padding:4px 12px; font-size:12px;">📋 Copy</button>
+            <span id="copyFeedback" class="copy-feedback">✅ Copied!</span>
+        </div>
+        <div id="output" class="output-area">
+            <span class="placeholder">Encrypted string will appear here</span>
+        </div>
+    </div>
+
+    <!-- Note / Security warning -->
+    <div class="note">
+        <strong>⚠️ Security Note:</strong> This tool uses <strong>client‑side encryption</strong>.
+        The passphrase is visible in the source code if hardcoded — this is <strong>obfuscation</strong>, not true security.
+        For production, store secrets in environment variables on the backend.
+    </div>
+
+    <div class="sep"></div>
+    <div style="font-size:13px; color:#64748b;">
+        🧪 <strong>Quick test:</strong> Encrypt a secret, then paste the output into the <strong>Decrypt</strong> field
+        to verify it works.
+    </div>
+</div>
+
+<script>
+    (function() {
+        "use strict";
+
+        // ---- DOM refs ----
+        const passphraseInput = document.getElementById('passphrase');
+        const saltInput = document.getElementById('salt');
+        const plaintextArea = document.getElementById('plaintext');
+        const outputDiv = document.getElementById('output');
+        const encryptBtn = document.getElementById('encryptBtn');
+        const decryptBtn = document.getElementById('decryptBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const copyFeedback = document.getElementById('copyFeedback');
+
+        // ---- Helpers ----
+        function hexToUint8(hex) {
+            if (hex.length % 2 !== 0) throw new Error('Invalid hex length');
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+            }
+            return bytes;
+        }
+
+        function uint8ToHex(uint8) {
+            return Array.from(uint8).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function base64Encode(uint8) {
+            return btoa(String.fromCharCode(...uint8));
+        }
+
+        function base64Decode(str) {
+            return Uint8Array.from(atob(str), c => c.charCodeAt(0));
+        }
+
+        // ---- Derive AES key ----
+        async function deriveKey(passphrase, salt) {
+            const enc = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                enc.encode(passphrase),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            return crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        // ---- Encrypt ----
+        async function encrypt(plaintext, passphrase, salt) {
+            const enc = new TextEncoder();
+            const data = enc.encode(plaintext);
+            const key = await deriveKey(passphrase, salt);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                data
+            );
+            const ivBase64 = base64Encode(iv);
+            const ctBase64 = base64Encode(new Uint8Array(ciphertext));
+            return `${ivBase64}:${ctBase64}`;
+        }
+
+        // ---- Decrypt ----
+        async function decrypt(encrypted, passphrase, salt) {
+            const parts = encrypted.split(':');
+            if (parts.length !== 2) throw new Error('Invalid format: expected iv:ciphertext (both base64)');
+            const iv = base64Decode(parts[0]);
+            const ciphertext = base64Decode(parts[1]);
+            const key = await deriveKey(passphrase, salt);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                ciphertext
+            );
+            return new TextDecoder().decode(decrypted);
+        }
+
+        // ---- UI actions ----
+        function setOutput(text, isError = false) {
+            outputDiv.innerHTML = text;
+            if (isError) {
+                outputDiv.style.color = '#dc2626';
+            } else {
+                outputDiv.style.color = '#0f172a';
+            }
+        }
+
+        function showCopyFeedback() {
+            copyFeedback.classList.add('show');
+            setTimeout(() => copyFeedback.classList.remove('show'), 1500);
+        }
+
+        // ---- Encrypt ----
+        encryptBtn.addEventListener('click', async function() {
+            const passphrase = passphraseInput.value.trim();
+            const saltHex = saltInput.value.trim();
+            const plaintext = plaintextArea.value.trim();
+
+            if (!passphrase) { setOutput('❌ Passphrase is required.', true); return; }
+            if (!plaintext) { setOutput('❌ Please enter a secret to encrypt.', true); return; }
+
+            let salt;
+            try {
+                salt = hexToUint8(saltHex);
+                if (salt.length !== 16) throw new Error('Salt must be 16 bytes (32 hex chars)');
+            } catch (e) {
+                setOutput(`❌ Invalid salt: ${e.message}`, true);
+                return;
+            }
+
+            try {
+                const encrypted = await encrypt(plaintext, passphrase, salt);
+                setOutput(encrypted);
+            } catch (err) {
+                setOutput(`❌ Encryption failed: ${err.message}`, true);
+            }
+        });
+
+        // ---- Decrypt ----
+        decryptBtn.addEventListener('click', async function() {
+            const passphrase = passphraseInput.value.trim();
+            const saltHex = saltInput.value.trim();
+            const encryptedText = plaintextArea.value.trim(); // we reuse the same textarea
+
+            if (!passphrase) { setOutput('❌ Passphrase is required.', true); return; }
+            if (!encryptedText) { setOutput('❌ Please paste an encrypted string to decrypt.', true); return; }
+
+            let salt;
+            try {
+                salt = hexToUint8(saltHex);
+                if (salt.length !== 16) throw new Error('Salt must be 16 bytes (32 hex chars)');
+            } catch (e) {
+                setOutput(`❌ Invalid salt: ${e.message}`, true);
+                return;
+            }
+
+            try {
+                const decrypted = await decrypt(encryptedText, passphrase, salt);
+                setOutput(decrypted);
+            } catch (err) {
+                setOutput(`❌ Decryption failed: ${err.message}`, true);
+            }
+        });
+
+        // ---- Clear ----
+        clearBtn.addEventListener('click', function() {
+            plaintextArea.value = '';
+            setOutput('<span class="placeholder">Encrypted string will appear here</span>');
+        });
+
+        // ---- Copy ----
+        copyBtn.addEventListener('click', function() {
+            const text = outputDiv.textContent || '';
+            if (!text || text.includes('Encrypted string will appear here')) {
+                return;
+            }
+            navigator.clipboard.writeText(text).then(() => {
+                showCopyFeedback();
+            }).catch(() => {
+                // fallback
+                const range = document.createRange();
+                range.selectNode(outputDiv);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                window.getSelection().removeAllRanges();
+                showCopyFeedback();
+            });
+        });
+
+        // ---- Allow pasting encrypted text into the plaintext area for decryption ----
+        // (No extra logic needed, user just pastes and clicks Decrypt)
+
+        // ---- Set initial example salt ----
+        // The default salt is already set in the HTML.
+
+        console.log('🔐 Encryption tool ready.');
+    })();
+</script>
+
+</body>
+</html>

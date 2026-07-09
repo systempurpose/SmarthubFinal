@@ -49,7 +49,119 @@ function toggleDeviceSections(show) {
         statusBar.style.display = show ? 'grid' : 'none';
     }
 }
+// ---- Apply full theme (accent, background, text) ----
+// ---- Apply full theme (accent, background, card, text) ----
+function applyTheme(settings) {
+    const accent = settings.themeColor || '#0d6efd';
+    const bg = settings.bgColor || '#ffffff';
+    const cardBg = settings.cardColor || '#ffffff';
+    const text = settings.textColor || '#1f2937';
 
+    // Store the settings for later use
+    window._activeTheme = settings;
+
+    // Set CSS custom properties
+    document.documentElement.style.setProperty('--primary-color', accent);
+    document.documentElement.style.setProperty('--primary-color-dark', adjustColor(accent, -20));
+    document.documentElement.style.setProperty('--bg-color', bg);
+    document.documentElement.style.setProperty('--card-color', cardBg);
+    document.documentElement.style.setProperty('--text-color', text);
+
+    // ---- Body & Main Content ----
+    document.body.style.backgroundColor = bg;
+    document.body.style.color = text;
+
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.backgroundColor = bg;
+        mainContent.style.color = text;
+    }
+
+    const pageContent = document.getElementById('pageContent');
+    if (pageContent) {
+        pageContent.style.backgroundColor = bg;
+        pageContent.style.color = text;
+    }
+
+    // ---- Sidebar ----
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+        sidebar.style.color = text;
+        // Keep sidebar background dark (or you can make it customizable too)
+        // sidebar.style.backgroundColor = '#1e293b';
+        
+        // Update sidebar links and text
+        sidebar.querySelectorAll('a, span, div, .nav-item, .sidebar-footer, .connection-status, .auth-email, .auth-role').forEach(el => {
+            if (!el.style.color) {
+                el.style.color = text;
+            }
+        });
+        
+        // Also update the sidebar header
+        const header = sidebar.querySelector('.sidebar-header h2');
+        if (header) header.style.color = text;
+    }
+
+    // ---- Cards & Panels ----
+    document.querySelectorAll('.card, .info-card, .status-card, .test-card, .action-card, .metric, .health-card, .summary-card, .overview-item').forEach(el => {
+        // Only override if they don't have explicit background set inline
+        if (!el.style.backgroundColor) {
+            el.style.backgroundColor = cardBg;
+        }
+        if (!el.style.color) {
+            el.style.color = text;
+        }
+        // Also update child text elements
+        el.querySelectorAll('div, span, p, h1, h2, h3, h4, h5, h6, label, strong, .item-label, .item-value').forEach(child => {
+            if (!child.style.color) {
+                child.style.color = text;
+            }
+        });
+    });
+
+    // ---- Modals ----
+    document.querySelectorAll('.modal .modal-content, .modal .modal-body, .modal .modal-header, .modal .modal-footer').forEach(el => {
+        el.style.backgroundColor = cardBg;
+        el.style.color = text;
+        el.querySelectorAll('h3, p, span, label, div').forEach(child => {
+            if (!child.style.color) {
+                child.style.color = text;
+            }
+        });
+    });
+
+    // ---- Buttons (accent) ----
+    document.querySelectorAll('.btn-primary, button.primary, .auth-login-btn, #saveSettingsBtn, .auth-login-btn').forEach(btn => {
+        btn.style.background = accent;
+        btn.style.borderColor = accent;
+        btn.style.color = '#ffffff';
+    });
+
+    // ---- Secondary buttons ----
+    document.querySelectorAll('.btn-secondary, #resetSettingsBtn, .btn-secondary button').forEach(btn => {
+        if (!btn.style.background) {
+            btn.style.borderColor = text + '30';
+            btn.style.color = text;
+        }
+    });
+
+    console.log('[Theme] Applied:', { accent, bg, cardBg, text });
+}
+
+// ---- Helper to darken a hex color (used for gradients) ----
+function adjustColor(hex, percent) {
+    let r, g, b;
+    if (hex.startsWith('#')) {
+        const full = hex.length === 7 ? hex : `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+        r = parseInt(full.slice(1,3), 16);
+        g = parseInt(full.slice(3,5), 16);
+        b = parseInt(full.slice(5,7), 16);
+    } else {
+        return '#0b5ed7';
+    }
+    const darken = (val) => Math.max(0, Math.min(255, val + percent));
+    return `#${darken(r).toString(16).padStart(2,'0')}${darken(g).toString(16).padStart(2,'0')}${darken(b).toString(16).padStart(2,'0')}`;
+}
 let usbState = null; // track current USB state
 
 const PAGE_REQUIRES_ADB = {
@@ -1301,27 +1413,78 @@ function loadStorageResults() {
     } catch { return null; }
 }
 
-function loadSavedScanResults() {
-    // App Security Scan
-    const appResults = loadAppScanResults();
-    if (appResults) renderAppScanResults(appResults);
+// ===== LOAD SAVED SCAN RESULTS (async, Supabase first) =====
+async function loadSavedScanResults() {
+    try {
+        // Dynamically import Supabase helpers (since ui.js is not a module)
+        const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
+        const { fetchLatestAppScan, fetchLatestStorageScan } = await import('./sb-loader.js');
 
-    // Storage Analysis
-    const storageResults = loadStorageResults();
-    if (storageResults) renderStorageResults(storageResults);
+        const userId = getCurrentUserId();
+        const deviceId = getCurrentDeviceId() || window.currentDeviceId;
 
-    // Hardware Tests
-    const hardwareResults = loadHardwareResults();
-    if (hardwareResults) renderHardwareResults(hardwareResults);
+        // ---- App Scan ----
+        let appResults = null;
+        if (userId && deviceId) {
+            try {
+                appResults = await fetchLatestAppScan(userId, deviceId);
+                console.log('[loadSavedScanResults] App scan loaded from Supabase');
+            } catch (e) {
+                console.warn('[loadSavedScanResults] Supabase app scan fetch failed:', e);
+            }
+        }
+        if (!appResults) {
+            appResults = loadAppScanResults(); // localStorage fallback
+        }
+        if (appResults) {
+            renderAppScanResults(appResults);
+        }
 
-    // Connection Troubleshoot
-    const connectionResults = loadConnectionResults();
-    if (connectionResults) renderConnectionResults(connectionResults);
+        // ---- Storage Scan ----
+        let storageResults = null;
+        if (userId && deviceId) {
+            try {
+                storageResults = await fetchLatestStorageScan(userId, deviceId);
+                console.log('[loadSavedScanResults] Storage scan loaded from Supabase');
+            } catch (e) {
+                console.warn('[loadSavedScanResults] Supabase storage scan fetch failed:', e);
+            }
+        }
+        if (!storageResults) {
+            storageResults = loadStorageResults();
+        }
+        if (storageResults) {
+            renderStorageResults(storageResults);
+        }
 
-    // Advanced Diagnostic
-    const advancedResults = loadAdvancedResults();
-    if (advancedResults) renderAdvancedResults(advancedResults);
+        // ---- Local‑only scans ----
+        const hardwareResults = loadHardwareResults();
+        if (hardwareResults) renderHardwareResults(hardwareResults);
+
+        const connectionResults = loadConnectionResults();
+        if (connectionResults) renderConnectionResults(connectionResults);
+
+        const advancedResults = loadAdvancedResults();
+        if (advancedResults) renderAdvancedResults(advancedResults);
+
+    } catch (err) {
+        console.warn('[loadSavedScanResults] Failed to load from Supabase, using localStorage only:', err);
+        // Fallback: just load from localStorage
+        const appResults = loadAppScanResults();
+        if (appResults) renderAppScanResults(appResults);
+        const storageResults = loadStorageResults();
+        if (storageResults) renderStorageResults(storageResults);
+        const hardwareResults = loadHardwareResults();
+        if (hardwareResults) renderHardwareResults(hardwareResults);
+        const connectionResults = loadConnectionResults();
+        if (connectionResults) renderConnectionResults(connectionResults);
+        const advancedResults = loadAdvancedResults();
+        if (advancedResults) renderAdvancedResults(advancedResults);
+    }
 }
+
+// ---- Expose globally so other modules can trigger a reload ----
+window.loadSavedScanResults = loadSavedScanResults;
 
 function clearScanResults(type) {
     if (type === 'app') {

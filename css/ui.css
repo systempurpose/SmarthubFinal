@@ -1323,3 +1323,27 @@ pre {
     background: var(--primary-color) !important;
     /* other styles */
 }
+.auth-email,
+.auth-role {
+    color: #000000 !important;
+}
+:root {
+        --bg-color: #f1f5f9;
+    --card-color: #ffffff;
+    --text-color: #1f2937;
+    --primary-color: #0d6efd;
+    --primary-color-dark: #0b5ed7;
+}
+.card, .info-card, .status-card, .test-card, .action-card {
+    background: var(--card-color);
+    color: var(--text-color);
+}
+
+.main-content, #pageContent {
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.sidebar {
+    color: var(--text-color);
+}

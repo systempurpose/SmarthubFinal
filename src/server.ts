@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import fs from 'node:fs/promises';
-
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import networkRoutes from './routes/networkRoutes';
@@ -1400,6 +1400,8 @@ function classifyUsbDevice(dev: UsbDeviceInfo): DeviceState | null {
     // However, to avoid misclassifying, we'll return null and let it be generic.
     return null;
 }
+
+
 // ============ MAIN ROUTE ============
 
 // ---- Device state detection (no ADB) ----
@@ -2036,6 +2038,49 @@ app.get('/device/:id', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---- Account Storage Routes ----
+function getAppDataDir() {
+    const base = process.env.APPDATA || 
+                 (process.platform === 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + '/.local/share');
+    const dir = path.join(base, 'SmartHub');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+// Save encrypted account
+app.post('/api/account/save', (req, res) => {
+    const { encryptedData } = req.body;
+    if (!encryptedData) {
+        return res.status(400).json({ error: 'No data provided' });
+    }
+    try {
+        const dir = getAppDataDir();
+        const filePath = path.join(dir, 'account.dat');
+        writeFileSync(filePath, encryptedData, 'utf8');
+        res.json({ ok: true });
+    } catch (err: any) {
+        console.error('Failed to save account:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Load encrypted account
+app.get('/api/account/load', (req, res) => {
+    try {
+        const dir = getAppDataDir();
+        const filePath = path.join(dir, 'account.dat');
+        if (existsSync(filePath)) {
+            const encryptedData = readFileSync(filePath, 'utf8');
+            res.json({ encryptedData });
+        } else {
+            res.json({ encryptedData: null });
+        }
+    } catch (err: any) {
+        console.error('Failed to load account:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ---- Software Safety ----
