@@ -1,7 +1,123 @@
 // js/repairs.js – Repair Tools page (renderRepairs)
+// UI PASS: design tokens, card/badge/result system, grouped layout.
+// All function names, element IDs, and event-handling logic are unchanged.
 
 async function renderRepairs() {
     const container = document.getElementById('pageContent');
+
+    // ---- One-time style injection (scoped, won't leak into other pages) ----
+    function injectRepairStyles() {
+        if (document.getElementById('repairsStyleSheet')) return;
+        const style = document.createElement('style');
+        style.id = 'repairsStyleSheet';
+        style.textContent = `
+            .rp-page { --rp-danger:#dc2626; --rp-danger-bg:#fef2f2; --rp-danger-border:#fecaca;
+                       --rp-warning:#f59e0b; --rp-warning-bg:#fef3c7; --rp-warning-border:#fde68a;
+                       --rp-info:#0d6efd; --rp-info-bg:#eff6ff; --rp-info-border:#bfdbfe;
+                       --rp-success:#16a34a; --rp-success-bg:#f0fdf4; --rp-success-border:#bbf7d0;
+                       --rp-ink:#1f2937; --rp-muted:#6b7280; --rp-line:#e5e7eb; }
+
+            .rp-section { margin-bottom: 28px; }
+            .rp-section-head { display:flex; align-items:baseline; gap:10px; margin-bottom:12px; }
+            .rp-section-head h2 { margin:0; font-size:13px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--rp-muted); }
+            .rp-section-head .rp-rule { flex:1; height:1px; background:var(--rp-line); }
+            .rp-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; }
+
+            .rp-card { background:#fff; border:1px solid var(--rp-line); border-radius:14px; padding:20px;
+                       transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; }
+            .rp-card:hover { box-shadow:0 6px 20px rgba(15,23,42,0.08); border-color:#d7dce3; }
+            .rp-card.accent-danger { border-top:3px solid var(--rp-danger); }
+            .rp-card.accent-info { border-top:3px solid var(--rp-info); }
+
+            .rp-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:6px; }
+            .rp-icon-badge { flex-shrink:0; width:40px; height:40px; border-radius:10px; display:flex; align-items:center;
+                             justify-content:center; font-size:19px; }
+            .rp-icon-badge.danger { background:var(--rp-danger-bg); }
+            .rp-icon-badge.info { background:var(--rp-info-bg); }
+            .rp-card-head h3 { margin:0; font-size:15px; font-weight:700; color:var(--rp-ink); line-height:1.3; }
+
+            .rp-risk { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600;
+                       padding:3px 9px; border-radius:999px; margin-bottom:12px; }
+            .rp-risk .dot { width:6px; height:6px; border-radius:50%; }
+            .rp-risk.destructive { background:var(--rp-danger-bg); color:#991b1b; border:1px solid var(--rp-danger-border); }
+            .rp-risk.destructive .dot { background:var(--rp-danger); }
+            .rp-risk.caution { background:var(--rp-warning-bg); color:#92400e; border:1px solid var(--rp-warning-border); }
+            .rp-risk.caution .dot { background:var(--rp-warning); }
+            .rp-risk.safe { background:var(--rp-success-bg); color:#166534; border:1px solid var(--rp-success-border); }
+            .rp-risk.safe .dot { background:var(--rp-success); }
+
+            .rp-desc { color:var(--rp-muted); font-size:13.5px; line-height:1.5; margin:0 0 14px; }
+
+            .rp-btns { display:flex; flex-direction:column; gap:8px; }
+            .rp-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+                      padding:9px 10px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer;
+                      border:1px solid transparent; transition:filter .15s ease, opacity .15s ease; }
+            .rp-btn:hover { filter:brightness(1.05); }
+            .rp-btn:disabled, .rp-btn.is-disabled { opacity:0.45; cursor:not-allowed; filter:none; }
+            .rp-btn-danger { background:var(--rp-danger); color:#fff; }
+            .rp-btn-info { background:var(--rp-info); color:#fff; }
+            .rp-btn-ghost { background:#f8fafc; color:#374151; border-color:var(--rp-line); }
+            .rp-btn-ghost:hover { background:#f1f5f9; }
+            .rp-pill { font-size:10.5px; font-weight:600; padding:1px 7px; border-radius:999px; white-space:nowrap; }
+            .rp-pill-on-solid { background:rgba(255,255,255,0.22); color:#fff; }
+            .rp-pill-adb { background:#eef2ff; color:#4338ca; border:1px solid #e0e7ff; }
+            .rp-pill-noadb { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
+
+            .rp-result { margin-top:10px; font-size:13px; }
+            .rp-result:empty { margin-top:0; }
+            .rp-result-box { position:relative; margin-top:4px; padding:12px 14px; border-radius:8px; border-left:4px solid; }
+            .rp-result-box.success { background:var(--rp-success-bg); border-color:var(--rp-success); }
+            .rp-result-box.error { background:var(--rp-danger-bg); border-color:var(--rp-danger); }
+            .rp-result-box.warning { background:var(--rp-warning-bg); border-color:var(--rp-warning); }
+            .rp-result-box.info { background:var(--rp-info-bg); border-color:var(--rp-info); }
+            .rp-result-box .title { margin:0; font-size:13.5px; font-weight:700; }
+            .rp-result-box .sub { margin:4px 0 0; font-size:12.5px; color:var(--rp-muted); }
+            .rp-result-box .hint { margin:6px 0 0; font-size:11.5px; color:#92400e; }
+            .rp-result-box .log { margin-top:8px; max-height:190px; overflow-y:auto; font-size:11.5px;
+                                   background:rgba(0,0,0,0.035); padding:8px; border-radius:6px; line-height:1.6; }
+            .rp-result-box .close-x { position:absolute; top:6px; right:8px; background:transparent; border:none;
+                                       font-size:19px; color:var(--rp-muted); cursor:pointer; line-height:1; padding:2px 4px; }
+            .rp-result-box .close-x:hover { color:var(--rp-ink); }
+            .rp-result-box .pending { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--rp-muted); }
+
+            .rp-banner { padding:10px 14px; border-radius:9px; font-size:13px; display:flex; gap:8px; align-items:flex-start; }
+            .rp-banner.warn { background:var(--rp-warning-bg); border-left:4px solid var(--rp-warning); color:#92400e; }
+
+            .rp-modal-overlay { z-index:99999; background:rgba(15,23,42,0.55); backdrop-filter:blur(6px);
+                                align-items:center; justify-content:center; }
+            .rp-modal-box { max-width:480px; padding:0; border-radius:16px; box-shadow:0 24px 60px rgba(15,23,42,0.28);
+                            overflow:hidden; background:#fff; }
+            .rp-modal-box.wide { max-width:700px; max-height:85vh; display:flex; flex-direction:column; }
+            .rp-modal-head { padding:16px 22px; border-bottom:1px solid rgba(0,0,0,0.06); display:flex; align-items:center; gap:12px; }
+            .rp-modal-head .icon { font-size:24px; }
+            .rp-modal-head h3 { margin:0; font-size:16.5px; font-weight:700; }
+            .rp-modal-head p.sub { margin:2px 0 0; font-size:12.5px; }
+            .rp-modal-head .x { margin-left:auto; background:transparent; border:none; font-size:22px; cursor:pointer; padding:0 4px; }
+            .rp-modal-body { padding:22px; }
+            .rp-modal-foot { padding:12px 22px; background:#f8fafc; border-top:1px solid var(--rp-line);
+                             display:flex; justify-content:flex-end; gap:10px; }
+
+            .rp-brand-card { background:#fff; border:1.5px solid var(--rp-line); border-radius:12px; padding:16px 8px;
+                             text-align:center; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
+            .rp-brand-card:hover { border-color:var(--rp-info); box-shadow:0 6px 16px rgba(13,110,253,0.15); transform:translateY(-1px); }
+            .rp-brand-card img { height:44px; max-width:80px; object-fit:contain; margin-bottom:8px; }
+            .rp-brand-card .name { font-size:12.5px; font-weight:600; color:var(--rp-ink); }
+
+            .rp-guide { position:relative; margin-top:8px; padding:14px 16px; background:var(--rp-info-bg);
+                        border-radius:8px; border-left:4px solid var(--rp-info); }
+            .rp-guide strong.head { display:block; font-size:13.5px; margin-bottom:4px; }
+            .rp-guide p, .rp-guide li { font-size:13px; color:#374151; }
+            .rp-guide code { background:#e2e8f0; padding:1px 5px; border-radius:4px; font-size:12px; }
+            .rp-guide hr { margin:12px 0; border:0; border-top:1px solid #e5e7eb; }
+
+            .rp-confirm-input { width:100%; padding:10px 12px; border:2px solid #d1d5db; border-radius:8px;
+                                 font-size:14px; margin-top:6px; transition:border-color .15s ease; }
+            .rp-confirm-input:focus { outline:none; border-color:var(--rp-info); }
+            .rp-confirm-input.valid { border-color:var(--rp-success); }
+        `;
+        document.head.appendChild(style);
+    }
+    injectRepairStyles();
 
     // ---- Helper: run ADB command with improved error handling ----
     async function runAdb(command) {
@@ -41,25 +157,36 @@ async function renderRepairs() {
         }
     }
 
+    // ---- Helper: build a standardized result box ----
+    function resultBox(kind, title, sub, hint, log) {
+        // kind: 'success' | 'error' | 'warning' | 'info'
+        const icon = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' }[kind] || 'ℹ️';
+        return `
+            <div class="rp-result-box ${kind}">
+                <p class="title">${icon} ${title}</p>
+                ${sub ? `<p class="sub">${sub}</p>` : ''}
+                ${log ? `<div class="log">${log}</div>` : ''}
+                ${hint ? `<p class="hint">${hint}</p>` : ''}
+            </div>
+        `;
+    }
+
     // ---- Helper: show result modal ----
     function showResultModal(title, message, isSuccess = true) {
         const icon = isSuccess ? '✅' : '❌';
         const color = isSuccess ? '#16a34a' : '#dc2626';
+        const headBg = isSuccess ? '#f0fdf4' : '#fef2f2';
         const modalHtml = `
-            <div id="resultModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                <div class="modal-content" style="max-width: 480px; padding: 0; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; background: white;">
-                    <div style="background: ${isSuccess ? '#f0fdf4' : '#fef2f2'}; padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 28px;">${icon}</span>
-                            <div>
-                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: ${color};">${title}</h3>
-                            </div>
-                            <button id="resultModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 24px; color: #6B7280; cursor: pointer; padding: 0 8px;">&times;</button>
-                        </div>
+            <div id="resultModal" class="modal rp-modal-overlay" style="display: none;">
+                <div class="modal-content rp-modal-box">
+                    <div class="rp-modal-head" style="background:${headBg};">
+                        <span class="icon">${icon}</span>
+                        <h3 style="color:${color};">${title}</h3>
+                        <button id="resultModalClose" class="x" style="color:#6B7280;">&times;</button>
                     </div>
-                    <div style="padding: 24px;">
+                    <div class="rp-modal-body">
                         <p style="margin: 0; font-size: 14px; color: #374151; white-space: pre-wrap; word-break: break-word;">${escapeHtml(message)}</p>
-                        <button id="resultModalOkBtn" class="btn-primary" style="margin-top: 16px; padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: ${color}; border: none; color: white;">OK</button>
+                        <button id="resultModalOkBtn" class="btn-primary rp-btn rp-btn-info" style="margin-top: 16px; width:auto; padding:8px 24px; background: ${color};">OK</button>
                     </div>
                 </div>
             </div>
@@ -82,22 +209,18 @@ async function renderRepairs() {
     // ---- Helper: show confirmation modal for dangerous actions ----
     function showDangerConfirm(title, message, callback) {
         const modalHtml = `
-            <div id="dangerConfirmModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                <div class="modal-content" style="max-width: 480px; padding: 0; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; background: white;">
-                    <div style="background: #fef2f2; padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 28px;">⚠️</span>
-                            <div>
-                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #dc2626;">${title}</h3>
-                            </div>
-                            <button id="dangerConfirmClose" style="margin-left: auto; background: transparent; border: none; font-size: 24px; color: #6B7280; cursor: pointer; padding: 0 8px;">&times;</button>
-                        </div>
+            <div id="dangerConfirmModal" class="modal rp-modal-overlay" style="display: none;">
+                <div class="modal-content rp-modal-box">
+                    <div class="rp-modal-head" style="background:#fef2f2;">
+                        <span class="icon">⚠️</span>
+                        <h3 style="color:#dc2626;">${title}</h3>
+                        <button id="dangerConfirmClose" class="x" style="color:#6B7280;">&times;</button>
                     </div>
-                    <div style="padding: 24px;">
+                    <div class="rp-modal-body">
                         <p style="margin: 0 0 16px 0; font-size: 14px; color: #374151; white-space: pre-wrap;">${escapeHtml(message)}</p>
                         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                            <button id="dangerConfirmCancel" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="repairs.danger.cancel">Cancel</button>
-                            <button id="dangerConfirmOk" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: #dc2626; border: none; color: white;" data-i18n="repairs.danger.proceed">Proceed</button>
+                            <button id="dangerConfirmCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.danger.cancel">Cancel</button>
+                            <button id="dangerConfirmOk" class="btn-primary rp-btn rp-btn-danger" style="width:auto; padding: 8px 24px;" data-i18n="repairs.danger.proceed">Proceed</button>
                         </div>
                     </div>
                 </div>
@@ -286,19 +409,17 @@ async function renderRepairs() {
     // ---- Legal disclaimer modal ----
     function showLegalDisclaimer(action, callback) {
         const modalHtml = `
-            <div id="legalDisclaimerModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                <div class="modal-content acrylic" style="max-width: 480px; padding: 0; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;">
-                    <div style="background: #fef3c7; padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 28px;">⚠️</span>
-                            <div>
-                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #92400e;" data-i18n="repairs.legal.title">Legal Disclaimer</h3>
-                                <p style="margin: 2px 0 0 0; font-size: 13px; color: #78350f;" data-i18n="repairs.legal.subtitle">Please read before proceeding</p>
-                            </div>
-                            <button id="legalDisclaimerClose" style="margin-left: auto; background: transparent; border: none; font-size: 24px; color: #78350f; cursor: pointer; padding: 0 8px;">&times;</button>
+            <div id="legalDisclaimerModal" class="modal rp-modal-overlay" style="display: none;">
+                <div class="modal-content acrylic rp-modal-box">
+                    <div class="rp-modal-head" style="background:#fef3c7;">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <h3 style="color:#92400e;" data-i18n="repairs.legal.title">Legal Disclaimer</h3>
+                            <p class="sub" style="color:#78350f;" data-i18n="repairs.legal.subtitle">Please read before proceeding</p>
                         </div>
+                        <button id="legalDisclaimerClose" class="x" style="color:#78350f;">&times;</button>
                     </div>
-                    <div style="padding: 24px 24px 20px 24px;">
+                    <div class="rp-modal-body">
                         <p style="font-size: 14px; color: #1e293b; line-height: 1.6; margin: 0 0 16px 0;" data-i18n="repairs.legal.body">
                             This tool is intended <strong>only for legitimate device recovery</strong> by the rightful owner.
                             Unauthorized use to bypass security on devices you do not own is illegal and unethical.
@@ -307,8 +428,8 @@ async function renderRepairs() {
                             By proceeding, you confirm that you are the owner of this device or have explicit authorization from the owner.
                         </p>
                         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                            <button id="legalCancelBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="repairs.legal.cancel">Cancel</button>
-                            <button id="legalAcceptBtn" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: #0d6efd;" data-i18n="repairs.legal.accept">I Understand</button>
+                            <button id="legalCancelBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.legal.cancel">Cancel</button>
+                            <button id="legalAcceptBtn" class="btn-primary rp-btn rp-btn-info" style="width:auto; padding: 8px 24px;" data-i18n="repairs.legal.accept">I Understand</button>
                         </div>
                     </div>
                 </div>
@@ -338,15 +459,15 @@ async function renderRepairs() {
         let modal = document.getElementById('factoryResetModal');
         if (!modal) {
             const modalHtml = `
-                <div id="factoryResetModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                    <div class="modal-content" style="max-width: 700px; max-height: 85vh; display: flex; flex-direction: column; padding: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
-                        <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-                            <h3 id="factoryResetModalTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;" data-i18n="repairs.reset.modal.title">🗑️ Factory Reset – Select Your Brand</h3>
-                            <span class="close-button" id="closeFactoryResetModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
+                <div id="factoryResetModal" class="modal rp-modal-overlay" style="display: none;">
+                    <div class="modal-content rp-modal-box wide">
+                        <div class="rp-modal-head" style="background:#f8fafc; border-bottom:1px solid #e5e7eb;">
+                            <h3 id="factoryResetModalTitle" style="color:#1f2937;" data-i18n="repairs.reset.modal.title">🗑️ Factory Reset – Select Your Brand</h3>
+                            <button id="closeFactoryResetModal" class="x" style="color:#9ca3af; margin-left:auto;">&times;</button>
                         </div>
-                        <div id="factoryResetModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
-                        <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; flex-shrink: 0;">
-                            <button id="closeFactoryResetModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="repairs.reset.modal.close">Close</button>
+                        <div id="factoryResetModalBody" class="rp-modal-body" style="flex: 1; overflow-y: auto; background:#fff;"></div>
+                        <div class="rp-modal-foot">
+                            <button id="closeFactoryResetModalBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.modal.close">Close</button>
                         </div>
                     </div>
                 </div>
@@ -363,31 +484,22 @@ async function renderRepairs() {
         function showBrandGrid() {
             titleEl.textContent = '🗑️ Factory Reset – Select Your Brand';
             let html = `
-                <p style="color: #6B7280; margin-bottom: 16px;" data-i18n="repairs.reset.modal.chooseBrand">Choose your device brand to view the factory reset guide.</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;">
+                <p style="color: #6B7280; margin-bottom: 16px; font-size:13.5px;" data-i18n="repairs.reset.modal.chooseBrand">Choose your device brand to view the factory reset guide.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:12px;">
             `;
             for (const brand of supportedBrands) {
                 const logoFile = brandLogoMap[brand];
                 const displayName = brand.charAt(0).toUpperCase() + brand.slice(1);
                 html += `
-                    <div class="brand-card" data-brand="${brand}" style="
-                        background: white;
-                        border: 2px solid #e5e7eb;
-                        border-radius: 12px;
-                        padding: 16px 8px;
-                        text-align: center;
-                        cursor: pointer;
-                        transition: all 0.15s ease;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-                    " onmouseover="this.style.borderColor='#0d6efd'; this.style.boxShadow='0 4px 12px rgba(13,110,253,0.15)'" onmouseout="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none'">
-                        <img src="../android_logo/${logoFile}" alt="${displayName}" style="height: 48px; max-width: 80px; object-fit: contain; margin-bottom: 8px;">
-                        <div style="font-size: 13px; font-weight: 500; color: #1f2937;">${displayName}</div>
+                    <div class="rp-brand-card" data-brand="${brand}">
+                        <img src="../android_logo/${logoFile}" alt="${displayName}">
+                        <div class="name">${displayName}</div>
                     </div>
                 `;
             }
             html += `</div>`;
             bodyEl.innerHTML = html;
-            document.querySelectorAll('.brand-card').forEach(card => {
+            document.querySelectorAll('.rp-brand-card').forEach(card => {
                 card.addEventListener('click', function() {
                     const brand = this.dataset.brand;
                     showGuideForBrand(brand);
@@ -424,12 +536,12 @@ async function renderRepairs() {
                     ${steps}
                 </div>
                 ${note ? `<p style="margin: 12px 0 0; font-size: 13px; color: #6B7280;">ℹ️ ${note}</p>` : ''}
-                <div style="margin-top: 16px; padding: 10px 14px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;" data-i18n="repairs.reset.modal.warning">
+                <div class="rp-banner warn" style="margin-top: 16px;" data-i18n="repairs.reset.modal.warning">
                     ⚠️ This will erase all data and may trigger Factory Reset Protection (FRP). Have your Google account ready.
                 </div>
                 <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button id="copyResetGuideBtn" class="btn-secondary" style="padding: 6px 18px; font-size: 13px; border-radius: 8px;" data-i18n="repairs.reset.modal.copy">📋 Copy Instructions</button>
-                    <button id="backToBrandsBtn" class="btn-secondary" style="padding: 6px 18px; font-size: 13px; border-radius: 8px;" data-i18n="repairs.reset.modal.back">⬅️ Back to Brands</button>
+                    <button id="copyResetGuideBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 6px 18px; font-size: 13px;" data-i18n="repairs.reset.modal.copy">📋 Copy Instructions</button>
+                    <button id="backToBrandsBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 6px 18px; font-size: 13px;" data-i18n="repairs.reset.modal.back">⬅️ Back to Brands</button>
                 </div>
             `;
             document.getElementById('copyResetGuideBtn')?.addEventListener('click', function() {
@@ -559,87 +671,68 @@ async function renderRepairs() {
     // ---- Public Deactivate FRP (with UI feedback) ----
     async function deactivateFrp() {
         const resultDiv = document.getElementById('frpResult');
-        resultDiv.innerHTML = '⏳ Deactivating FRP... (detecting Android version)';
+        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Deactivating FRP… (detecting Android version)</p></div>`;
 
         const result = await deactivateFrpInternal(false);
         const version = result.version || 'unknown';
-        let html = `
-            <div style="margin-top:8px; padding:12px; border-radius:6px; border-left:4px solid ${result.success ? '#16a34a' : '#dc2626'}; background: ${result.success ? '#f0fdf4' : '#fef2f2'};">
-                <strong>${result.success ? '✅' : '❌'} ${result.success ? 'FRP deactivated' : 'FRP deactivation incomplete'}</strong>
-                <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">
-                    Android SDK: ${version} &nbsp;|&nbsp; Commands attempted: ${result.commands.length}
-                </p>
-                <div style="margin-top:6px; max-height:200px; overflow-y:auto; font-size:12px; background:rgba(0,0,0,0.03); padding:6px; border-radius:4px;">
-                    ${result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('')}
-                </div>
-                ${result.success ? '<p style="margin:4px 0 0; font-size:12px; color:#92400e;">Reboot the device to apply changes.</p>' : '<p style="margin:4px 0 0; font-size:12px; color:#92400e;">Try the manual guide below.</p>'}
-            </div>
-        `;
-        resultDiv.innerHTML = html;
+        const log = result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('');
+        const sub = `Android SDK: ${version} &nbsp;|&nbsp; Commands attempted: ${result.commands.length}`;
+        const hint = result.success ? 'Reboot the device to apply changes.' : 'Try the manual guide below.';
+
+        resultDiv.innerHTML = resultBox(
+            result.success ? 'success' : 'error',
+            result.success ? 'FRP deactivated' : 'FRP deactivation incomplete',
+            sub, hint, log
+        );
     }
 
     // ---- Combined FRP deactivation + Factory Reset ----
     async function performFullResetWithFrpRemoval() {
         const resultDiv = document.getElementById('factoryResetResult');
         if (!resultDiv) {
-            const card = document.querySelector('.card:has(#factoryResetModalBtn)');
+            const card = document.querySelector('.card:has(#factoryResetModalBtn), .rp-card:has(#factoryResetModalBtn)');
             if (card) {
                 const div = document.createElement('div');
                 div.id = 'factoryResetResult';
-                div.style.marginTop = '12px';
-                div.style.fontSize = '13px';
+                div.className = 'rp-result';
                 card.appendChild(div);
             }
         }
         const resultEl = document.getElementById('factoryResetResult');
-        if (resultEl) resultEl.innerHTML = '⏳ Removing FRP and accounts...';
+        if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Removing FRP and accounts…</p></div>`;
 
         const result = await deactivateFrpInternal(true);
         if (!result.success) {
             if (resultEl) {
-                resultEl.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                        <strong>❌ FRP removal failed</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">
-                            Cannot proceed with factory reset because FRP could not be removed.
-                            Please try using the "Deactivate FRP" button manually first.
-                        </p>
-                        <div style="margin-top:6px; max-height:150px; overflow-y:auto; font-size:12px; background:rgba(0,0,0,0.03); padding:6px; border-radius:4px;">
-                            ${result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('')}
-                        </div>
-                    </div>
-                `;
+                const log = result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('');
+                resultEl.innerHTML = resultBox(
+                    'error', 'FRP removal failed',
+                    'Cannot proceed with factory reset because FRP could not be removed. Please try using the "Deactivate FRP" button manually first.',
+                    null, log
+                );
             }
             return;
         }
 
-        if (resultEl) resultEl.innerHTML = '⏳ Sending factory reset command...';
+        if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Sending factory reset command…</p></div>`;
 
         try {
             const writeCmd = `echo '--wipe_data' > /cache/recovery/command`;
             await runAdb(writeCmd);
-            if (resultEl) resultEl.innerHTML = '⏳ Rebooting to recovery...';
+            if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to recovery…</p></div>`;
             await runAdb('reboot recovery');
             if (resultEl) {
-                resultEl.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                        <strong>✅ FRP removed and reset triggered</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">
-                            The device is now rebooting into recovery mode and will perform a factory reset automatically.
-                            FRP has been cleared.
-                        </p>
-                    </div>
-                `;
+                resultEl.innerHTML = resultBox(
+                    'success', 'FRP removed and reset triggered',
+                    'The device is now rebooting into recovery mode and will perform a factory reset automatically. FRP has been cleared.'
+                );
             }
         } catch (err) {
             if (resultEl) {
-                resultEl.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                        <strong>❌ Reset failed</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                        <p style="margin:4px 0 0; font-size:12px; color:#92400e;">FRP was removed but reset failed. Try manual guide.</p>
-                    </div>
-                `;
+                resultEl.innerHTML = resultBox(
+                    'error', 'Reset failed', escapeHtml(err.message),
+                    'FRP was removed but reset failed. Try manual guide.'
+                );
             }
         }
     }
@@ -651,46 +744,36 @@ async function renderRepairs() {
         if (existing) existing.remove();
 
         const modalHtml = `
-            <div id="${modalId}" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                <div class="modal-content" style="max-width: 480px; padding: 0; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; background: #ffffff;">
-                    <div style="background: #dc2626; padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 28px;">⚠️</span>
-                            <div>
-                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: white;" data-i18n="repairs.reset.adb.title">Factory Reset via ADB</h3>
-                                <p style="margin: 2px 0 0 0; font-size: 13px; color: #fca5a5;" data-i18n="repairs.reset.adb.subtitle">This action is irreversible</p>
-                            </div>
-                            <button id="adbResetModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 24px; color: white; cursor: pointer; padding: 0 8px;">&times;</button>
+            <div id="${modalId}" class="modal rp-modal-overlay" style="display: none; background: rgba(15,23,42,0.65);">
+                <div class="modal-content rp-modal-box">
+                    <div class="rp-modal-head" style="background: #dc2626;">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <h3 style="color:white;" data-i18n="repairs.reset.adb.title">Factory Reset via ADB</h3>
+                            <p class="sub" style="color:#fca5a5;" data-i18n="repairs.reset.adb.subtitle">This action is irreversible</p>
                         </div>
+                        <button id="adbResetModalClose" class="x" style="color:white;">&times;</button>
                     </div>
-                    <div style="padding: 24px;">
-                        <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
-                            <p style="margin: 0; font-size: 14px; color: #991b1b; font-weight: 500;" data-i18n="repairs.reset.adb.warning1">
+                    <div class="rp-modal-body">
+                        <div class="rp-result-box error" style="margin-top:0;">
+                            <p class="title" style="font-weight:500;" data-i18n="repairs.reset.adb.warning1">
                                 ⚠️ This will erase <strong>ALL</strong> data and <strong>automatically remove FRP</strong> before wiping.
                                 You will need your Google account credentials to set up the device again.
                             </p>
                         </div>
-                        <div style="background: #fef9c3; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px;">
-                            <p style="margin: 0; font-size: 13px; color: #92400e;" data-i18n="repairs.reset.adb.warning2">
+                        <div class="rp-result-box warning" data-i18n="repairs.reset.adb.warning2">
+                            <p class="title" style="font-size:13px; font-weight:500;">
                                 To confirm, type <strong>CONFIRM</strong> in the box below.
                             </p>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label for="confirmInput" style="font-size: 14px; font-weight: 500; color: #1f2937;" data-i18n="repairs.reset.adb.label">Type "CONFIRM" to proceed</label>
-                            <input type="text" id="confirmInput" placeholder="CONFIRM" style="
-                                width: 100%;
-                                padding: 10px 12px;
-                                border: 2px solid #d1d5db;
-                                border-radius: 8px;
-                                font-size: 14px;
-                                margin-top: 4px;
-                                transition: border-color 0.2s;
-                            " autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+                            <label for="confirmInput" style="font-size: 14px; font-weight: 600; color: #1f2937;" data-i18n="repairs.reset.adb.label">Type "CONFIRM" to proceed</label>
+                            <input type="text" id="confirmInput" placeholder="CONFIRM" class="rp-confirm-input" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
                             <div id="confirmError" style="color: #dc2626; font-size: 12px; margin-top: 4px; display: none;" data-i18n="repairs.reset.adb.error">Please type CONFIRM exactly.</div>
                         </div>
                         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                            <button id="adbResetCancel" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="repairs.reset.adb.cancel">Cancel</button>
-                            <button id="adbResetProceed" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: #dc2626; border: none; color: white; opacity: 0.5; pointer-events: none;" data-i18n="repairs.reset.adb.proceed">Proceed</button>
+                            <button id="adbResetCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.adb.cancel">Cancel</button>
+                            <button id="adbResetProceed" class="btn-primary rp-btn rp-btn-danger is-disabled" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.adb.proceed">Proceed</button>
                         </div>
                     </div>
                 </div>
@@ -712,12 +795,12 @@ async function renderRepairs() {
         input.addEventListener('input', function() {
             const val = this.value.trim();
             if (val.toUpperCase() === 'CONFIRM') {
-                proceedBtn.style.opacity = '1';
-                proceedBtn.style.pointerEvents = 'auto';
+                proceedBtn.classList.remove('is-disabled');
+                input.classList.add('valid');
                 errorDiv.style.display = 'none';
             } else {
-                proceedBtn.style.opacity = '0.5';
-                proceedBtn.style.pointerEvents = 'none';
+                proceedBtn.classList.add('is-disabled');
+                input.classList.remove('valid');
                 errorDiv.style.display = 'block';
                 errorDiv.textContent = 'Please type CONFIRM exactly.';
             }
@@ -762,36 +845,34 @@ async function renderRepairs() {
         ];
 
         let checkboxes = packages.map(p => `
-            <div style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+            <div style="display:flex; align-items:center; gap:8px; padding:5px 0;">
                 <input type="checkbox" id="pkg_${p.pkg}" value="${p.pkg}" style="width:16px; height:16px;">
                 <label for="pkg_${p.pkg}" style="font-size:13px;">${p.name} <span style="color:#6B7280; font-size:11px;">(${p.pkg})</span></label>
             </div>
         `).join('');
 
         const modalHtml = `
-            <div id="${modalId}" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-                <div class="modal-content" style="max-width: 480px; padding: 0; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; background: #ffffff;">
-                    <div style="background: #0d6efd; padding: 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="font-size: 28px;">📦</span>
-                            <div>
-                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: white;" data-i18n="repairs.bloatware.modal.title">Disable Bloatware</h3>
-                                <p style="margin: 2px 0 0 0; font-size: 13px; color: #b0d4ff;" data-i18n="repairs.bloatware.modal.subtitle">Select apps to disable (user‑only)</p>
-                            </div>
-                            <button id="bloatwareModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 24px; color: white; cursor: pointer; padding: 0 8px;">&times;</button>
+            <div id="${modalId}" class="modal rp-modal-overlay" style="display: none;">
+                <div class="modal-content rp-modal-box">
+                    <div class="rp-modal-head" style="background: #0d6efd;">
+                        <span class="icon">📦</span>
+                        <div>
+                            <h3 style="color:white;" data-i18n="repairs.bloatware.modal.title">Disable Bloatware</h3>
+                            <p class="sub" style="color:#b0d4ff;" data-i18n="repairs.bloatware.modal.subtitle">Select apps to disable (user‑only)</p>
                         </div>
+                        <button id="bloatwareModalClose" class="x" style="color:white;">&times;</button>
                     </div>
-                    <div style="padding: 24px; max-height: 400px; overflow-y: auto;">
+                    <div class="rp-modal-body" style="max-height: 400px; overflow-y: auto;">
                         <div style="display:flex; flex-direction:column; gap:2px;">
                             ${checkboxes}
                         </div>
-                        <div style="margin-top:12px; font-size:12px; color:#6B7280;">
+                        <div style="margin-top:12px; padding-top:10px; border-top:1px solid #e5e7eb; font-size:12.5px; color:#6B7280;">
                             <label><input type="checkbox" id="selectAllBloatware" data-i18n="repairs.bloatware.modal.selectAll"> Select All</label>
                         </div>
                     </div>
-                    <div style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 12px;">
-                        <button id="bloatwareCancel" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="repairs.bloatware.modal.cancel">Cancel</button>
-                        <button id="bloatwareDisable" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: #dc2626; border: none; color: white;" data-i18n="repairs.bloatware.modal.disable">Disable Selected</button>
+                    <div class="rp-modal-foot">
+                        <button id="bloatwareCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.bloatware.modal.cancel">Cancel</button>
+                        <button id="bloatwareDisable" class="btn-primary rp-btn rp-btn-danger" style="width:auto; padding: 8px 24px;" data-i18n="repairs.bloatware.modal.disable">Disable Selected</button>
                     </div>
                 </div>
             </div>
@@ -823,7 +904,7 @@ async function renderRepairs() {
 
             // Show progress in the result div
             const resultDiv = document.getElementById('bloatwareResult');
-            resultDiv.innerHTML = '⏳ Disabling selected apps...';
+            resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Disabling selected apps…</p></div>`;
 
             let results = [];
             let anySuccess = false;
@@ -839,16 +920,13 @@ async function renderRepairs() {
             }
 
             const success = results.filter(r => r.status.includes('✅')).length;
-            const html = `
-                <div style="margin-top:8px; padding:12px; border-radius:6px; border-left:4px solid ${success > 0 ? '#16a34a' : '#dc2626'}; background: ${success > 0 ? '#f0fdf4' : '#fef2f2'};">
-                    <strong>${success > 0 ? '✅' : '❌'} ${success > 0 ? `${success} app(s) disabled` : 'No apps disabled'}</strong>
-                    <div style="margin-top:6px; max-height:200px; overflow-y:auto; font-size:12px; background:rgba(0,0,0,0.03); padding:6px; border-radius:4px;">
-                        ${results.map(r => `<div>${r.status} – ${r.pkg}</div>`).join('')}
-                    </div>
-                    ${success === 0 && packages.length > 0 ? '<p style="margin-top:4px; color:#92400e;">💡 Make sure the device is connected and USB debugging is authorized.</p>' : ''}
-                </div>
-            `;
-            resultDiv.innerHTML = html;
+            const log = results.map(r => `<div>${r.status} – ${r.pkg}</div>`).join('');
+            const hint = (success === 0 && packages.length > 0) ? '💡 Make sure the device is connected and USB debugging is authorized.' : null;
+            resultDiv.innerHTML = resultBox(
+                success > 0 ? 'success' : 'error',
+                success > 0 ? `${success} app(s) disabled` : 'No apps disabled',
+                null, hint, log
+            );
         });
 
         if (typeof applyLanguage === 'function') {
@@ -859,81 +937,65 @@ async function renderRepairs() {
 
     // ---- NEW: Clear Cache ----
     async function clearCache() {
-        const resultDiv = document.getElementById('cacheResult');
-        resultDiv.innerHTML = '⏳ Clearing cache...';
+    const resultDiv = document.getElementById('cacheResult');
+    resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Clearing cache…</p></div>`;
 
-        try {
-            // First try to trim caches (safe method)
-            const output = await runAdb('pm trim-caches 9999999999');
-            // Also clear app cache for all packages
-            const apps = await runAdb('pm list packages');
-            const packages = apps.split('\n').map(line => line.replace('package:', '').trim()).filter(Boolean);
-            let cleared = 0;
-            for (const pkg of packages.slice(0, 50)) { // limit to 50 to avoid timeout
-                try {
-                    await runAdb(`pm clear --cache-only ${pkg}`);
-                    cleared++;
-                } catch (e) { /* ignore */ }
+    try {
+        // 1. Trim caches globally (safe and fast)
+        await runAdb('pm trim-caches 9999999999');
+
+        // 2. Get list of all packages
+        const appsOutput = await runAdb('pm list packages');
+        const packages = appsOutput.split('\n')
+            .map(line => line.replace('package:', '').trim())
+            .filter(Boolean);
+
+        // 3. Clear per-app cache (limit to avoid timeout)
+        const MAX_APPS = 200;
+        const packagesToClear = packages.slice(0, MAX_APPS);
+        const attemptedCount = packagesToClear.length;
+        let clearedCount = 0;
+
+        for (const pkg of packagesToClear) {
+            try {
+                const output = await runAdb(`pm clear --cache-only ${pkg}`);
+                if (output.includes('Success') || output.includes('Cleared')) {
+                    clearedCount++;
+                }
+            } catch (e) {
+                // Ignore errors – some packages may not allow cache clearing
             }
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                    <strong data-i18n="repairs.cache.success">✅ Cache cleared</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">
-                        Trimmed caches and cleared cache for ${cleared} apps.
-                    </p>
-                </div>
-            `;
-        } catch (err) {
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                    <strong data-i18n="repairs.cache.failed">❌ Clear cache failed</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                    <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.cache.fallback">Try using the manual guide below.</p>
-                </div>
-            `;
+            // Small delay to prevent overload
+            await new Promise(r => setTimeout(r, 10));
         }
+
+        const message = `Trimmed caches and cleared cache for ${clearedCount} app${clearedCount !== 1 ? 's' : ''} (out of ${attemptedCount} attempted).`;
+        resultDiv.innerHTML = resultBox('success', 'Cache cleared', message);
+    } catch (err) {
+        resultDiv.innerHTML = resultBox('error', 'Clear cache failed', escapeHtml(err.message), 'Try using the manual guide below.');
     }
+}
 
     // ---- NEW: Reboot to Recovery / Download ----
     async function rebootToRecovery() {
         const resultDiv = document.getElementById('rebootResult');
-        resultDiv.innerHTML = '⏳ Rebooting to Recovery...';
+        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to Recovery…</p></div>`;
         try {
             await runAdb('reboot recovery');
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                    <strong data-i18n="repairs.reboot.recovery.success">✅ Reboot to Recovery sent</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.reboot.recovery.desc">The device should now boot into Recovery mode.</p>
-                </div>
-            `;
+            resultDiv.innerHTML = resultBox('success', 'Reboot to Recovery sent', 'The device should now boot into Recovery mode.');
         } catch (err) {
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                    <strong data-i18n="repairs.reboot.failed">❌ Failed to reboot</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                </div>
-            `;
+            resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message));
         }
     }
 
     async function rebootToDownload() {
         const resultDiv = document.getElementById('rebootResult');
-        resultDiv.innerHTML = '⏳ Rebooting to Download mode...';
+        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to Download mode…</p></div>`;
         try {
             await runAdb('reboot download');
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                    <strong data-i18n="repairs.reboot.download.success">✅ Reboot to Download sent</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.reboot.download.desc">The device should now boot into Download mode (Samsung).</p>
-                </div>
-            `;
+            resultDiv.innerHTML = resultBox('success', 'Reboot to Download sent', 'The device should now boot into Download mode (Samsung).');
         } catch (err) {
-            resultDiv.innerHTML = `
-                <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                    <strong data-i18n="repairs.reboot.failed">❌ Failed to reboot</strong>
-                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                </div>
-            `;
+            resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message));
         }
     }
 
@@ -941,159 +1003,172 @@ async function renderRepairs() {
     let deviceCheckHtml = '';
     if (!currentDeviceId) {
         deviceCheckHtml = `
-            <div style="margin-bottom:16px; padding:12px 16px; background:#fef3c7; border-radius:8px; border-left:4px solid #f59e0b; font-size:13px; color:#92400e;">
+            <div class="rp-banner warn" style="margin-top:14px;">
                 <span data-i18n="repairs.noDevice">⚠️ No device connected. Some features require ADB, but guides are always available.</span>
             </div>
         `;
     }
 
+    // Small helper to keep the button markup declarative and consistent
+    function actionBtn({ id, kind, label, i18n, adb, disabled }) {
+        // kind: 'danger' | 'info' | 'ghost'
+        const classes = { danger: 'rp-btn-danger', info: 'rp-btn-info', ghost: 'rp-btn-ghost' }[kind];
+        const baseClass = kind === 'ghost' ? 'btn-secondary' : 'btn-primary';
+        const pill = adb === null ? '' :
+            adb
+                ? `<span class="rp-pill ${kind === 'ghost' ? 'rp-pill-adb' : 'rp-pill-on-solid'}">ADB required</span>`
+                : `<span class="rp-pill ${kind === 'ghost' ? 'rp-pill-noadb' : 'rp-pill-on-solid'}">No ADB</span>`;
+        const disAttr = disabled ? 'disabled' : '';
+        const disClass = disabled ? 'is-disabled' : '';
+        return `
+            <button id="${id}" class="${baseClass} rp-btn ${classes} ${disClass}" ${disAttr}>
+                <span data-i18n="${i18n}">${label}</span>${pill}
+            </button>
+        `;
+    }
+
     const html = `
+        <div class="rp-page">
         <div style="margin-bottom:24px;">
             <h1 style="margin-bottom:6px; font-size:24px; font-weight:700; color:#1f2937;" data-i18n="repairs.title">🔧 Repair Tools</h1>
             <p style="color:#6b7280; font-size:14px; margin:0;" data-i18n="repairs.subtitle">Recovery and maintenance operations – practical guides & automation.</p>
-            <div style="margin-top:8px; padding:8px 12px; background:#fef3c7; border-radius:6px; border-left:4px solid #f59e0b; font-size:13px; color:#92400e;" data-i18n="repairs.warning">
+            <div class="rp-banner warn" style="margin-top:10px;" data-i18n="repairs.warning">
                 ⚠️ These actions can erase data or void warranties. Proceed with caution.
             </div>
             ${deviceCheckHtml}
         </div>
 
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+        <!-- Section: Account & Security -->
+        <div class="rp-section">
+            <div class="rp-section-head"><h2 data-i18n="repairs.section.account">Account &amp; Security</h2><div class="rp-rule"></div></div>
+            <div class="rp-grid">
 
-            <!-- FRP Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">🚫</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.frp.title">FRP Bypass</h3>
+                <!-- FRP Card -->
+                <div class="rp-card accent-danger">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge danger">🚫</span>
+                        <h3 data-i18n="repairs.frp.title">FRP Bypass</h3>
+                    </div>
+                    <span class="rp-risk destructive"><span class="dot"></span>Irreversible</span>
+                    <p class="rp-desc" data-i18n="repairs.frp.desc">Remove Google accounts and deactivate Factory Reset Protection.</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'frpDeactivateBtn', kind:'danger', label:'🔓 Deactivate FRP', i18n:'repairs.frp.deactivate', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'frpGuideBtn', kind:'ghost', label:'📋 Guide', i18n:'repairs.frp.guide', adb:false, disabled:false })}
+                    </div>
+                    <div id="frpResult" class="rp-result"></div>
                 </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.frp.desc">Remove Google accounts and deactivate Factory Reset Protection.</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="frpDeactivateBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#dc2626;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.frp.deactivate">🔓 Deactivate FRP</span> <span style="font-size:11px; color:${!currentDeviceId ? '#fca5a5' : '#fca5a5'};">(ADB required)</span>
-                    </button>
-                    <button id="frpGuideBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.frp.guide">📋 Guide (no ADB)</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
+
+                <!-- Retrieve Email Card -->
+                <div class="rp-card accent-info">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge info">📧</span>
+                        <h3 data-i18n="repairs.email.title">Retrieve Email</h3>
+                    </div>
+                    <span class="rp-risk safe"><span class="dot"></span>Read-only</span>
+                    <p class="rp-desc" data-i18n="repairs.email.desc">Recover Google account email – use web guide or ADB retrieval.</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'retrieveEmailGuideBtn', kind:'ghost', label:'📋 Show Guide', i18n:'repairs.email.guide', adb:false, disabled:false })}
+                        ${actionBtn({ id:'retrieveEmailAdbBtn', kind:'info', label:'🔌 Retrieve via ADB', i18n:'repairs.email.adb', adb:true, disabled: !currentDeviceId })}
+                    </div>
+                    <div id="emailResult" class="rp-result"></div>
                 </div>
-                <div id="frpResult" style="margin-top:8px; font-size:13px;"></div>
+
             </div>
+        </div>
 
-            <!-- Retrieve Email Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">📧</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.email.title">Retrieve Email</h3>
+        <!-- Section: Reset & Bootloader -->
+        <div class="rp-section">
+            <div class="rp-section-head"><h2 data-i18n="repairs.section.reset">Reset &amp; Bootloader</h2><div class="rp-rule"></div></div>
+            <div class="rp-grid">
+
+                <!-- Factory Reset Card -->
+                <div class="rp-card accent-danger">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge danger">🗑️</span>
+                        <h3 data-i18n="repairs.reset.title">Factory Reset</h3>
+                    </div>
+                    <span class="rp-risk destructive"><span class="dot"></span>Erases all data</span>
+                    <p class="rp-desc" data-i18n="repairs.reset.desc">Wipe all data – FRP will be removed automatically before reset.</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'factoryResetModalBtn', kind:'ghost', label:'📋 Show Reset Guide', i18n:'repairs.reset.guide', adb:false, disabled:false })}
+                        ${actionBtn({ id:'adbFactoryResetBtn', kind:'danger', label:'🔧 Factory Reset via ADB', i18n:'repairs.reset.adb', adb:true, disabled: !currentDeviceId })}
+                    </div>
+                    <div id="factoryResetResult" class="rp-result"></div>
                 </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.email.desc">Recover Google account email – use web guide or ADB retrieval.</p>
-                <div style="display:flex; flex-direction:column; gap:8px;">
-                    <button id="retrieveEmailGuideBtn" class="btn-secondary" style="width:100%; padding:8px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.email.guide">📋 Show Guide</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                    <button id="retrieveEmailAdbBtn" class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:13px; background:#0d6efd;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.email.adb">🔌 Retrieve via ADB</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#b0d4ff'};">(ADB required)</span>
-                    </button>
+
+                <!-- Bootloader Card -->
+                <div class="rp-card accent-danger">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge danger">🔓</span>
+                        <h3 data-i18n="repairs.bootloader.title">Bootloader</h3>
+                    </div>
+                    <span class="rp-risk destructive"><span class="dot"></span>Erases all data</span>
+                    <p class="rp-desc" data-i18n="repairs.bootloader.desc">Reboot, unlock, or lock the bootloader (wipes data).</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'bootloaderRebootBtn', kind:'ghost', label:'📱 Reboot to Bootloader', i18n:'repairs.bootloader.reboot', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'bootloaderUnlockBtn', kind:'danger', label:'🔓 Unlock Bootloader', i18n:'repairs.bootloader.unlock', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'bootloaderLockBtn', kind:'danger', label:'🔒 Lock Bootloader', i18n:'repairs.bootloader.lock', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'bootloaderCommandsBtn', kind:'ghost', label:'📋 Commands Guide', i18n:'repairs.bootloader.commands', adb:false, disabled:false })}
+                    </div>
+                    <div id="bootloaderResult" class="rp-result"></div>
                 </div>
-                <div id="emailResult" style="margin-top:8px; font-size:13px;"></div>
+
             </div>
+        </div>
 
-            <!-- Factory Reset Card -->
-            <div class="card" style="padding:20px; border-left:4px solid #dc2626;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">🗑️</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.reset.title">Factory Reset</h3>
+        <!-- Section: Maintenance -->
+        <div class="rp-section">
+            <div class="rp-section-head"><h2 data-i18n="repairs.section.maintenance">Maintenance</h2><div class="rp-rule"></div></div>
+            <div class="rp-grid">
+
+                <!-- Disable Bloatware Card -->
+                <div class="rp-card accent-info">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge info">📦</span>
+                        <h3 data-i18n="repairs.bloatware.title">Disable Bloatware</h3>
+                    </div>
+                    <span class="rp-risk caution"><span class="dot"></span>Reversible</span>
+                    <p class="rp-desc" data-i18n="repairs.bloatware.desc">Disable pre‑installed system apps (user‑only).</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'bloatwareModalBtn', kind:'info', label:'📦 Select Apps to Disable', i18n:'repairs.bloatware.select', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'bloatwareGuideBtn', kind:'ghost', label:'📋 Guide', i18n:'repairs.bloatware.guide', adb:false, disabled:false })}
+                    </div>
+                    <div id="bloatwareResult" class="rp-result"></div>
                 </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.reset.desc">Wipe all data – FRP will be removed automatically before reset.</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="factoryResetModalBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.reset.guide">📋 Show Reset Guide</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                    <button id="adbFactoryResetBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#dc2626;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.reset.adb">🔧 Factory Reset via ADB</span> <span style="font-size:11px; color:${!currentDeviceId ? '#fca5a5' : '#fca5a5'};">(ADB required)</span>
-                    </button>
+
+                <!-- Clear Cache Card -->
+                <div class="rp-card accent-info">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge info">🧹</span>
+                        <h3 data-i18n="repairs.cache.title">Clear Cache</h3>
+                    </div>
+                    <span class="rp-risk safe"><span class="dot"></span>Safe</span>
+                    <p class="rp-desc" data-i18n="repairs.cache.desc">Clear app cache and temporary files.</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'clearCacheBtn', kind:'info', label:'🧹 Clear Cache', i18n:'repairs.cache.clear', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'cacheGuideBtn', kind:'ghost', label:'📋 Guide', i18n:'repairs.cache.guide', adb:false, disabled:false })}
+                    </div>
+                    <div id="cacheResult" class="rp-result"></div>
                 </div>
-                <div id="factoryResetResult" style="margin-top:8px; font-size:13px;"></div>
+
+                <!-- Reboot Modes Card -->
+                <div class="rp-card accent-info">
+                    <div class="rp-card-head">
+                        <span class="rp-icon-badge info">📱</span>
+                        <h3 data-i18n="repairs.reboot.title">Reboot Modes</h3>
+                    </div>
+                    <span class="rp-risk safe"><span class="dot"></span>Safe</span>
+                    <p class="rp-desc" data-i18n="repairs.reboot.desc">Reboot to Recovery or Download mode.</p>
+                    <div class="rp-btns">
+                        ${actionBtn({ id:'rebootRecoveryBtn', kind:'info', label:'📱 Reboot to Recovery', i18n:'repairs.reboot.recovery', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'rebootDownloadBtn', kind:'info', label:'📱 Reboot to Download', i18n:'repairs.reboot.download', adb:true, disabled: !currentDeviceId })}
+                        ${actionBtn({ id:'rebootGuideBtn', kind:'ghost', label:'📋 Guide', i18n:'repairs.reboot.guide', adb:false, disabled:false })}
+                    </div>
+                    <div id="rebootResult" class="rp-result"></div>
+                </div>
+
             </div>
-
-            <!-- Bootloader Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">🔓</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.bootloader.title">Bootloader</h3>
-                </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.bootloader.desc">Reboot, unlock, or lock the bootloader (wipes data).</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="bootloaderRebootBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.bootloader.reboot">📱 Reboot to Bootloader</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#6B7280'};">(ADB required)</span>
-                    </button>
-                    <button id="bootloaderUnlockBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#dc2626;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.bootloader.unlock">🔓 Unlock Bootloader</span> <span style="font-size:11px; color:${!currentDeviceId ? '#fca5a5' : '#fca5a5'};">(ADB required)</span>
-                    </button>
-                    <button id="bootloaderLockBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#dc2626;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.bootloader.lock">🔒 Lock Bootloader</span> <span style="font-size:11px; color:${!currentDeviceId ? '#fca5a5' : '#fca5a5'};">(ADB required)</span>
-                    </button>
-                    <button id="bootloaderCommandsBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.bootloader.commands">📋 Commands Guide</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                </div>
-                <div id="bootloaderResult" style="margin-top:8px; font-size:13px;"></div>
-            </div>
-
-            <!-- NEW: Disable Bloatware Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">📦</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.bloatware.title">Disable Bloatware</h3>
-                </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.bloatware.desc">Disable pre‑installed system apps (user‑only).</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="bloatwareModalBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#0d6efd;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.bloatware.select">📦 Select Apps to Disable</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#b0d4ff'};">(ADB required)</span>
-                    </button>
-                    <button id="bloatwareGuideBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.bloatware.guide">📋 Guide (no ADB)</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                </div>
-                <div id="bloatwareResult" style="margin-top:8px; font-size:13px;"></div>
-            </div>
-
-            <!-- NEW: Clear Cache Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">🧹</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.cache.title">Clear Cache</h3>
-                </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.cache.desc">Clear app cache and temporary files.</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="clearCacheBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#0d6efd;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.cache.clear">🧹 Clear Cache</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#b0d4ff'};">(ADB required)</span>
-                    </button>
-                    <button id="cacheGuideBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.cache.guide">📋 Guide (no ADB)</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                </div>
-                <div id="cacheResult" style="margin-top:8px; font-size:13px;"></div>
-            </div>
-
-            <!-- NEW: Reboot Modes Card -->
-            <div class="card" style="padding:20px;">
-                <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                    <span style="font-size:28px;">📱</span>
-                    <h3 style="margin:0; font-size:17px; font-weight:600;" data-i18n="repairs.reboot.title">Reboot Modes</h3>
-                </div>
-                <p style="color:#6B7280; font-size:14px;" data-i18n="repairs.reboot.desc">Reboot to Recovery or Download mode.</p>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button id="rebootRecoveryBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#0d6efd;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.reboot.recovery">📱 Reboot to Recovery</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#b0d4ff'};">(ADB required)</span>
-                    </button>
-                    <button id="rebootDownloadBtn" class="btn-primary" style="width:100%; padding:6px; border-radius:8px; font-size:13px; background:#0d6efd;" ${!currentDeviceId ? 'disabled style="opacity:0.5;"' : ''}>
-                        <span data-i18n="repairs.reboot.download">📱 Reboot to Download</span> <span style="font-size:11px; color:${!currentDeviceId ? '#9ca3af' : '#b0d4ff'};">(ADB required)</span>
-                    </button>
-                    <button id="rebootGuideBtn" class="btn-secondary" style="width:100%; padding:6px; border-radius:8px; font-size:13px;">
-                        <span data-i18n="repairs.reboot.guide">📋 Guide (no ADB)</span> <span style="font-size:11px; color:#6B7280;">(no ADB)</span>
-                    </button>
-                </div>
-                <div id="rebootResult" style="margin-top:8px; font-size:13px;"></div>
-            </div>
-
+        </div>
         </div>
     `;
 
@@ -1135,19 +1210,19 @@ async function renderRepairs() {
             return;
         }
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:8px; padding:12px; background:#f0f9ff; border-radius:6px; border-left:4px solid #0ea5e9;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
-                <strong data-i18n="repairs.frp.guide.title">📋 FRP Bypass Guide (no ADB)</strong>
-                <p style="margin:6px 0 0; font-size:13px;" data-i18n="repairs.frp.guide.intro">
+            <div class="rp-guide">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
+                <strong class="head" data-i18n="repairs.frp.guide.title">📋 FRP Bypass Guide (no ADB)</strong>
+                <p style="margin:0 0 6px;" data-i18n="repairs.frp.guide.intro">
                     If USB Debugging is not available, try these methods:
                 </p>
-                <ul style="font-size:13px; color:#374151; margin-top:4px; padding-left:20px;">
+                <ul style="margin-top:4px; padding-left:20px;">
                     <li><strong data-i18n="repairs.frp.guide.method1">Method 1:</strong> <span data-i18n="repairs.frp.guide.method1.desc">Use the <a href="https://www.google.com/android/find" target="_blank">Find My Device</a> website to remotely lock the device and reset the password.</span></li>
                     <li><strong data-i18n="repairs.frp.guide.method2">Method 2:</strong> <span data-i18n="repairs.frp.guide.method2.desc">Boot into Recovery Mode and perform a factory reset (this will erase all data).</span></li>
                     <li><strong data-i18n="repairs.frp.guide.method3">Method 3:</strong> <span data-i18n="repairs.frp.guide.method3.desc">Use third‑party tools like <a href="https://frp2026.github.io/" target="_blank">FRP2026</a> (works on some devices).</span></li>
                     <li><strong data-i18n="repairs.frp.guide.method4">Method 4:</strong> <span data-i18n="repairs.frp.guide.method4.desc">Try the Emergency Call trick: <code>*#*#4636#*#*</code> might grant access to settings.</span></li>
                 </ul>
-                <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;">
+                <hr>
                 <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.frp.guide.note">
                     💡 <strong>Note:</strong> These methods may not work on all devices. The ADB method above is more reliable.
                 </p>
@@ -1171,14 +1246,14 @@ async function renderRepairs() {
             return;
         }
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:8px; padding:12px; background:#f0f9ff; border-radius:6px; border-left:4px solid #0ea5e9;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
-                <strong data-i18n="repairs.email.guide.title">📧 Account Recovery Guide</strong>
-                <p style="margin:6px 0 0; font-size:13px;" data-i18n="repairs.email.guide.desc">
+            <div class="rp-guide">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
+                <strong class="head" data-i18n="repairs.email.guide.title">📧 Account Recovery Guide</strong>
+                <p style="margin:0;" data-i18n="repairs.email.guide.desc">
                     Open <a href="https://accounts.google.com/signin/usernamerecovery" target="_blank">Google Account Recovery</a> on any device.
                     If you can access the phone's browser via Emergency Call or Accessibility, visit that URL directly on the phone.
                 </p>
-                <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;">
+                <hr>
                 <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.email.guide.tip">
                     💡 <strong>Tip:</strong> On the lock screen, try swiping up and tapping "Emergency call", then enter <code>*#*#4636#*#*</code> or similar codes to access settings (varies by device).
                 </p>
@@ -1201,37 +1276,22 @@ async function renderRepairs() {
         }
         showLegalDisclaimer('Retrieve Email via ADB', async () => {
             const resultDiv = document.getElementById('emailResult');
-            resultDiv.innerHTML = '⏳ Retrieving accounts via ADB...';
+            resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Retrieving accounts via ADB…</p></div>`;
             try {
                 const output = await runAdb('dumpsys account');
                 // Broadened regex: matches both [user@gmail.com] and name=user@gmail.com
                 const emails = output.match(/(?:\[([^\]]+@[^\]]+)\]|name=([^\s,]+@[^\s,]+))/g) || [];
                 const uniqueEmails = [...new Set(emails.map(e => e.replace(/[\[\]]/g, '').replace(/name=/g, '')))];
                 if (uniqueEmails.length === 0) {
-                    resultDiv.innerHTML = `
-                        <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                            <strong data-i18n="repairs.email.noEmails">❌ No emails found</strong>
-                            <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.email.noEmails.desc">No Google accounts were detected on this device.</p>
-                        </div>
-                    `;
+                    resultDiv.innerHTML = resultBox('error', 'No emails found', 'No Google accounts were detected on this device.');
                 } else {
-                    resultDiv.innerHTML = `
-                        <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                            <strong data-i18n="repairs.email.found">✅ Found ${uniqueEmails.length} account(s)</strong>
-                            <div style="margin-top:6px; font-size:13px; color:#374151;">
-                                ${uniqueEmails.map(e => `📧 ${e}`).join('<br>')}
-                            </div>
-                        </div>
-                    `;
+                    resultDiv.innerHTML = resultBox(
+                        'success', `Found ${uniqueEmails.length} account(s)`,
+                        null, null, uniqueEmails.map(e => `📧 ${e}`).join('<br>')
+                    );
                 }
             } catch (err) {
-                resultDiv.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                        <strong data-i18n="repairs.email.failed">❌ ADB retrieval failed</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                        <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.email.failed.hint">Make sure USB Debugging is enabled and the device is authorized.</p>
-                    </div>
-                `;
+                resultDiv.innerHTML = resultBox('error', 'ADB retrieval failed', escapeHtml(err.message), 'Make sure USB Debugging is enabled and the device is authorized.');
             }
         });
     });
@@ -1262,23 +1322,12 @@ async function renderRepairs() {
         }
         showLegalDisclaimer('Reboot to Bootloader', async () => {
             const resultDiv = document.getElementById('bootloaderResult');
-            resultDiv.innerHTML = '⏳ Rebooting to bootloader...';
+            resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to bootloader…</p></div>`;
             try {
                 await runAdb('reboot bootloader');
-                resultDiv.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                        <strong data-i18n="repairs.bootloader.reboot.success">✅ Reboot sent</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.bootloader.reboot.desc">The device should now be in bootloader mode. Use fastboot commands for further actions.</p>
-                    </div>
-                `;
+                resultDiv.innerHTML = resultBox('success', 'Reboot sent', 'The device should now be in bootloader mode. Use fastboot commands for further actions.');
             } catch (err) {
-                resultDiv.innerHTML = `
-                    <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                        <strong data-i18n="repairs.bootloader.reboot.failed">❌ Failed to reboot</strong>
-                        <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                        <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.reboot.manual">Try manually: power off, then press Volume Down + Power to enter bootloader.</p>
-                    </div>
-                `;
+                resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message), 'Try manually: power off, then press Volume Down + Power to enter bootloader.');
             }
         });
     });
@@ -1295,36 +1344,27 @@ async function renderRepairs() {
             () => {
                 showLegalDisclaimer('Unlock Bootloader', async () => {
                     const resultDiv = document.getElementById('bootloaderResult');
-                    resultDiv.innerHTML = '⏳ Attempting to unlock bootloader...';
+                    resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Attempting to unlock bootloader…</p></div>`;
                     try {
                         await runAdb('reboot bootloader').catch(() => {});
                         const output = await runFastboot('flashing unlock');
                         if (output === null) {
                             resultDiv.innerHTML = `
-                                <div style="margin-top:8px; padding:12px; background:#fef3c7; border-radius:6px; border-left:4px solid #f59e0b;">
-                                    <strong data-i18n="repairs.bootloader.unlock.fastbootMissing">⚠️ Fastboot not available</strong>
-                                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.bootloader.unlock.manualCmd">Please run the following command manually in terminal:</p>
+                                <div class="rp-result-box warning">
+                                    <p class="title" data-i18n="repairs.bootloader.unlock.fastbootMissing">⚠️ Fastboot not available</p>
+                                    <p class="sub" data-i18n="repairs.bootloader.unlock.manualCmd">Please run the following command manually in terminal:</p>
                                     <pre style="background:#1e293b; color:#e2e8f0; padding:8px; border-radius:4px; font-size:12px; margin:8px 0 0;">fastboot flashing unlock</pre>
-                                    <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.unlock.followScreen">Follow the on-screen instructions on your device.</p>
+                                    <p class="hint" data-i18n="repairs.bootloader.unlock.followScreen">Follow the on-screen instructions on your device.</p>
                                 </div>
                             `;
                         } else {
-                            resultDiv.innerHTML = `
-                                <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                                    <strong data-i18n="repairs.bootloader.unlock.success">✅ Bootloader unlocked</strong>
-                                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">Output: ${escapeHtml(output)}</p>
-                                    <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.unlock.wipe">The device will likely reboot and wipe all data.</p>
-                                </div>
-                            `;
+                            resultDiv.innerHTML = resultBox(
+                                'success', 'Bootloader unlocked', `Output: ${escapeHtml(output)}`,
+                                'The device will likely reboot and wipe all data.'
+                            );
                         }
                     } catch (err) {
-                        resultDiv.innerHTML = `
-                            <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                                <strong data-i18n="repairs.bootloader.unlock.failed">❌ Unlock failed</strong>
-                                <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                                <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.unlock.hint">Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.</p>
-                            </div>
-                        `;
+                        resultDiv.innerHTML = resultBox('error', 'Unlock failed', escapeHtml(err.message), 'Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.');
                     }
                 });
             }
@@ -1343,36 +1383,27 @@ async function renderRepairs() {
             () => {
                 showLegalDisclaimer('Lock Bootloader', async () => {
                     const resultDiv = document.getElementById('bootloaderResult');
-                    resultDiv.innerHTML = '⏳ Attempting to lock bootloader...';
+                    resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Attempting to lock bootloader…</p></div>`;
                     try {
                         await runAdb('reboot bootloader').catch(() => {});
                         const output = await runFastboot('flashing lock');
                         if (output === null) {
                             resultDiv.innerHTML = `
-                                <div style="margin-top:8px; padding:12px; background:#fef3c7; border-radius:6px; border-left:4px solid #f59e0b;">
-                                    <strong data-i18n="repairs.bootloader.lock.fastbootMissing">⚠️ Fastboot not available</strong>
-                                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;" data-i18n="repairs.bootloader.lock.manualCmd">Please run the following command manually in terminal:</p>
+                                <div class="rp-result-box warning">
+                                    <p class="title" data-i18n="repairs.bootloader.lock.fastbootMissing">⚠️ Fastboot not available</p>
+                                    <p class="sub" data-i18n="repairs.bootloader.lock.manualCmd">Please run the following command manually in terminal:</p>
                                     <pre style="background:#1e293b; color:#e2e8f0; padding:8px; border-radius:4px; font-size:12px; margin:8px 0 0;">fastboot flashing lock</pre>
-                                    <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.lock.followScreen">Follow the on-screen instructions on your device.</p>
+                                    <p class="hint" data-i18n="repairs.bootloader.lock.followScreen">Follow the on-screen instructions on your device.</p>
                                 </div>
                             `;
                         } else {
-                            resultDiv.innerHTML = `
-                                <div style="margin-top:8px; padding:12px; background:#f0fdf4; border-radius:6px; border-left:4px solid #16a34a;">
-                                    <strong data-i18n="repairs.bootloader.lock.success">✅ Bootloader locked</strong>
-                                    <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">Output: ${escapeHtml(output)}</p>
-                                    <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.lock.wipe">The device will likely reboot and wipe all data.</p>
-                                </div>
-                            `;
+                            resultDiv.innerHTML = resultBox(
+                                'success', 'Bootloader locked', `Output: ${escapeHtml(output)}`,
+                                'The device will likely reboot and wipe all data.'
+                            );
                         }
                     } catch (err) {
-                        resultDiv.innerHTML = `
-                            <div style="margin-top:8px; padding:12px; background:#fef2f2; border-radius:6px; border-left:4px solid #dc2626;">
-                                <strong data-i18n="repairs.bootloader.lock.failed">❌ Lock failed</strong>
-                                <p style="margin:4px 0 0; font-size:13px; color:#6B7280;">${escapeHtml(err.message)}</p>
-                                <p style="margin:4px 0 0; font-size:12px; color:#92400e;" data-i18n="repairs.bootloader.lock.hint">Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.</p>
-                            </div>
-                        `;
+                        resultDiv.innerHTML = resultBox('error', 'Lock failed', escapeHtml(err.message), 'Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.');
                     }
                 });
             }
@@ -1401,19 +1432,19 @@ fastboot flashing unlock   # or fastboot oem unlock
 fastboot flashing lock     # or fastboot oem lock
         `;
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:12px; padding:16px; background:#f0f4ff; border-radius:8px; border-left:4px solid #0d6efd;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
+            <div class="rp-guide" style="background:#f0f4ff;">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                     <span style="font-size:20px;">🔓</span>
-                    <strong style="font-size:16px;" data-i18n="repairs.bootloader.commands.title">Bootloader Commands Guide</strong>
+                    <strong style="font-size:15px;" data-i18n="repairs.bootloader.commands.title">Bootloader Commands Guide</strong>
                 </div>
-                <p style="margin:4px 0 8px; font-size:13px; color:#6B7280;" data-i18n="repairs.bootloader.commands.desc">
+                <p style="margin:4px 0 8px; color:#6B7280;" data-i18n="repairs.bootloader.commands.desc">
                     Unlocking the bootloader will wipe all data and may void warranty.
                     Ensure OEM unlocking is enabled in Developer Options.
                 </p>
                 <pre style="background:#1e293b; color:#e2e8f0; padding:12px; border-radius:6px; font-size:12px; overflow-x:auto; white-space:pre-wrap;">${commands}</pre>
                 <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
-                    <button id="copyBootloaderCommands" class="btn-secondary" style="padding:4px 16px; font-size:12px;" data-i18n="repairs.bootloader.commands.copy">📋 Copy Commands</button>
+                    <button id="copyBootloaderCommands" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:5px 16px; font-size:12px;" data-i18n="repairs.bootloader.commands.copy">📋 Copy Commands</button>
                 </div>
                 <div style="margin-top:8px; font-size:12px; color:#6B7280;">
                     <a href="https://developer.android.com/studio/command-line/adb" target="_blank" data-i18n="repairs.bootloader.commands.docs">Official ADB/Fastboot documentation</a>
@@ -1455,20 +1486,20 @@ fastboot flashing lock     # or fastboot oem lock
             return;
         }
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:8px; padding:12px; background:#f0f9ff; border-radius:6px; border-left:4px solid #0ea5e9;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
-                <strong data-i18n="repairs.bloatware.guide.title">📋 Disable Bloatware Guide (no ADB)</strong>
-                <p style="margin:6px 0 0; font-size:13px;" data-i18n="repairs.bloatware.guide.intro">
+            <div class="rp-guide">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
+                <strong class="head" data-i18n="repairs.bloatware.guide.title">📋 Disable Bloatware Guide (no ADB)</strong>
+                <p style="margin:0 0 6px;" data-i18n="repairs.bloatware.guide.intro">
                     To disable bloatware without ADB:
                 </p>
-                <ol style="font-size:13px; color:#374151; margin-top:4px; padding-left:20px;">
+                <ol style="margin-top:4px; padding-left:20px;">
                     <li data-i18n="repairs.bloatware.guide.step1">Go to <strong>Settings → Apps</strong> (or Apps & Notifications).</li>
                     <li data-i18n="repairs.bloatware.guide.step2">Select the app you want to disable.</li>
                     <li data-i18n="repairs.bloatware.guide.step3">Tap <strong>Disable</strong> (if available).</li>
                     <li data-i18n="repairs.bloatware.guide.step4">If "Disable" is greyed out, tap <strong>Force Stop</strong> and then try again.</li>
                     <li data-i18n="repairs.bloatware.guide.step5">For system apps that cannot be disabled, you may need to use ADB or third‑party tools.</li>
                 </ol>
-                <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;">
+                <hr>
                 <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.bloatware.guide.note">
                     💡 <strong>Note:</strong> Some apps may not be disabled without ADB. The ADB method above is more flexible.
                 </p>
@@ -1503,19 +1534,19 @@ fastboot flashing lock     # or fastboot oem lock
             return;
         }
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:8px; padding:12px; background:#f0f9ff; border-radius:6px; border-left:4px solid #0ea5e9;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
-                <strong data-i18n="repairs.cache.guide.title">📋 Clear Cache Guide (no ADB)</strong>
-                <p style="margin:6px 0 0; font-size:13px;" data-i18n="repairs.cache.guide.intro">
+            <div class="rp-guide">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
+                <strong class="head" data-i18n="repairs.cache.guide.title">📋 Clear Cache Guide (no ADB)</strong>
+                <p style="margin:0 0 6px;" data-i18n="repairs.cache.guide.intro">
                     To clear cache without ADB:
                 </p>
-                <ol style="font-size:13px; color:#374151; margin-top:4px; padding-left:20px;">
+                <ol style="margin-top:4px; padding-left:20px;">
                     <li data-i18n="repairs.cache.guide.step1">Go to <strong>Settings → Storage</strong>.</li>
                     <li data-i18n="repairs.cache.guide.step2">Tap <strong>Cache data</strong> (or "Clear cache").</li>
                     <li data-i18n="repairs.cache.guide.step3">Alternatively, go to <strong>Settings → Apps</strong>, select each app, and tap <strong>Clear cache</strong>.</li>
                     <li data-i18n="repairs.cache.guide.step4">For a deeper clean, boot into Recovery Mode and select <strong>Wipe cache partition</strong>.</li>
                 </ol>
-                <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;">
+                <hr>
                 <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.cache.guide.note">
                     💡 <strong>Note:</strong> The ADB method above can clear cache for all apps at once.
                 </p>
@@ -1575,20 +1606,20 @@ fastboot flashing lock     # or fastboot oem lock
         let combo = recoveryCombos[brand] || recoveryCombos.generic;
 
         resultDiv.innerHTML = `
-            <div style="position:relative; margin-top:8px; padding:12px; background:#f0f9ff; border-radius:6px; border-left:4px solid #0ea5e9;">
-                <button class="guide-close-btn" style="position:absolute; top:4px; right:8px; background:transparent; border:none; font-size:20px; color:#6B7280; cursor:pointer;" title="Close guide">&times;</button>
-                <strong data-i18n="repairs.reboot.guide.title">📋 Reboot Guide (no ADB)</strong>
-                <p style="margin:6px 0 0; font-size:13px;" data-i18n="repairs.reboot.guide.intro">
+            <div class="rp-guide">
+                <button class="guide-close-btn close-x" title="Close guide">&times;</button>
+                <strong class="head" data-i18n="repairs.reboot.guide.title">📋 Reboot Guide (no ADB)</strong>
+                <p style="margin:0 0 6px;" data-i18n="repairs.reboot.guide.intro">
                     To enter <strong>Recovery Mode</strong> or <strong>Download Mode</strong> without ADB:
                 </p>
-                <ul style="font-size:13px; color:#374151; margin-top:4px; padding-left:20px;">
+                <ul style="margin-top:4px; padding-left:20px;">
                     <li data-i18n="repairs.reboot.guide.step1"><strong>Power off</strong> the device.</li>
                     <li data-i18n="repairs.reboot.guide.step2">Press and hold <strong>${combo}</strong> simultaneously.</li>
                     <li data-i18n="repairs.reboot.guide.step3">For Recovery, release when the logo appears and use volume keys to navigate.</li>
                     <li data-i18n="repairs.reboot.guide.step4">For Download (Samsung), press Volume Up when prompted.</li>
                     <li data-i18n="repairs.reboot.guide.step5">If the combo doesn't work, search online for your specific model.</li>
                 </ul>
-                <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;">
+                <hr>
                 <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.reboot.guide.detected">
                     💡 <strong>Detected brand:</strong> ${brand} &nbsp;|&nbsp; Recommended combo: ${combo}
                 </p>

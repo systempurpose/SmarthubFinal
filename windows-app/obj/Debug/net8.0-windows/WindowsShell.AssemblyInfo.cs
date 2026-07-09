@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Offline Windows desktop companion for Android diagnostics (ADB/Fastboot/USB-only " +
     "triage)."))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0+609d434fb25835f79673ccad12254b787ea6890b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0+7c80c502b5d1835bedfeb3ad22ccec0abfbc118d")]
 [assembly: System.Reflection.AssemblyProductAttribute("SmartHub Diagnostics ALPHA")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SmartHub Diagnostics ALPHA")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

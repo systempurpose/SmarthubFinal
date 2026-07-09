@@ -1,5 +1,5 @@
 async function showRamModal() {
-    // ---- Helper: simplify app names ----
+    // ---- Helper: simplify app names (no translations needed) ----
     function simplifyAppName(pkg) {
         let name = pkg
             .replace(/^com\.(android|google|transsion|transsnet|facebook|whatsapp|instagram)\./i, '')
@@ -201,9 +201,9 @@ async function showRamModal() {
     }
 
     // ======================== MAIN MODAL FUNCTION ========================
-    const modal = ensureInfoModal('ramModal', '🧠 RAM Usage by App');
+    const modal = ensureInfoModal('ramModal', t('ramModal.title'));
     const body = document.getElementById('ramModalBody');
-    body.innerHTML = getModernSpinnerHTML('Loading RAM usage...');
+    body.innerHTML = getModernSpinnerHTML(t('ramModal.loading'));
     modal.style.display = 'flex';
 
     let ramData = null;
@@ -237,7 +237,7 @@ async function showRamModal() {
             };
         } catch (fallbackErr) {
             console.error('ADB fallback also failed:', fallbackErr);
-            body.innerHTML = `<div class="alert alert-danger">Error loading RAM: ${escapeHtml(fallbackErr.message)}</div>`;
+            body.innerHTML = `<div class="alert alert-danger">${t('common.error')} ${t('ramModal.loadingError')}: ${escapeHtml(fallbackErr.message)}</div>`;
             return;
         }
     }
@@ -266,7 +266,7 @@ async function showRamModal() {
                 ramBarHtml = `
                     <div style="background: #f8f9fa; border-radius: 16px; padding: 12px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                            <span style="font-weight: 600;">📊 RAM Usage</span>
+                            <span style="font-weight: 600;">📊 ${t('ramModal.ramUsage')}</span>
                             <span>${escapeHtml(usedRam)} / ${escapeHtml(totalRam)} (${percent.toFixed(1)}%)</span>
                         </div>
                         <div style="background: #e9ecef; border-radius: 10px; height: 8px; overflow: hidden;">
@@ -294,7 +294,7 @@ async function showRamModal() {
         if (remainingPercent > 0.5) {
             processList.push({
                 originalName: 'system_kernel',
-                displayName: '🖥️ System & Kernel',
+                displayName: `🖥️ ${t('ramModal.systemKernel')}`,
                 percent: remainingPercent,
                 mb: (remainingPercent / 100) * usedMB
             });
@@ -305,14 +305,14 @@ async function showRamModal() {
         let fallbackNote = '';
         if (usedFallback) {
             fallbackNote = `<div style="font-size: 12px; color: #f59e0b; background: #fffbeb; padding: 6px 12px; border-radius: 6px; margin-top: 8px; border-left: 3px solid #f59e0b;">
-                ⚠️ Using ADB fallback – process list may be approximate.
+                ⚠️ ${t('ramModal.fallback')}
             </div>`;
         }
 
         const html = `
             ${ramBarHtml}
             <div style="margin-bottom: 12px;">
-                <input type="text" id="ramSearchInput" placeholder="🔍 Filter apps..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
+                <input type="text" id="ramSearchInput" placeholder="${t('common.filterApps')}..." style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:24px; font-size:13px; outline:none;">
             </div>
             <div id="ramProcessList" class="ram-process-list-container" style="max-height: 320px; overflow-y: auto; padding-right: 6px;">
                 ${processList.map(proc => `
@@ -328,8 +328,7 @@ async function showRamModal() {
                 `).join('')}
             </div>
             <div style="margin-top: 8px; font-size: 11px; color: #6c757d; text-align: center;">
-                Percentages shown are of <strong>used RAM</strong> (${escapeHtml(usedRam)}).  
-                "System & Kernel" includes drivers, caches, and kernel memory.
+                ${t('ramModal.note', { usedRam: escapeHtml(usedRam) })}
             </div>
             ${fallbackNote}
         `;
@@ -355,6 +354,6 @@ async function showRamModal() {
 
     } catch (renderErr) {
         console.error('Render error:', renderErr);
-        body.innerHTML = `<div class="alert alert-danger">Error rendering RAM: ${escapeHtml(renderErr.message)}</div>`;
+        body.innerHTML = `<div class="alert alert-danger">${t('common.error')} ${t('ramModal.renderError')}: ${escapeHtml(renderErr.message)}</div>`;
     }
 }

@@ -170,4 +170,5 @@ async function renderDashboard() {
         </div>
     `;
     document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
+    
 }

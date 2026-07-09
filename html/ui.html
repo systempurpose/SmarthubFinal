@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <!-- Tesseract.js for offline OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- Supabase library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div class="app-container">
@@ -16,44 +18,44 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <i class="fas fa-microchip"></i>
-                <h2>SmartHub</h2>
+                <h2 data-i18n="app.title">SmartHub</h2>
             </div>
-           <nav class="sidebar-nav">
-    <!-- Diagnostic Tools (top) -->
-    <a href="#" class="nav-item active" data-page="dashboard">
-        <i class="fas fa-tachometer-alt"></i> Dashboard
-    </a>
-    <a href="#" class="nav-item" data-page="hardware-tests">
-        <i class="fas fa-microscope"></i> Hardware Tests
-    </a>
-    <a href="#" class="nav-item" data-page="connection-troubleshoot">
-        <i class="fas fa-globe"></i> Connection Troubleshoot
-    </a>
-    <a href="#" class="nav-item" data-page="bsod">
-        <i class="fas fa-exclamation-triangle"></i> BSOD Diagnosis
-    </a>
-    <a href="#" class="nav-item" data-page="advanced">
-        <i class="fas fa-microchip"></i> Advanced
-    </a>
-    <a href="#" class="nav-item" data-page="device-info">
-        <i class="fas fa-mobile-alt"></i> Device Info
-    </a>
-    <a href="#" class="nav-item" data-page="repairs">
-        <i class="fas fa-tools"></i> Repairs
-    </a>
-    <a href="#" class="nav-item" data-page="ai-conclusion">
-        <i class="fas fa-robot"></i> AI Conclusion
-    </a>
+            <nav class="sidebar-nav">
+                <!-- Diagnostic Tools (top) -->
+                <a href="#" class="nav-item active" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt"></i> <span data-i18n="nav.dashboard">Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-page="hardware-tests">
+                    <i class="fas fa-microscope"></i> <span data-i18n="nav.hardwareTests">Hardware Tests</span>
+                </a>
+                <a href="#" class="nav-item" data-page="connection-troubleshoot">
+                    <i class="fas fa-globe"></i> <span data-i18n="nav.connectionTroubleshoot">Connection Troubleshoot</span>
+                </a>
+                <a href="#" class="nav-item" data-page="bsod">
+                    <i class="fas fa-exclamation-triangle"></i> <span data-i18n="nav.bsod">BSOD Diagnosis</span>
+                </a>
+                <a href="#" class="nav-item" data-page="advanced">
+                    <i class="fas fa-microchip"></i> <span data-i18n="nav.advanced">Advanced</span>
+                </a>
+                <a href="#" class="nav-item" data-page="device-info">
+                    <i class="fas fa-mobile-alt"></i> <span data-i18n="nav.deviceInfo">Device Info</span>
+                </a>
+                <a href="#" class="nav-item" data-page="repairs">
+                    <i class="fas fa-tools"></i> <span data-i18n="nav.repairs">Repairs</span>
+                </a>
+                <a href="#" class="nav-item" data-page="ai-conclusion">
+                    <i class="fas fa-robot"></i> <span data-i18n="nav.aiConclusion">AI Conclusion</span>
+                </a>
 
-    <!-- Spacer & Settings (bottom) -->
-    <div style="flex:1;"></div>
-    <a href="#" class="nav-item" data-page="settings">
-        <i class="fas fa-cog"></i> Settings
-    </a>
-</nav>
+                <!-- Spacer & Settings (bottom) -->
+                <div style="flex:1;"></div>
+                <a href="#" class="nav-item" data-page="settings">
+                    <i class="fas fa-cog"></i> <span data-i18n="nav.settings">Settings</span>
+                </a>
+            </nav>
             <div class="sidebar-footer">
                 <div class="connection-status" id="connectionStatus">
-                    <i class="fas fa-plug"></i> <span>Disconnected</span>
+                    <i class="fas fa-plug"></i> <span data-i18n="connection.disconnected">Disconnected</span>
                 </div>
             </div>
         </aside>
@@ -83,13 +85,13 @@
             <div id="hwTestModal" class="modal" style="display: none;">
                 <div class="modal-content" style="max-width: 500px; width: 90%;">
                     <div class="modal-header">
-                        <h3 id="hwModalTitle">Hardware Test</h3>
+                        <h3 id="hwModalTitle" data-i18n="hw.modal.title">Hardware Test</h3>
                         <span class="close-button" id="hwCloseModalBtn">&times;</span>
                     </div>
                     <div class="modal-body" id="hwModalBody" style="text-align: center; min-height: 200px;"></div>
                     <div class="modal-footer" id="hwModalFooter">
-                        <button id="hwYesBtn" class="btn-primary" style="display: none;">✅ Yes, it worked</button>
-                        <button id="hwNoBtn" class="btn-secondary" style="display: none;">❌ No, it failed</button>
+                        <button id="hwYesBtn" class="btn-primary" style="display: none;" data-i18n="hw.modal.yes">✅ Yes, it worked</button>
+                        <button id="hwNoBtn" class="btn-secondary" style="display: none;" data-i18n="hw.modal.no">❌ No, it failed</button>
                     </div>
                 </div>
             </div>
@@ -97,17 +99,17 @@
             <!-- Status Bar -->
             <div id="status-bar" style="display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
                 <div class="status-card" style="background: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                    <div style="font-size: 12px; color: #6B7280;">Battery</div>
+                    <div style="font-size: 12px; color: #6B7280;" data-i18n="status.battery">Battery</div>
                     <div style="font-size: 20px; font-weight: 600;" id="status-battery">--%</div>
                     <div style="width: 100%; height: 4px; background: #E5E7EB; border-radius: 2px; margin-top: 4px;"><div id="status-battery-bar" style="height: 4px; background: #10B981; border-radius: 2px; width: 0%;"></div></div>
                 </div>
                 <div class="status-card" style="background: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                    <div style="font-size: 12px; color: #6B7280;">Storage</div>
+                    <div style="font-size: 12px; color: #6B7280;" data-i18n="status.storage">Storage</div>
                     <div style="font-size: 20px; font-weight: 600;" id="status-storage">--%</div>
                     <div style="width: 100%; height: 4px; background: #E5E7EB; border-radius: 2px; margin-top: 4px;"><div id="status-storage-bar" style="height: 4px; background: #3B82F6; border-radius: 2px; width: 0%;"></div></div>
                 </div>
                 <div class="status-card" style="background: white; padding: 12px 16px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                    <div style="font-size: 12px; color: #6B7280;">RAM</div>
+                    <div style="font-size: 12px; color: #6B7280;" data-i18n="status.ram">RAM</div>
                     <div style="font-size: 20px; font-weight: 600;" id="status-ram">--%</div>
                     <div style="width: 100%; height: 4px; background: #E5E7EB; border-radius: 2px; margin-top: 4px;"><div id="status-ram-bar" style="height: 4px; background: #8B5CF6; border-radius: 2px; width: 0%;"></div></div>
                 </div>
@@ -118,38 +120,38 @@
                 <!-- Dashboard Page (default, hidden by JS) -->
                 <div id="page-dashboard" class="page">
                     <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                        <h2>Dashboard</h2>
-                        <button id="quickScanBtn" class="btn btn-primary">⚡ Quick Scan</button>
+                        <h2 data-i18n="dashboard.title">Dashboard</h2>
+                        <button id="quickScanBtn" class="btn btn-primary" data-i18n="btn.quickScan">⚡ Quick Scan</button>
                     </div>
                     <!-- Health Summary Card -->
                     <div class="health-card" id="healthCard" style="background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
                         <div class="health-status" style="display: flex; align-items: center; gap: 0.75rem; font-size: 1.2rem; font-weight: 600;">
                             <span class="status-icon" id="healthIcon" style="font-size: 2rem;">✅</span>
-                            <span class="status-label" id="healthLabel">Device Healthy</span>
+                            <span class="status-label" id="healthLabel" data-i18n="health.deviceHealthy">Device Healthy</span>
                         </div>
                         <div class="health-details" style="color: #6B7280; font-size: 0.9rem;">
-                            <span id="lastScanLabel">Last scan: <span id="lastScanTime">Never</span></span>
+                            <span id="lastScanLabel"><span data-i18n="label.lastScan">Last scan:</span> <span id="lastScanTime">Never</span></span>
                             <span id="deviceModel" style="display: block; font-weight: 500;"></span>
                         </div>
                     </div>
                     <!-- Metrics as Progress Bars -->
                     <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
                         <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">Battery</label>
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;" data-i18n="metric.battery">Battery</label>
                             <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
                                 <div class="progress-fill" id="batteryFill" style="height: 100%; width: 0%; background: #28a745; border-radius: 20px; transition: width 0.5s ease;"></div>
                             </div>
                             <span id="batteryText">0%</span>
                         </div>
                         <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">Storage</label>
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;" data-i18n="metric.storage">Storage</label>
                             <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
                                 <div class="progress-fill" id="storageFill" style="height: 100%; width: 0%; background: #3B82F6; border-radius: 20px; transition: width 0.5s ease;"></div>
                             </div>
                             <span id="storageText">0%</span>
                         </div>
                         <div class="metric" style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
-                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;">RAM</label>
+                            <label style="display: block; font-weight: 500; margin-bottom: 0.25rem;" data-i18n="metric.ram">RAM</label>
                             <div class="progress-bar" style="background: #e9ecef; border-radius: 20px; height: 10px; overflow: hidden; margin: 0.5rem 0;">
                                 <div class="progress-fill" id="ramFill" style="height: 100%; width: 0%; background: #8B5CF6; border-radius: 20px; transition: width 0.5s ease;"></div>
                             </div>
@@ -160,42 +162,42 @@
 
                 <!-- Hardware Tests Page -->
                 <div id="page-hardware-tests" class="page" style="display: none;">
-                    <h2>Hardware Tests</h2>
+                    <h2 data-i18n="hw.page.title">Hardware Tests</h2>
                     <div class="tests-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;">
                         <div class="test-card" data-test="multitouch" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">Multi‑Touch</h3>
-                            <p style="color: #6B7280;">Test touch sensitivity and multiple points.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.multitouch.title">Multi‑Touch</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.multitouch.desc">Test touch sensitivity and multiple points.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                         <div class="test-card" data-test="deadpixel" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">Dead Pixel</h3>
-                            <p style="color: #6B7280;">Display full‑screen RGB/white patterns.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.deadpixel.title">Dead Pixel</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.deadpixel.desc">Display full‑screen RGB/white patterns.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                         <div class="test-card" data-test="camera" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">Camera</h3>
-                            <p style="color: #6B7280;">Test camera preview and capture.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.camera.title">Camera</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.camera.desc">Test camera preview and capture.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                         <div class="test-card" data-test="speaker" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">Speaker / Mic</h3>
-                            <p style="color: #6B7280;">Record and play back audio.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.speaker.title">Speaker / Mic</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.speaker.desc">Record and play back audio.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                         <div class="test-card" data-test="wifi" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">WiFi / Bluetooth</h3>
-                            <p style="color: #6B7280;">Scan for networks and devices.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.wifi.title">WiFi / Bluetooth</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.wifi.desc">Scan for networks and devices.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                         <div class="test-card" data-test="gps" style="background: white; padding: 1.5rem; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <h3 style="margin-top: 0;">GPS</h3>
-                            <p style="color: #6B7280;">Check satellite count and accuracy.</p>
-                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;">Start Test</button>
+                            <h3 style="margin-top: 0;" data-i18n="hw.gps.title">GPS</h3>
+                            <p style="color: #6B7280;" data-i18n="hw.gps.desc">Check satellite count and accuracy.</p>
+                            <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
                     </div>
@@ -212,20 +214,20 @@
                 <div style="display: flex; align-items: center; gap: 14px;">
                     <span style="font-size: 32px;">🔌</span>
                     <div>
-                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #0369a1;">ADB Required</h3>
-                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #0c4a6e; opacity: 0.8;">USB Debugging is needed for this feature</p>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: #0369a1;" data-i18n="adbRequired.title">ADB Required</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #0c4a6e; opacity: 0.8;" data-i18n="adbRequired.subtitle">USB Debugging is needed for this feature</p>
                     </div>
                     <button id="adbRequiredClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #0c4a6e; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
                 </div>
             </div>
             <!-- Body -->
             <div style="padding: 24px 28px 28px 28px;">
-                <p style="font-size: 15px; color: #1e293b; margin: 0 0 16px 0; line-height: 1.6;">
+                <p style="font-size: 15px; color: #1e293b; margin: 0 0 16px 0; line-height: 1.6;" data-i18n="adbRequired.body">
                     <strong>USB Debugging (ADB)</strong> is required to access this diagnostic feature.
                 </p>
                 <div style="background: #f0f9ff; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; border-left: 3px solid #0ea5e9;">
-                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #0369a1; font-weight: 600;">📋 How to Enable USB Debugging:</p>
-                    <ol style="margin: 0; padding-left: 20px; color: #1e293b; font-size: 13px; line-height: 1.8;">
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: #0369a1; font-weight: 600;" data-i18n="adbRequired.howTo">📋 How to Enable USB Debugging:</p>
+                    <ol style="margin: 0; padding-left: 20px; color: #1e293b; font-size: 13px; line-height: 1.8;" data-i18n="adbRequired.steps">
                         <li>Go to <strong>Settings</strong> → <strong>About Phone</strong></li>
                         <li>Tap <strong>Build Number</strong> 7 times to unlock Developer Options</li>
                         <li>Go to <strong>Settings</strong> → <strong>Developer Options</strong></li>
@@ -234,64 +236,71 @@
                     </ol>
                 </div>
                 <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
-                    <button id="adbRequiredWatchBtn" class="btn-secondary" style="padding: 10px 20px; font-size: 13px; border-radius: 10px; display: flex; align-items: center; gap: 8px;">
-                        ▶️ Watch Tutorial
-                    </button>
-                    <button id="adbRequiredOkBtn" class="btn-primary" style="padding: 10px 28px; font-size: 13px; border-radius: 10px; font-weight: 500; background: #0ea5e9; border-color: #0ea5e9;">Got It</button>
+                    <button id="adbRequiredWatchBtn" class="btn-secondary" style="padding: 10px 20px; font-size: 13px; border-radius: 10px; display: flex; align-items: center; gap: 8px;" data-i18n="adbRequired.watchBtn">▶️ Watch Tutorial</button>
+                    <button id="adbRequiredOkBtn" class="btn-primary" style="padding: 10px 28px; font-size: 13px; border-radius: 10px; font-weight: 500; background: #0ea5e9; border-color: #0ea5e9;" data-i18n="adbRequired.gotIt">Got It</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- BSOD Diagnostic Warning Modal -->
-    <div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-        <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                <div style="display: flex; align-items: center; gap: 14px;">
-                    <span style="font-size: 36px;">⚠️</span>
-                    <div>
-                        <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;">BSOD Diagnostic</h3>
-                        <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;">Boot failure analysis tool</p>
-                    </div>
-                    <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
+    <!-- BSOD Diagnostic Warning Modal -->
+<div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+    <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <span style="font-size: 36px;">⚠️</span>
+                <div>
+                    <h3 style="margin: 0; font-size: 22px; font-weight: 700; color: #92400e;" data-i18n="bsodWarning.title">BSOD Diagnostic</h3>
+                    <p style="margin: 2px 0 0 0; font-size: 14px; color: #78350f; opacity: 0.8;" data-i18n="bsodWarning.subtitle">Boot failure analysis tool</p>
                 </div>
+                <button id="bsodWarningClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: #78350f; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
             </div>
-            <!-- Body -->
-            <div style="padding: 24px 28px 28px 28px;">
-                <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;">
-                    This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
-                </p>
-                <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
-                    <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
-                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong></li>
-                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong></li>
-                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP</li>
-                        <li style="display: flex; align-items: center; gap: 10px;"><span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong></li>
-                    </ul>
-                </div>
-                <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
-                    <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;">Back</button>
-                    <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);">Continue</button>
-                </div>
+        </div>
+        <!-- Body -->
+        <div style="padding: 24px 28px 28px 28px;">
+            <p style="font-size: 16px; font-weight: 500; color: #1e293b; margin: 0 0 16px 0; line-height: 1.5;" data-i18n-html="bsodWarning.body">
+                This diagnostic is specifically for phones that <strong>cannot boot</strong> or are stuck in a <strong>boot loop / black screen</strong>.
+            </p>
+            <div style="background: #f8fafc; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                <ul style="margin: 0; padding: 0; list-style: none; color: #334155; font-size: 14px; line-height: 2;">
+                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item1">
+                        <span style="font-size: 18px;">⚠️</span> Only use this if your phone <strong>won't start normally</strong>
+                    </li>
+                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item2">
+                        <span style="font-size: 18px;">🔌</span> Requires a USB connection – <strong>no ADB needed</strong>
+                    </li>
+                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item3">
+                        <span style="font-size: 18px;">📱</span> Detects Download Mode, Fastboot, Recovery, EDL, Preloader, and MTP
+                    </li>
+                    <li style="display: flex; align-items: center; gap: 10px;" data-i18n-html="bsodWarning.list.item4">
+                        <span style="font-size: 18px;">🔄</span> If your phone <strong>is booting normally</strong>, use the <strong>Advanced Diagnostic</strong> or <strong>Hardware Tests</strong>
+                    </li>
+                </ul>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 4px;">
+                <button id="bsodWarningBack" class="btn-secondary" style="padding: 10px 28px; font-size: 14px; border-radius: 10px; font-weight: 500;" data-i18n="bsodWarning.back">Back</button>
+                <button id="bsodWarningContinue" class="btn-primary" style="padding: 10px 32px; font-size: 14px; border-radius: 10px; font-weight: 600; background: #dc2626; border-color: #dc2626; box-shadow: 0 4px 12px rgba(220,38,38,0.3);" data-i18n="bsodWarning.continue">Continue</button>
             </div>
         </div>
     </div>
+</div>
 
     <!-- Modal: USB Debugging Wizard -->
     <div id="wizardModal" class="modal">
         <div class="modal-content acrylic">
             <div class="modal-header">
-                <h3><i class="fas fa-exclamation-triangle"></i> No USB Debugging? Let's Fix It</h3>
+                <h3 data-i18n="wizard.title"><i class="fas fa-exclamation-triangle"></i> No USB Debugging? Let's Fix It</h3>
                 <span class="close-button">&times;</span>
             </div>
             <div class="modal-body" id="wizardBody">
                 <!-- Steps injected dynamically -->
             </div>
             <div class="modal-footer">
-                <button id="wizardPrevBtn" class="btn-secondary" disabled>Previous</button>
-                <button id="wizardNextBtn" class="btn-primary">Next</button>
-                <button id="wizardCancelBtn" class="btn-secondary">Cancel</button>
+                <button id="wizardPrevBtn" class="btn-secondary" disabled data-i18n="wizard.prev">Previous</button>
+                <button id="wizardNextBtn" class="btn-primary" data-i18n="wizard.next">Next</button>
+                <button id="wizardCancelBtn" class="btn-secondary" data-i18n="wizard.cancel">Cancel</button>
             </div>
         </div>
     </div>
@@ -300,32 +309,50 @@
     <div id="diagnosticModal" class="modal">
         <div class="modal-content acrylic" style="max-width: 800px;">
             <div class="modal-header">
-                <h3><i class="fas fa-file-medical-alt"></i> Diagnostic Report</h3>
+                <h3 data-i18n="diagnostic.title"><i class="fas fa-file-medical-alt"></i> Diagnostic Report</h3>
                 <span class="close-button" id="diagnosticModalClose">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                    <button class="tab-btn active" data-tab="hardware">Hardware</button>
-                    <button class="tab-btn" data-tab="security">Security</button>
-                    <button class="tab-btn" data-tab="apps">Apps</button>
-                    <button class="tab-btn" data-tab="network">Network</button>
-                    <button class="tab-btn" data-tab="events">Events</button>
+                    <button class="tab-btn active" data-tab="hardware" data-i18n="diagnostic.tab.hardware">Hardware</button>
+                    <button class="tab-btn" data-tab="security" data-i18n="diagnostic.tab.security">Security</button>
+                    <button class="tab-btn" data-tab="apps" data-i18n="diagnostic.tab.apps">Apps</button>
+                    <button class="tab-btn" data-tab="network" data-i18n="diagnostic.tab.network">Network</button>
+                    <button class="tab-btn" data-tab="events" data-i18n="diagnostic.tab.events">Events</button>
                 </div>
                 <div id="tabContent" class="tab-content" style="min-height: 200px;">
                     <!-- Dynamic content -->
                 </div>
             </div>
             <div class="modal-footer" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 1rem;">
-                <button id="exportPdfBtn" class="btn-secondary">📄 Export PDF</button>
-                <button id="exportHtmlBtn" class="btn-secondary">📄 Export HTML</button>
-                <button id="shareBtn" class="btn-primary">📤 Share Report</button>
+                <button id="exportPdfBtn" class="btn-secondary" data-i18n="diagnostic.exportPdf">📄 Export PDF</button>
+                <button id="exportHtmlBtn" class="btn-secondary" data-i18n="diagnostic.exportHtml">📄 Export HTML</button>
+                <button id="shareBtn" class="btn-primary" data-i18n="diagnostic.share">📤 Share Report</button>
             </div>
         </div>
     </div>
 
-    <!-- ... (everything before scripts is unchanged) ... -->
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="loading-spinner-ring"></div>
+            <div class="loading-spinner-ring"></div>
+            <div class="loading-spinner-ring"></div>
+            <div class="loading-dot"></div>
+            <span class="loading-text" data-i18n="loading.text">Loading…</span>
+        </div>
+    </div>
 
-    <!-- ============ LOAD SCRIPTS (FIXED PATHS) ============ -->
+    <!-- 1. Language files (only en and fil) -->
+    <script src="js/lang/eng_lang.js"></script>
+    <script src="js/lang/fil_lang.js"></script>
+
+    <!-- 2. Central i18n loader -->
+    <script src="js/i18n.js"></script>
+
+
+    <!-- ============ SCRIPTS ============ -->
+    <!-- Load order is important: ui.js defines core, then settings.js provides I18N, then modules -->
     <script src="../js/ui.js"></script>
     <script src="../js/storageAnalysis.js"></script>
     <script src="../js/advanceDiagnostic.js"></script>
@@ -334,7 +361,7 @@
     <script src="js/dashboard.js"></script>
     <script src="js/adbDashboard.js"></script>
     <script src="js/batteryModal.js"></script>
-    <script src="js/ramModal.js"></script>      
+    <script src="js/ramModal.js"></script>
     <script src="js/storageModal.js"></script>
     <script src="js/bsodPage.js"></script>
     <script src="js/temperatureModal.js"></script>
@@ -342,15 +369,20 @@
     <script src="js/connectionTroubleshoot.js"></script>
     <script src="js/setting.js"></script>
     <script src="js/aiConclusion.js"></script>
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay">
-        <div class="loading-spinner">
-            <div class="loading-spinner-ring"></div>
-            <div class="loading-spinner-ring"></div>
-            <div class="loading-spinner-ring"></div>
-            <div class="loading-dot"></div>
-            <span class="loading-text">Loading…</span>
-        </div>
-    </div>
+    <script src="js/supabase.js"></script>
+    <script src="js/hardwareTest.js"></script>
+    <script src="js/advanceDiagnostic.js"></script>
+    <!-- Initial language apply (will be called inside ui.js after DOM ready) -->
+    <script>
+        // Ensure language is applied after all scripts are loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // The applyLanguage function is defined in setting.js (loaded above)
+            // ui.js already calls applyLanguage on init, but we can call it again to be safe.
+            if (typeof applyLanguage === 'function') {
+                const saved = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}');
+                applyLanguage(saved.language || 'en');
+            }
+        });
+    </script>
 </body>
 </html>

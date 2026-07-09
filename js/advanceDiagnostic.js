@@ -1,11 +1,33 @@
-// js/advanceDiagnostic.js
+// js/advanceDiagnostic.js – Advanced Diagnostics (no hardware tests)
+// Combines the module (window.SmartHub.advanceDiagnostic) and page renderer
 (function() {
     'use strict';
 
     let currentDeviceId = null;
     let diagResults = null;
+    let _currentContainerId = null;
+    let _lastRenderResults = null;
+    let _isRendering = false;
 
-    // ---- Private helpers ----
+    // ---- I18N helpers ----
+    function _getLang() {
+        return window._activeLang
+            || (window.SmartHubI18n && window.SmartHubI18n.getCurrentLang ? window.SmartHubI18n.getCurrentLang() : 'en');
+    }
+
+    function _t(key, fallback) {
+        const lang = _getLang();
+        let result = null;
+        if (window.SmartHubI18n && typeof window.SmartHubI18n.t === 'function') {
+            result = window.SmartHubI18n.t(key, lang);
+        }
+        if (!result && typeof t === 'function') {
+            result = t(key, lang);
+        }
+        return result || fallback || key;
+    }
+
+    // ---- ADB & API helpers ----
     async function adb(command) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -68,17 +90,30 @@
         return Math.floor(date.getTime() / 1000);
     }
 
-    // ====== ORIGINAL WORKING TESTS (unchanged) ======
+    // ====== SOFTWARE-ONLY TESTS (no hardware / companion app) ======
+    // (All hardware tests removed – they are handled in the Hardware Tests page)
+
     async function testAppCrashes() {
+        const name = _t('adv.test.appCrashes.name', 'App Crashes');
         try {
             const uptime = await getDeviceUptimeSeconds();
             if (uptime < 60) {
-                return { name: 'App Crashes', passed: true, message: 'Device just booted, ignoring boot-time logs', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.appCrashes.message.justBooted', 'Device just booted, ignoring boot-time logs'),
+                    fix: ''
+                };
             }
             const result = await adb('logcat -v time -b crash -t 200');
             const lines = result.output.split('\n').filter(l => l.includes('FATAL EXCEPTION'));
             if (lines.length === 0) {
-                return { name: 'App Crashes', passed: true, message: 'No recent crashes', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.appCrashes.message.noCrashes', 'No recent crashes'),
+                    fix: ''
+                };
             }
             const now = await getCurrentTimeSeconds();
             const crashPackages = new Set();
@@ -100,59 +135,87 @@
                 ? `${uniqueCount} minor crash(es) (ignored)`
                 : `${uniqueCount} unique apps crashed recently: ${Array.from(crashPackages).slice(0,3).join(', ')}...`;
             return {
-                name: 'App Crashes',
+                name,
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Clear app data: `adb shell pm clear <package>` or uninstall.'
+                fix: passed ? '' : _t('adv.test.appCrashes.fix', 'Clear app data: `adb shell pm clear <package>` or uninstall.')
             };
         } catch (e) {
-            return { name: 'App Crashes', passed: false, message: `Error: ${e.message}`, fix: 'Check ADB connection.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.appCrashes.fixError', 'Check ADB connection.')
+            };
         }
     }
 
     async function testANR() {
+        const name = _t('adv.test.anr.name', 'ANR (App Freezes)');
         try {
             const uptime = await getDeviceUptimeSeconds();
             const result = await adb('dumpsys anr');
             const output = result.output;
             const anrMatches = output.match(/ANR in ([^\n]+)/g) || [];
             if (anrMatches.length === 0) {
-                return { name: 'ANR (App Freezes)', passed: true, message: 'No ANR detected', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.anr.message.noAnr', 'No ANR detected'),
+                    fix: ''
+                };
             }
             const recentAnrs = anrMatches.filter(match => uptime < 3600);
             const passed = recentAnrs.length === 0;
             return {
-                name: 'ANR (App Freezes)',
+                name,
                 passed,
-                message: passed ? 'No recent ANR' : `${recentAnrs.length} ANR event(s) found (last ${Math.round(uptime/60)} min)`,
-                fix: passed ? '' : 'Clear data of the app listed in the ANR, or uninstall it.'
+                message: passed ? _t('adv.test.anr.message.noRecent', 'No recent ANR') : `${recentAnrs.length} ANR event(s) found (last ${Math.round(uptime/60)} min)`,
+                fix: passed ? '' : _t('adv.test.anr.fix', 'Clear data of the app listed in the ANR, or uninstall it.')
             };
         } catch (e) {
-            return { name: 'ANR', passed: false, message: `Error: ${e.message}`, fix: 'Restart ADB.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.anr.fixError', 'Restart ADB.')
+            };
         }
     }
 
     async function testKernelPanic() {
+        const name = _t('adv.test.kernelPanic.name', 'Kernel Panic');
         try {
             const uptime = await getDeviceUptimeSeconds();
             if (uptime > 86400) {
-                return { name: 'Kernel Panic', passed: true, message: 'Uptime >24h, ignoring old panic logs', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.kernelPanic.message.uptimeOk', 'Uptime >24h, ignoring old panic logs'),
+                    fix: ''
+                };
             }
             const result = await adb('cat /proc/last_kmsg 2>/dev/null || echo "no_last_kmsg"');
             const hasPanic = result.output.includes('panic') || result.output.includes('Oops');
             const passed = !hasPanic || uptime > 86400;
             return {
-                name: 'Kernel Panic',
+                name,
                 passed,
-                message: hasPanic && uptime < 86400 ? 'Kernel panic detected in current boot' : 'No kernel panic',
-                fix: hasPanic && uptime < 86400 ? 'Reflash boot.img via fastboot. If persists, factory reset.' : ''
+                message: hasPanic && uptime < 86400 ? _t('adv.test.kernelPanic.message.detected', 'Kernel panic detected in current boot') : _t('adv.test.kernelPanic.message.none', 'No kernel panic'),
+                fix: hasPanic && uptime < 86400 ? _t('adv.test.kernelPanic.fix', 'Reflash boot.img via fastboot. If persists, factory reset.') : ''
             };
         } catch (e) {
-            return { name: 'Kernel Panic', passed: false, message: `Error: ${e.message}`, fix: 'Check if device supports last_kmsg.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.kernelPanic.fixError', 'Check if device supports last_kmsg.')
+            };
         }
     }
 
     async function testSystemServiceCrashes() {
+        const name = _t('adv.test.systemService.name', 'System Service Stability');
         try {
             const result = await adb('logcat -b system -t 200');
             const lines = result.output.split('\n').filter(l => l.includes('Service death') || l.includes('Crash'));
@@ -166,52 +229,70 @@
             }
             const problematic = Object.entries(serviceCounts).filter(([_, count]) => count > 2);
             const passed = problematic.length === 0;
-            const msg = passed ? 'Stable' : `${problematic.length} service(s) crashed repeatedly: ${problematic.map(([s]) => s).join(', ')}`;
+            const msg = passed ? _t('adv.test.systemService.message.stable', 'Stable') : `${problematic.length} service(s) crashed repeatedly: ${problematic.map(([s]) => s).join(', ')}`;
             return {
-                name: 'System Service Stability',
+                name,
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Restart SystemUI: `adb shell pkill -f com.android.systemui`. If persists, factory reset.'
+                fix: passed ? '' : _t('adv.test.systemService.fix', 'Restart SystemUI: `adb shell pkill -f com.android.systemui`. If persists, factory reset.')
             };
         } catch (e) {
-            return { name: 'System Service Stability', passed: false, message: `Error: ${e.message}`, fix: 'Check ADB permissions.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.systemService.fixError', 'Check ADB permissions.')
+            };
         }
     }
 
     async function testStorageHealth() {
+        const name = _t('adv.test.storageFull.name', 'Storage Full');
         try {
             const data = await apiCall('/hardware/storage');
             const usedPct = data.percent || 0;
             const passed = usedPct < 92;
             return {
-                name: 'Storage Full',
+                name,
                 passed,
                 message: `${usedPct.toFixed(1)}% used`,
-                fix: passed ? '' : 'Free up space: `adb shell pm trim-caches`. Delete large files in `/sdcard/Download`.'
+                fix: passed ? '' : _t('adv.test.storageFull.fix', 'Free up space: `adb shell pm trim-caches`. Delete large files in `/sdcard/Download`.')
             };
         } catch (e) {
-            return { name: 'Storage Full', passed: false, message: `Error: ${e.message}`, fix: 'Check device connection.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.storageFull.fixError', 'Check device connection.')
+            };
         }
     }
 
     async function testBackgroundWakeups() {
+        const name = _t('adv.test.wakeups.name', 'Excessive Wakeups (Battery Drain)');
         try {
             const result = await adb('dumpsys deviceidle');
             const lines = result.output.split('\n').filter(l => l.includes('Wakeup') || l.includes('wakeup'));
             const count = lines.length;
             const passed = count < 30;
             return {
-                name: 'Excessive Wakeups (Battery Drain)',
+                name,
                 passed,
                 message: `${count} wakeup events logged (threshold: 30)`,
-                fix: passed ? '' : 'Find culprit: `adb shell dumpsys deviceidle`. Disable with `adb shell pm disable <package>`.'
+                fix: passed ? '' : _t('adv.test.wakeups.fix', 'Find culprit: `adb shell dumpsys deviceidle`. Disable with `adb shell pm disable <package>`.')
             };
         } catch (e) {
-            return { name: 'Excessive Wakeups', passed: false, message: `Error: ${e.message}`, fix: 'Restart ADB.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.wakeups.fixError', 'Restart ADB.')
+            };
         }
     }
 
     async function testUIJank() {
+        const name = _t('adv.test.uiJank.name', 'UI Jank');
         try {
             const windowDump = await adb('dumpsys window');
             const output = windowDump.output;
@@ -240,47 +321,64 @@
                 const percent = total > 0 ? (jank / total) * 100 : 0;
                 const passed = percent < threshold;
                 return {
-                    name: `UI Jank (${fgPkg.split('.').pop()})`,
+                    name: name + ` (${fgPkg.split('.').pop()})`,
                     passed,
                     message: `${percent.toFixed(1)}% janky frames (threshold ${threshold}%)`,
-                    fix: passed ? '' : 'Reduce animations: `adb shell settings put global window_animation_scale 0.5`. Disable bloatware.'
+                    fix: passed ? '' : _t('adv.test.uiJank.fix', 'Reduce animations: `adb shell settings put global window_animation_scale 0.5`. Disable bloatware.')
                 };
             } else {
-                return { name: 'UI Jank', passed: true, message: 'No frame data available (app may be idle)', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.uiJank.message.noData', 'No frame data available (app may be idle)'),
+                    fix: ''
+                };
             }
         } catch (e) {
-            return { name: 'UI Jank', passed: false, message: `Error: ${e.message}`, fix: 'Ensure screen is on and an app is active.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.uiJank.fixError', 'Ensure screen is on and an app is active.')
+            };
         }
     }
 
     async function testNetworkStack() {
+        const name = _t('adv.test.networkStack.name', 'WiFi/Bluetooth Stack Stability');
         try {
             const result = await adb('logcat -b system -t 200 | grep -i "wifi.*crash\\|bluetooth.*crash" || echo ""');
             const lines = result.output.split('\n').filter(l => l.trim() && !l.includes('grep'));
             const count = lines.length;
             const passed = count <= 2;
             return {
-                name: 'WiFi/Bluetooth Stack Stability',
+                name,
                 passed,
-                message: passed ? 'Stable' : `${count} stack restarts detected`,
-                fix: passed ? '' : 'Reset network: `adb shell settings put global wifi_on 0` then `1`. Clear BT cache: `adb shell pm clear com.android.bluetooth`.'
+                message: passed ? _t('adv.test.networkStack.message.stable', 'Stable') : `${count} stack restarts detected`,
+                fix: passed ? '' : _t('adv.test.networkStack.fix', 'Reset network: `adb shell settings put global wifi_on 0` then `1`. Clear BT cache: `adb shell pm clear com.android.bluetooth`.')
             };
         } catch (e) {
-            return { name: 'Network Stack', passed: false, message: `Error: ${e.message}`, fix: 'Check device connection.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.networkStack.fixError', 'Check device connection.')
+            };
         }
     }
 
     async function testThermalThrottling() {
+        const name = _t('adv.test.thermal.name', 'Thermal Throttling');
         try {
             const battery = await apiCall('/hardware/battery');
             const isCharging = battery.charging === true;
             const temp = parseFloat(battery.temperature) || 0;
             const passed = temp < 45 || isCharging;
             return {
-                name: 'Thermal Throttling',
+                name,
                 passed,
                 message: passed ? `${temp}°C (${isCharging ? 'charging, normal' : 'normal'})` : `${temp}°C (overheating while idle)`,
-                fix: passed ? '' : 'Disable heavy background apps. Wipe cache partition from recovery.'
+                fix: passed ? '' : _t('adv.test.thermal.fix', 'Disable heavy background apps. Wipe cache partition from recovery.')
             };
         } catch (e) {
             try {
@@ -288,18 +386,24 @@
                 const lines = result.output.split('\n').filter(l => l.includes('thermal'));
                 const passed = lines.length < 2;
                 return {
-                    name: 'Thermal Throttling',
+                    name,
                     passed,
-                    message: passed ? 'No throttling' : `${lines.length} thermal events`,
-                    fix: passed ? '' : 'Check for rogue apps causing high CPU load.'
+                    message: passed ? _t('adv.test.thermal.message.noEvents', 'No throttling') : `${lines.length} thermal events`,
+                    fix: passed ? '' : _t('adv.test.thermal.fix', 'Check for rogue apps causing high CPU load.')
                 };
             } catch (e2) {
-                return { name: 'Thermal Throttling', passed: false, message: `Error: ${e2.message}`, fix: 'Restart ADB.' };
+                return {
+                    name,
+                    passed: false,
+                    message: _t('adv.common.error', 'Error: ') + e2.message,
+                    fix: _t('adv.test.thermal.fixError', 'Restart ADB.')
+                };
             }
         }
     }
 
     async function testGhostTouch() {
+        const name = _t('adv.test.ghostTouch.name', 'Ghost Touch');
         try {
             let isScreenOn = false;
             try {
@@ -310,7 +414,12 @@
                 isScreenOn = true;
             }
             if (isScreenOn) {
-                return { name: 'Ghost Touch', passed: true, message: 'Skipped (screen is on – cannot test accurately)', fix: '' };
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.ghostTouch.message.skipped', 'Skipped (screen is on – cannot test accurately)'),
+                    fix: ''
+                };
             }
             let run1, run2;
             try {
@@ -323,10 +432,10 @@
                 const count = touchEvents.length;
                 const passed = count < 10;
                 return {
-                    name: 'Ghost Touch',
+                    name,
                     passed,
                     message: passed ? `No ghost touch (${count} recent events)` : `Possible ghost touch (${count} events)`,
-                    fix: passed ? '' : 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity".'
+                    fix: passed ? '' : _t('adv.test.ghostTouch.fix', 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity".')
                 };
             }
             const count1 = run1.output.split('\n')
@@ -336,22 +445,23 @@
             const passed = !(count1 > 3 && count2 > 3);
             const avgCount = Math.round((count1 + count2) / 2);
             return {
-                name: 'Ghost Touch',
+                name,
                 passed,
                 message: passed ? `No ghost touch (avg ${avgCount} events)` : `Possible ghost touch (avg ${avgCount} events)`,
-                fix: passed ? '' : 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware.'
+                fix: passed ? '' : _t('adv.test.ghostTouch.fix', 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware.')
             };
         } catch (e) {
-            return { name: 'Ghost Touch', passed: false, message: `Error: ${e.message}`, fix: 'Check ADB and touch driver.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.ghostTouch.fixError', 'Check ADB and touch driver.')
+            };
         }
     }
 
-    // ====== FIXED TESTS ======
-
-    // FIX: broadened zone-name matching + fallback to highest-reading zone when no name matches;
-    // discards physically impossible readings (<=0 or >150°C); treats a fully unreadable result as
-    // informational rather than a failure, since many devices restrict thermal sysfs access entirely.
     async function testCPUTemperature() {
+        const name = _t('adv.test.cpuTemp.name', 'CPU Temperature');
         try {
             let cpuTemp = null;
             let zoneName = '';
@@ -369,22 +479,17 @@
                     let temp = parseFloat(raw);
                     if (isNaN(temp)) continue;
                     if (temp > 1000) temp /= 1000;
-                    if (temp <= 0 || temp > 150) continue; // discard impossible readings
+                    if (temp <= 0 || temp > 150) continue;
 
                     candidates.push({ type, temp });
-
-                    // Broadened match to cover common vendor naming conventions
                     if (/cpu|soc|tsens|apu|cluster|cpuss|pm8|msm.*thermal|little|big|silver|gold/.test(type)) {
                         cpuTemp = temp;
                         zoneName = type;
                         break;
                     }
-                } catch (_) {
-                    // zone doesn't exist – skip
-                }
+                } catch (_) {}
             }
 
-            // Fallback: CPU/SoC is almost always the hottest zone on a running device
             if (cpuTemp === null && candidates.length > 0) {
                 candidates.sort((a, b) => b.temp - a.temp);
                 cpuTemp = candidates[0].temp;
@@ -393,40 +498,48 @@
 
             const passed = cpuTemp === null || cpuTemp < 48;
             return {
-                name: 'CPU Temperature',
+                name,
                 passed,
-                message: cpuTemp !== null ? `${cpuTemp.toFixed(1)}°C (${zoneName})` : 'Unable to read (thermal zones not accessible on this device)',
-                fix: (!passed && cpuTemp !== null) ? 'CPU running hot. Reduce load or check cooling.' : ''
+                message: cpuTemp !== null ? `${cpuTemp.toFixed(1)}°C (${zoneName})` : _t('adv.test.cpuTemp.message.unavailable', 'Unable to read (thermal zones not accessible on this device)'),
+                fix: (!passed && cpuTemp !== null) ? _t('adv.test.cpuTemp.fix', 'CPU running hot. Reduce load or check cooling.') : ''
             };
         } catch (e) {
-            return { name: 'CPU Temperature', passed: true, message: 'Unable to read thermal zones', fix: '' };
+            return {
+                name,
+                passed: true,
+                message: _t('adv.test.cpuTemp.message.unavailable', 'Unable to read (thermal zones not accessible on this device)'),
+                fix: ''
+            };
         }
     }
 
-    // FIX: normalize units — some battery APIs report volts (e.g. 3.91) instead of millivolts (3910),
-    // which previously always failed the 3200-4400 mV range check.
     async function testBatteryVoltage() {
+        const name = _t('adv.test.batteryVoltage.name', 'Battery Voltage');
         try {
             const bat = await apiCall('/hardware/battery');
             let voltage = bat.voltage ? parseFloat(bat.voltage) : 0;
-
             if (voltage > 0 && voltage < 20) {
-                voltage = voltage * 1000; // convert volts -> millivolts
+                voltage = voltage * 1000;
             }
-
             const passed = voltage === 0 || (voltage >= 3200 && voltage <= 4400);
             return {
-                name: 'Battery Voltage',
+                name,
                 passed,
-                message: voltage > 0 ? `${Math.round(voltage)} mV` : 'Not available',
-                fix: passed ? '' : 'Voltage outside normal range – consider battery replacement.'
+                message: voltage > 0 ? `${Math.round(voltage)} mV` : _t('adv.common.notAvailable', 'Not available'),
+                fix: passed ? '' : _t('adv.test.batteryVoltage.fix', 'Voltage outside normal range – consider battery replacement.')
             };
         } catch (e) {
-            return { name: 'Battery Voltage', passed: true, message: 'Not available', fix: '' };
+            return {
+                name,
+                passed: true,
+                message: _t('adv.common.notAvailable', 'Not available'),
+                fix: ''
+            };
         }
     }
 
     async function testBatteryHealth() {
+        const name = _t('adv.test.batteryHealth.name', 'Battery Health');
         try {
             const bat = await apiCall('/hardware/battery');
             const health = (bat.health || '').toLowerCase();
@@ -446,262 +559,148 @@
             if (!passed && cycle > 0) msg += `, ${health}`;
             else if (!passed) msg = `${health}`;
             return {
-                name: 'Battery Health',
+                name,
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Battery may need replacement. Run battery calibration or replace.'
+                fix: passed ? '' : _t('adv.test.batteryHealth.fix', 'Battery may need replacement. Run battery calibration or replace.')
             };
         } catch (e) {
-            return { name: 'Battery Health', passed: true, message: 'Not available', fix: '' };
+            return {
+                name,
+                passed: true,
+                message: _t('adv.common.notAvailable', 'Not available'),
+                fix: ''
+            };
         }
     }
 
-    // FIX: exclude Android's Integer.MAX_VALUE (2147483647) and other sentinel values used to
-    // signal "no reading available" — these were previously being parsed as real dBm values.
     async function testSignalStrength() {
+        const name = _t('adv.test.signalStrength.name', 'Signal Strength');
         try {
-            const result = await adb('dumpsys telephony.registry | grep -i "mSignalStrength"');
+            const result = await adb('dumpsys telephony.registry');
             const output = result.output || '';
-            let dbm = null;
+            let level = null;
+            let passed = true;
+            let msg = _t('adv.test.signalStrength.message.unavailable', 'Unable to read signal');
 
-            const isSentinel = (n) => n === 2147483647 || n === -2147483648 || n === 99 || n === -1 || Math.abs(n) > 200;
-
-            const lteMatch = output.match(/rssi\s*=\s*(-?\d+)/i) || output.match(/dbm\s*=\s*(-?\d+)/i);
+            const lteMatch = output.match(/mLte=CellSignalStrengthLte[^}]*?level=(\d+)/);
             if (lteMatch) {
-                const val = parseInt(lteMatch[1]);
-                if (!isSentinel(val) && val < 0 && val > -150) {
-                    dbm = val;
+                level = parseInt(lteMatch[1]);
+                if (level >= 0 && level <= 4) {
+                    const levels = [
+                        _t('adv.test.signalStrength.level.unknown', 'Unknown'),
+                        _t('adv.test.signalStrength.level.poor', 'Poor'),
+                        _t('adv.test.signalStrength.level.moderate', 'Moderate'),
+                        _t('adv.test.signalStrength.level.good', 'Good'),
+                        _t('adv.test.signalStrength.level.excellent', 'Excellent')
+                    ];
+                    msg = `LTE level ${level}/4 (${levels[level] || 'Unknown'})`;
+                    passed = level >= 2;
                 }
-            }
-            if (dbm === null) {
-                const altMatch = output.match(/SignalStrength:\{[^}]*?\b(\d{1,2})\b[^}]*\}/);
-                if (altMatch) {
-                    const val = parseInt(altMatch[1]);
-                    if (val >= 0 && val <= 31) { // valid GSM ASU range (0-31; 99 = unknown, already excluded by regex)
-                        dbm = -113 + 2 * val;
+            } else {
+                const anyMatch = output.match(/level=(\d+)/);
+                if (anyMatch) {
+                    const lvl = parseInt(anyMatch[1]);
+                    if (lvl >= 0 && lvl <= 4) {
+                        level = lvl;
+                        const levels = [
+                            _t('adv.test.signalStrength.level.unknown', 'Unknown'),
+                            _t('adv.test.signalStrength.level.poor', 'Poor'),
+                            _t('adv.test.signalStrength.level.moderate', 'Moderate'),
+                            _t('adv.test.signalStrength.level.good', 'Good'),
+                            _t('adv.test.signalStrength.level.excellent', 'Excellent')
+                        ];
+                        msg = `Signal level ${level}/4 (${levels[level] || 'Unknown'})`;
+                        passed = level >= 2;
                     }
                 }
-            }
-
-            let level = 'Unknown';
-            let passed = true;
-            if (dbm !== null) {
-                if (dbm >= -80) { level = 'Excellent'; passed = true; }
-                else if (dbm >= -90) { level = 'Good'; passed = true; }
-                else if (dbm >= -100) { level = 'Fair'; passed = true; }
-                else { level = 'Poor'; passed = false; }
             }
 
             return {
-                name: 'Signal Strength',
+                name,
                 passed,
-                message: dbm !== null ? `${dbm} dBm (${level})` : 'Unable to read signal (no active cellular connection)',
-                fix: passed ? '' : 'Move to an area with better coverage or check antenna.'
+                message: msg,
+                fix: passed ? '' : _t('adv.test.signalStrength.fix', 'Move to an area with better coverage or check antenna.')
             };
         } catch (e) {
-            return { name: 'Signal Strength', passed: true, message: 'Unable to read signal (no SIM or radio unavailable)', fix: '' };
+            return {
+                name,
+                passed: true,
+                message: _t('adv.test.signalStrength.message.unavailable', 'Unable to read signal'),
+                fix: ''
+            };
         }
     }
 
-    // FIX: check SIM state first — "no SIM" or "no mobile plan" should be informational, not a
-    // hard failure. Previously any device without an active mobile data session always failed.
     async function testStorageIOErrors() {
-    try {
-        let foundErrors = [];
-        let usedMethod = 'logcat';
-
-        // Fetch raw logcat from all buffers (no grep in shell)
-        const buffers = ['main', 'system', 'kernel', 'events'];
-        const rawLines = [];
-
-        for (const buffer of buffers) {
-            try {
-                const result = await adb(`logcat -d -b ${buffer} -t 3000`);
-                const lines = (result.output || '').split('\n');
-                rawLines.push(...lines);
-            } catch (_) {
-                // buffer may not exist – skip
+        const name = _t('adv.test.storageIO.name', 'Storage I/O Errors');
+        try {
+            let foundErrors = [];
+            let usedMethod = 'logcat';
+            const buffers = ['main', 'system', 'kernel', 'events'];
+            const rawLines = [];
+            for (const buffer of buffers) {
+                try {
+                    const result = await adb(`logcat -d -b ${buffer} -t 3000`);
+                    const lines = (result.output || '').split('\n');
+                    rawLines.push(...lines);
+                } catch (_) {}
             }
-        }
-
-        // Now filter in JavaScript with a strict pattern
-        const patterns = [
-            /EXT4-fs error/i,
-            /F2FS-fs.*error/i,
-            /blk_update_request.*I\/O error/i,
-            /Buffer I\/O error on device/i,
-            /mmcblk.*I\/O error/i,
-            /ufshcd.*error/i,
-            /critical target error/i
-        ];
-
-        for (const line of rawLines) {
-            // Skip lines that are clearly not storage errors (like adbd service logs)
-            if (line.includes('adbd service requested')) continue;
-            if (line.includes('logcat -d')) continue;
-            for (const pattern of patterns) {
-                if (pattern.test(line)) {
-                    foundErrors.push(line.trim());
-                    break;
-                }
-            }
-        }
-
-        // Deduplicate repeated lines
-        foundErrors = [...new Set(foundErrors)];
-
-        // If nothing found in logcat, try dmesg (root fallback)
-        if (foundErrors.length === 0) {
-            try {
-                const dmesg = await adb('dmesg 2>/dev/null');
-                const lines = (dmesg.output || '').split('\n');
-                for (const line of lines) {
-                    if (/mmc.*error|ufs.*error|Buffer I\/O error/i.test(line)) {
+            const patterns = [
+                /EXT4-fs error/i,
+                /F2FS-fs.*error/i,
+                /blk_update_request.*I\/O error/i,
+                /Buffer I\/O error on device/i,
+                /mmcblk.*I\/O error/i,
+                /ufshcd.*error/i,
+                /critical target error/i
+            ];
+            for (const line of rawLines) {
+                if (line.includes('adbd service requested')) continue;
+                if (line.includes('logcat -d')) continue;
+                for (const pattern of patterns) {
+                    if (pattern.test(line)) {
                         foundErrors.push(line.trim());
-                        usedMethod = 'dmesg';
+                        break;
                     }
                 }
-            } catch (_) {}
-        }
-
-        const hasErrors = foundErrors.length > 0;
-        return {
-            name: 'Storage I/O Errors',
-            passed: !hasErrors,
-            message: hasErrors
-                ? `${foundErrors.length} I/O error(s) detected (${usedMethod})`
-                : 'No storage I/O errors found',
-            fix: hasErrors
-                ? 'Storage corruption detected. Backup data immediately and replace storage.'
-                : ''
-        };
-    } catch (e) {
-        return {
-            name: 'Storage I/O Errors',
-            passed: false,
-            message: `Error: ${e.message}`,
-            fix: 'Check storage health.'
-        };
-    }
-}
-
-    // FIX: removed the forced `svc data disable` call, which could break connectivity entirely if
-    // WiFi wasn't actually associated to an AP yet (leaving the device with no working radio during
-    // the test, guaranteeing a false failure). Now checks actual WiFi association first, adds a
-    // curl-based fallback for networks that filter ICMP, and never toggles radios that are already working.
-    async function testDnsResolution() {
-    try {
-        // ---- Enable WiFi using multiple methods ----
-        try { await adb('svc wifi enable'); } catch (_) {}
-        try { await adb('settings put global wifi_on 1'); } catch (_) {}
-        try { await adb('cmd wifi set-wifi-enabled enabled'); } catch (_) {}
-        await new Promise(r => setTimeout(r, 3000));
-
-        // ---- Disable mobile data ----
-        try { await adb('svc data disable'); } catch (_) {}
-        try { await adb('settings put global mobile_data 0'); } catch (_) {}
-        await new Promise(r => setTimeout(r, 1000));
-
-        // Check if WiFi connected
-        let wifiConnected = false;
-        let wifiAttempts = 0;
-        while (!wifiConnected && wifiAttempts < 5) {
-            try {
-                const wifiCheck = await adb('dumpsys wifi | grep -i "state: COMPLETED\\|mNetworkInfo.*CONNECTED"');
-                wifiConnected = /COMPLETED|CONNECTED/i.test(wifiCheck.output || '');
-            } catch (_) {}
-            if (!wifiConnected) {
-                await new Promise(r => setTimeout(r, 2000));
-                wifiAttempts++;
             }
-        }
-
-        let resolved = false;
-        let detail = '';
-
-        // ---- If WiFi connected, test DNS ----
-        if (wifiConnected) {
-            try {
-                const result = await adb('ping -c 1 -W 3 google.com 2>&1');
-                const output = result.output || '';
-                resolved = /\d+\.\d+\.\d+\.\d+/.test(output) && !/unknown host|bad address|network unreachable/i.test(output);
-                if (resolved) detail = 'DNS resolved successfully (WiFi)';
-            } catch (_) {}
-        }
-
-        // ---- If WiFi failed, try mobile data as fallback ----
-        if (!resolved) {
-            // Enable data, disable WiFi
-            try { await adb('svc wifi disable'); } catch (_) {}
-            try { await adb('svc data enable'); } catch (_) {}
-            try { await adb('settings put global mobile_data 1'); } catch (_) {}
-            await new Promise(r => setTimeout(r, 2000));
-
-            // Test DNS over data
-            try {
-                const result = await adb('ping -c 1 -W 3 google.com 2>&1');
-                const output = result.output || '';
-                resolved = /\d+\.\d+\.\d+\.\d+/.test(output) && !/unknown host|bad address|network unreachable/i.test(output);
-                if (resolved) detail = 'DNS resolved successfully (mobile data)';
-            } catch (_) {}
-        }
-
-        // ---- Final fallback: curl ----
-        if (!resolved) {
-            try {
-                const curlResult = await adb('curl -s -o /dev/null -w "%{http_code}" --max-time 5 https://www.google.com');
-                const code = parseInt((curlResult.output || '').trim());
-                if (code >= 200 && code < 500) {
-                    resolved = true;
-                    detail = 'DNS resolved successfully (curl)';
-                }
-            } catch (_) {}
-        }
-
-        if (!resolved) {
-            // Try to set Google DNS manually if not set
-            let dnsSet = false;
-            try {
-                const dns1 = await adb('getprop net.dns1');
-                if (!dns1.output || dns1.output.trim() === '') {
-                    await adb('setprop net.dns1 8.8.8.8');
-                    await adb('setprop net.dns2 8.8.4.4');
-                    dnsSet = true;
-                }
-            } catch (_) {}
-
-            if (dnsSet) {
-                // Retry DNS
+            foundErrors = [...new Set(foundErrors)];
+            if (foundErrors.length === 0) {
                 try {
-                    const result = await adb('ping -c 1 -W 3 google.com 2>&1');
-                    const output = result.output || '';
-                    resolved = /\d+\.\d+\.\d+\.\d+/.test(output) && !/unknown host|bad address|network unreachable/i.test(output);
-                    if (resolved) detail = 'DNS resolved after setting Google DNS';
+                    const dmesg = await adb('dmesg 2>/dev/null');
+                    const lines = (dmesg.output || '').split('\n');
+                    for (const line of lines) {
+                        if (/mmc.*error|ufs.*error|Buffer I\/O error/i.test(line)) {
+                            foundErrors.push(line.trim());
+                            usedMethod = 'dmesg';
+                        }
+                    }
                 } catch (_) {}
             }
-
-            if (!resolved) {
-                detail = 'DNS resolution failed';
-                try {
-                    const dns1 = await adb('getprop net.dns1');
-                    const dnsVal = (dns1.output || '').trim();
-                    detail += dnsVal ? ` (configured DNS: ${dnsVal})` : ' (no DNS server configured)';
-                } catch (_) {}
-            }
+            const hasErrors = foundErrors.length > 0;
+            return {
+                name,
+                passed: !hasErrors,
+                message: hasErrors
+                    ? `${foundErrors.length} I/O error(s) detected (${usedMethod})`
+                    : _t('adv.test.storageIO.message.none', 'No storage I/O errors found'),
+                fix: hasErrors
+                    ? _t('adv.test.storageIO.fix', 'Storage corruption detected. Backup data immediately and replace storage.')
+                    : ''
+            };
+        } catch (e) {
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.storageIO.fixError', 'Check storage health.')
+            };
         }
-
-        return {
-            name: 'DNS Resolution',
-            passed: resolved,
-            message: detail,
-            fix: resolved ? '' : 'Check network connectivity, DHCP, or DNS settings. Try setting DNS manually via `setprop net.dns1 8.8.8.8`.'
-        };
-    } catch (e) {
-        return { name: 'DNS Resolution', passed: false, message: `Error: ${e.message}`, fix: 'Check network connectivity.' };
     }
-}
 
     async function testStorageSpeed() {
+        const name = _t('adv.test.storageSpeed.name', 'Storage Speed');
         try {
             let result = await adb('dd if=/dev/zero of=/sdcard/speedtest.tmp bs=1m count=100 2>&1');
             const output = result.output || '';
@@ -715,20 +714,16 @@
                     const start = Date.now();
                     await adb('head -c 100M /dev/zero > /sdcard/speedtest.tmp 2>/dev/null');
                     const elapsed = (Date.now() - start) / 1000;
-                    if (elapsed > 0) {
-                        mbps = 100 / elapsed;
-                    }
+                    if (elapsed > 0) mbps = 100 / elapsed;
                 } catch (_) {}
             }
-            try {
-                await adb('rm -f /sdcard/speedtest.tmp');
-            } catch (_) {}
+            try { await adb('rm -f /sdcard/speedtest.tmp'); } catch (_) {}
             const passed = mbps !== null && mbps >= 10;
             return {
-                name: 'Storage Speed',
+                name,
                 passed,
-                message: mbps !== null ? `${mbps.toFixed(1)} MB/s` : 'Unable to measure',
-                fix: passed ? '' : 'Storage may be failing or nearly full. Free up space or replace storage.'
+                message: mbps !== null ? `${mbps.toFixed(1)} MB/s` : _t('adv.test.storageSpeed.message.unable', 'Unable to measure'),
+                fix: passed ? '' : _t('adv.test.storageSpeed.fix', 'Storage may be failing or nearly full. Free up space or replace storage.')
             };
         } catch (e) {
             try {
@@ -739,130 +734,82 @@
                 try { await adb('rm -f /sdcard/speedtest.tmp'); } catch (_) {}
                 const passed = mbps !== null && mbps >= 10;
                 return {
-                    name: 'Storage Speed',
+                    name,
                     passed,
-                    message: mbps !== null ? `${mbps.toFixed(1)} MB/s` : 'Unable to measure',
-                    fix: passed ? '' : 'Storage may be failing or nearly full. Free up space or replace storage.'
+                    message: mbps !== null ? `${mbps.toFixed(1)} MB/s` : _t('adv.test.storageSpeed.message.unable', 'Unable to measure'),
+                    fix: passed ? '' : _t('adv.test.storageSpeed.fix', 'Storage may be failing or nearly full. Free up space or replace storage.')
                 };
             } catch (e2) {
-                return { name: 'Storage Speed', passed: false, message: `Error: ${e2.message}`, fix: 'Check device storage health.' };
+                return {
+                    name,
+                    passed: false,
+                    message: _t('adv.common.error', 'Error: ') + e2.message,
+                    fix: _t('adv.test.storageSpeed.fixError', 'Check device storage health.')
+                };
             }
         }
     }
-
-    // FIX: tightened patterns to require actual kernel/filesystem-level error signatures
-    // (EXT4-fs, F2FS-fs, blk_update_request, mmcblk, ufshcd) instead of generic words like
-    // "Read-error"/"Write-error"/"journal.*error" which matched unrelated app or log lines.
-    // Also deduplicates repeated lines and filters out app-package false positives.
-    async function testSignalStrength() {
-    try {
-        const result = await adb('dumpsys telephony.registry');
-        const output = result.output || '';
-
-        // Find the LTE block and extract the `level` (0‑4)
-        const lteMatch = output.match(/mLte=CellSignalStrengthLte[^}]*?level=(\d+)/);
-        let level = null;
-        let passed = true;
-        let msg = 'Unable to read signal';
-
-        if (lteMatch) {
-            level = parseInt(lteMatch[1]);
-            if (level >= 0 && level <= 4) {
-                const levels = ['Unknown', 'Poor', 'Moderate', 'Good', 'Excellent'];
-                msg = `LTE level ${level}/4 (${levels[level] || 'Unknown'})`;
-                passed = level >= 2; // Moderate or better
-            }
-        } else {
-            // Fallback: try to find any signal level from other RATs
-            const anyMatch = output.match(/level=(\d+)/);
-            if (anyMatch) {
-                const lvl = parseInt(anyMatch[1]);
-                if (lvl >= 0 && lvl <= 4) {
-                    level = lvl;
-                    const levels = ['Unknown', 'Poor', 'Moderate', 'Good', 'Excellent'];
-                    msg = `Signal level ${level}/4 (${levels[level] || 'Unknown'})`;
-                    passed = level >= 2;
-                }
-            }
-        }
-
-        return {
-            name: 'Signal Strength',
-            passed,
-            message: msg,
-            fix: passed ? '' : 'Move to an area with better coverage or check antenna.'
-        };
-    } catch (e) {
-        return { name: 'Signal Strength', passed: true, message: 'Unable to read signal', fix: '' };
-    }
-}
 
     async function testMemoryLeaks() {
-    try {
-        // Get the actual foreground app package (skip non‑app windows)
-        const fgResult = await adb('dumpsys window | grep mCurrentFocus | head -1');
-        const focusLine = fgResult.output || '';
-        let pkg = null;
-
-        // Try to extract package name from the focus line
-        const pkgMatch = focusLine.match(/u0\s+([\w.]+)/);
-        if (pkgMatch) {
-            pkg = pkgMatch[1];
-        } else {
-            // Fallback: use dumpsys activity to get the top activity
-            try {
-                const topResult = await adb('dumpsys activity activities | grep "TaskRecord" | head -1');
-                const topMatch = topResult.output.match(/TaskRecord.*?([\w.]+)\//);
-                if (topMatch) pkg = topMatch[1];
-            } catch (_) {}
-        }
-
-        // If still no valid package, skip the test with a message
-        if (!pkg || pkg === 'NotificationShade' || pkg === 'SystemUI' || pkg.includes('launcher')) {
+        const name = _t('adv.test.memoryLeak.name', 'Memory Leak');
+        try {
+            const fgResult = await adb('dumpsys window | grep mCurrentFocus | head -1');
+            const focusLine = fgResult.output || '';
+            let pkg = null;
+            const pkgMatch = focusLine.match(/u0\s+([\w.]+)/);
+            if (pkgMatch) {
+                pkg = pkgMatch[1];
+            } else {
+                try {
+                    const topResult = await adb('dumpsys activity activities | grep "TaskRecord" | head -1');
+                    const topMatch = topResult.output.match(/TaskRecord.*?([\w.]+)\//);
+                    if (topMatch) pkg = topMatch[1];
+                } catch (_) {}
+            }
+            if (!pkg || pkg === 'NotificationShade' || pkg === 'SystemUI' || pkg.includes('launcher')) {
+                return {
+                    name,
+                    passed: true,
+                    message: _t('adv.test.memoryLeak.message.skipped', 'Skipped (no foreground app detected)'),
+                    fix: ''
+                };
+            }
+            const samples = [];
+            const sampleCount = 3;
+            const intervalMs = 5000;
+            for (let i = 0; i < sampleCount; i++) {
+                const memResult = await adb(`dumpsys meminfo ${pkg} | grep TOTAL`);
+                const memMatch = memResult.output.match(/TOTAL\s+(\d+)/);
+                samples.push(memMatch ? parseInt(memMatch[1]) : 0);
+                if (i < sampleCount - 1) await new Promise(r => setTimeout(r, intervalMs));
+            }
+            let leaking = false;
+            if (samples.length >= 2) {
+                let increasing = true;
+                for (let i = 1; i < samples.length; i++) {
+                    if (samples[i] <= samples[i-1]) { increasing = false; break; }
+                }
+                leaking = increasing && (samples[samples.length-1] - samples[0] > 5000);
+            }
+            const current = samples[samples.length-1] || 0;
             return {
-                name: 'Memory Leak',
-                passed: true,
-                message: 'Skipped (no foreground app detected)',
-                fix: ''
+                name,
+                passed: !leaking,
+                message: leaking ? `PSS grew from ${samples[0]}KB to ${current}KB (possible leak)` : `PSS: ${current}KB (stable)`,
+                fix: leaking ? _t('adv.test.memoryLeak.fix', 'Restart the app or device. If persistent, app has memory leak.') : ''
+            };
+        } catch (e) {
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.memoryLeak.fixError', 'Check app memory usage.')
             };
         }
-
-        const samples = [];
-        const sampleCount = 3;
-        const intervalMs = 5000;
-        for (let i = 0; i < sampleCount; i++) {
-            const memResult = await adb(`dumpsys meminfo ${pkg} | grep TOTAL`);
-            const memMatch = memResult.output.match(/TOTAL\s+(\d+)/);
-            samples.push(memMatch ? parseInt(memMatch[1]) : 0);
-            if (i < sampleCount - 1) {
-                await new Promise(r => setTimeout(r, intervalMs));
-            }
-        }
-
-        let leaking = false;
-        if (samples.length >= 2) {
-            let increasing = true;
-            for (let i = 1; i < samples.length; i++) {
-                if (samples[i] <= samples[i-1]) {
-                    increasing = false;
-                    break;
-                }
-            }
-            leaking = increasing && (samples[samples.length-1] - samples[0] > 5000);
-        }
-        const current = samples[samples.length-1] || 0;
-        return {
-            name: 'Memory Leak',
-            passed: !leaking,
-            message: leaking ? `PSS grew from ${samples[0]}KB to ${current}KB (possible leak)` : `PSS: ${current}KB (stable)`,
-            fix: leaking ? 'Restart the app or device. If persistent, app has memory leak.' : ''
-        };
-    } catch (e) {
-        return { name: 'Memory Leak', passed: false, message: `Error: ${e.message}`, fix: 'Check app memory usage.' };
     }
-}
 
     async function testSensors() {
+        const name = _t('adv.test.sensors.name', 'Sensor Health');
         try {
             let output = '';
             let usedService = '';
@@ -876,7 +823,7 @@
                     output = result2.output;
                     usedService = 'sensors';
                 } catch (_) {
-                    return { name: 'Sensor Health', passed: true, message: 'Sensor service not accessible', fix: '' };
+                    return { name, passed: true, message: _t('adv.test.sensors.message.notAccessible', 'Sensor service not accessible'), fix: '' };
                 }
             }
             if (output.includes("Can't find service") || output.includes("No such service")) {
@@ -886,7 +833,7 @@
                         output = result3.output;
                         usedService = 'sensors';
                     } catch (_) {
-                        return { name: 'Sensor Health', passed: true, message: 'Sensor service not available', fix: '' };
+                        return { name, passed: true, message: _t('adv.test.sensors.message.notAvailable', 'Sensor service not available'), fix: '' };
                     }
                 } else {
                     try {
@@ -894,7 +841,7 @@
                         output = result3.output;
                         usedService = 'sensorservice';
                     } catch (_) {
-                        return { name: 'Sensor Health', passed: true, message: 'Sensor service not available', fix: '' };
+                        return { name, passed: true, message: _t('adv.test.sensors.message.notAvailable', 'Sensor service not available'), fix: '' };
                     }
                 }
             }
@@ -913,44 +860,44 @@
             if (hasMag) present.push('Magnetometer');
             if (hasStep) present.push('Step');
             const passed = present.length > 0;
-            const msg = present.length ? `${present.join(', ')} detected` : 'No sensors detected (unexpected)';
+            const msg = present.length ? `${present.join(', ')} detected` : _t('adv.test.sensors.message.none', 'No sensors detected (unexpected)');
             return {
-                name: 'Sensor Health',
+                name,
                 passed,
                 message: msg + (usedService ? ` (via ${usedService})` : ''),
-                fix: passed ? '' : 'Sensors may be disabled or hardware issue. Check `dumpsys sensorservice` for details.'
+                fix: passed ? '' : _t('adv.test.sensors.fix', 'Sensors may be disabled or hardware issue. Check `dumpsys sensorservice` for details.')
             };
         } catch (e) {
-            return { name: 'Sensor Health', passed: true, message: `Unable to check: ${e.message}`, fix: '' };
+            return { name, passed: true, message: _t('adv.common.error', 'Error: ') + e.message, fix: '' };
         }
     }
 
     async function testRootStatus() {
+        const name = _t('adv.test.rootStatus.name', 'Bootloader/Security Status');
         try {
             const result = await adb('getprop ro.boot.verifiedbootstate');
             const state = result.output.trim();
             let passed = true;
-            let msg = state || 'Unknown';
+            let msg = state || _t('adv.common.unknown', 'Unknown');
             if (state === 'orange' || state === 'yellow') passed = false;
-            else if (state === 'green') passed = true;
-            else passed = true;
             return {
-                name: 'Bootloader/Security Status',
+                name,
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Bootloader unlocked or tampered – relock if possible, reflash stock firmware.'
+                fix: passed ? '' : _t('adv.test.rootStatus.fix', 'Bootloader unlocked or tampered – relock if possible, reflash stock firmware.')
             };
         } catch (e) {
-            return { name: 'Bootloader Status', passed: true, message: 'Unknown', fix: '' };
+            return { name, passed: true, message: _t('adv.common.unknown', 'Unknown'), fix: '' };
         }
     }
 
     async function testSecurityPatch() {
+        const name = _t('adv.test.securityPatch.name', 'Security Patch Level');
         try {
             const result = await adb('getprop ro.build.version.security_patch');
             const patch = result.output.trim();
             let passed = true;
-            let msg = patch || 'Unknown';
+            let msg = patch || _t('adv.common.unknown', 'Unknown');
             if (patch && patch !== 'unknown') {
                 const parts = patch.split('-');
                 if (parts.length === 3) {
@@ -963,225 +910,178 @@
                 }
             }
             return {
-                name: 'Security Patch Level',
+                name,
                 passed,
                 message: msg,
-                fix: passed ? '' : 'Update your device via system settings to get the latest security fixes.'
+                fix: passed ? '' : _t('adv.test.securityPatch.fix', 'Update your device via system settings to get the latest security fixes.')
             };
         } catch (e) {
-            return { name: 'Security Patch', passed: true, message: 'Not available', fix: '' };
+            return { name, passed: true, message: _t('adv.common.notAvailable', 'Not available'), fix: '' };
         }
     }
 
     async function testNetworkType() {
-    try {
-        // ---- Disable WiFi (multiple methods) ----
-        try { await adb('svc wifi disable'); } catch (_) {}
-        try { await adb('settings put global wifi_on 0'); } catch (_) {}
-        try { await adb('cmd wifi set-wifi-enabled disabled'); } catch (_) {}
-        // ---- Enable mobile data ----
-        try { await adb('svc data enable'); } catch (_) {}
-        try { await adb('settings put global mobile_data 1'); } catch (_) {}
-        // Wait for radio to settle
-        await new Promise(r => setTimeout(r, 2500));
-
-        // Verify data is actually enabled
-        let dataEnabled = false;
+        const name = _t('adv.test.networkType.name', 'Network Type');
         try {
-            const dataCheck = await adb('settings get global mobile_data');
-            dataEnabled = (dataCheck.output || '').trim() === '1';
-        } catch (_) {}
-
-        const result = await adb('dumpsys telephony.registry');
-        const output = result.output || '';
-
-        // Search for Packet-Switched domain with DATA service
-        let tech = null;
-        const psMatch = output.match(/domain=PS\s+transportType=WWAN.*?accessNetworkTechnology=(\w+).*?availableServices=\[DATA\]/i);
-        if (psMatch) {
-            tech = psMatch[1].toUpperCase();
-        }
-
-        if (!tech) {
-            const anyMatch = output.match(/accessNetworkTechnology=(\w+)/i);
-            if (anyMatch) tech = anyMatch[1].toUpperCase();
-        }
-
-        // Check SIM state
-        let simState = '';
-        try {
-            const simResult = await adb('getprop gsm.sim.state');
-            simState = (simResult.output || '').trim().toLowerCase();
-        } catch (_) {}
-
-        if (!tech) {
-            if (simState.includes('absent') || simState.includes('unknown')) {
+            try { await adb('svc wifi disable'); } catch (_) {}
+            try { await adb('settings put global wifi_on 0'); } catch (_) {}
+            try { await adb('cmd wifi set-wifi-enabled disabled'); } catch (_) {}
+            try { await adb('svc data enable'); } catch (_) {}
+            try { await adb('settings put global mobile_data 1'); } catch (_) {}
+            await new Promise(r => setTimeout(r, 2500));
+            let dataEnabled = false;
+            try {
+                const dataCheck = await adb('settings get global mobile_data');
+                dataEnabled = (dataCheck.output || '').trim() === '1';
+            } catch (_) {}
+            const result = await adb('dumpsys telephony.registry');
+            const output = result.output || '';
+            let tech = null;
+            const psMatch = output.match(/domain=PS\s+transportType=WWAN.*?accessNetworkTechnology=(\w+).*?availableServices=\[DATA\]/i);
+            if (psMatch) tech = psMatch[1].toUpperCase();
+            if (!tech) {
+                const anyMatch = output.match(/accessNetworkTechnology=(\w+)/i);
+                if (anyMatch) tech = anyMatch[1].toUpperCase();
+            }
+            let simState = '';
+            try {
+                const simResult = await adb('getprop gsm.sim.state');
+                simState = (simResult.output || '').trim().toLowerCase();
+            } catch (_) {}
+            if (!tech) {
+                if (simState.includes('absent') || simState.includes('unknown')) {
+                    return { name, passed: true, message: _t('adv.test.networkType.message.noSim', 'No SIM installed — mobile data not applicable'), fix: '' };
+                }
                 return {
-                    name: 'Network Type',
-                    passed: true,
-                    message: 'No SIM installed — mobile data not applicable',
-                    fix: ''
+                    name,
+                    passed: false,
+                    message: dataEnabled ? _t('adv.test.networkType.message.notRegistered', 'Not available (radio not registered)') : _t('adv.test.networkType.message.toggleFailed', 'Mobile data off — toggle failed'),
+                    fix: dataEnabled ? _t('adv.test.networkType.fix.simApn', 'Check SIM or APN settings.') : _t('adv.test.networkType.fix.manual', 'Failed to enable mobile data. Try manually.')
                 };
             }
+            const isModern = tech !== 'UNKNOWN' && tech !== 'GPRS' && tech !== 'EDGE' && tech !== 'GSM';
             return {
-                name: 'Network Type',
+                name,
+                passed: isModern,
+                message: tech,
+                fix: isModern ? '' : _t('adv.test.networkType.fix.slow', 'Slow network – upgrade plan or change location.')
+            };
+        } catch (e) {
+            return {
+                name,
                 passed: false,
-                message: dataEnabled ? 'Not available (radio not registered)' : 'Mobile data off — toggle failed',
-                fix: dataEnabled ? 'Check SIM or APN settings.' : 'Failed to enable mobile data. Try manually.'
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.networkType.fix.radio', 'Check radio status.')
             };
         }
-
-        const isModern = tech !== 'UNKNOWN' && tech !== 'GPRS' && tech !== 'EDGE' && tech !== 'GSM';
-        return {
-            name: 'Network Type',
-            passed: isModern,
-            message: tech,
-            fix: isModern ? '' : 'Slow network – upgrade plan or change location.'
-        };
-    } catch (e) {
-        return { name: 'Network Type', passed: false, message: `Error: ${e.message}`, fix: 'Check radio status.' };
     }
-}
 
     async function testImeiPresent() {
-    try {
-        let imei = null;
-        let method = '';
-
-        // ---- Try companion app via broadcast ----
+        const name = _t('adv.test.imei.name', 'IMEI Present');
         try {
-            // Send broadcast to request IMEI
-            await adb('am broadcast -a com.smarthub.diagnostics.GET_IMEI');
-            await new Promise(r => setTimeout(r, 2000));
-            // Read result file written by app
-            const result = await adb('cat /data/local/tmp/imei.txt 2>/dev/null');
-            const val = (result.output || '').trim();
-            if (val && val.length >= 14) {
-                imei = val;
-                method = 'companion app (broadcast)';
-            }
-        } catch (_) {}
-
-        // ---- Fallback to ADB-only methods ----
-        if (!imei) {
+            let imei = null;
+            let method = '';
             try {
-                const result = await adb('service call iphonesubinfo 1 2>&1');
-                const output = result.output || '';
-                if (!output.includes('fffffffc')) {
-                    const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
-                    if (hexGroups.length > 0) {
-                        const chars = hexGroups
-                            .map(g => g.replace(/\./g, ''))
-                            .join('')
-                            .match(/.{1,4}/g)
-                            ?.map(h => String.fromCharCode(parseInt(h, 16)))
-                            .join('') || '';
-                        const digitsOnly = chars.replace(/[^\d]/g, '');
-                        if (digitsOnly.length >= 14) {
-                            imei = digitsOnly;
-                            method = 'service call (no root)';
-                        }
-                    }
+                await adb('am broadcast -a com.smarthub.diagnostics.GET_IMEI');
+                await new Promise(r => setTimeout(r, 2000));
+                const result = await adb('cat /data/local/tmp/imei.txt 2>/dev/null');
+                const val = (result.output || '').trim();
+                if (val && val.length >= 14) {
+                    imei = val;
+                    method = 'companion app (broadcast)';
                 }
             } catch (_) {}
-        }
-
-        if (!imei) {
-            const props = [
-                'persist.radio.imei',
-                'gsm.imei',
-                'ro.imei',
-                'ro.ril.imei',
-                'ril.imei',
-                'ro.ril.imei1',
-                'ro.ril.imei2'
-            ];
-            for (const prop of props) {
+            if (!imei) {
                 try {
-                    const result = await adb(`getprop ${prop}`);
-                    const val = (result.output || '').trim();
-                    if (val && val.length >= 14) {
-                        imei = val;
-                        method = `getprop ${prop}`;
-                        break;
+                    const result = await adb('service call iphonesubinfo 1 2>&1');
+                    const output = result.output || '';
+                    if (!output.includes('fffffffc')) {
+                        const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
+                        if (hexGroups.length > 0) {
+                            const chars = hexGroups.map(g => g.replace(/\./g, '')).join('').match(/.{1,4}/g)?.map(h => String.fromCharCode(parseInt(h, 16))).join('') || '';
+                            const digitsOnly = chars.replace(/[^\d]/g, '');
+                            if (digitsOnly.length >= 14) {
+                                imei = digitsOnly;
+                                method = 'service call (no root)';
+                            }
+                        }
                     }
                 } catch (_) {}
             }
-        }
-
-        if (!imei) {
-            try {
-                const result = await adb('dumpsys iphonesubinfo 2>&1');
-                const output = result.output || '';
-                const match = output.match(/Device ID[:=]\s*(\d{14,17})/i);
-                if (match) {
-                    imei = match[1];
-                    method = 'dumpsys iphonesubinfo (legacy)';
+            if (!imei) {
+                const props = ['persist.radio.imei','gsm.imei','ro.imei','ro.ril.imei','ril.imei','ro.ril.imei1','ro.ril.imei2'];
+                for (const prop of props) {
+                    try {
+                        const result = await adb(`getprop ${prop}`);
+                        const val = (result.output || '').trim();
+                        if (val && val.length >= 14) {
+                            imei = val;
+                            method = `getprop ${prop}`;
+                            break;
+                        }
+                    } catch (_) {}
                 }
-            } catch (_) {}
-        }
-
-        if (!imei) {
-            try {
-                const result = await adb('dumpsys telephony.registry | grep -i "imei"');
-                const output = result.output || '';
-                const match = output.match(/imei[:=]\s*(\d{14,17})/i);
-                if (match) {
-                    imei = match[1];
-                    method = 'dumpsys telephony.registry';
-                }
-            } catch (_) {}
-        }
-
-        if (!imei) {
-            try {
-                const result = await adb('service call iphonesubinfo 2 2>&1');
-                const output = result.output || '';
-                if (!output.includes('fffffffc')) {
-                    const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
-                    if (hexGroups.length > 0) {
-                        const chars = hexGroups
-                            .map(g => g.replace(/\./g, ''))
-                            .join('')
-                            .match(/.{1,4}/g)
-                            ?.map(h => String.fromCharCode(parseInt(h, 16)))
-                            .join('') || '';
-                        const digitsOnly = chars.replace(/[^\d]/g, '');
-                        if (digitsOnly.length >= 14) {
-                            imei = digitsOnly;
-                            method = 'service call (index 2)';
+            }
+            if (!imei) {
+                try {
+                    const result = await adb('dumpsys iphonesubinfo 2>&1');
+                    const output = result.output || '';
+                    const match = output.match(/Device ID[:=]\s*(\d{14,17})/i);
+                    if (match) { imei = match[1]; method = 'dumpsys iphonesubinfo (legacy)'; }
+                } catch (_) {}
+            }
+            if (!imei) {
+                try {
+                    const result = await adb('dumpsys telephony.registry | grep -i "imei"');
+                    const output = result.output || '';
+                    const match = output.match(/imei[:=]\s*(\d{14,17})/i);
+                    if (match) { imei = match[1]; method = 'dumpsys telephony.registry'; }
+                } catch (_) {}
+            }
+            if (!imei) {
+                try {
+                    const result = await adb('service call iphonesubinfo 2 2>&1');
+                    const output = result.output || '';
+                    if (!output.includes('fffffffc')) {
+                        const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
+                        if (hexGroups.length > 0) {
+                            const chars = hexGroups.map(g => g.replace(/\./g, '')).join('').match(/.{1,4}/g)?.map(h => String.fromCharCode(parseInt(h, 16))).join('') || '';
+                            const digitsOnly = chars.replace(/[^\d]/g, '');
+                            if (digitsOnly.length >= 14) {
+                                imei = digitsOnly;
+                                method = 'service call (index 2)';
+                            }
                         }
                     }
-                }
-            } catch (_) {}
+                } catch (_) {}
+            }
+            if (!imei) {
+                try {
+                    const result = await adb('dumpsys phone 2>/dev/null | grep -i "imei"');
+                    const output = result.output || '';
+                    const match = output.match(/imei[:=]\s*(\d{14,17})/i);
+                    if (match) { imei = match[1]; method = 'dumpsys phone'; }
+                } catch (_) {}
+            }
+            const passed = imei !== null && imei.length >= 14;
+            return {
+                name,
+                passed,
+                message: passed ? `IMEI present (${method})` : _t('adv.test.imei.message.fallback', 'IMEI not accessible — try dialing `*#06#` manually'),
+                fix: passed ? '' : _t('adv.test.imei.fix', 'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.')
+            };
+        } catch (e) {
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.imei.fixRadio', 'Check device radio.')
+            };
         }
-
-        if (!imei) {
-            try {
-                const result = await adb('dumpsys phone 2>/dev/null | grep -i "imei"');
-                const output = result.output || '';
-                const match = output.match(/imei[:=]\s*(\d{14,17})/i);
-                if (match) {
-                    imei = match[1];
-                    method = 'dumpsys phone';
-                }
-            } catch (_) {}
-        }
-
-        const passed = imei !== null && imei.length >= 14;
-        return {
-            name: 'IMEI Present',
-            passed,
-            message: passed ? `IMEI present (${method})` : 'IMEI not accessible — try dialing `*#06#` manually',
-            fix: passed ? '' : 'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.'
-        };
-    } catch (e) {
-        return { name: 'IMEI Present', passed: false, message: `Error: ${e.message}`, fix: 'Check device radio.' };
     }
-}
-    // FIX: raised threshold — 500mA is standard USB charging current and is normal, not a fault.
-    // Also normalizes current_now units (µA -> mA) more defensively.
+
     async function testChargingCurrent() {
+        const name = _t('adv.test.chargingCurrent.name', 'Charging Current');
         try {
             let current = 0;
             try {
@@ -1189,7 +1089,6 @@
                 if (bat.maxChargingCurrent) current = parseFloat(bat.maxChargingCurrent);
                 else if (bat.max_current) current = parseFloat(bat.max_current);
             } catch (_) {}
-
             if (current === 0) {
                 const dump = await adb('dumpsys battery');
                 const match = dump.output.match(/Max charging current:\s*(\d+)/);
@@ -1198,438 +1097,142 @@
                     if (current > 10000) current = Math.round(current / 1000);
                 }
             }
-
             if (current === 0) {
                 try {
                     const sys = await adb('cat /sys/class/power_supply/battery/current_now 2>/dev/null');
                     const raw = sys.output.trim();
                     if (raw) {
                         const val = parseInt(raw);
-                        if (!isNaN(val) && val !== 0) {
-                            current = Math.round(Math.abs(val) / 1000); // µA -> mA
-                        }
+                        if (!isNaN(val) && val !== 0) current = Math.round(Math.abs(val) / 1000);
                     }
                 } catch (_) {}
             }
-
             if (current === 0) {
-                return { name: 'Charging Current', passed: true, message: 'Not reported by this device', fix: '' };
+                return { name, passed: true, message: _t('adv.test.chargingCurrent.message.notReported', 'Not reported by this device'), fix: '' };
             }
-
-            // 500mA is standard USB current — only flag genuinely low current below ~400mA
             const passed = current >= 400;
             return {
-                name: 'Charging Current',
+                name,
                 passed,
                 message: `${current} mA`,
-                fix: passed ? '' : 'Low charging current detected – check cable, charger, or USB port.'
+                fix: passed ? '' : _t('adv.test.chargingCurrent.fix', 'Low charging current detected – check cable, charger, or USB port.')
             };
         } catch (e) {
-            return { name: 'Charging Current', passed: true, message: 'Not available', fix: '' };
+            return { name, passed: true, message: _t('adv.common.notAvailable', 'Not available'), fix: '' };
         }
     }
 
-    // FIX: added sanity range check — values above ~3000 are physically impossible for a phone
-    // battery and almost always mean the sysfs node returned a different counter entirely
-    // (e.g. charge_counter in µAh being misread as cycle_count).
     async function testBatteryCycleCount() {
+        const name = _t('adv.test.batteryCycle.name', 'Battery Cycle Count');
         try {
             const result = await adb('cat /sys/class/power_supply/battery/cycle_count 2>/dev/null || echo "unavailable"');
             const output = (result.output || '').trim();
             let count = parseInt(output);
             const available = !isNaN(count) && output !== 'unavailable';
-
             const plausible = available && count >= 0 && count <= 3000;
-
             if (available && !plausible) {
                 return {
-                    name: 'Battery Cycle Count',
+                    name,
                     passed: true,
-                    message: `Reported value (${count}) is not a valid cycle count on this device`,
+                    message: _t('adv.test.batteryCycle.message.invalid', `Reported value (${count}) is not a valid cycle count on this device`),
                     fix: ''
                 };
             }
-
             const passed = !available || count < 500;
             return {
-                name: 'Battery Cycle Count',
+                name,
                 passed,
-                message: available ? `${count} cycles` : 'Not available',
-                fix: passed ? '' : 'Battery has high cycle count (>500). Consider replacement.'
+                message: available ? `${count} cycles` : _t('adv.common.notAvailable', 'Not available'),
+                fix: passed ? '' : _t('adv.test.batteryCycle.fix', 'Battery has high cycle count (>500). Consider replacement.')
             };
         } catch (e) {
-            return { name: 'Battery Cycle Count', passed: true, message: 'Not available', fix: '' };
+            return { name, passed: true, message: _t('adv.common.notAvailable', 'Not available'), fix: '' };
         }
     }
 
     async function testChargingType() {
+        const name = _t('adv.test.chargingType.name', 'Charging Type');
         try {
             const battery = await apiCall('/hardware/battery');
             const plugged = battery.plugged || 0;
-            const map = { 0: 'Not charging', 1: 'AC (wired)', 2: 'USB', 4: 'Wireless' };
-            const type = map[plugged] || 'Unknown';
+            const map = {
+                0: _t('adv.test.chargingType.type.notCharging', 'Not charging'),
+                1: _t('adv.test.chargingType.type.ac', 'AC (wired)'),
+                2: _t('adv.test.chargingType.type.usb', 'USB'),
+                4: _t('adv.test.chargingType.type.wireless', 'Wireless')
+            };
+            const type = map[plugged] || _t('adv.common.unknown', 'Unknown');
             const passed = plugged !== 0;
             return {
-                name: 'Charging Type',
+                name,
                 passed,
                 message: type,
-                fix: passed ? '' : 'Device is not charging. Check cable, charger, or port.'
+                fix: passed ? '' : _t('adv.test.chargingType.fix', 'Device is not charging. Check cable, charger, or port.')
             };
         } catch (e) {
-            return { name: 'Charging Type', passed: false, message: `Error: ${e.message}`, fix: 'Check charging hardware.' };
+            return {
+                name,
+                passed: false,
+                message: _t('adv.common.error', 'Error: ') + e.message,
+                fix: _t('adv.test.chargingType.fixError', 'Check charging hardware.')
+            };
         }
     }
-    // ====== HARDWARE TESTS USING COMPANION APP ======
 
-async function testMultiTouch() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode multitouch');
-        const result = await showModalWithTimeout(
-            'Multi‑touch Test',
-            'Place 5 fingers on the screen simultaneously. The app will detect the max number of touches.',
-            12000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('PASS') || result.includes('5');
-        return {
-            name: 'Multi‑touch',
-            passed,
-            message: result || 'Multi‑touch test completed',
-            fix: passed ? '' : 'Touchscreen may not support 5‑point multitouch.'
-        };
-    } catch (e) {
-        return { name: 'Multi‑touch', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testPhysicalButtons() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode buttons');
-        const result = await showModalWithTimeout(
-            'Physical Buttons Test',
-            'Press Volume Up and Volume Down within 8 seconds.',
-            10000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Volume Up') && result.includes('Volume Down');
-        return {
-            name: 'Physical Buttons',
-            passed,
-            message: result || 'Button test completed',
-            fix: passed ? '' : 'Volume buttons may be faulty.'
-        };
-    } catch (e) {
-        return { name: 'Physical Buttons', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testColorSweep() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode colorsweep');
-        const result = await showModalWithTimeout(
-            'Screen Burn‑in / Dead Pixel Test',
-            'The screen will cycle through solid colors (Red, Green, Blue, White, Black). Tap the screen to advance each color.\nCheck for dead pixels or burn‑in.',
-            30000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('completed') || result.includes('done');
-        return {
-            name: 'Screen Burn‑in / Dead Pixel',
-            passed,
-            message: result || 'Color sweep completed',
-            fix: passed ? '' : 'Dead pixels or burn‑in detected – consider screen replacement.'
-        };
-    } catch (e) {
-        return { name: 'Screen Burn‑in', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testCameraFront() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode camera_front');
-        const result = await showModalWithTimeout(
-            'Front Camera Test',
-            'Checking front camera presence and autofocus...',
-            5000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Present');
-        return {
-            name: 'Front Camera',
-            passed,
-            message: result || 'Front camera check completed',
-            fix: passed ? '' : 'Front camera not detected.'
-        };
-    } catch (e) {
-        return { name: 'Front Camera', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testCameraRear() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode camera_rear');
-        const result = await showModalWithTimeout(
-            'Rear Camera Test',
-            'Checking rear camera presence and autofocus...',
-            5000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Present');
-        return {
-            name: 'Rear Camera',
-            passed,
-            message: result || 'Rear camera check completed',
-            fix: passed ? '' : 'Rear camera not detected.'
-        };
-    } catch (e) {
-        return { name: 'Rear Camera', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testMagnetometer() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode magnetometer');
-        const result = await showModalWithTimeout(
-            'Magnetometer Test',
-            'Reading magnetometer sensor... (move phone in a figure‑8 pattern)',
-            6000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Magnetic') && !result.includes('Not present');
-        return {
-            name: 'Magnetometer',
-            passed,
-            message: result || 'Magnetometer check completed',
-            fix: passed ? '' : 'Magnetometer not detected – compass may not work.'
-        };
-    } catch (e) {
-        return { name: 'Magnetometer', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testBarometer() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode barometer');
-        const result = await showModalWithTimeout(
-            'Barometer Test',
-            'Reading barometer sensor... (altitude/pressure)',
-            6000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Pressure') && !result.includes('Not present');
-        return {
-            name: 'Barometer',
-            passed,
-            message: result || 'Barometer check completed',
-            fix: passed ? '' : 'Barometer not detected.'
-        };
-    } catch (e) {
-        return { name: 'Barometer', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testWirelessCharging() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode wireless_charging');
-        const result = await showModalWithTimeout(
-            'Wireless Charging Test',
-            'Place the device on a wireless charger if available. Checking wireless charging capability.',
-            8000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('ACTIVE') || result.includes('place on a wireless charger');
-        return {
-            name: 'Wireless Charging',
-            passed,
-            message: result || 'Wireless charging check completed',
-            fix: passed ? '' : 'Wireless charging not supported or not detected.'
-        };
-    } catch (e) {
-        return { name: 'Wireless Charging', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testIrBlaster() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode ir_blaster');
-        const result = await showModalWithTimeout(
-            'IR Blaster Test',
-            'Checking for IR blaster hardware...',
-            4000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('Present');
-        return {
-            name: 'IR Blaster',
-            passed,
-            message: result || 'IR blaster check completed',
-            fix: passed ? '' : 'IR blaster not detected.'
-        };
-    } catch (e) {
-        return { name: 'IR Blaster', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-async function testFaceUnlock() {
-    try {
-        await adb('am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode face_unlock');
-        const result = await showModalWithTimeout(
-            'Face Unlock Test',
-            'Checking for face unlock hardware and enrollment status...',
-            6000
-        );
-        await adb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchCompanionApp();
-        const passed = result.includes('present') || result.includes('available');
-        return {
-            name: 'Face Unlock',
-            passed,
-            message: result || 'Face unlock check completed',
-            fix: passed ? '' : 'Face unlock hardware not detected.'
-        };
-    } catch (e) {
-        return { name: 'Face Unlock', passed: false, message: `Error: ${e.message}`, fix: 'Check if companion app is installed.' };
-    }
-}
-
-// ---- Helper: show modal with timeout and return result ----
-async function showModalWithTimeout(title, message, timeoutMs) {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('hwTestModal') || document.getElementById('advanceDiagModal');
-        if (!modal) {
-            resolve('Test completed (no modal)');
-            return;
-        }
-        const modalTitle = modal.querySelector('.modal-header h3') || modal.querySelector('h3');
-        const modalBody = modal.querySelector('.modal-body');
-        if (modalTitle) modalTitle.textContent = title;
-        if (modalBody) modalBody.innerHTML = `<p>${message}</p><p style="font-size:12px; color:#999;">Waiting for app to complete...</p>`;
-        modal.style.display = 'flex';
-        let resolved = false;
-        const timer = setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                modal.style.display = 'none';
-                resolve('Timeout');
-            }
-        }, timeoutMs);
-        // Poll for result file from app (ExtraHardwareTestActivity writes to /data/local/tmp/hwtest_result.txt)
-        const pollInterval = setInterval(async () => {
-            try {
-                const result = await adb('cat /data/local/tmp/hwtest_result.txt 2>/dev/null');
-                const text = (result.output || '').trim();
-                if (text) {
-                    clearInterval(pollInterval);
-                    clearTimeout(timer);
-                    modal.style.display = 'none';
-                    resolved = true;
-                    resolve(text);
-                }
-            } catch (_) {}
-        }, 1000);
-        // Also listen for modal close (user dismisses)
-        const closeBtn = modal.querySelector('.close-button');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                if (!resolved) {
-                    resolved = true;
-                    clearInterval(pollInterval);
-                    clearTimeout(timer);
-                    modal.style.display = 'none';
-                    resolve('User closed modal');
-                }
-            });
-        }
-        // Click outside to close
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal && !resolved) {
-                resolved = true;
-                clearInterval(pollInterval);
-                clearTimeout(timer);
-                modal.style.display = 'none';
-                resolve('User closed modal');
-            }
-        });
-    });
-}
-
-async function launchCompanionApp() {
-    await adb('am start -n com.smarthub.diagnostics/.MainActivity');
-}
-    // ====== RUN ALL TESTS ======
+    // ====== RUN SOFTWARE TESTS (no hardware) ======
     async function runSoftwareDiagnostics() {
-    const tests = [
-        testAppCrashes,
-        testANR,
-        testKernelPanic,
-        testSystemServiceCrashes,
-        testStorageHealth,
-        testBackgroundWakeups,
-        testUIJank,
-        testNetworkStack,
-        testThermalThrottling,
-        testGhostTouch,
-        testCPUTemperature,
-        testBatteryVoltage,
-        testBatteryHealth,
-        testSignalStrength,
-        testNetworkType,
-        // testDnsResolution,   // REMOVED (unreliable)
-        testStorageSpeed,
-        testStorageIOErrors,
-        testMemoryLeaks,
-        testSensors,
-        testRootStatus,
-        testSecurityPatch,
-        testImeiPresent,
-        testChargingCurrent,
-        testBatteryCycleCount,
-        testChargingType
-    ];
-    const results = [];
-    for (const testFn of tests) {
-        try {
-            const res = await testFn();
-            if (res && typeof res === 'object' && res.name && typeof res.passed !== 'undefined') {
-                results.push(res);
-            } else {
+        const tests = [
+            testAppCrashes,
+            testANR,
+            testKernelPanic,
+            testSystemServiceCrashes,
+            testStorageHealth,
+            testBackgroundWakeups,
+            testUIJank,
+            testNetworkStack,
+            testThermalThrottling,
+            testGhostTouch,
+            testCPUTemperature,
+            testBatteryVoltage,
+            testBatteryHealth,
+            testSignalStrength,
+            testNetworkType,
+            testStorageSpeed,
+            testStorageIOErrors,
+            testMemoryLeaks,
+            testSensors,
+            testRootStatus,
+            testSecurityPatch,
+            testImeiPresent,
+            testChargingCurrent,
+            testBatteryCycleCount,
+            testChargingType
+        ];
+        const results = [];
+        for (const testFn of tests) {
+            try {
+                const res = await testFn();
+                if (res && typeof res === 'object' && res.name && typeof res.passed !== 'undefined') {
+                    results.push(res);
+                } else {
+                    results.push({
+                        name: testFn.name || 'Unknown',
+                        passed: false,
+                        message: 'Test returned invalid result',
+                        fix: 'Check test implementation.'
+                    });
+                }
+            } catch (e) {
                 results.push({
-                    name: testFn.name || 'Unknown',
+                    name: testFn.name || 'Unknown Test',
                     passed: false,
-                    message: 'Test returned invalid result',
-                    fix: 'Check test implementation.'
+                    message: `Error: ${e.message}`,
+                    fix: 'Check device connectivity.'
                 });
             }
-        } catch (e) {
-            results.push({
-                name: testFn.name || 'Unknown Test',
-                passed: false,
-                message: `Error: ${e.message}`,
-                fix: 'Check device connectivity.'
-            });
         }
+        return results;
     }
-    return results;
-}
 
     // ---- Deep & Rootkit scans ----
     async function performDeepScan(deviceId) {
@@ -1738,143 +1341,167 @@ async function launchCompanionApp() {
     window.SmartHub.advanceDiagnostic = {
         runFullSuite: async function(deviceId, onProgress) {
             currentDeviceId = deviceId;
-            if (typeof onProgress === 'function') onProgress('Running software diagnostics...');
+            if (typeof onProgress === 'function') onProgress(_t('adv.progress.software', 'Running software diagnostics...'));
 
             const softwareResults = await runSoftwareDiagnostics();
 
-            if (typeof onProgress === 'function') onProgress('Running deep & rootkit scans...');
+            if (typeof onProgress === 'function') onProgress(_t('adv.progress.deep', 'Running deep & rootkit scans...'));
             const [deep, rootkit] = await Promise.all([
                 performDeepScan(deviceId),
                 performRootkitScan(deviceId)
             ]);
 
-            if (typeof onProgress === 'function') onProgress('Analyzing with AI...');
+            if (typeof onProgress === 'function') onProgress(_t('adv.progress.ai', 'Analyzing with AI...'));
             const aiConclusion = await runAIAnalysis(deviceId, softwareResults, deep, rootkit);
 
             diagResults = { software: softwareResults, deep, rootkit, ai: aiConclusion };
-            if (typeof onProgress === 'function') onProgress('Done');
+            if (typeof onProgress === 'function') onProgress(_t('adv.progress.done', 'Done'));
             return diagResults;
         },
 
         getResults: function() { return diagResults; },
 
         renderResults: function(containerId) {
-            const container = document.getElementById(containerId);
-            if (!container || !diagResults) return;
+            _currentContainerId = containerId;
+            _lastRenderResults = diagResults;
+            this._doRender(containerId);
+        },
 
-            const { software, deep, rootkit, ai } = diagResults;
-            let html = '';
+        _doRender: function(containerId) {
+            if (_isRendering) return;
+            _isRendering = true;
+            try {
+                const container = document.getElementById(containerId);
+                if (!container || !diagResults) return;
 
-            const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
-            const total = validSoftware.length;
-            const passed = validSoftware.filter(t => t.passed).length;
-            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
-            const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+                const { software, deep, rootkit, ai } = diagResults;
+                let html = '';
 
-            html += `
-                <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                    <div style="font-size:32px;">${icon}</div>
-                    <div>
-                        <strong style="font-size:20px; color:${color};">${pct}%</strong>
-                        <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
-                    </div>
-                    <div style="flex:1; min-width:100px;">
-                        <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
-                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            if (deep || rootkit) {
-                html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
-                if (deep) {
-                    let deepText = deep.summary || 'No issues';
-                    const match = deepText.match(/(\d+)\s+findings/);
-                    const displayText = match ? `${match[1]} issues` : deepText;
-                    html += `
-                        <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                            🔬 Deep Scan: <strong>${escapeHtml(displayText)}</strong>
-                        </span>
-                    `;
-                }
-                if (rootkit) {
-                    const isOk = !rootkit.summary.toLowerCase().includes('unavailable') && !rootkit.summary.toLowerCase().includes('error');
-                    const icon = isOk ? '✅' : '⚠️';
-                    html += `
-                        <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                            🛡️ Rootkit: <strong>${escapeHtml(rootkit.summary || 'Clean')}</strong> ${icon}
-                        </span>
-                    `;
-                }
-                html += `</div>`;
-            }
-
-            if (validSoftware.length > 0) {
-                html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
-                for (const test of validSoftware) {
-                    const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
-                    const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
-                    const icon = test.passed ? '✅' : '❌';
-                    let fixHtml = '';
-                    if (!test.passed && test.fix) {
-                        fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
-                            <strong>🔧 Fix:</strong> ${escapeHtml(test.fix)}
-                        </div>`;
-                    }
-                    html += `
-                        <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
-                            <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
-                            <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
-                            ${fixHtml}
-                        </div>
-                    `;
-                }
-                html += `</div>`;
-            } else {
-                html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">No test results available.</div>`;
-            }
-
-            if (ai) {
-                let confidenceColor = '#6B7280';
-                if (ai.confidence === 'High') confidenceColor = '#2e7d32';
-                else if (ai.confidence === 'Medium') confidenceColor = '#ed6c02';
-                else if (ai.confidence === 'Low') confidenceColor = '#d32f2f';
+                const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
+                const total = validSoftware.length;
+                const passed = validSoftware.filter(t => t.passed).length;
+                const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+                const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+                const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
 
                 html += `
-                    <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); border-radius:12px; border:1px solid #c7d2fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-                            <span style="font-size:28px;">🧠</span>
-                            <div>
-                                <h3 style="margin:0; color:#1e3a8a; font-size:18px;">AI Diagnosis</h3>
-                                <span style="font-size:12px; color:#6B7280;">Root cause analysis</span>
+                    <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                        <div style="font-size:32px;">${icon}</div>
+                        <div>
+                            <strong style="font-size:20px; color:${color};">${pct}%</strong>
+                            <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
+                        </div>
+                        <div style="flex:1; min-width:100px;">
+                            <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
+                                <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
                             </div>
-                            <span style="margin-left:auto; font-size:12px; background:${confidenceColor}20; color:${confidenceColor}; padding:2px 12px; border-radius:12px; font-weight:600;">
-                                Confidence: ${escapeHtml(ai.confidence || 'Medium')}
-                            </span>
                         </div>
-                        <div style="font-size:15px; color:#1e293b; margin-bottom:10px; padding:12px; background:rgba(255,255,255,0.5); border-radius:8px;">
-                            <strong>📋 Conclusion:</strong><br>
-                            ${escapeHtml(ai.summary)}
-                        </div>
-                        <div style="margin-top:8px;">
-                            <strong style="color:#1e3a8a;">🔧 Recommended Actions:</strong>
-                            <ul style="margin:6px 0 0 20px; padding:0; color:#334155;">
-                                ${ai.actions.map(a => `<li style="margin-bottom:4px;">${escapeHtml(a)}</li>`).join('')}
-                            </ul>
-                        </div>
-                        ${ai.nextStep ? `
-                        <div style="margin-top:10px; padding:10px; background:#dbeafe; border-radius:6px; border-left:3px solid #3b82f6;">
-                            <strong>📌 Next Step:</strong> ${escapeHtml(ai.nextStep)}
-                        </div>` : ''}
                     </div>
                 `;
-            }
 
-            container.innerHTML = html;
+                if (deep || rootkit) {
+                    html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
+                    if (deep) {
+                        let deepText = deep.summary || 'No issues';
+                        const match = deepText.match(/(\d+)\s+findings/);
+                        const displayText = match ? `${match[1]} issues` : deepText;
+                        html += `
+                            <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                                🔬 ${_t('adv.result.deepScan', 'Deep Scan')}: <strong>${escapeHtml(displayText)}</strong>
+                            </span>
+                        `;
+                    }
+                    if (rootkit) {
+                        const isOk = !rootkit.summary.toLowerCase().includes('unavailable') && !rootkit.summary.toLowerCase().includes('error');
+                        const icon = isOk ? '✅' : '⚠️';
+                        html += `
+                            <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                                🛡️ ${_t('adv.result.rootkit', 'Rootkit')}: <strong>${escapeHtml(rootkit.summary || 'Clean')}</strong> ${icon}
+                            </span>
+                        `;
+                    }
+                    html += `</div>`;
+                }
+
+                if (validSoftware.length > 0) {
+                    html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
+                    for (const test of validSoftware) {
+                        const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
+                        const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
+                        const icon = test.passed ? '✅' : '❌';
+                        let fixHtml = '';
+                        if (!test.passed && test.fix) {
+                            fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
+                                <strong>🔧 ${_t('adv.result.fix', 'Fix')}:</strong> ${escapeHtml(test.fix)}
+                            </div>`;
+                        }
+                        html += `
+                            <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
+                                <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
+                                <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
+                                ${fixHtml}
+                            </div>
+                        `;
+                    }
+                    html += `</div>`;
+                } else {
+                    html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">${_t('adv.result.noResults', 'No test results available.')}</div>`;
+                }
+
+                if (ai) {
+                    let confidenceColor = '#6B7280';
+                    if (ai.confidence === 'High') confidenceColor = '#2e7d32';
+                    else if (ai.confidence === 'Medium') confidenceColor = '#ed6c02';
+                    else if (ai.confidence === 'Low') confidenceColor = '#d32f2f';
+
+                    html += `
+                        <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); border-radius:12px; border:1px solid #c7d2fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                                <span style="font-size:28px;">🧠</span>
+                                <div>
+                                    <h3 style="margin:0; color:#1e3a8a; font-size:18px;">${_t('adv.result.conclusion', 'AI Diagnosis')}</h3>
+                                    <span style="font-size:12px; color:#6B7280;">${_t('adv.result.rootCause', 'Root cause analysis')}</span>
+                                </div>
+                                <span style="margin-left:auto; font-size:12px; background:${confidenceColor}20; color:${confidenceColor}; padding:2px 12px; border-radius:12px; font-weight:600;">
+                                    ${_t('adv.result.confidence', 'Confidence')}: ${escapeHtml(ai.confidence || 'Medium')}
+                                </span>
+                            </div>
+                            <div style="font-size:15px; color:#1e293b; margin-bottom:10px; padding:12px; background:rgba(255,255,255,0.5); border-radius:8px;">
+                                <strong>📋 ${_t('adv.result.summary', 'Conclusion')}:</strong><br>
+                                ${escapeHtml(ai.summary)}
+                            </div>
+                            <div style="margin-top:8px;">
+                                <strong style="color:#1e3a8a;">🔧 ${_t('adv.result.recommendedActions', 'Recommended Actions')}:</strong>
+                                <ul style="margin:6px 0 0 20px; padding:0; color:#334155;">
+                                    ${ai.actions.map(a => `<li style="margin-bottom:4px;">${escapeHtml(a)}</li>`).join('')}
+                                </ul>
+                            </div>
+                            ${ai.nextStep ? `
+                            <div style="margin-top:10px; padding:10px; background:#dbeafe; border-radius:6px; border-left:3px solid #3b82f6;">
+                                <strong>📌 ${_t('adv.result.nextStep', 'Next Step')}:</strong> ${escapeHtml(ai.nextStep)}
+                            </div>` : ''}
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
+            } finally {
+                _isRendering = false;
+            }
         }
     };
+
+    // ---- Language change listener (safe, non-looping) ----
+    let _languageChangeHandler = function(e) {
+        const lang = e.detail.lang;
+        // Only re-render if we have a container and stored results, and we are not already rendering
+        if (_currentContainerId && _lastRenderResults && !_isRendering) {
+            diagResults = _lastRenderResults;
+            window.SmartHub.advanceDiagnostic._doRender(_currentContainerId);
+        }
+    };
+    document.removeEventListener('languageChanged', _languageChangeHandler);
+    document.addEventListener('languageChanged', _languageChangeHandler);
 
     function escapeHtml(str) {
         if (!str) return '';
@@ -1885,4 +1512,262 @@ async function launchCompanionApp() {
             return m;
         });
     }
+
+    // ---- Helper: get device ID from status bar ----
+    function getDeviceIdFromStatusBar() {
+        const statusSpan = document.querySelector('#connectionStatus span');
+        if (statusSpan) {
+            const text = statusSpan.textContent;
+            const match = text.match(/ADB:\s*([A-Fa-f0-9]+)/);
+            if (match) return match[1];
+        }
+        return null;
+    }
+
+    // ---- Expose the page renderer as a global function ----
+    // ---- Expose the page renderer as a global function ----
+window.renderAdvancedDiagnostic = function() {
+    const container = document.getElementById('pageContent');
+
+    // Helper to get the current device ID from status bar or global
+    function getCurrentDeviceId() {
+        // 1. From global (set by ui.js)
+        if (window.currentDeviceId) return window.currentDeviceId;
+        // 2. From status bar text
+        const statusSpan = document.querySelector('#connectionStatus span');
+        if (statusSpan) {
+            const text = statusSpan.textContent;
+            const match = text.match(/ADB:\s*([A-Fa-f0-9]+)/);
+            if (match) return match[1];
+        }
+        // 3. From localStorage or any other place? Not needed.
+        return null;
+    }
+
+    // Use global translations – they're already defined at the top of this file
+    // We'll just use _t and _getLang from the outer scope (they are hoisted)
+
+    // ---- Render the page ----
+    let deviceId = getCurrentDeviceId();
+
+    if (!deviceId) {
+        // Show "No Device Connected" message – but still render the button?
+        // The user might connect later, so we'll render the UI but show a warning.
+        container.innerHTML = `
+            <div style="margin-bottom: 24px;">
+                <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;" data-i18n="adv.page.title">${_t('adv.page.title', '🔍 Advanced Diagnostics')}</h1>
+                <p style="color: #6b7280; font-size: 14px; margin: 0;" data-i18n="adv.page.subtitle">${_t('adv.page.subtitle', 'A deeper pass across software behavior, installed apps, and rootkit indicators.')}</p>
+            </div>
+            <div class="card" style="text-align: center; padding: 40px; background: #fff8e1; border: 1px solid #ffecb3;">
+                <i class="fas fa-plug" style="font-size: 48px; color: #f57c00;"></i>
+                <h2 data-i18n="adv.page.noDeviceTitle">${_t('adv.page.noDeviceTitle', 'No Device Connected')}</h2>
+                <p data-i18n="adv.page.noDeviceDesc">${_t('adv.page.noDeviceDesc', 'Please connect your Android phone via USB and enable USB debugging.')}</p>
+                <button id="retryDeviceCheckBtn" style="margin-top: 12px; padding: 8px 24px; border: 1px solid #f57c00; background: white; border-radius: 8px; cursor: pointer;" data-i18n="adv.page.retryCheck">${_t('adv.page.retryCheck', '🔄 Check Again')}</button>
+            </div>
+            <div id="advancedDiagContainer" style="margin-top: 20px;"></div>
+        `;
+        if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+
+        // Retry button: re-run renderAdvancedDiagnostic
+        document.getElementById('retryDeviceCheckBtn')?.addEventListener('click', function() {
+            window.renderAdvancedDiagnostic();
+        });
+        return;
+    }
+
+    // ---- Device connected – render full UI ----
+    const pageHtml = `
+        <div style="margin-bottom: 24px;">
+            <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;" data-i18n="adv.page.title">${_t('adv.page.title', '🔍 Advanced Diagnostics')}</h1>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;" data-i18n="adv.page.subtitle">${_t('adv.page.subtitle', 'A deeper pass across software behavior, installed apps, and rootkit indicators.')}</p>
+        </div>
+
+        <div style="background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px;">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; color: #0d6efd; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-heart-pulse" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.softwareHealthLabel">${_t('adv.page.softwareHealthLabel', 'Software Health')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.softwareHealthDesc">${_t('adv.page.softwareHealthDesc', '26 system checks')}</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #f0fdf4; color: #16a34a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-magnifying-glass" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.deepScanLabel">${_t('adv.page.deepScanLabel', 'Deep App Scan')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.deepScanDesc">${_t('adv.page.deepScanDesc', 'Installed apps & behavior')}</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="fas fa-shield-halved" style="font-size: 13px;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.rootkitLabel">${_t('adv.page.rootkitLabel', 'Rootkit Check')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.rootkitDesc">${_t('adv.page.rootkitDesc', 'Kernel & process anomalies')}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; padding: 8px 0 4px 0;">
+                <button id="runAdvancedDiagBtn" style="
+                    border: none; cursor: pointer;
+                    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+                    color: white; font-size: 15px; font-weight: 600;
+                    padding: 13px 40px; border-radius: 12px;
+                    box-shadow: 0 4px 14px rgba(13,110,253,0.3);
+                    transition: transform 0.15s ease, box-shadow 0.15s ease;
+                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 18px rgba(13,110,253,0.38)'"
+                   onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 14px rgba(13,110,253,0.3)'">
+                    <i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">${_t('adv.page.runBtn', 'Run Advanced Scan')}</span>
+                </button>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 10px;" data-i18n="adv.page.runHint">${_t('adv.page.runHint', 'Takes a couple of minutes — the phone stays usable during the scan.')}</div>
+            </div>
+        </div>
+
+        <div id="advancedDiagContainer" style="margin-top: 20px;"></div>
+    `;
+
+    container.innerHTML = pageHtml;
+
+    // Apply language
+    if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+
+    // ---- Button click handler ----
+    const runBtn = document.getElementById('runAdvancedDiagBtn');
+    const diagContainer = document.getElementById('advancedDiagContainer');
+
+    // Helper to run ADB commands with the current device ID
+    async function runAdbWithDevice(command) {
+        const currentDevice = getCurrentDeviceId();
+        if (!currentDevice) throw new Error('No device connected.');
+        const resp = await fetch('/adb-shell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId: currentDevice, command })
+        });
+        if (!resp.ok) throw new Error(`ADB command failed: ${resp.status}`);
+        const data = await resp.json();
+        return data.output;
+    }
+
+    // Ensure modal exists
+    function ensureScanModal() {
+        let modal = document.getElementById('advancedDiagModal');
+        if (!modal) {
+            const modalHTML = `
+                <div id="advancedDiagModal" class="modal" style="display: none; z-index: 99999;">
+                    <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
+                        <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+                            <h3 id="advancedDiagModalTitle" data-i18n="adv.modal.title" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">${_t('adv.modal.title', 'Advanced Diagnostics')}</h3>
+                            <span class="close-button" id="closeAdvancedDiagModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
+                        </div>
+                        <div id="advancedDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
+                        <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
+                            <button id="closeAdvancedDiagModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="adv.modal.close">${_t('adv.modal.close', 'Close')}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById('advancedDiagModal');
+            document.getElementById('closeAdvancedDiagModal').addEventListener('click', () => modal.style.display = 'none');
+            document.getElementById('closeAdvancedDiagModalBtn').addEventListener('click', () => modal.style.display = 'none');
+            window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+            if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+        }
+        return modal;
+    }
+
+    runBtn.addEventListener('click', async function() {
+        const btn = this;
+        // ---- Get the current device ID at scan time ----
+        const currentDeviceId = getCurrentDeviceId();
+        if (!currentDeviceId) {
+            showAlert(_t('adv.scan.noDevice', 'No device connected. Please connect your phone and try again.'));
+            return;
+        }
+
+        btn.disabled = true;
+        btn.style.opacity = '0.75';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span data-i18n="adv.scan.scanningBtn">' + _t('adv.scan.scanningBtn', 'Scanning...') + '</span>';
+
+        try {
+            // Launch companion app (optional)
+            try {
+                await runAdbWithDevice('am start -n com.smarthub.diagnostics/.MainActivity');
+            } catch (e) {
+                console.warn('[Advanced] Could not launch Android app:', e);
+            }
+
+            const modal = ensureScanModal();
+            const modalTitle = document.getElementById('advancedDiagModalTitle');
+            const modalBody = document.getElementById('advancedDiagModalBody');
+            modalTitle.textContent = _t('adv.modal.title', 'Advanced Diagnostics');
+            modalBody.innerHTML = window.getModernSpinnerHTML(_t('adv.scan.runningModal', 'Running advanced diagnostics... This may take 2-3 minutes.'));
+            modal.style.display = 'flex';
+
+            diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;" data-i18n="adv.scan.inProgress">${_t('adv.scan.inProgress', '⏳ Scan in progress... See modal for details.')}</div>`;
+
+            // Run the scan with the current device ID
+            const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
+                currentDeviceId,
+                (msg) => {
+                    const textEl = modalBody.querySelector('.loading-text');
+                    if (textEl) textEl.textContent = msg;
+                }
+            );
+
+            // Remove AI from results (we already have it embedded)
+            if (results && results.ai) {
+                delete results.ai;
+            }
+
+            modal.style.display = 'none';
+            window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
+
+            const advancedResults = {
+                software: results.software ? results.software.map(r => ({ name: r.name, passed: r.passed })) : [],
+                scanTime: new Date().toLocaleString()
+            };
+            saveAdvancedResults(advancedResults);
+
+        } catch (err) {
+            modal.style.display = 'none';
+            diagContainer.innerHTML = `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
+                        <i class="fas fa-triangle-exclamation"></i> <span data-i18n="adv.scan.failedTitle">${_t('adv.scan.failedTitle', 'Scan failed')}</span>
+                    </div>
+                    <div style="font-size: 13px; color: #991b1b; margin-bottom: 12px;">${escapeHtml(err.message)}</div>
+                    <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;" data-i18n="adv.scan.retryBtn">
+                        ${_t('adv.scan.retryBtn', '🔄 Retry')}
+                    </button>
+                </div>
+            `;
+            if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+        } finally {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = '<i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">' + _t('adv.page.runBtn', 'Run Advanced Scan') + '</span>';
+        }
+    });
+
+    // ---- Restore previous results ----
+    const savedAdv = loadAdvancedResults();
+    if (savedAdv) {
+        diagContainer.innerHTML = `
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;" data-i18n="adv.scan.lastScan">
+                ${_t('adv.scan.lastScan', 'Last scan:')} ${new Date(savedAdv.date).toLocaleString()}
+            </div>
+        `;
+        if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+    }
+};
 })();

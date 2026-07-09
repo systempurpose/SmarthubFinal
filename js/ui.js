@@ -932,23 +932,52 @@ async function testSuspiciousScan() {
 async function renderAdvancedDiagnostic() {
     const container = document.getElementById('pageContent');
 
+    // ---- Helper: get current language ----
+    function _getLang() {
+        return window._activeLang
+            || (window.SmartHubI18n && window.SmartHubI18n.getCurrentLang ? window.SmartHubI18n.getCurrentLang() : 'en');
+    }
+
+    function _t(key, fallback) {
+        const lang = _getLang();
+        let result = null;
+        if (window.SmartHubI18n && typeof window.SmartHubI18n.t === 'function') {
+            result = window.SmartHubI18n.t(key, lang);
+        }
+        if (result === null || result === undefined || result === '') {
+            if (typeof t === 'function') {
+                result = t(key, lang);
+            }
+        }
+        if (result === null || result === undefined || result === '') {
+            result = fallback || key;
+        }
+        return result;
+    }
+
     if (!currentDeviceId) {
         container.innerHTML = `
             <div class="card" style="text-align: center; padding: 40px;">
                 <i class="fas fa-plug" style="font-size: 48px; color: #d83b01;"></i>
-                <h2>No Device Connected</h2>
-                <p>Please connect your Android phone via USB and enable USB debugging.</p>
+                <h2 data-i18n="adv.page.noDeviceTitle">${_t('adv.page.noDeviceTitle', 'No Device Connected')}</h2>
+                <p data-i18n="adv.page.noDeviceDesc">${_t('adv.page.noDeviceDesc', 'Please connect your Android phone via USB and enable USB debugging.')}</p>
             </div>
         `;
+        if (typeof applyLanguage === 'function') {
+            applyLanguage(_getLang());
+        }
         return;
     }
 
     if (!window.SmartHub?.advanceDiagnostic) {
         container.innerHTML = `
             <div class="card" style="padding: 20px; background: #ffebee; color: #c62828;">
-                ❌ Advanced diagnostic module not loaded. Check script inclusion.
+                <span data-i18n="adv.page.moduleMissing">${_t('adv.page.moduleMissing', '❌ Advanced diagnostic module not loaded. Check script inclusion.')}</span>
             </div>
         `;
+        if (typeof applyLanguage === 'function') {
+            applyLanguage(_getLang());
+        }
         return;
     }
 
@@ -966,8 +995,8 @@ async function renderAdvancedDiagnostic() {
 
     const pageHtml = `
         <div style="margin-bottom: 24px;">
-            <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;">🔍 Advanced Diagnostics</h1>
-            <p style="color: #6b7280; font-size: 14px; margin: 0;">A deeper pass across software behavior, installed apps, and rootkit indicators.</p>
+            <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;" data-i18n="adv.page.title">${_t('adv.page.title', '🔍 Advanced Diagnostics')}</h1>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;" data-i18n="adv.page.subtitle">${_t('adv.page.subtitle', 'A deeper pass across software behavior, installed apps, and rootkit indicators.')}</p>
         </div>
 
         <div style="background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #f1f3f5;">
@@ -977,8 +1006,8 @@ async function renderAdvancedDiagnostic() {
                         <i class="fas fa-heart-pulse" style="font-size: 13px;"></i>
                     </div>
                     <div>
-                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Software Health</div>
-                        <div style="font-size: 11px; color: #9ca3af;">26 system checks</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.softwareHealthLabel">${_t('adv.page.softwareHealthLabel', 'Software Health')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.softwareHealthDesc">${_t('adv.page.softwareHealthDesc', '26 system checks')}</div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
@@ -986,8 +1015,8 @@ async function renderAdvancedDiagnostic() {
                         <i class="fas fa-magnifying-glass" style="font-size: 13px;"></i>
                     </div>
                     <div>
-                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Deep App Scan</div>
-                        <div style="font-size: 11px; color: #9ca3af;">Installed apps & behavior</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.deepScanLabel">${_t('adv.page.deepScanLabel', 'Deep App Scan')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.deepScanDesc">${_t('adv.page.deepScanDesc', 'Installed apps & behavior')}</div>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f8fafc; border-radius: 10px;">
@@ -995,8 +1024,8 @@ async function renderAdvancedDiagnostic() {
                         <i class="fas fa-shield-halved" style="font-size: 13px;"></i>
                     </div>
                     <div>
-                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;">Rootkit Check</div>
-                        <div style="font-size: 11px; color: #9ca3af;">Kernel & process anomalies</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1f2937;" data-i18n="adv.page.rootkitLabel">${_t('adv.page.rootkitLabel', 'Rootkit Check')}</div>
+                        <div style="font-size: 11px; color: #9ca3af;" data-i18n="adv.page.rootkitDesc">${_t('adv.page.rootkitDesc', 'Kernel & process anomalies')}</div>
                     </div>
                 </div>
             </div>
@@ -1011,9 +1040,9 @@ async function renderAdvancedDiagnostic() {
                     transition: transform 0.15s ease, box-shadow 0.15s ease;
                 " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 18px rgba(13,110,253,0.38)'"
                    onmouseout="this.style.transform='none'; this.style.boxShadow='0 4px 14px rgba(13,110,253,0.3)'">
-                    <i class="fas fa-play"></i> Run Advanced Scan
+                    <i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">${_t('adv.page.runBtn', 'Run Advanced Scan')}</span>
                 </button>
-                <div style="font-size: 12px; color: #9ca3af; margin-top: 10px;">Takes a couple of minutes — the phone stays usable during the scan.</div>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 10px;" data-i18n="adv.page.runHint">${_t('adv.page.runHint', 'Takes a couple of minutes — the phone stays usable during the scan.')}</div>
             </div>
         </div>
 
@@ -1021,6 +1050,12 @@ async function renderAdvancedDiagnostic() {
     `;
 
     container.innerHTML = pageHtml;
+
+    // ---- APPLY LANGUAGE ----
+    if (typeof applyLanguage === 'function') {
+        const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
+        applyLanguage(window._activeLang || savedLang);
+    }
 
     const runBtn = document.getElementById('runAdvancedDiagBtn');
     const diagContainer = document.getElementById('advancedDiagContainer');
@@ -1032,12 +1067,12 @@ async function renderAdvancedDiagnostic() {
                 <div id="advancedDiagModal" class="modal" style="display: none; z-index: 99999;">
                     <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
                         <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 id="advancedDiagModalTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">Advanced Diagnostics</h3>
+                            <h3 id="advancedDiagModalTitle" data-i18n="adv.modal.title" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">${_t('adv.modal.title', 'Advanced Diagnostics')}</h3>
                             <span class="close-button" id="closeAdvancedDiagModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
                         </div>
                         <div id="advancedDiagModalBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
                         <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                            <button id="closeAdvancedDiagModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">Close</button>
+                            <button id="closeAdvancedDiagModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;" data-i18n="adv.modal.close">${_t('adv.modal.close', 'Close')}</button>
                         </div>
                     </div>
                 </div>
@@ -1047,6 +1082,11 @@ async function renderAdvancedDiagnostic() {
             document.getElementById('closeAdvancedDiagModal').addEventListener('click', () => modal.style.display = 'none');
             document.getElementById('closeAdvancedDiagModalBtn').addEventListener('click', () => modal.style.display = 'none');
             window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+            // Apply language to modal
+            if (typeof applyLanguage === 'function') {
+                applyLanguage(_getLang());
+            }
         }
         return modal;
     }
@@ -1056,7 +1096,7 @@ async function renderAdvancedDiagnostic() {
         btn.disabled = true;
         btn.style.opacity = '0.75';
         btn.style.cursor = 'not-allowed';
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span data-i18n="adv.scan.scanningBtn">' + _t('adv.scan.scanningBtn', 'Scanning...') + '</span>';
 
         // ---- LAUNCH ANDROID APP ----
         try {
@@ -1069,11 +1109,11 @@ async function renderAdvancedDiagnostic() {
         const modal = ensureScanModal();
         const modalTitle = document.getElementById('advancedDiagModalTitle');
         const modalBody = document.getElementById('advancedDiagModalBody');
-        modalTitle.textContent = 'Advanced Diagnostics';
-        modalBody.innerHTML = window.getModernSpinnerHTML('Running advanced diagnostics... This may take 2-3 minutes.');
+        modalTitle.textContent = _t('adv.modal.title', 'Advanced Diagnostics');
+        modalBody.innerHTML = window.getModernSpinnerHTML(_t('adv.scan.runningModal', 'Running advanced diagnostics... This may take 2-3 minutes.'));
         modal.style.display = 'flex';
 
-        diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;">⏳ Scan in progress... See modal for details.</div>`;
+        diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;" data-i18n="adv.scan.inProgress">${_t('adv.scan.inProgress', '⏳ Scan in progress... See modal for details.')}</div>`;
 
         try {
             const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
@@ -1085,7 +1125,6 @@ async function renderAdvancedDiagnostic() {
             );
 
             // ---- 🧠 REMOVE AI DIAGNOSIS SECTION ----
-            // Remove the 'ai' property so it won't be rendered or saved
             if (results && results.ai) {
                 delete results.ai;
             }
@@ -1096,7 +1135,6 @@ async function renderAdvancedDiagnostic() {
             // ---- SAVE ADVANCED RESULTS (without AI) ----
             const advancedResults = {
                 software: results.software ? results.software.map(r => ({ name: r.name, passed: r.passed })) : [],
-                // ai intentionally omitted
                 scanTime: new Date().toLocaleString()
             };
             saveAdvancedResults(advancedResults);
@@ -1106,19 +1144,22 @@ async function renderAdvancedDiagnostic() {
             diagContainer.innerHTML = `
                 <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
                     <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
-                        <i class="fas fa-triangle-exclamation"></i> Scan failed
+                        <i class="fas fa-triangle-exclamation"></i> <span data-i18n="adv.scan.failedTitle">${_t('adv.scan.failedTitle', 'Scan failed')}</span>
                     </div>
                     <div style="font-size: 13px; color: #991b1b; margin-bottom: 12px;">${escapeHtml(err.message)}</div>
-                    <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;">
-                        🔄 Retry
+                    <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;" data-i18n="adv.scan.retryBtn">
+                        ${_t('adv.scan.retryBtn', '🔄 Retry')}
                     </button>
                 </div>
             `;
+            if (typeof applyLanguage === 'function') {
+                applyLanguage(_getLang());
+            }
         } finally {
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.cursor = 'pointer';
-            btn.innerHTML = '<i class="fas fa-play"></i> Run Advanced Scan';
+            btn.innerHTML = '<i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">' + _t('adv.page.runBtn', 'Run Advanced Scan') + '</span>';
         }
     });
 
@@ -1126,15 +1167,15 @@ async function renderAdvancedDiagnostic() {
     const savedAdv = loadAdvancedResults();
     if (savedAdv) {
         diagContainer.innerHTML = `
-            <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">
-                Last scan: ${new Date(savedAdv.date).toLocaleString()}
+            <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;" data-i18n="adv.scan.lastScan">
+                ${_t('adv.scan.lastScan', 'Last scan:')} ${new Date(savedAdv.date).toLocaleString()}
             </div>
         `;
+        if (typeof applyLanguage === 'function') {
+            applyLanguage(_getLang());
+        }
     }
 }
-
-
-
 
 
 // ---- Extracted ADB dashboard rendering (keep the existing logic) ----
@@ -2179,795 +2220,7 @@ async function getHardwareFeatures() {
 }
 
 // ==================== HARDWARE TESTS PAGE (FULL UPDATED) ====================
-// ==================== HARDWARE TESTS PAGE (FINAL) ====================
-async function renderHardwareTests() {
-    if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card">No device connected. Please connect an Android phone with USB debugging enabled.</div>`;
-        return;
-    }
 
-    // ========== HELPERS ==========
-    async function runAdb(command) {
-        const resp = await fetch('/adb-shell', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: currentDeviceId, command })
-        });
-        if (!resp.ok) throw new Error(`ADB command failed: ${resp.status}`);
-        const data = await resp.json();
-        return data.output;
-    }
-
-    async function launchAndroidApp() {
-        await runAdb('am start -n com.smarthub.diagnostics/.MainActivity');
-    }
-
-    async function launchTestRunner(testType) {
-        await runAdb(`am start -n com.smarthub.diagnostics/.TestRunnerActivity --es test ${testType}`);
-    }
-
-    async function launchExtraHardwareTest(mode) {
-        await runAdb(`am start -n com.smarthub.diagnostics/.ExtraHardwareTestActivity --es mode ${mode}`);
-    }
-
-    async function returnToMainApp() {
-        await runAdb('input keyevent KEYCODE_BACK');
-        await new Promise(r => setTimeout(r, 500));
-        await launchAndroidApp();
-    }
-
-    // ---- Hardware feature detection ----
-    let hardwareFeaturesCache = null;
-
-    async function getHardwareFeatures() {
-        if (hardwareFeaturesCache) return hardwareFeaturesCache;
-        try {
-            const out = await runAdb('pm list features');
-            const features = out.split('\n')
-                .filter(line => line.includes('feature:'))
-                .map(line => line.replace(/^feature:/, '').trim());
-            hardwareFeaturesCache = features;
-            return features;
-        } catch {
-            return [];
-        }
-    }
-
-    async function hasFeature(feature) {
-        const features = await getHardwareFeatures();
-        return features.some(f => f === feature);
-    }
-
-    async function hasSensor(sensorType) {
-        try {
-            const out = await runAdb(`dumpsys sensorservice | grep -i "${sensorType}"`);
-            return out.trim().length > 0;
-        } catch {
-            return false;
-        }
-    }
-
-    // ---- Modal helpers ----
-    let modal, modalTitle, modalBody, yesBtn, noBtn, closeBtn;
-    let currentResolver = null;
-
-    function initModal() {
-        modal = document.getElementById('hwTestModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'hwTestModal';
-            modal.className = 'modal';
-            modal.style.display = 'none';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb;">
-                        <h3 id="hwModalTitle" style="margin: 0; font-size: 18px;">Hardware Test</h3>
-                        <span class="close-button" id="hwCloseModalBtn" style="cursor: pointer; font-size: 24px; color: #6B7280;">&times;</span>
-                    </div>
-                    <div class="modal-body" id="hwModalBody" style="padding: 20px; text-align: center; min-height: 150px;"></div>
-                    <div class="modal-footer" id="hwModalFooter" style="padding: 16px 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-                        <button id="hwYesBtn" class="btn-primary" style="display: none; margin: 0 8px;">✅ Yes, it worked</button>
-                        <button id="hwNoBtn" class="btn-secondary" style="display: none; margin: 0 8px;">❌ No, it failed</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-        modalTitle = document.getElementById('hwModalTitle');
-        modalBody = document.getElementById('hwModalBody');
-        yesBtn = document.getElementById('hwYesBtn');
-        noBtn = document.getElementById('hwNoBtn');
-        closeBtn = document.getElementById('hwCloseModalBtn');
-
-        closeBtn.addEventListener('click', closeModal);
-        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    }
-
-    function showModal(title, message) {
-        if (!modal) initModal();
-        modalTitle.textContent = title;
-        modalBody.innerHTML = message;
-        modal.style.display = 'flex';
-        yesBtn.style.display = 'none';
-        noBtn.style.display = 'none';
-    }
-
-    function closeModal() {
-        if (modal) modal.style.display = 'none';
-        if (currentResolver) {
-            currentResolver('no');
-            currentResolver = null;
-        }
-    }
-
-    function waitForUserConfirmation() {
-        return new Promise((resolve) => {
-            currentResolver = resolve;
-            yesBtn.style.display = 'inline-block';
-            noBtn.style.display = 'inline-block';
-            const onYes = () => { cleanup(); resolve('yes'); };
-            const onNo = () => { cleanup(); resolve('no'); };
-            const cleanup = () => {
-                yesBtn.removeEventListener('click', onYes);
-                noBtn.removeEventListener('click', onNo);
-                yesBtn.style.display = 'none';
-                noBtn.style.display = 'none';
-                currentResolver = null;
-                closeModal();
-            };
-            yesBtn.addEventListener('click', onYes);
-            noBtn.addEventListener('click', onNo);
-        });
-    }
-
-    initModal();
-
-    // ========== TEST DEFINITIONS (unchanged) ==========
-    const testDefs = {
-        battery: {
-            title: 'Battery',
-            desc: 'Check battery level and health',
-            run: async () => {
-                const data = await apiCall(`/hardware/battery?deviceId=${currentDeviceId}`);
-                const level = data.level || 0;
-                const health = data.health || 'unknown';
-                const passed = (level >= 20 && health === 'good');
-                const message = passed ? `Level: ${level}%, health: ${health}` : (level < 20 ? 'Low battery (<20%)' : 'Poor battery health');
-                return { passed, message };
-            }
-        },
-        storage: {
-            title: 'Storage',
-            desc: 'Check storage space',
-            run: async () => {
-                const data = await apiCall(`/hardware/storage?deviceId=${currentDeviceId}`);
-                const free = data.free || '0';
-                let freeGB = 0;
-                const match = String(free).match(/(\d+(?:\.\d+)?)/);
-                if (match) freeGB = parseFloat(match[1]);
-                const passed = freeGB > 1.0;
-                const message = `Free space: ${free}`;
-                return { passed, message };
-            }
-        },
-        sensors: {
-            title: 'Sensors',
-            desc: 'Detect accelerometer, gyro, proximity, light',
-            run: async () => {
-                try {
-                    const res = await apiCall(`/hardware/sensors?deviceId=${currentDeviceId}`);
-                    const sensors = res.sensors || [];
-                    const types = sensors.map(s => s.type.toLowerCase());
-                    const hasAccel = types.some(t => t.includes('accelerometer'));
-                    const hasGyro = types.some(t => t.includes('gyroscope'));
-                    const hasProx = types.some(t => t.includes('proximity'));
-                    const hasLight = types.some(t => t.includes('light'));
-                    const passed = hasAccel && hasProx && hasLight;
-                    const missing = [];
-                    if (!hasAccel) missing.push('accelerometer');
-                    if (!hasProx) missing.push('proximity');
-                    if (!hasLight) missing.push('light');
-                    let message = passed
-                        ? `All core sensors detected (Gyro: ${hasGyro ? '✅' : '❌ optional'})`
-                        : `Missing required: ${missing.join(', ')}`;
-                    return { passed, message };
-                } catch (err) {
-                    return { passed: false, message: 'Failed to read sensors' };
-                }
-            }
-        },
-        display: {
-            title: 'Display',
-            desc: 'Check screen resolution',
-            run: async () => {
-                const deviceRes = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
-                let raw = await deviceRes.text();
-                try { const p = JSON.parse(raw); if (typeof p === 'string') raw = p; } catch(e) {}
-                const width = raw.match(/\[sys.logical.width\]:\s*\[(\d+)\]/)?.[1];
-                const height = raw.match(/\[sys.logical.height\]:\s*\[(\d+)\]/)?.[1];
-                const passed = width && height;
-                const message = passed ? `${width} x ${height}` : 'Could not read resolution';
-                return { passed, message };
-            }
-        },
-        proximity: {
-            title: 'Proximity Sensor',
-            desc: 'Check if proximity sensor is present',
-            run: async () => {
-                const features = await getHardwareFeatures();
-                const hasProx = features.some(f => f === 'android.hardware.sensor.proximity');
-                if (!hasProx) {
-                    return { passed: true, message: 'Not supported (no proximity sensor)' };
-                }
-                return { passed: true, message: 'Proximity sensor present' };
-            }
-        },
-        gyro: {
-            title: 'Gyroscope / Accelerometer',
-            desc: 'Check motion sensors',
-            run: async () => {
-                const features = await getHardwareFeatures();
-                const hasGyro = features.some(f => f === 'android.hardware.sensor.gyroscope');
-                const hasAccel = features.some(f => f === 'android.hardware.sensor.accelerometer');
-                if (!hasGyro && !hasAccel) {
-                    return { passed: true, message: 'Not supported (no motion sensors)' };
-                }
-                return { passed: true, message: `Motion sensors present (Gyro: ${hasGyro}, Accel: ${hasAccel})` };
-            }
-        },
-        gps: {
-            title: 'GPS',
-            desc: 'Enable GPS and check lock',
-            run: async () => {
-                try {
-                    await runAdb('settings put secure location_mode 3');
-                    await new Promise(r => setTimeout(r, 1000));
-                    const mode = await runAdb('settings get secure location_mode');
-                    const enabled = mode.trim() === '3';
-                    if (!enabled) {
-                        return { passed: false, message: 'GPS could not be enabled' };
-                    }
-                    const dump = await runAdb('dumpsys location');
-                    const hasFix = dump.includes('mLocation') && dump.includes('latitude') && !dump.includes('mLocation=null');
-                    const passed = hasFix;
-                    const message = hasFix ? 'GPS locked successfully' : 'GPS enabled but no fix (move outdoors)';
-                    return { passed, message };
-                } catch (e) {
-                    return { passed: false, message: 'Failed to check GPS: ' + e.message };
-                }
-            }
-        },
-        fingerprint: {
-            title: 'Fingerprint',
-            desc: 'Check fingerprint hardware',
-            run: async () => {
-                const features = await getHardwareFeatures();
-                const hasFingerprint = features.some(f => f === 'android.hardware.fingerprint');
-                return { passed: true, message: hasFingerprint ? 'Fingerprint hardware present' : 'Not supported (no fingerprint sensor)' };
-            }
-        },
-        nfc: {
-            title: 'NFC',
-            desc: 'Check NFC hardware',
-            run: async () => {
-                const features = await getHardwareFeatures();
-                const hasNfc = features.some(f => f === 'android.hardware.nfc');
-                return { passed: true, message: hasNfc ? 'NFC hardware present' : 'Not supported (no NFC)' };
-            }
-        },
-        microphone: {
-            title: 'Microphone',
-            desc: 'Record and playback test',
-            run: async () => {
-                await launchTestRunner('microphone');
-                showModal('Microphone Test', `
-                    <p>🎤 The phone is recording and then playing back your voice.</p>
-                    <p>After the recording, the sound will loop.</p>
-                    <p><strong>Did you hear your voice clearly?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed microphone working' : 'Microphone issue reported';
-                return { passed, message };
-            }
-        },
-        vibration: {
-            title: 'Vibration',
-            desc: 'Test vibration motor',
-            run: async () => {
-                try { await runAdb('cmd vibrator_manager synced oneshot 500'); } catch(e) {}
-                showModal('Vibration Test', `
-                    <p>📳 The phone should vibrate for a moment.</p>
-                    <p><strong>Did you feel the vibration?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed vibration' : 'Vibration issue reported';
-                return { passed, message };
-            }
-        },
-        flashlight: {
-            title: 'Flashlight',
-            desc: 'Test rear flashlight',
-            run: async () => {
-                await launchTestRunner('flash');
-                showModal('Flashlight Test', `
-                    <p>🔦 The rear flashlight should turn on briefly.</p>
-                    <p><strong>Did you see the light?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed flashlight' : 'Flashlight issue reported';
-                return { passed, message };
-            }
-        },
-        speaker: {
-            title: 'Speaker',
-            desc: 'Play test tone',
-            run: async () => {
-                await launchTestRunner('sound');
-                showModal('Speaker Test', `
-                    <p>🔊 The phone should play a short test tone at medium volume.</p>
-                    <p><strong>Did you hear the sound clearly?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed speaker' : 'Speaker issue reported';
-                return { passed, message };
-            }
-        },
-        headphone: {
-            title: 'Headphone',
-            desc: 'Test headphone audio',
-            run: async () => {
-                await launchTestRunner('headphone');
-                showModal('Headphone Test', `
-                    <p>🎧 Please plug in headphones.</p>
-                    <p>The phone will play a sound through the headphones.</p>
-                    <p><strong>Did you hear the sound clearly?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed headphone working' : 'Headphone issue reported';
-                return { passed, message };
-            }
-        },
-        touch: {
-            title: 'Touch Screen',
-            desc: 'Draw on screen to test',
-            run: async () => {
-                await launchTestRunner('touch');
-                showModal('Touch Screen Test', `
-                    <p>📱 The phone is now in touch test mode.</p>
-                    <p>Draw inside the square guide on the phone.</p>
-                    <p><strong>Does the screen register your touches and draw smoothly?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed touch working' : 'Touch issues reported';
-                return { passed, message };
-            }
-        },
-        multitouch: {
-            title: 'Multi‑touch',
-            desc: 'Test 5‑point multi‑touch',
-            run: async () => {
-                await launchExtraHardwareTest('multitouch');
-                showModal('Multi‑touch Test', `
-                    <p>📱 Place 5 fingers on the screen simultaneously.</p>
-                    <p>The phone will show the number of touches detected.</p>
-                    <p><strong>Did it detect at least 5 fingers?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed 5‑point multi‑touch' : 'Multi‑touch issue reported';
-                return { passed, message };
-            }
-        },
-        buttons: {
-            title: 'Physical Buttons',
-            desc: 'Test Volume Up & Down',
-            run: async () => {
-                await launchExtraHardwareTest('buttons');
-                showModal('Physical Buttons Test', `
-                    <p>🔘 Press <strong>Volume Up</strong> and <strong>Volume Down</strong>.</p>
-                    <p>The phone will show which buttons you pressed.</p>
-                    <p><strong>Did both buttons register?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed both volume buttons' : 'Button issue reported';
-                return { passed, message };
-            }
-        },
-        colorsweep: {
-            title: 'Screen Burn‑in / Dead Pixel',
-            desc: 'Cycle through solid colors',
-            run: async () => {
-                await launchExtraHardwareTest('colorsweep');
-                showModal('Screen Burn‑in Test', `
-                    <p>🎨 The screen will cycle through solid colors (Red, Green, Blue, White, Black).</p>
-                    <p>Tap the "Next" button on the phone to advance each color.</p>
-                    <p><strong>Did the screen display all colors correctly without dead pixels or burn‑in?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed screen normal' : 'Screen issue reported';
-                return { passed, message };
-            }
-        },
-        camerafront: {
-            title: 'Front Camera',
-            desc: 'Check front camera + autofocus',
-            run: async () => {
-                const hasFrontCam = await hasFeature('android.hardware.camera.front');
-                if (!hasFrontCam) {
-                    return { passed: true, message: 'Not supported (no front camera hardware)' };
-                }
-                await launchExtraHardwareTest('camera_front');
-                showModal('Front Camera Test', `
-                    <p>📸 The front camera preview should appear on the phone.</p>
-                    <p><strong>Is the preview clear and working?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed front camera working' : 'Front camera issue reported';
-                return { passed, message };
-            }
-        },
-        camerarear: {
-            title: 'Rear Camera',
-            desc: 'Check rear camera + autofocus',
-            run: async () => {
-                const hasRearCam = await hasFeature('android.hardware.camera');
-                if (!hasRearCam) {
-                    return { passed: true, message: 'Not supported (no rear camera hardware)' };
-                }
-                await launchExtraHardwareTest('camera_rear');
-                showModal('Rear Camera Test', `
-                    <p>📸 The rear camera preview should appear on the phone.</p>
-                    <p><strong>Is the preview clear and working?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed rear camera working' : 'Rear camera issue reported';
-                return { passed, message };
-            }
-        },
-        magnetometer: {
-            title: 'Magnetometer',
-            desc: 'Test magnetic field sensor',
-            run: async () => {
-                const hasMag = await hasSensor('Magnetic field');
-                if (!hasMag) {
-                    return { passed: true, message: 'Not supported (no magnetometer)' };
-                }
-                await launchExtraHardwareTest('magnetometer');
-                showModal('Magnetometer Test', `
-                    <p>🧲 Move the phone in a figure‑8 pattern to calibrate.</p>
-                    <p>The phone will show live magnetic field readings.</p>
-                    <p><strong>Did the readings change as you moved the phone?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed magnetometer working' : 'Magnetometer issue reported';
-                return { passed, message };
-            }
-        },
-        barometer: {
-            title: 'Barometer',
-            desc: 'Test pressure sensor',
-            run: async () => {
-                const hasBaro = await hasSensor('Pressure');
-                if (!hasBaro) {
-                    return { passed: true, message: 'Not supported (no barometer)' };
-                }
-                await launchExtraHardwareTest('barometer');
-                showModal('Barometer Test', `
-                    <p>🌡️ The app will read pressure/altitude sensor.</p>
-                    <p><strong>Did the app show a pressure reading?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed barometer working' : 'Barometer issue reported';
-                return { passed, message };
-            }
-        },
-        irblaster: {
-            title: 'IR Blaster',
-            desc: 'Detect infrared transmitter',
-            run: async () => {
-                const hasIr = await hasFeature('android.hardware.consumerir');
-                if (!hasIr) {
-                    return { passed: true, message: 'Not supported (no IR blaster)' };
-                }
-                await launchExtraHardwareTest('ir_blaster');
-                showModal('IR Blaster Test', `
-                    <p>📡 The phone will check for IR blaster hardware.</p>
-                    <p><strong>Does the phone have an IR blaster?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed IR blaster present' : 'IR blaster issue reported';
-                return { passed, message };
-            }
-        },
-        faceunlock: {
-            title: 'Face Unlock',
-            desc: 'Check face recognition hardware',
-            run: async () => {
-                const hasFace = await hasFeature('android.hardware.biometrics.face');
-                if (!hasFace) {
-                    return { passed: true, message: 'Not supported (no face unlock hardware)' };
-                }
-                await launchExtraHardwareTest('face_unlock');
-                showModal('Face Unlock Test', `
-                    <p>👤 The app will check face unlock hardware and enrollment status.</p>
-                    <p><strong>Does the phone support face unlock?</strong></p>
-                `);
-                const result = await waitForUserConfirmation();
-                closeModal();
-                await returnToMainApp();
-                const passed = (result === 'yes');
-                const message = passed ? 'User confirmed face unlock hardware' : 'Face unlock issue reported';
-                return { passed, message };
-            }
-        }
-    };
-
-    // ========== BUILD UI ==========
-    const testIds = Object.keys(testDefs);
-    let cardsHtml = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">`;
-    for (const id of testIds) {
-        const def = testDefs[id];
-        cardsHtml += `
-            <div class="test-card" id="card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
-                <div>
-                    <h3 style="margin: 0 0 4px 0; font-size: 16px;">${def.title}</h3>
-                    <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${def.desc}</p>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" style="font-weight: 600; color: #6B7280; font-size: 14px;">⏳ Pending</span>
-                    <button class="btn-secondary run-single-test" data-test="${id}" style="font-size: 12px; padding: 4px 16px;">Run</button>
-                </div>
-                <div class="result-message" style="font-size: 12px; color: #6B7280; margin-top: 4px; word-break: break-word; display: none;"></div>
-            </div>
-        `;
-    }
-    cardsHtml += `</div>`;
-
-    const fullHtml = `
-        <div class="info-card" style="text-align: center; margin-bottom: 24px;">
-            <div class="card-header"><i class="fas fa-microscope"></i> Hardware Diagnostics</div>
-            <div class="card-content">
-                <p>Run individual tests below or run the full suite.</p>
-                <button id="startHwTestBtn" class="btn-primary" style="font-size: 16px;">🔍 Start Full Hardware Test</button>
-            </div>
-        </div>
-        ${cardsHtml}
-        <div id="hwResults" style="display: none;">
-            <div class="cards-container" id="hwCardsContainer"></div>
-            <div id="hwSummaryCard" class="info-card" style="margin-top: 24px;"></div>
-        </div>
-    `;
-
-    document.getElementById('pageContent').innerHTML = fullHtml;
-
-    // ========== RESTORE SAVED RESULTS ON MOUNT ==========
-    const saved = loadHardwareResults();
-    if (saved && saved.results) {
-        window._hardwareTestResults = saved.results;
-        Object.entries(saved.results).forEach(([id, r]) => {
-            const card = document.getElementById(`card-${id}`);
-            if (!card) return;
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
-            const btn = card.querySelector('.run-single-test');
-            const color = r.passed ? '#2e7d32' : '#d32f2f';
-            statusSpan.style.color = color;
-            statusSpan.textContent = `${r.passed ? '✅ Passed' : '❌ Failed'}`;
-            msgSpan.textContent = r.message || '';
-            msgSpan.style.display = 'block';
-            msgSpan.style.color = color;
-            if (btn) btn.textContent = r.passed ? 'Rerun' : 'Details';
-        });
-        if (saved.summary) {
-            const summaryDiv = document.getElementById('hwSummaryCard');
-            if (summaryDiv) {
-                const { total, passed, percentage } = saved.summary;
-                summaryDiv.innerHTML = `
-                    <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-                    <div class="card-content">
-                        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                            <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
-                                <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-                                    <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
-                                    <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
-                                        stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
-                                </svg>
-                                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
-                            </div>
-                            <div>
-                                <h3 style="margin: 0; font-size: 20px;">${passed}/${total} tests passed</h3>
-                                <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-    }
-
-    // ========== SINGLE TEST HANDLER (with per‑test save) ==========
-    document.querySelectorAll('.run-single-test').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            const testId = this.dataset.test;
-            const card = document.getElementById(`card-${testId}`);
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
-            const btn = card.querySelector('.run-single-test');
-            const def = testDefs[testId];
-            if (!def) return;
-
-            btn.disabled = true;
-            btn.textContent = '⏳ Running...';
-            statusSpan.style.color = '#f59e0b';
-            statusSpan.textContent = '⏳ Running...';
-            msgSpan.style.display = 'none';
-
-            try {
-                const result = await def.run();
-                const passed = result.passed;
-                const icon = passed ? '✅' : '❌';
-                const color = passed ? '#2e7d32' : '#d32f2f';
-                statusSpan.style.color = color;
-                statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
-                msgSpan.textContent = result.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = color;
-                btn.textContent = passed ? 'Rerun' : 'Details';
-
-                // ---- SAVE THIS SINGLE TEST RESULT ----
-                window._hardwareTestResults[testId] = { name: def.title, passed, message: result.message };
-                saveHardwareResults(null); // keep existing summary
-            } catch (err) {
-                statusSpan.style.color = '#d32f2f';
-                statusSpan.textContent = '❌ Error';
-                msgSpan.textContent = err.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = '#d32f2f';
-                btn.textContent = 'Retry';
-
-                window._hardwareTestResults[testId] = { name: def.title, passed: false, message: err.message };
-                saveHardwareResults(null);
-            } finally {
-                btn.disabled = false;
-            }
-        });
-    });
-
-    // ========== FULL SUITE HANDLER (with summary save) ==========
-    document.getElementById('startHwTestBtn').addEventListener('click', async function() {
-        const resultsContainer = document.getElementById('hwResults');
-        resultsContainer.style.display = 'block';
-        const cardsContainer = document.getElementById('hwCardsContainer');
-        cardsContainer.innerHTML = '';
-        const results = {};
-
-        try {
-            await launchAndroidApp();
-        } catch (e) {
-            alert('Companion app not installed. Some tests may fail.');
-        }
-
-        for (const id of testIds) {
-            const def = testDefs[id];
-            const card = document.getElementById(`card-${id}`);
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
-            const btn = card.querySelector('.run-single-test');
-            btn.disabled = true;
-            btn.textContent = '⏳ Running...';
-            statusSpan.style.color = '#f59e0b';
-            statusSpan.textContent = '⏳ Running...';
-            msgSpan.style.display = 'none';
-
-            try {
-                const result = await def.run();
-                results[id] = { name: def.title, passed: result.passed, message: result.message };
-                const passed = result.passed;
-                const icon = passed ? '✅' : '❌';
-                const color = passed ? '#2e7d32' : '#d32f2f';
-                statusSpan.style.color = color;
-                statusSpan.textContent = `${icon} ${passed ? 'Passed' : 'Failed'}`;
-                msgSpan.textContent = result.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = color;
-                btn.textContent = passed ? 'Rerun' : 'Details';
-                btn.disabled = false;
-            } catch (err) {
-                results[id] = { name: def.title, passed: false, message: err.message };
-                statusSpan.style.color = '#d32f2f';
-                statusSpan.textContent = '❌ Error';
-                msgSpan.textContent = err.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = '#d32f2f';
-                btn.textContent = 'Retry';
-                btn.disabled = false;
-            }
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        const passedCount = Object.values(results).filter(r => r.passed).length;
-        const total = testIds.length;
-        const percentage = Math.round((passedCount / total) * 100);
-
-        const summaryDiv = document.getElementById('hwSummaryCard');
-        summaryDiv.innerHTML = `
-            <div class="card-header"><i class="fas fa-clipboard-list"></i> Test Summary</div>
-            <div class="card-content">
-                <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
-                        <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-                            <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
-                            <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
-                                stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
-                        </svg>
-                        <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
-                    </div>
-                    <div>
-                        <h3 style="margin: 0; font-size: 20px;">${passedCount}/${total} tests passed</h3>
-                        <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? '✅ All tests passed – device is fully functional!' : percentage >= 80 ? '⚠️ Most tests passed – minor issues may exist.' : '❌ Multiple failures – device needs attention.'}</p>
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
-                    ${Object.values(results).map(r => `
-                        <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'};">
-                            <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; font-size: 14px;">${escapeHtml(r.name)}</div>
-                                <div style="font-size: 12px; color: #555; word-break: break-word;">${escapeHtml(r.message)}</div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-        resultsContainer.scrollIntoView({ behavior: 'smooth' });
-
-        // ---- SAVE FULL SUITE SUMMARY ----
-        const summary = { total, passed: passedCount, percentage };
-        window._hardwareTestResults = results;
-        saveHardwareResults(summary);
-    });
-}
 
 // ==================== LIVE SCREEN ====================
 let liveScreenInterval = null;
@@ -3089,7 +2342,7 @@ async function renderDeviceInfo() {
     const container = document.getElementById('pageContent');
 
     if (!currentDeviceId) {
-        container.innerHTML = `<div class="card">No device connected.</div>`;
+        container.innerHTML = `<div class="card">${t('deviceInfo.noDevice')}</div>`;
         if (deviceInfoTimer) {
             clearTimeout(deviceInfoTimer);
             deviceInfoTimer = null;
@@ -3138,52 +2391,52 @@ async function renderDeviceInfo() {
             const boolIcon = (val) => val ? '✅' : '❌';
 
             // ---- Existing fields ----
-            const volteState = get('gsm.sys.volte.state') === '1' ? 'On' : 'Off';
-            const vowifiState = get('gsm.sys.vowifi.state') === '1' ? 'On' : 'Off';
+            const volteState = get('gsm.sys.volte.state') === '1' ? t('deviceInfo.on') : t('deviceInfo.off');
+            const vowifiState = get('gsm.sys.vowifi.state') === '1' ? t('deviceInfo.on') : t('deviceInfo.off');
             const bluetoothOn = infoData.bluetoothOn !== undefined ? infoData.bluetoothOn : false;
             const mobileDataToggle = infoData.mobileDataToggle !== undefined ? infoData.mobileDataToggle : false;
             const mobileDataConnected = infoData.mobileDataConnected !== undefined ? infoData.mobileDataConnected : false;
 
             // ---- Battery ----
-            const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : 'Not available';
-            const batteryHealth = infoData.batteryHealth || 'Not available';
-            const batteryVoltage = infoData.batteryVoltage ? infoData.batteryVoltage + ' mV' : 'Not available';
-            const batteryTemp = infoData.batteryTemperature ? infoData.batteryTemperature + '°C' : 'Not available';
-            const maxChargeCurrent = infoData.maxChargingCurrent ? infoData.maxChargingCurrent + ' mA' : 'Not available';
-            const maxChargeVoltage = infoData.maxChargingVoltage ? infoData.maxChargingVoltage + ' mV' : 'Not available';
+            const batteryCapacity = infoData.batteryCapacity ? infoData.batteryCapacity + ' mAh' : t('deviceInfo.notAvailable');
+            const batteryHealth = infoData.batteryHealth || t('deviceInfo.notAvailable');
+            const batteryVoltage = infoData.batteryVoltage ? infoData.batteryVoltage + ' mV' : t('deviceInfo.notAvailable');
+            const batteryTemp = infoData.batteryTemperature ? infoData.batteryTemperature + '°C' : t('deviceInfo.notAvailable');
+            const maxChargeCurrent = infoData.maxChargingCurrent ? infoData.maxChargingCurrent + ' mA' : t('deviceInfo.notAvailable');
+            const maxChargeVoltage = infoData.maxChargingVoltage ? infoData.maxChargingVoltage + ' mV' : t('deviceInfo.notAvailable');
 
             // ---- Display ----
-            const refreshRate = infoData.refreshRate || 'Not available';
+            const refreshRate = infoData.refreshRate || t('deviceInfo.notAvailable');
 
             // ---- Camera ----
             const camRes = (infoData.cameraResolutions && infoData.cameraResolutions.length)
                 ? infoData.cameraResolutions.join(', ')
-                : 'Not available';
+                : t('deviceInfo.notAvailable');
 
             // ---- MACs ----
-            const wifiMac = infoData.wifiMac || 'Not available';
-            const btMac = infoData.btMac || 'Not available';
+            const wifiMac = infoData.wifiMac || t('deviceInfo.notAvailable');
+            const btMac = infoData.btMac || t('deviceInfo.notAvailable');
 
             // ---- Paired devices ----
             const pairedDevices = infoData.pairedDevices || [];
             const pairedCount = pairedDevices.length;
-            const pairedSummary = pairedCount > 0 ? `${pairedCount} device${pairedCount > 1 ? 's' : ''} paired` : 'None';
+            const pairedSummary = pairedCount > 0 ? `${pairedCount} ${t('deviceInfo.device')}${pairedCount > 1 ? t('deviceInfo.devicesPlural') : ''} ${t('deviceInfo.paired')}` : t('deviceInfo.none');
 
             // ---- New fields ----
-            const widevineLevel = infoData.widevineLevel || 'Not available';
-            const drmSchemes = (infoData.drmSchemes && infoData.drmSchemes.length) ? infoData.drmSchemes.join(', ') : 'None';
+            const widevineLevel = infoData.widevineLevel || t('deviceInfo.notAvailable');
+            const drmSchemes = (infoData.drmSchemes && infoData.drmSchemes.length) ? infoData.drmSchemes.join(', ') : t('deviceInfo.none');
             const storageTotal = infoData.storageTotal || '?';
             const storageUsed = infoData.storageUsed || '?';
             const storageFree = infoData.storageFree || '?';
-            const storageType = infoData.storageType || 'Unknown';
-            const gnss = (infoData.gnssProviders && infoData.gnssProviders.length) ? infoData.gnssProviders.join(', ') : 'Unknown';
+            const storageType = infoData.storageType || t('deviceInfo.unknown');
+            const gnss = (infoData.gnssProviders && infoData.gnssProviders.length) ? infoData.gnssProviders.join(', ') : t('deviceInfo.unknown');
             const hasGyroText = infoData.hasGyro ? '✅' : '❌';
             const hasMagText = infoData.hasMagnetometer ? '✅' : '❌';
             const hasBaroText = infoData.hasBarometer ? '✅' : '❌';
-            const usbOtg = infoData.usbOtgSupported ? '✅ Supported' : 'Not supported';
-            const localIp = infoData.localIp || 'Not connected';
-            const gateway = infoData.gateway || 'Not available';
-            const dns = (infoData.dnsServers && infoData.dnsServers.length) ? infoData.dnsServers.join(', ') : 'Not available';
+            const usbOtg = infoData.usbOtgSupported ? t('deviceInfo.usbOtgSupported') : t('deviceInfo.usbOtgNotSupported');
+            const localIp = infoData.localIp || t('deviceInfo.notConnected');
+            const gateway = infoData.gateway || t('deviceInfo.notAvailable');
+            const dns = (infoData.dnsServers && infoData.dnsServers.length) ? infoData.dnsServers.join(', ') : t('deviceInfo.notAvailable');
 
             // ---- Helpers ----
             const makeCard = (title, icon, items) => `
@@ -3208,85 +2461,85 @@ async function renderDeviceInfo() {
             const cards = [];
 
             // ---- Device Overview ----
-            cards.push(makeCard('Device Overview', 'fas fa-info-circle', [
-                { label: 'Model', value: get('ro.product.model', 'Unknown') },
-                { label: 'Manufacturer', value: get('ro.product.manufacturer', 'Unknown') },
-                { label: 'Android', value: `${get('ro.build.version.release')} (SDK ${get('ro.build.version.sdk')})` },
-                { label: 'Security Patch', value: get('ro.build.version.security_patch') },
-                { label: 'Board / CPU', value: `${get('ro.product.board')} / ${get('ro.product.cpu.abi')}` },
-                { label: 'Serial', value: get('ro.serialno') },
-                { label: 'Display', value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
+            cards.push(makeCard(t('deviceInfo.deviceOverview'), 'fas fa-info-circle', [
+                { label: t('deviceInfo.model'), value: get('ro.product.model', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.manufacturer'), value: get('ro.product.manufacturer', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.android'), value: `${get('ro.build.version.release')} (SDK ${get('ro.build.version.sdk')})` },
+                { label: t('deviceInfo.securityPatch'), value: get('ro.build.version.security_patch') },
+                { label: t('deviceInfo.boardCpu'), value: `${get('ro.product.board')} / ${get('ro.product.cpu.abi')}` },
+                { label: t('deviceInfo.serial'), value: get('ro.serialno') },
+                { label: t('deviceInfo.displayRes'), value: `${get('sys.logical.width', '?')} x ${get('sys.logical.height', '?')}` }
             ]));
 
             // ---- Battery ----
-            cards.push(makeCard('Battery', 'fas fa-battery-full', [
-                { label: 'Capacity', value: batteryCapacity },
-                { label: 'Health', value: batteryHealth },
-                { label: 'Voltage', value: batteryVoltage },
-                { label: 'Temperature', value: batteryTemp },
-                { label: 'Max Charge Current', value: maxChargeCurrent },
-                { label: 'Max Charge Voltage', value: maxChargeVoltage }
+            cards.push(makeCard(t('deviceInfo.battery'), 'fas fa-battery-full', [
+                { label: t('deviceInfo.capacity'), value: batteryCapacity },
+                { label: t('deviceInfo.health'), value: batteryHealth },
+                { label: t('deviceInfo.voltage'), value: batteryVoltage },
+                { label: t('deviceInfo.temperature'), value: batteryTemp },
+                { label: t('deviceInfo.maxChargeCurrent'), value: maxChargeCurrent },
+                { label: t('deviceInfo.maxChargeVoltage'), value: maxChargeVoltage }
             ]));
 
             // ---- Display ----
-            cards.push(makeCard('Display', 'fas fa-desktop', [
-                { label: 'Refresh Rate', value: refreshRate },
-                { label: 'Density', value: `${get('ro.sf.lcd_density', '?')} dpi` }
+            cards.push(makeCard(t('deviceInfo.display'), 'fas fa-desktop', [
+                { label: t('deviceInfo.refreshRate'), value: refreshRate },
+                { label: t('deviceInfo.density'), value: `${get('ro.sf.lcd_density', '?')} dpi` }
             ]));
 
             // ---- Camera ----
-            cards.push(makeCard('Camera', 'fas fa-camera', [
-                { label: 'Resolutions', value: camRes }
+            cards.push(makeCard(t('deviceInfo.camera'), 'fas fa-camera', [
+                { label: t('deviceInfo.resolutions'), value: camRes }
             ]));
 
             // ---- DRM & Media ----
-            cards.push(makeCard('DRM & Media', 'fas fa-lock', [
-                { label: 'Widevine Level', value: widevineLevel },
-                { label: 'Supported DRM', value: drmSchemes }
+            cards.push(makeCard(t('deviceInfo.drm'), 'fas fa-lock', [
+                { label: t('deviceInfo.widevine'), value: widevineLevel },
+                { label: t('deviceInfo.supportedDrm'), value: drmSchemes }
             ]));
 
             // ---- Storage ----
-            cards.push(makeCard('Storage', 'fas fa-hdd', [
-                { label: 'Total (Data)', value: storageTotal },
-                { label: 'Used', value: storageUsed },
-                { label: 'Free', value: storageFree },
-                { label: 'Hardware Type', value: storageType }
+            cards.push(makeCard(t('deviceInfo.storage'), 'fas fa-hdd', [
+                { label: t('deviceInfo.totalData'), value: storageTotal },
+                { label: t('deviceInfo.used'), value: storageUsed },
+                { label: t('deviceInfo.free'), value: storageFree },
+                { label: t('deviceInfo.hardwareType'), value: storageType }
             ]));
 
             // ---- GNSS / GPS ----
-            cards.push(makeCard('GNSS / GPS', 'fas fa-satellite', [
-                { label: 'Satellites', value: gnss }
+            cards.push(makeCard(t('deviceInfo.gnss'), 'fas fa-satellite', [
+                { label: t('deviceInfo.satellites'), value: gnss }
             ]));
 
             // ---- Sensors ----
-            cards.push(makeCard('Sensors', 'fas fa-microchip', [
-                { label: 'Gyroscope', value: hasGyroText },
-                { label: 'Magnetometer', value: hasMagText },
-                { label: 'Barometer', value: hasBaroText }
+            cards.push(makeCard(t('deviceInfo.sensors'), 'fas fa-microchip', [
+                { label: t('deviceInfo.gyroscope'), value: hasGyroText },
+                { label: t('deviceInfo.magnetometer'), value: hasMagText },
+                { label: t('deviceInfo.barometer'), value: hasBaroText }
             ]));
 
             // ---- USB OTG ----
-            cards.push(makeCard('USB OTG', 'fas fa-usb', [
-                { label: 'Host Mode', value: usbOtg }
+            cards.push(makeCard(t('deviceInfo.usbOtg'), 'fas fa-usb', [
+                { label: t('deviceInfo.hostMode'), value: usbOtg }
             ]));
 
             // ---- Network Details ----
-            cards.push(makeCard('Network Details', 'fas fa-network-wired', [
-                { label: 'Local IP', value: localIp },
-                { label: 'Gateway', value: gateway },
-                { label: 'DNS Servers', value: dns }
+            cards.push(makeCard(t('deviceInfo.networkDetails'), 'fas fa-network-wired', [
+                { label: t('deviceInfo.localIp'), value: localIp },
+                { label: t('deviceInfo.gateway'), value: gateway },
+                { label: t('deviceInfo.dnsServers'), value: dns }
             ]));
 
             // ---- Bluetooth ----
             let pairedExtra = '';
             if (pairedCount > 0) {
-                pairedExtra = `<button class="btn-secondary" style="font-size:12px; padding:4px 12px;" onclick="showPairedDevicesModal()">📋 Show (${pairedCount})</button>`;
+                pairedExtra = `<button class="btn-secondary" style="font-size:12px; padding:4px 12px;" onclick="showPairedDevicesModal()">📋 ${t('deviceInfo.showPaired')} (${pairedCount})</button>`;
             }
-            cards.push(makeCardWithExtra('Bluetooth', 'fab fa-bluetooth', [
-                { label: 'Enabled', value: boolIcon(bluetoothOn) },
-                { label: 'Adapter State', value: bluetoothOn ? 'ON' : 'OFF' },
-                { label: 'Paired Devices', value: pairedSummary },
-                { label: 'MAC Address', value: btMac }
+            cards.push(makeCardWithExtra(t('deviceInfo.bluetooth'), 'fab fa-bluetooth', [
+                { label: t('deviceInfo.enabled'), value: boolIcon(bluetoothOn) },
+                { label: t('deviceInfo.adapterState'), value: bluetoothOn ? t('deviceInfo.on') : t('deviceInfo.off') },
+                { label: t('deviceInfo.pairedDevices'), value: pairedSummary },
+                { label: t('deviceInfo.macAddress'), value: btMac }
             ], pairedExtra));
 
             // ---- WiFi ----
@@ -3294,61 +2547,61 @@ async function renderDeviceInfo() {
             if (wifiData && wifiData.wifi) {
                 const info = formatWifiStatus(wifiData.wifi);
                 wifiItems = [
-                    { label: 'SSID', value: info.ssid },
-                    { label: 'Status', value: info.status },
-                    { label: 'Signal', value: info.signal },
-                    { label: 'Link Speed', value: info.linkSpeed },
-                    { label: 'Frequency', value: info.frequency },
-                    { label: 'MAC Address', value: wifiMac }
+                    { label: t('deviceInfo.ssid'), value: info.ssid },
+                    { label: t('deviceInfo.status'), value: info.status },
+                    { label: t('deviceInfo.signal'), value: info.signal },
+                    { label: t('deviceInfo.linkSpeed'), value: info.linkSpeed },
+                    { label: t('deviceInfo.frequency'), value: info.frequency },
+                    { label: t('deviceInfo.macAddress'), value: wifiMac }
                 ];
             } else {
                 wifiItems = [
-                    { label: 'Status', value: 'Unable to fetch WiFi info' },
-                    { label: 'MAC Address', value: wifiMac }
+                    { label: t('deviceInfo.status'), value: t('deviceInfo.wifiUnavailable') },
+                    { label: t('deviceInfo.macAddress'), value: wifiMac }
                 ];
             }
-            cards.push(makeCard('WiFi', 'fas fa-wifi', wifiItems));
+            cards.push(makeCard(t('deviceInfo.wifi'), 'fas fa-wifi', wifiItems));
 
             // ---- Network & SIM ----
-            cards.push(makeCard('Network & SIM', 'fas fa-network-wired', [
-                { label: 'Operator', value: get('gsm.operator.alpha', 'Unknown') },
-                { label: 'Network Type', value: get('gsm.network.type', 'Unknown') },
-                { label: 'SIM State', value: get('gsm.sim.state', 'Unknown') },
-                { label: 'Mobile Data (Toggle)', value: boolIcon(mobileDataToggle) },
-                { label: 'Mobile Data (Connected)', value: boolIcon(mobileDataConnected) },
-                { label: 'VoLTE / VoWiFi', value: `VoLTE ${volteState} / VoWiFi ${vowifiState}` }
+            cards.push(makeCard(t('deviceInfo.networkSim'), 'fas fa-network-wired', [
+                { label: t('deviceInfo.operator'), value: get('gsm.operator.alpha', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.networkType'), value: get('gsm.network.type', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.simState'), value: get('gsm.sim.state', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.mobileDataToggle'), value: boolIcon(mobileDataToggle) },
+                { label: t('deviceInfo.mobileDataConnected'), value: boolIcon(mobileDataConnected) },
+                { label: t('deviceInfo.volteVowifi'), value: `${t('deviceInfo.volte')} ${volteState} / ${t('deviceInfo.vowifi')} ${vowifiState}` }
             ]));
 
             // ---- System & Build ----
-            cards.push(makeCard('System & Build', 'fas fa-code-branch', [
-                { label: 'Fingerprint', value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
-                { label: 'Build Date', value: get('ro.build.date', 'N/A') },
-                { label: 'Bootloader', value: get('ro.bootloader', 'unknown') },
-                { label: 'Encryption', value: get('ro.crypto.state') === 'encrypted' ? '🔒 Encrypted' : 'Unencrypted' }
+            cards.push(makeCard(t('deviceInfo.systemBuild'), 'fas fa-code-branch', [
+                { label: t('deviceInfo.fingerprint'), value: get('ro.build.fingerprint', 'N/A').substring(0, 60) + '...' },
+                { label: t('deviceInfo.buildDate'), value: get('ro.build.date', 'N/A') },
+                { label: t('deviceInfo.bootloader'), value: get('ro.bootloader', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.encryption'), value: get('ro.crypto.state') === 'encrypted' ? '🔒 ' + t('deviceInfo.encrypted') : t('deviceInfo.unencrypted') }
             ]));
 
             // ---- Hardware ----
-            cards.push(makeCard('Hardware', 'fas fa-microchip', [
-                { label: 'SoC', value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
-                { label: 'GPU', value: get('ro.hardware.egl', 'N/A') },
-                { label: 'RAM', value: get('ro.boot.ddrsize', 'N/A') },
-                { label: 'Display Density', value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
+            cards.push(makeCard(t('deviceInfo.hardware'), 'fas fa-microchip', [
+                { label: t('deviceInfo.soc'), value: `${get('ro.soc.model', 'N/A')} (${get('ro.board.platform', 'N/A')})` },
+                { label: t('deviceInfo.gpu'), value: get('ro.hardware.egl', 'N/A') },
+                { label: t('deviceInfo.ram'), value: get('ro.boot.ddrsize', 'N/A') },
+                { label: t('deviceInfo.displayDensity'), value: `${get('ro.sf.lcd_density', 'N/A')} dpi` }
             ]));
 
             // ---- Special Features ----
-            cards.push(makeCard('Special Features', 'fas fa-star', [
-                { label: 'Gesture Support', value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
-                { label: 'Game Mode', value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
-                { label: 'Face Unlock', value: get('ro.faceid.support') === '1' ? '✅' : '❌' },
-                { label: 'Fingerprint Sensor', value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
+            cards.push(makeCard(t('deviceInfo.specialFeatures'), 'fas fa-star', [
+                { label: t('deviceInfo.gestureSupport'), value: get('ro.os_gesture_support') === '1' ? '✅' : '❌' },
+                { label: t('deviceInfo.gameMode'), value: get('ro.os_gamemode_support') === '1' ? '✅' : '❌' },
+                { label: t('deviceInfo.faceUnlock'), value: get('ro.faceid.support') === '1' ? '✅' : '❌' },
+                { label: t('deviceInfo.fingerprintSensor'), value: get('ro.fingerprint_support') === '1' ? '✅' : '❌' }
             ]));
 
             // ---- Security & Boot ----
-            cards.push(makeCard('Security & Boot', 'fas fa-shield-alt', [
-                { label: 'Verified Boot', value: get('ro.boot.verifiedbootstate', 'unknown') },
-                { label: 'Bootloader Lock', value: get('ro.boot.flash.locked') === '1' ? '🔒 Locked' : '🔓 Unlocked' },
-                { label: 'dm‑verity', value: get('ro.boot.veritymode', 'unknown') },
-                { label: 'ADB Secure', value: get('ro.adb.secure') === '1' ? 'Yes' : 'No' }
+            cards.push(makeCard(t('deviceInfo.securityBoot'), 'fas fa-shield-alt', [
+                { label: t('deviceInfo.verifiedBoot'), value: get('ro.boot.verifiedbootstate', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.bootloaderLock'), value: get('ro.boot.flash.locked') === '1' ? '🔒 ' + t('deviceInfo.locked') : '🔓 ' + t('deviceInfo.unlocked') },
+                { label: t('deviceInfo.dmVerity'), value: get('ro.boot.veritymode', t('deviceInfo.unknown')) },
+                { label: t('deviceInfo.adbSecure'), value: get('ro.adb.secure') === '1' ? t('deviceInfo.yes') : t('deviceInfo.no') }
             ]));
 
             const finalHtml = `<div class="cards-container">${cards.join('')}</div>`;
@@ -3359,7 +2612,7 @@ async function renderDeviceInfo() {
             lastDeviceInfoData = currentDataHash;
 
         } catch (err) {
-            container.innerHTML = `<div class="card">Error loading device info: ${err.message}</div>`;
+            container.innerHTML = `<div class="card">${t('deviceInfo.errorLoading')}: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -3566,10 +2819,38 @@ function applyThemeColor(color) {
     const darker = adjustColor(color, -20);
     document.documentElement.style.setProperty('--primary-color', color);
     document.documentElement.style.setProperty('--primary-color-dark', darker);
-    const container = document.getElementById('pageContent');
-    if (container) {
-        sweepThemeColors(container, color, darker);
+    // Also expose an RGB triple for use with rgba() in CSS (hover backgrounds)
+    try {
+        const rgb = hexToRgb(color);
+        if (rgb) document.documentElement.style.setProperty('--primary-color-rgb', `${rgb.r},${rgb.g},${rgb.b}`);
+    } catch (e) {
+        // ignore
     }
+    // Sweep the visible page content plus key chrome regions so inline
+    // background colors and gradients update without scanning the whole DOM.
+    const container = document.getElementById('pageContent');
+    if (container) sweepThemeColors(container, color, darker);
+
+    const header = document.querySelector('header.app-header');
+    if (header) sweepThemeColors(header, color, darker);
+
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sweepThemeColors(sidebar, color, darker);
+
+    // Update any open modal headers / cards
+    document.querySelectorAll('.modal, .modal-header, .card-header').forEach(el => {
+        try { sweepThemeColors(el, color, darker); } catch (e) { /* ignore */ }
+    });
+}
+
+function hexToRgb(hex) {
+    if (!hex) return null;
+    const h = hex.replace('#','');
+    const full = h.length === 6 ? h : h.split('').map(c=>c+c).join('');
+    const r = parseInt(full.slice(0,2),16);
+    const g = parseInt(full.slice(2,4),16);
+    const b = parseInt(full.slice(4,6),16);
+    return { r, g, b };
 }
 
 // Re-apply the active theme color whenever #pageContent's content changes
@@ -3578,12 +2859,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const pageContent = document.getElementById('pageContent');
     if (!pageContent) return;
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((mutations) => {
+        // Apply theme sweeps immediately.
         if (window._activeThemeColor && window._activeThemeColor.toLowerCase() !== DEFAULT_PRIMARY) {
             sweepThemeColors(pageContent, window._activeThemeColor, adjustColor(window._activeThemeColor, -20));
         }
-        if (window._activeLang && window._activeLang !== 'en') {
-            applyLanguage(window._activeLang);
+
+        // Safely re-run scoped translations after a page render. Disconnect
+        // observer while translating to avoid recursive mutation handling.
+        if (window._activeLang && window._activeLang !== 'en' && window.SmartHubI18n && typeof window.SmartHubI18n.applyTranslations === 'function') {
+            try {
+                observer.disconnect();
+                window.SmartHubI18n.applyTranslations(pageContent);
+                window.SmartHubI18n.applyTranslations(document.querySelector('.sidebar'));
+                window.SmartHubI18n.applyTranslations(document.querySelector('header.app-header'));
+            } catch (e) {
+                // ignore
+            } finally {
+                observer.observe(pageContent, { childList: true, subtree: true });
+            }
         }
     });
     observer.observe(pageContent, { childList: true, subtree: true });
@@ -3592,7 +2886,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // wasn't the first page visited this session.
     const saved = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en","themeColor":"#0d6efd"}');
     applyThemeColor(saved.themeColor || DEFAULT_PRIMARY);
-    applyLanguage(saved.language || 'en');
+    if (window.SmartHubI18n && typeof window.SmartHubI18n.setCurrentLang === 'function') {
+        try {
+            window.SmartHubI18n.setCurrentLang(saved.language || 'en', pageContent);
+            // Ensure sidebar and header also translate on initial load
+            try {
+                window.SmartHubI18n.applyTranslations(document.querySelector('.sidebar'));
+                window.SmartHubI18n.applyTranslations(document.querySelector('header.app-header'));
+            } catch (e) { /* ignore */ }
+        } catch (e) {
+            applyLanguage(saved.language || 'en');
+        }
+    } else {
+        applyLanguage(saved.language || 'en');
+    }
 });
 
 // Helper to darken a hex color by a percentage (for gradient)

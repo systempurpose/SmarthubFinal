@@ -1,59 +1,59 @@
 async function renderAdbDashboard(container) {
     container.innerHTML = `
-        <h1 style="margin-bottom: 24px;">Dashboard</h1>
+        <h1 data-i18n="dashboard.title" style="margin-bottom: 24px;">Dashboard</h1>
         <div class="action-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
             <div class="action-card" data-action="storage-analysis" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">💾</div>
-                <div style="font-weight: 600; font-size: 15px;">Storage Analysis</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Check storage usage & large files</div>
+                <div data-i18n="action.storageAnalysis.title" style="font-weight: 600; font-size: 15px;">Storage Analysis</div>
+                <div data-i18n="action.storageAnalysis.desc" style="font-size: 12px; color: #6B7280; margin-top: 4px;">Check storage usage & large files</div>
             </div>
             <div class="action-card" data-action="app-security" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">🛡️</div>
-                <div style="font-weight: 600; font-size: 15px;">App Security Scan</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Detect suspicious & risky apps</div>
+                <div data-i18n="action.appSecurity.title" style="font-weight: 600; font-size: 15px;">App Security Scan</div>
+                <div data-i18n="action.appSecurity.desc" style="font-size: 12px; color: #6B7280; margin-top: 4px;">Detect suspicious & risky apps</div>
             </div>
             <div class="action-card" data-action="install" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">📱</div>
-                <div style="font-weight: 600; font-size: 15px;">Install Android App</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Deploy companion app</div>
+                <div data-i18n="action.install.title" style="font-weight: 600; font-size: 15px;">Install Android App</div>
+                <div data-i18n="action.install.desc" style="font-size: 12px; color: #6B7280; margin-top: 4px;">Deploy companion app</div>
             </div>
             <div class="action-card" data-action="wizard" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">🔌</div>
-                <div style="font-weight: 600; font-size: 15px;">USB Debugging Wizard</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Connect your phone</div>
+                <div data-i18n="action.wizard.title" style="font-weight: 600; font-size: 15px;">USB Debugging Wizard</div>
+                <div data-i18n="action.wizard.desc" style="font-size: 12px; color: #6B7280; margin-top: 4px;">Connect your phone</div>
             </div>
             <div class="action-card" data-action="help" style="background: white; border-radius: 16px; padding: 20px 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: 1px solid #e5e7eb;">
                 <div style="font-size: 32px; margin-bottom: 8px;">❓</div>
-                <div style="font-weight: 600; font-size: 15px;">Help</div>
-                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Guides & support</div>
+                <div data-i18n="action.help.title" style="font-weight: 600; font-size: 15px;">Help</div>
+                <div data-i18n="action.help.desc" style="font-size: 12px; color: #6B7280; margin-top: 4px;">Guides & support</div>
             </div>
         </div>
 
         <div class="card" id="softwareSafetyCard">
-            <div class="card-title"><i class="fas fa-shield-alt"></i> Software Safety</div>
+            <div class="card-title"><i class="fas fa-shield-alt"></i> <span data-i18n="safety.title">Software Safety</span></div>
             <div id="safetyContent" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;">
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Security Patch</div>
+                    <div data-i18n="safety.patch" style="font-size: 12px; color: #6B7280;">Security Patch</div>
                     <div id="safetyPatch" style="font-weight: 600;">---</div>
                 </div>
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Root Status</div>
+                    <div data-i18n="safety.root" style="font-size: 12px; color: #6B7280;">Root Status</div>
                     <div id="safetyRoot" style="font-weight: 600;">---</div>
                 </div>
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Play Protect</div>
+                    <div data-i18n="safety.playProtect" style="font-size: 12px; color: #6B7280;">Play Protect</div>
                     <div id="safetyPlayProtect" style="font-weight: 600;">---</div>
                 </div>
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Unknown Sources</div>
+                    <div data-i18n="safety.unknown" style="font-size: 12px; color: #6B7280;">Unknown Sources</div>
                     <div id="safetyUnknown" style="font-weight: 600;">---</div>
                 </div>
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">USB Debugging</div>
+                    <div data-i18n="safety.adb" style="font-size: 12px; color: #6B7280;">USB Debugging</div>
                     <div id="safetyAdb" style="font-weight: 600;">---</div>
                 </div>
                 <div style="background: #f8f9fa; border-radius: 8px; padding: 10px; text-align: center;">
-                    <div style="font-size: 12px; color: #6B7280;">Suspicious Apps</div>
+                    <div data-i18n="safety.suspicious" style="font-size: 12px; color: #6B7280;">Suspicious Apps</div>
                     <div id="safetySuspicious" style="font-weight: 600;">---</div>
                 </div>
             </div>
@@ -77,6 +77,17 @@ async function renderAdbDashboard(container) {
         <div id="alertsCard" class="card" style="display: none;"></div>
         <div id="diagnosticResult" class="card" style="display: none;"></div>
     `;
+
+    // FIX: this render call was wiping out any previously-applied translations
+    // (this innerHTML has zero data-i18n coverage before this fix, and nothing
+    // ever re-ran applyLanguage after building it). Now that every static
+    // label above has a data-i18n key, re-apply the active language right
+    // after building the markup so it renders correctly regardless of which
+    // language is selected.
+    if (typeof applyLanguage === 'function') {
+        const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
+        applyLanguage(window._activeLang || savedLang);
+    }
 
     loadSavedScanResults();
 
@@ -212,4 +223,5 @@ async function renderAdbDashboard(container) {
     }
 
     document.getElementById('testScanBtn')?.addEventListener('click', testSuspiciousScan);
+    
 }
