@@ -3,13 +3,13 @@ async function loadSavedScanResults() {
     try {
         // Dynamically import Supabase helpers (since ui.js is not a module)
         const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
-        // 👇 NEW: import all loaders, including connection
         const { 
             fetchLatestAppScan, 
             fetchLatestStorageScan, 
             fetchLatestHardwareScan,
             fetchLatestAdvancedScan,
-            fetchLatestConnectionScan   // 👈 NEW
+            fetchLatestConnectionScan,
+            fetchLatestRepairScan   // 👈 NEW
         } = await import('./sb-loader.js');
 
         const userId = getCurrentUserId();
@@ -28,7 +28,7 @@ async function loadSavedScanResults() {
         if (!appResults) {
             appResults = loadAppScanResults(); // localStorage fallback
         }
-        if (appResults) {
+        if (appResults && typeof renderAppScanResults === 'function') {
             renderAppScanResults(appResults);
         }
 
@@ -45,7 +45,7 @@ async function loadSavedScanResults() {
         if (!storageResults) {
             storageResults = loadStorageResults();
         }
-        if (storageResults) {
+        if (storageResults && typeof renderStorageResults === 'function') {
             renderStorageResults(storageResults);
         }
 
@@ -62,7 +62,7 @@ async function loadSavedScanResults() {
         if (!hardwareResults) {
             hardwareResults = loadHardwareResults();
         }
-        if (hardwareResults) {
+        if (hardwareResults && typeof renderHardwareResults === 'function') {
             renderHardwareResults(hardwareResults);
         }
 
@@ -79,11 +79,11 @@ async function loadSavedScanResults() {
         if (!advancedResults) {
             advancedResults = loadAdvancedResults();
         }
-        if (advancedResults) {
+        if (advancedResults && typeof renderAdvancedResults === 'function') {
             renderAdvancedResults(advancedResults);
         }
 
-        // ---- 👇 NEW: Connection Tests ----
+        // ---- Connection Tests ----
         let connectionResults = null;
         if (userId && deviceId) {
             try {
@@ -96,25 +96,70 @@ async function loadSavedScanResults() {
         if (!connectionResults) {
             connectionResults = loadConnectionResults();
         }
-        if (connectionResults) {
+        if (connectionResults && typeof renderConnectionResults === 'function') {
             renderConnectionResults(connectionResults);
+        }
+
+        // ---- 🆕 Repair Results ----
+        let repairResults = null;
+        if (userId && deviceId) {
+            try {
+                repairResults = await fetchLatestRepairScan(userId, deviceId);
+                console.log('[loadSavedScanResults] Repair scan loaded from Supabase');
+            } catch (e) {
+                console.warn('[loadSavedScanResults] Supabase repair scan fetch failed:', e);
+            }
+        }
+        if (!repairResults) {
+            repairResults = typeof loadRepairResults === 'function' ? loadRepairResults() : null;
+        }
+        if (repairResults && typeof renderRepairResults === 'function') {
+            renderRepairResults(repairResults); // uses #repairResults container
         }
 
     } catch (err) {
         console.warn('[loadSavedScanResults] Failed to load from Supabase, using localStorage only:', err);
-        // Fallback: just load from localStorage
-        const appResults = loadAppScanResults();
-        if (appResults) renderAppScanResults(appResults);
-        const storageResults = loadStorageResults();
-        if (storageResults) renderStorageResults(storageResults);
-        const hardwareResults = loadHardwareResults();
-        if (hardwareResults) renderHardwareResults(hardwareResults);
-        const advancedResults = loadAdvancedResults();
-        if (advancedResults) renderAdvancedResults(advancedResults);
-        const connectionResults = loadConnectionResults();
-        if (connectionResults) renderConnectionResults(connectionResults);
+        // Fallback: just load from localStorage (with existence checks)
+        try {
+            const appResults = loadAppScanResults();
+            if (appResults && typeof renderAppScanResults === 'function') renderAppScanResults(appResults);
+        } catch (e) { /* ignore */ }
+
+        try {
+            const storageResults = loadStorageResults();
+            if (storageResults && typeof renderStorageResults === 'function') renderStorageResults(storageResults);
+        } catch (e) { /* ignore */ }
+
+        try {
+            const hardwareResults = loadHardwareResults();
+            if (hardwareResults && typeof renderHardwareResults === 'function') renderHardwareResults(hardwareResults);
+        } catch (e) { /* ignore */ }
+
+        try {
+            const advancedResults = loadAdvancedResults();
+            if (advancedResults && typeof renderAdvancedResults === 'function') renderAdvancedResults(advancedResults);
+        } catch (e) { /* ignore */ }
+
+        try {
+            const connectionResults = loadConnectionResults();
+            if (connectionResults && typeof renderConnectionResults === 'function') renderConnectionResults(connectionResults);
+        } catch (e) { /* ignore */ }
+
+        try {
+            const repairResults = typeof loadRepairResults === 'function' ? loadRepairResults() : null;
+            if (repairResults && typeof renderRepairResults === 'function') renderRepairResults(repairResults);
+        } catch (e) { /* ignore */ }
     }
 }
 
-// ---- Expose globally so other modules can trigger a reload ----
+// ---- Expose globally ----
 window.loadSavedScanResults = loadSavedScanResults;
+
+// 👇 IMPORTANT: Ensure these helpers are defined in ui.js (or loadDB.js):
+/*
+function renderAdvancedResults(results) { /* ... * / }
+function renderConnectionResults(results) { /* ... * / }
+function renderRepairResults(results, containerId = 'repairResults') { /* ... * / }
+function loadRepairResults() { try { return JSON.parse(localStorage.getItem('smartHubRepairResults')); } catch { return null; } }
+function saveRepairResults(results) { localStorage.setItem('smartHubRepairResults', JSON.stringify(results)); }
+*/

@@ -55,40 +55,37 @@
     }
 
     function applyTranslations(root) {
-    const lang = getCurrentLang();
-    // ... existing code ...
+        const scope = (root && (root instanceof Element || root instanceof Document))
+            ? root
+            : document.getElementById('pageContent') || document;
 
-    const scope = (root && (root instanceof Element || root instanceof Document))
-        ? root
-        : document.getElementById('pageContent') || document;
+        // ---- Plain text (escaped) ----
+        scope.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (!key) return;
+            try {
+                el.textContent = t(key);
+            } catch { /* ignore */ }
+        });
 
-    // Existing: textContent translations
-    scope.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if (!key) return;
-        try {
-            el.textContent = t(key);
-        } catch { /* ignore */ }
-    });
+        // ---- HTML (preserves tags) ----
+        scope.querySelectorAll('[data-i18n-html]').forEach(el => {
+            const key = el.getAttribute('data-i18n-html');
+            if (!key) return;
+            try {
+                el.innerHTML = t(key);
+            } catch { /* ignore */ }
+        });
 
-    // NEW: innerHTML translations (preserves HTML tags)
-    scope.querySelectorAll('[data-i18n-html]').forEach(el => {
-        const key = el.getAttribute('data-i18n-html');
-        if (!key) return;
-        try {
-            el.innerHTML = t(key);
-        } catch { /* ignore */ }
-    });
-
-    // Existing: placeholders
-    scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-        const key = el.getAttribute('data-i18n-placeholder');
-        if (!key) return;
-        try {
-            el.setAttribute('placeholder', t(key));
-        } catch { /* ignore */ }
-    });
-}
+        // ---- Placeholder ----
+        scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (!key) return;
+            try {
+                el.setAttribute('placeholder', t(key));
+            } catch { /* ignore */ }
+        });
+    }
 
     function setCurrentLang(lang, root) {
         const normalized = (lang === 'tl') ? 'fil' : lang;

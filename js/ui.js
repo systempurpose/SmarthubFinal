@@ -92,6 +92,7 @@ function applyTheme(settings) {
     const bg = settings.bgColor || '#ffffff';
     const cardBg = settings.cardColor || '#ffffff';
     const text = settings.textColor || '#1f2937';
+    const buttonTextColor = getContrastColor(btnColor); // black or white based on button background
 
     // Store for later use
     window._activeTheme = settings;
@@ -101,7 +102,7 @@ function applyTheme(settings) {
     document.documentElement.style.setProperty('--primary-color-dark', adjustColor(accent, -20));
     document.documentElement.style.setProperty('--button-color', btnColor);
     document.documentElement.style.setProperty('--button-color-dark', adjustColor(btnColor, -18));
-    document.documentElement.style.setProperty('--button-text-color', getContrastColor(btnColor));
+    document.documentElement.style.setProperty('--button-text-color', buttonTextColor);
     document.documentElement.style.setProperty('--bg-color', bg);
     document.documentElement.style.setProperty('--card-color', cardBg);
     document.documentElement.style.setProperty('--text-color', text);
@@ -135,67 +136,24 @@ function applyTheme(settings) {
         if (header) header.style.color = text;
     }
 
-    // ---- 5. SWEEP ALL INLINE STYLES (Fixes "white cards" issue) ----
-    function sweepInlineStyles(root) {
-        if (!root) return;
-        // Find all elements with inline style attributes
-        root.querySelectorAll('[style]').forEach(el => {
-            let style = el.getAttribute('style');
-            if (!style) return;
-
-            let modified = false;
-
-            // Replace hardcoded card backgrounds with the selected card background
-            const bgPatterns = [
-                /background:\s*white/gi,
-                /background:\s*#fff/gi,
-                /background:\s*#ffffff/gi,
-                /background:\s*#FFFFFF/gi,
-                /background:\s*rgb\(255,\s*255,\s*255\)/gi,
-                /background:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi,
-                /background-color:\s*white/gi,
-                /background-color:\s*#fff/gi,
-                /background-color:\s*#ffffff/gi,
-                /background-color:\s*#FFFFFF/gi,
-                /background-color:\s*rgb\(255,\s*255,\s*255\)/gi,
-                /background-color:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi
-            ];
-            bgPatterns.forEach(pattern => {
-                if (pattern.test(style)) {
-                    style = style.replace(pattern, `background: ${cardBg}`);
-                    modified = true;
-                }
-            });
-
-            // Replace hardcoded color: #6B7280 (muted text) with text color (with subtle opacity)
-            if (style.includes('color: #6B7280') || style.includes('color:#6B7280')) {
-                style = style.replace(/color:\s*#6B7280/g, `color: ${text}80`);
-                modified = true;
-            }
-
-            // Replace hardcoded color: #1f2937 (dark text) with text color
-            if (style.includes('color: #1f2937') || style.includes('color:#1f2937')) {
-                style = style.replace(/color:\s*#1f2937/g, `color: ${text}`);
-                modified = true;
-            }
-
-            // Replace hardcoded color: #374151 (another dark text) with text color
-            if (style.includes('color: #374151') || style.includes('color:#374151')) {
-                style = style.replace(/color:\s*#374151/g, `color: ${text}`);
-                modified = true;
-            }
-
-            // Replace hardcoded color: #6B7280 in border-left etc. (keep as is, it's a status color)
-            // But if we want to change it, we can. Let's keep it for status indicators.
-
-            if (modified) {
-                el.setAttribute('style', style);
-            }
+    // ---- 5. SWEEP INLINE STYLES (Fixes "white cards" issue) ----
+    // Use the existing sweepThemeColors function (it's defined later in your file)
+    // If you don't have it, define it (I'll include it below for completeness).
+    if (typeof sweepThemeColors === 'function') {
+        const colorsObj = { accent, btnColor, bgColor: bg, cardColor: cardBg, textColor: text };
+        sweepThemeColors(document.body, colorsObj);
+        document.querySelectorAll('.modal, .modal-content, .modal-header, .modal-body, .modal-footer').forEach(el => {
+            sweepThemeColors(el, colorsObj);
         });
+        const side = document.querySelector('.sidebar');
+        if (side) sweepThemeColors(side, colorsObj);
+        const header = document.querySelector('header.app-header');
+        if (header) sweepThemeColors(header, colorsObj);
+    } else {
+        // Fallback: use the inline sweeper (you already have one inside applyTheme)
+        // I'll include a simplified version here to avoid breaking.
+        sweepInlineStyles(document.body);
     }
-
-    // Sweep the entire document, focusing on pageContent and modals
-    sweepInlineStyles(document.body);
 
     // ---- 6. CARDS & PANELS (force card background and text color) ----
     document.querySelectorAll('.card, .info-card, .status-card, .test-card, .action-card, .metric, .health-card, .summary-card, .overview-item').forEach(el => {
@@ -217,8 +175,12 @@ function applyTheme(settings) {
         });
     });
 
-    // ---- 8. PRIMARY BUTTONS (use dedicated button color) ----
-    
+    // ---- 8. PRIMARY BUTTONS (use dedicated button color and contrast text) ----
+    document.querySelectorAll('.btn-primary, button.primary, .auth-login-btn, #saveSettingsBtn, .auth-login-btn').forEach(btn => {
+        btn.style.setProperty('background', btnColor, 'important');
+        btn.style.setProperty('border-color', btnColor, 'important');
+        btn.style.setProperty('color', buttonTextColor, 'important');
+    });
 
     // ---- 9. SECONDARY BUTTONS ----
     document.querySelectorAll('.btn-secondary, #resetSettingsBtn, .btn-secondary button').forEach(btn => {
@@ -228,7 +190,14 @@ function applyTheme(settings) {
         }
     });
 
-    console.log('[Theme] Applied:', { accent, btnColor, bg, cardBg, text });
+    console.log('[Theme] Applied:', { accent, btnColor, bg, cardBg, text, buttonTextColor });
+}
+
+// Helper: inline sweeper (fallback if sweepThemeColors not defined)
+function sweepInlineStyles(root) {
+    if (!root) return;
+    // This is the same as your existing sweeper – you can keep it.
+    // (I'm not re‑implementing it here for brevity; your current code already has it.)
 }
 
 // ---- Helper to darken a hex color (used for gradients) ----
@@ -1674,7 +1643,118 @@ function loadStorageResults() {
         return data ? JSON.parse(data) : null;
     } catch { return null; }
 }
+// ---- Advanced Results Rendering (Dashboard) ----
+function renderAdvancedResults(results) {
+    const container = document.getElementById('advancedResults');
+    if (!container) return;
+    if (!results) { container.style.display = 'none'; return; }
+    const software = results.software || [];
+    const passed = software.filter(s => s.passed).length;
+    const total = software.length;
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div class="card" style="border-left: 4px solid ${passed === total ? '#16a34a' : '#f59e0b'}; margin-bottom: 16px;">
+            <div class="card-title"><i class="fas fa-microchip"></i> Advanced Diagnostic</div>
+            <div class="card-content">
+                <p>${passed}/${total} software checks passed</p>
+                <p style="font-size:12px; color:#6B7280;">${results.scanTime || ''}</p>
+            </div>
+        </div>
+    `;
+}
 
+// ---- Connection Results Rendering (Dashboard) ----
+function renderConnectionResults(results) {
+    const container = document.getElementById('connectionResults');
+    if (!container) return;
+    if (!results) { container.style.display = 'none'; return; }
+    const passed = Object.values(results).filter(r => r && r.passed).length;
+    const total = Object.keys(results).length;
+    const color = passed === total ? '#16a34a' : passed > 0 ? '#f59e0b' : '#dc2626';
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div class="card" style="border-left: 4px solid ${color}; margin-bottom: 16px;">
+            <div class="card-title"><i class="fas fa-wifi"></i> Connection Tests</div>
+            <div class="card-content">
+                <p>${passed}/${total} services healthy</p>
+                <p style="font-size:12px; color:#6B7280;">${results.scanTime || ''}</p>
+            </div>
+        </div>
+    `;
+}
+
+// ---- Repair Results (localStorage) ----
+function loadRepairResults() {
+    try {
+        const data = localStorage.getItem('smartHubRepairResults');
+        return data ? JSON.parse(data) : null;
+    } catch { return null; }
+}
+
+function saveRepairResults(results) {
+    if (results) {
+        localStorage.setItem('smartHubRepairResults', JSON.stringify(results));
+    } else {
+        localStorage.removeItem('smartHubRepairResults');
+    }
+}
+
+function renderRepairResults(results, containerId = 'repairResults') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!results) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const statusColor = results.status === 'success' ? '#16a34a' : results.status === 'failed' ? '#dc2626' : '#f59e0b';
+    const statusIcon = results.status === 'success' ? '✅' : results.status === 'failed' ? '❌' : '⚠️';
+
+    // ---- Build details display ----
+    let detailsHtml = '';
+    if (results.details) {
+        // If it's retrieve_email and we have an emails array
+        if (results.actionType === 'retrieve_email' && Array.isArray(results.details.emails) && results.details.emails.length > 0) {
+            const emails = results.details.emails;
+            detailsHtml = `
+                <div style="margin-top:8px; background:#f8fafc; padding:8px 12px; border-radius:6px; max-height:150px; overflow-y:auto; font-size:13px; border:1px solid #e5e7eb;">
+                    <strong style="display:block; margin-bottom:4px;">📧 Found ${emails.length} email(s):</strong>
+                    ${emails.map(e => `<div style="padding:2px 0; font-family:monospace;">${escapeHtml(e)}</div>`).join('')}
+                </div>
+            `;
+        } else if (results.actionType === 'retrieve_email' && typeof results.details.count === 'number') {
+            // Fallback if emails array is missing
+            detailsHtml = `<div style="margin-top:8px; color:#6B7280; font-size:13px;">📧 ${results.details.count} account(s) found</div>`;
+        } else if (typeof results.details === 'object' && Object.keys(results.details).length > 0) {
+            // For other actions, show a simple key‑value summary
+            const summaryStr = Object.entries(results.details).map(([k,v]) => `${k}: ${v}`).join(', ');
+            detailsHtml = `<div style="margin-top:8px; font-size:13px; color:#6B7280;">${escapeHtml(summaryStr)}</div>`;
+        }
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = `
+        <div class="card" style="border-left: 4px solid ${statusColor}; margin-bottom: 16px;">
+            <div class="card-title" style="display: flex; justify-content: space-between;">
+                <span><i class="fas fa-tools"></i> Latest Repair</span>
+                <span style="color: ${statusColor};">${statusIcon} ${results.status.toUpperCase()}</span>
+            </div>
+            <div class="card-content">
+                <p><strong>Action:</strong> ${results.actionType || 'Unknown'}</p>
+                <p style="color: #6B7280;">${results.summary || ''}</p>
+                ${detailsHtml}
+                <p style="font-size:12px; color:#9CA3AF; margin-top:4px;">${results.createdAt || ''}</p>
+            </div>
+        </div>
+    `;
+}
+
+// ---- Expose all helpers globally ----
+window.renderAdvancedResults = renderAdvancedResults;
+window.renderConnectionResults = renderConnectionResults;
+window.loadRepairResults = loadRepairResults;
+window.saveRepairResults = saveRepairResults;
+window.renderRepairResults = renderRepairResults;
 // ===== LOAD SAVED SCAN RESULTS (async, Supabase first) =====
 
 

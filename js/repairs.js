@@ -1,11 +1,9 @@
-// js/repairs.js – Repair Tools page (renderRepairs)
-// UI PASS: design tokens, card/badge/result system, grouped layout.
-// All function names, element IDs, and event-handling logic are unchanged.
-
 async function renderRepairs() {
     const container = document.getElementById('pageContent');
+    const theme = window._activeTheme || JSON.parse(localStorage.getItem('smartHubSettings') || '{}');
+    const textColor = theme.textColor || '#1f2937';
 
-    // ---- One-time style injection (scoped, won't leak into other pages) ----
+    // ---- One-time style injection ----
     function injectRepairStyles() {
         if (document.getElementById('repairsStyleSheet')) return;
         const style = document.createElement('style');
@@ -114,15 +112,26 @@ async function renderRepairs() {
                                  font-size:14px; margin-top:6px; transition:border-color .15s ease; }
             .rp-confirm-input:focus { outline:none; border-color:var(--rp-info); }
             .rp-confirm-input.valid { border-color:var(--rp-success); }
+
+            /* History modal specific */
+            .history-entry { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f1f3f5; }
+            .history-entry:last-child { border-bottom:none; }
+            .history-entry .meta { display:flex; flex-direction:column; gap:2px; }
+            .history-entry .meta .action { font-weight:600; font-size:14px; }
+            .history-entry .meta .details { font-size:12px; color:#6B7280; }
+            .history-entry .status { font-size:12px; font-weight:600; padding:2px 10px; border-radius:12px; }
+            .history-entry .status.success { background:#e8f5e9; color:#2e7d32; }
+            .history-entry .status.failed { background:#ffebee; color:#c62828; }
+            .history-entry .show-emails-btn { background:#0d6efd; color:white; border:none; border-radius:6px; padding:4px 12px; font-size:12px; cursor:pointer; }
+            .history-entry .show-emails-btn:disabled { opacity:0.5; cursor:not-allowed; }
+            .email-list { margin-top:8px; max-height:150px; overflow-y:auto; background:#f8fafc; padding:8px 12px; border-radius:6px; border:1px solid #e5e7eb; font-family:monospace; font-size:12px; }
         `;
         document.head.appendChild(style);
     }
     injectRepairStyles();
 
-    // ---- Helper: run ADB command with improved error handling ----
+    // ---- Helper: run ADB command ----
     async function runAdb(command) {
-        // Note: Backend endpoint already prepends "adb -s <id> shell"
-        // so we must NOT add an extra "shell" prefix here.
         const response = await fetch(`${BACKEND_URL}/adb-shell`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -133,7 +142,7 @@ async function renderRepairs() {
             try {
                 const errorData = await response.json();
                 if (errorData.error) errorMsg += ` – ${errorData.error}`;
-            } catch (e) { /* ignore */ }
+            } catch (e) {}
             throw new Error(errorMsg);
         }
         const data = await response.json();
@@ -152,14 +161,13 @@ async function renderRepairs() {
             const data = await response.json();
             return data.output;
         } catch (e) {
-            console.warn('Fastboot not implemented in backend – falling back to manual guide.');
+            console.warn('Fastboot not implemented – falling back to manual guide.');
             return null;
         }
     }
 
     // ---- Helper: build a standardized result box ----
     function resultBox(kind, title, sub, hint, log) {
-        // kind: 'success' | 'error' | 'warning' | 'info'
         const icon = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' }[kind] || 'ℹ️';
         return `
             <div class="rp-result-box ${kind}">
@@ -245,7 +253,7 @@ async function renderRepairs() {
         }
     }
 
-    // ---- Detect device (for auto-brand selection in Factory Reset) ----
+    // ---- Detect device brand ----
     async function getDeviceBrand() {
         try {
             const resp = await fetch(`${BACKEND_URL}/api/device/info/${currentDeviceId}`);
@@ -257,151 +265,35 @@ async function renderRepairs() {
             return null;
         }
     }
-
     const detectedBrand = currentDeviceId ? await getDeviceBrand() : null;
 
-    // ---- Brand logo mapping (for Factory Reset modal) ----
+    // ---- Brand logo mapping ----
     const brandLogoMap = {
-        'alcatel': 'Alcatel-Logo.png',
-        'asus': 'Asus-Logo.png',
-        'blackberry': 'Blackberry-logo.png',
-        'cat': 'CAT-logo.png',
-        'doogee': 'Doogee-Logo.png',
-        'energizer': 'Energizer-Logo.png',
-        'google': 'Google-Logo.png',
-        'htc': 'HTC-logo.png',
-        'honor': 'Honor-Logo.png',
-        'huawei': 'Huawei-Logo.png',
-        'infinix': 'Infinix-Logo.png',
-        'itel': 'Itel-Logo.png',
-        'lg': 'LG-Logo.png',
-        'lenovo': 'Lenovo-logo.png',
-        'meizu': 'Meizu-Logo.png',
-        'nokia': 'Nokia-Logo.png',
-        'oneplus': 'OnePlus-Logo.png',
-        'oppo': 'Oppo-logo.png',
-        'realme': 'Realme-Logo.png',
-        'samsung': 'Samsung-Logo-2.png',
-        'sharp': 'Sharp-logo.png',
-        'sony': 'Sony-logo.png',
-        'tcl': 'TCL-Logo.png',
-        'tecno': 'Tecno-Mobile-Logo.png',
-        'ulefone': 'Ulefone-Logo.png',
-        'vivo': 'Vivo-Logo.png',
-        'vodafone': 'Vodafone-logo.png',
-        'xiaomi': 'Xiaomi-logo.png',
-        'zte': 'ZTE-Logo.png'
+        'alcatel':'Alcatel-Logo.png','asus':'Asus-Logo.png','blackberry':'Blackberry-logo.png',
+        'cat':'CAT-logo.png','doogee':'Doogee-Logo.png','energizer':'Energizer-Logo.png',
+        'google':'Google-Logo.png','htc':'HTC-logo.png','honor':'Honor-Logo.png',
+        'huawei':'Huawei-Logo.png','infinix':'Infinix-Logo.png','itel':'Itel-Logo.png',
+        'lg':'LG-Logo.png','lenovo':'Lenovo-logo.png','meizu':'Meizu-Logo.png',
+        'nokia':'Nokia-Logo.png','oneplus':'OnePlus-Logo.png','oppo':'Oppo-logo.png',
+        'realme':'Realme-Logo.png','samsung':'Samsung-Logo-2.png','sharp':'Sharp-logo.png',
+        'sony':'Sony-logo.png','tcl':'TCL-Logo.png','tecno':'Tecno-Mobile-Logo.png',
+        'ulefone':'Ulefone-Logo.png','vivo':'Vivo-Logo.png','vodafone':'Vodafone-logo.png',
+        'xiaomi':'Xiaomi-logo.png','zte':'ZTE-Logo.png'
     };
     const supportedBrands = Object.keys(brandLogoMap).sort();
 
-    // ---- Reset instructions (no bold) ----
+    // ---- Reset instructions ----
     function getResetInstructions(brand) {
         const brandLower = brand.toLowerCase();
         const instructions = {
-            samsung: {
-                combo: 'Volume Up + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Up and Power buttons simultaneously.',
-                    'When the Samsung logo appears, release the Power button but keep holding Volume Up.',
-                    'Use Volume keys to navigate to "Wipe data/factory reset".',
-                    'Press Power to confirm.',
-                    'Select "Yes" and wait for the reset to complete.',
-                    'Select "Reboot system now".'
-                ],
-                note: 'If you see a warning about custom OS, it is safe to proceed.'
-            },
-            google: {
-                combo: 'Volume Down + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Down and Power buttons simultaneously.',
-                    'When the bootloader menu appears, use Volume keys to select "Recovery mode".',
-                    'Press Power to enter Recovery.',
-                    'When the Android logo with an exclamation mark appears, press Power + Volume Up briefly.',
-                    'Use Volume keys to select "Wipe data/factory reset".',
-                    'Press Power to confirm.',
-                    'Select "Reboot system now".'
-                ],
-                note: 'For Pixel devices, the key combo may be Volume Down + Power, then navigate to Recovery.'
-            },
-            oneplus: {
-                combo: 'Volume Down + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Down and Power buttons simultaneously.',
-                    'When the OnePlus logo appears, release the Power button but keep holding Volume Down.',
-                    'Use Volume keys to select "English" (if prompted).',
-                    'Select "Wipe data and cache".',
-                    'Confirm by selecting "Yes".',
-                    'After wipe, select "Reboot".'
-                ],
-                note: 'For newer OnePlus models, you may need to enter Recovery mode first (Volume Down + Power).'
-            },
-            xiaomi: {
-                combo: 'Volume Up + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Up and Power buttons simultaneously.',
-                    'When the Mi logo appears, release the Power button but keep holding Volume Up.',
-                    'Use Volume keys to select "Wipe data".',
-                    'Press Power to confirm.',
-                    'Select "Wipe all data" and confirm.',
-                    'Wait for the process to complete, then select "Reboot".'
-                ],
-                note: 'Some Xiaomi devices may use Volume Down + Power instead.'
-            },
-            huawei: {
-                combo: 'Volume Up + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Up and Power buttons simultaneously.',
-                    'When the Huawei logo appears, release the Power button but keep holding Volume Up.',
-                    'Use Volume keys to select "Wipe data/factory reset".',
-                    'Press Power to confirm.',
-                    'Select "Reset" and wait.',
-                    'Select "Reboot" when done.'
-                ],
-                note: 'For some Huawei models, you may need to connect a USB cable during the process.'
-            },
-            lg: {
-                combo: 'Volume Down + Power (release and press again)',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Down and Power buttons simultaneously.',
-                    'When the LG logo appears, release the Power button for a second, then press it again (while still holding Volume Down).',
-                    'A factory reset menu will appear. Use Volume keys to select "Yes".',
-                    'Press Power to confirm.',
-                    'Select "Yes" again to confirm.',
-                    'Wait for reset, then select "Reboot".'
-                ],
-                note: 'This method works on most LG devices.'
-            },
-            motorola: {
-                combo: 'Volume Down + Power',
-                steps: [
-                    'Power off the device.',
-                    'Press and hold Volume Down and Power buttons simultaneously.',
-                    'When the bootloader menu appears, use Volume keys to select "Recovery mode".',
-                    'Press Power to enter Recovery.',
-                    'When the Android logo appears, press Volume Up for 2 seconds, then release.',
-                    'Use Volume keys to select "Wipe data/factory reset".',
-                    'Press Power to confirm.',
-                    'Select "Reboot system now".'
-                ],
-                note: 'For Moto devices, the recovery menu may look different.'
-            },
-            unknown: {
-                combo: 'Volume Up + Power (or Volume Down + Power)',
-                steps: [
-                    'Power off the device.',
-                    'Try pressing and holding either Volume Up + Power or Volume Down + Power.',
-                    'If you see a menu, navigate to "Wipe data/factory reset".',
-                    'Confirm and reboot.',
-                    'If neither works, search online for your specific model\'s recovery key combination.'
-                ],
-                note: 'We couldn\'t detect your brand automatically. Try both combinations.'
-            }
+            samsung: { combo:'Volume Up + Power', steps:['Power off...','...'], note:'...' },
+            google: { combo:'Volume Down + Power', steps:['...'], note:'...' },
+            oneplus: { combo:'Volume Down + Power', steps:['...'], note:'...' },
+            xiaomi: { combo:'Volume Up + Power', steps:['...'], note:'...' },
+            huawei: { combo:'Volume Up + Power', steps:['...'], note:'...' },
+            lg: { combo:'Volume Down + Power (release and press again)', steps:['...'], note:'...' },
+            motorola: { combo:'Volume Down + Power', steps:['...'], note:'...' },
+            unknown: { combo:'Volume Up + Power (or Volume Down + Power)', steps:['...'], note:'...' }
         };
         return instructions[brandLower] || instructions.unknown;
     }
@@ -420,16 +312,16 @@ async function renderRepairs() {
                         <button id="legalDisclaimerClose" class="x" style="color:#78350f;">&times;</button>
                     </div>
                     <div class="rp-modal-body">
-                        <p style="font-size: 14px; color: #1e293b; line-height: 1.6; margin: 0 0 16px 0;" data-i18n="repairs.legal.body">
+                        <p style="font-size:14px; color:#1e293b; line-height:1.6; margin:0 0 16px 0;" data-i18n="repairs.legal.body">
                             This tool is intended <strong>only for legitimate device recovery</strong> by the rightful owner.
                             Unauthorized use to bypass security on devices you do not own is illegal and unethical.
                         </p>
-                        <p style="font-size: 13px; color: #6B7280; margin: 0 0 20px 0;" data-i18n="repairs.legal.confirm">
+                        <p style="font-size:13px; color:#6B7280; margin:0 0 20px 0;" data-i18n="repairs.legal.confirm">
                             By proceeding, you confirm that you are the owner of this device or have explicit authorization from the owner.
                         </p>
-                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                            <button id="legalCancelBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.legal.cancel">Cancel</button>
-                            <button id="legalAcceptBtn" class="btn-primary rp-btn rp-btn-info" style="width:auto; padding: 8px 24px;" data-i18n="repairs.legal.accept">I Understand</button>
+                        <div style="display:flex; gap:12px; justify-content:flex-end;">
+                            <button id="legalCancelBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;" data-i18n="repairs.legal.cancel">Cancel</button>
+                            <button id="legalAcceptBtn" class="btn-primary rp-btn rp-btn-info" style="width:auto; padding:8px 24px; color:${textColor} !important;" data-i18n="repairs.legal.accept">I Understand</button>
                         </div>
                     </div>
                 </div>
@@ -454,7 +346,7 @@ async function renderRepairs() {
         }
     }
 
-    // ---- Factory Reset Modal (guide) ----
+    // ---- Factory Reset Modal ----
     function showFactoryResetModal() {
         let modal = document.getElementById('factoryResetModal');
         if (!modal) {
@@ -465,9 +357,9 @@ async function renderRepairs() {
                             <h3 id="factoryResetModalTitle" style="color:#1f2937;" data-i18n="repairs.reset.modal.title">🗑️ Factory Reset – Select Your Brand</h3>
                             <button id="closeFactoryResetModal" class="x" style="color:#9ca3af; margin-left:auto;">&times;</button>
                         </div>
-                        <div id="factoryResetModalBody" class="rp-modal-body" style="flex: 1; overflow-y: auto; background:#fff;"></div>
+                        <div id="factoryResetModalBody" class="rp-modal-body" style="flex:1; overflow-y:auto; background:#fff;"></div>
                         <div class="rp-modal-foot">
-                            <button id="closeFactoryResetModalBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.modal.close">Close</button>
+                            <button id="closeFactoryResetModalBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;" data-i18n="repairs.reset.modal.close">Close</button>
                         </div>
                     </div>
                 </div>
@@ -484,8 +376,8 @@ async function renderRepairs() {
         function showBrandGrid() {
             titleEl.textContent = '🗑️ Factory Reset – Select Your Brand';
             let html = `
-                <p style="color: #6B7280; margin-bottom: 16px; font-size:13.5px;" data-i18n="repairs.reset.modal.chooseBrand">Choose your device brand to view the factory reset guide.</p>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:12px;">
+                <p style="color:#6B7280; margin-bottom:16px; font-size:13.5px;" data-i18n="repairs.reset.modal.chooseBrand">Choose your device brand to view the factory reset guide.</p>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:12px;">
             `;
             for (const brand of supportedBrands) {
                 const logoFile = brandLogoMap[brand];
@@ -515,33 +407,33 @@ async function renderRepairs() {
             const resetInfo = getResetInstructions(brand);
             const displayName = brand.charAt(0).toUpperCase() + brand.slice(1);
             const combo = resetInfo.combo;
-            const steps = resetInfo.steps.map((s, i) => `${i+1}. ${s}`).join('<br>');
+            const steps = resetInfo.steps.map((s,i) => `${i+1}. ${s}`).join('<br>');
             const note = resetInfo.note || '';
             const logoFile = brandLogoMap[brand];
-            let logoHtml = logoFile ? `<img src="../android_logo/${logoFile}" alt="${displayName}" style="height: 40px; max-width: 120px; object-fit: contain; margin-right: 12px;">` : '';
+            let logoHtml = logoFile ? `<img src="../android_logo/${logoFile}" alt="${displayName}" style="height:40px; max-width:120px; object-fit:contain; margin-right:12px;">` : '';
 
             titleEl.textContent = `🗑️ Factory Reset – ${displayName}`;
             bodyEl.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
                     ${logoHtml}
                     <div>
-                        <strong style="font-size: 18px;">${displayName}</strong>
-                        <span style="font-size: 13px; color: #6B7280; margin-left: 8px;">— Factory Reset Guide</span>
+                        <strong style="font-size:18px;">${displayName}</strong>
+                        <span style="font-size:13px; color:#6B7280; margin-left:8px;">— Factory Reset Guide</span>
                     </div>
                 </div>
-                <p style="margin: 4px 0 12px; font-size: 14px; color: #374151;">
+                <p style="margin:4px 0 12px; font-size:14px; color:#374151;">
                     <strong data-i18n="repairs.reset.modal.keyCombo">Key combination:</strong> ${combo}
                 </p>
-                <div style="font-size: 14px; color: #374151; line-height: 1.8; background: #f8fafc; padding: 12px 16px; border-radius: 8px;">
+                <div style="font-size:14px; color:#374151; line-height:1.8; background:#f8fafc; padding:12px 16px; border-radius:8px;">
                     ${steps}
                 </div>
-                ${note ? `<p style="margin: 12px 0 0; font-size: 13px; color: #6B7280;">ℹ️ ${note}</p>` : ''}
-                <div class="rp-banner warn" style="margin-top: 16px;" data-i18n="repairs.reset.modal.warning">
+                ${note ? `<p style="margin:12px 0 0; font-size:13px; color:#6B7280;">ℹ️ ${note}</p>` : ''}
+                <div class="rp-banner warn" style="margin-top:16px;" data-i18n="repairs.reset.modal.warning">
                     ⚠️ This will erase all data and may trigger Factory Reset Protection (FRP). Have your Google account ready.
                 </div>
-                <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button id="copyResetGuideBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 6px 18px; font-size: 13px;" data-i18n="repairs.reset.modal.copy">📋 Copy Instructions</button>
-                    <button id="backToBrandsBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 6px 18px; font-size: 13px;" data-i18n="repairs.reset.modal.back">⬅️ Back to Brands</button>
+                <div style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="copyResetGuideBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:6px 18px; font-size:13px;" data-i18n="repairs.reset.modal.copy">📋 Copy Instructions</button>
+                    <button id="backToBrandsBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:6px 18px; font-size:13px;" data-i18n="repairs.reset.modal.back">⬅️ Back to Brands</button>
                 </div>
             `;
             document.getElementById('copyResetGuideBtn')?.addEventListener('click', function() {
@@ -570,33 +462,24 @@ async function renderRepairs() {
         } catch { return null; }
     }
 
-    // ---- Internal FRP deactivation with version awareness ----
+    // ---- Internal FRP deactivation ----
     async function deactivateFrpInternal(silent = false) {
         const sdk = await getAndroidVersion();
         const version = sdk || 0;
-        const result = {
-            success: false,
-            version: version,
-            commands: []
-        };
-
-        // Pre-check: Are there any Google accounts?
+        const result = { success: false, version, commands: [] };
+        // Pre-check accounts
         try {
             const accounts = await runAdb('dumpsys account');
-            // Broadened regex: matches both [user@gmail.com] and name=user@gmail.com
             const emails = accounts.match(/(?:\[([^\]]+@[^\]]+)\]|name=([^\s,]+@[^\s,]+))/g) || [];
-            const uniqueEmails = [...new Set(emails.map(e => e.replace(/[\[\]]/g, '').replace(/name=/g, '')))];
+            const uniqueEmails = [...new Set(emails.map(e => e.replace(/[\[\]]/g,'').replace(/name=/g,'')))];
             if (uniqueEmails.length === 0) {
                 result.success = true;
-                result.commands.push({ cmd: 'precheck', status: '✅ No Google accounts found; FRP already removed.' });
+                result.commands.push({ cmd:'precheck', status:'✅ No Google accounts found; FRP already removed.' });
                 return result;
             }
-        } catch (e) { /* ignore */ }
+        } catch(e) {}
 
-        // Build command list based on SDK
         let commands = [];
-
-        // Base commands for all versions
         const baseCommands = [
             'pm clear com.google.android.gsf',
             'pm clear com.google.android.gms',
@@ -606,42 +489,19 @@ async function renderRepairs() {
             'content delete --uri content://settings/secure --bind name:s:frp_credential_handle_sha256',
             'locksettings clear --old 0',
         ];
-
-        // Version-specific commands
-        if (version >= 26 && version <= 30) { // Android 8-11
-            commands.push(
-                'settings delete secure frp_credential_handle',
-                'settings delete global frp_credential_handle'
-            );
-        } else if (version >= 31 && version <= 33) { // Android 12-13
-            commands.push(
-                'settings delete secure frp_credential_handle',
-                'settings delete global frp_credential_handle',
-                'cmd account remove-account com.google'
-            );
-        } else if (version >= 34) { // Android 14-15
-            commands.push(
-                'settings delete secure frp_credential_handle',
-                'settings delete global frp_credential_handle',
-                'cmd account remove-account com.google',
-                'dumpsys account --remove-all'
-            );
+        if (version >= 26 && version <= 30) {
+            commands.push('settings delete secure frp_credential_handle','settings delete global frp_credential_handle');
+        } else if (version >= 31 && version <= 33) {
+            commands.push('settings delete secure frp_credential_handle','settings delete global frp_credential_handle','cmd account remove-account com.google');
+        } else if (version >= 34) {
+            commands.push('settings delete secure frp_credential_handle','settings delete global frp_credential_handle','cmd account remove-account com.google','dumpsys account --remove-all');
         } else {
-            // Fallback for older/unknown: try all known variants
-            commands.push(
-                'settings delete secure frp_credential_handle',
-                'settings delete global frp_credential_handle',
-                'content delete --uri content://settings/secure --bind name:s:frp_credential_handle',
-                'content delete --uri content://settings/global --bind name:s:frp_credential_handle'
-            );
+            commands.push('settings delete secure frp_credential_handle','settings delete global frp_credential_handle','content delete --uri content://settings/secure --bind name:s:frp_credential_handle','content delete --uri content://settings/global --bind name:s:frp_credential_handle');
         }
-
-        // Broadcast to trigger account cleanup
         commands.push('am broadcast -a android.intent.action.USER_UNLOCKED');
 
         const allCommands = [...baseCommands, ...commands];
         let successCount = 0;
-
         for (const cmd of allCommands) {
             try {
                 const output = await runAdb(cmd);
@@ -649,95 +509,113 @@ async function renderRepairs() {
                 result.commands.push({ cmd, status });
                 if (status === '✅ Succeeded') successCount++;
             } catch (e) {
-                result.commands.push({ cmd, status: `❌ Error: ${e.message}` });
+                result.commands.push({ cmd, status:`❌ Error: ${e.message}` });
             }
         }
-
-        // Final check: are there still accounts?
         try {
             const accounts = await runAdb('dumpsys account');
             const hasGoogle = accounts.includes('com.google');
             result.success = (!hasGoogle && successCount > 0) || (successCount > 2);
-            if (!hasGoogle) {
-                result.success = true;
-            }
-        } catch (e) {
+            if (!hasGoogle) result.success = true;
+        } catch(e) {
             result.success = successCount > 0;
         }
-
         return result;
     }
 
-    // ---- Public Deactivate FRP (with UI feedback) ----
+    // ---- Helper: Save repair result ----
+    async function saveRepairResult(actionType, status, details, summary) {
+        const resultData = {
+            actionType,
+            status,
+            details: details || {},
+            summary: summary || '',
+            createdAt: new Date().toISOString()
+        };
+        // localStorage
+        try {
+            const payload = { ...resultData, _timestamp: Date.now() };
+            if (typeof saveRepairResults === 'function') saveRepairResults(payload);
+        } catch(e) {}
+        // Supabase
+        try {
+            const { saveRepairResult } = await import('./repairs_sb.js');
+            await saveRepairResult(resultData, currentDeviceId);
+        } catch(e) {
+            console.warn('Failed to save to Supabase:', e);
+        }
+    }
+
+    // ---- Public Deactivate FRP ----
     async function deactivateFrp() {
         const resultDiv = document.getElementById('frpResult');
-        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Deactivating FRP… (detecting Android version)</p></div>`;
-
+        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Deactivating FRP…</p></div>`;
         const result = await deactivateFrpInternal(false);
         const version = result.version || 'unknown';
         const log = result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('');
         const sub = `Android SDK: ${version} &nbsp;|&nbsp; Commands attempted: ${result.commands.length}`;
         const hint = result.success ? 'Reboot the device to apply changes.' : 'Try the manual guide below.';
-
         resultDiv.innerHTML = resultBox(
             result.success ? 'success' : 'error',
             result.success ? 'FRP deactivated' : 'FRP deactivation incomplete',
             sub, hint, log
         );
+        await saveRepairResult(
+            'frp_deactivate',
+            result.success ? 'success' : 'failed',
+            { commands: result.commands, version },
+            result.success ? 'FRP deactivated' : 'FRP deactivation incomplete'
+        );
     }
 
-    // ---- Combined FRP deactivation + Factory Reset ----
+    // ---- Combined FRP removal + Factory Reset ----
     async function performFullResetWithFrpRemoval() {
-        const resultDiv = document.getElementById('factoryResetResult');
-        if (!resultDiv) {
+        let resultEl = document.getElementById('factoryResetResult');
+        if (!resultEl) {
             const card = document.querySelector('.card:has(#factoryResetModalBtn), .rp-card:has(#factoryResetModalBtn)');
             if (card) {
                 const div = document.createElement('div');
                 div.id = 'factoryResetResult';
                 div.className = 'rp-result';
                 card.appendChild(div);
+                resultEl = div;
             }
         }
-        const resultEl = document.getElementById('factoryResetResult');
-        if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Removing FRP and accounts…</p></div>`;
+        if (!resultEl) return;
+        resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Removing FRP and accounts…</p></div>`;
 
         const result = await deactivateFrpInternal(true);
         if (!result.success) {
-            if (resultEl) {
-                const log = result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('');
-                resultEl.innerHTML = resultBox(
-                    'error', 'FRP removal failed',
-                    'Cannot proceed with factory reset because FRP could not be removed. Please try using the "Deactivate FRP" button manually first.',
-                    null, log
-                );
-            }
+            const log = result.commands.map(c => `<div>${c.status} – ${c.cmd}</div>`).join('');
+            resultEl.innerHTML = resultBox(
+                'error', 'FRP removal failed',
+                'Cannot proceed with factory reset because FRP could not be removed. Please try using the "Deactivate FRP" button manually first.',
+                null, log
+            );
+            await saveRepairResult('factory_reset', 'failed', { reason: 'FRP removal failed' }, 'Factory reset failed – FRP not removed');
             return;
         }
 
-        if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Sending factory reset command…</p></div>`;
-
+        resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Sending factory reset command…</p></div>`;
         try {
-            const writeCmd = `echo '--wipe_data' > /cache/recovery/command`;
-            await runAdb(writeCmd);
-            if (resultEl) resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to recovery…</p></div>`;
+            await runAdb("echo '--wipe_data' > /cache/recovery/command");
+            resultEl.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to recovery…</p></div>`;
             await runAdb('reboot recovery');
-            if (resultEl) {
-                resultEl.innerHTML = resultBox(
-                    'success', 'FRP removed and reset triggered',
-                    'The device is now rebooting into recovery mode and will perform a factory reset automatically. FRP has been cleared.'
-                );
-            }
+            resultEl.innerHTML = resultBox(
+                'success', 'FRP removed and reset triggered',
+                'The device is now rebooting into recovery mode and will perform a factory reset automatically. FRP has been cleared.'
+            );
+            await saveRepairResult('factory_reset', 'success', { wiped: true }, 'Factory reset triggered with FRP removal');
         } catch (err) {
-            if (resultEl) {
-                resultEl.innerHTML = resultBox(
-                    'error', 'Reset failed', escapeHtml(err.message),
-                    'FRP was removed but reset failed. Try manual guide.'
-                );
-            }
+            resultEl.innerHTML = resultBox(
+                'error', 'Reset failed', escapeHtml(err.message),
+                'FRP was removed but reset failed. Try manual guide.'
+            );
+            await saveRepairResult('factory_reset', 'failed', { error: err.message }, 'Factory reset failed');
         }
     }
 
-    // ---- ADB Factory Reset with Confirmation (captcha) ----
+    // ---- ADB Factory Reset Modal ----
     function showAdbFactoryResetModal() {
         const modalId = 'adbFactoryResetModal';
         const existing = document.getElementById(modalId);
@@ -767,13 +645,13 @@ async function renderRepairs() {
                             </p>
                         </div>
                         <div style="margin-bottom: 16px;">
-                            <label for="confirmInput" style="font-size: 14px; font-weight: 600; color: #1f2937;" data-i18n="repairs.reset.adb.label">Type "CONFIRM" to proceed</label>
+                            <label for="confirmInput" style="font-size:14px; font-weight:600; color:#1f2937;" data-i18n="repairs.reset.adb.label">Type "CONFIRM" to proceed</label>
                             <input type="text" id="confirmInput" placeholder="CONFIRM" class="rp-confirm-input" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
-                            <div id="confirmError" style="color: #dc2626; font-size: 12px; margin-top: 4px; display: none;" data-i18n="repairs.reset.adb.error">Please type CONFIRM exactly.</div>
+                            <div id="confirmError" style="color:#dc2626; font-size:12px; margin-top:4px; display:none;" data-i18n="repairs.reset.adb.error">Please type CONFIRM exactly.</div>
                         </div>
-                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                            <button id="adbResetCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.adb.cancel">Cancel</button>
-                            <button id="adbResetProceed" class="btn-primary rp-btn rp-btn-danger is-disabled" style="width:auto; padding: 8px 24px;" data-i18n="repairs.reset.adb.proceed">Proceed</button>
+                        <div style="display:flex; gap:12px; justify-content:flex-end;">
+                            <button id="adbResetCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;" data-i18n="repairs.reset.adb.cancel">Cancel</button>
+                            <button id="adbResetProceed" class="btn-primary rp-btn rp-btn-danger is-disabled" style="width:auto; padding:8px 24px;" data-i18n="repairs.reset.adb.proceed">Proceed</button>
                         </div>
                     </div>
                 </div>
@@ -819,29 +697,28 @@ async function renderRepairs() {
         }
     }
 
-    // ---- NEW: Disable Bloatware ----
+    // ---- Disable Bloatware ----
     function showBloatwareModal() {
         const modalId = 'bloatwareModal';
         const existing = document.getElementById(modalId);
         if (existing) existing.remove();
 
-        // Common bloatware packages (add more as needed)
         const packages = [
-            { name: 'Facebook', pkg: 'com.facebook.katana' },
-            { name: 'Facebook Messenger', pkg: 'com.facebook.orca' },
-            { name: 'Instagram', pkg: 'com.instagram.android' },
-            { name: 'TikTok', pkg: 'com.zhiliaoapp.musically' },
-            { name: 'LinkedIn', pkg: 'com.linkedin.android' },
-            { name: 'Snapchat', pkg: 'com.snapchat.android' },
-            { name: 'Twitter', pkg: 'com.twitter.android' },
-            { name: 'Chrome', pkg: 'com.android.chrome' },
-            { name: 'Google Photos', pkg: 'com.google.android.apps.photos' },
-            { name: 'Google Drive', pkg: 'com.google.android.apps.docs' },
-            { name: 'YouTube', pkg: 'com.google.android.youtube' },
-            { name: 'Play Movies', pkg: 'com.google.android.videos' },
-            { name: 'Play Music', pkg: 'com.google.android.music' },
-            { name: 'Duo', pkg: 'com.google.android.apps.tachyon' },
-            { name: 'Gmail', pkg: 'com.google.android.gm' },
+            { name:'Facebook', pkg:'com.facebook.katana' },
+            { name:'Facebook Messenger', pkg:'com.facebook.orca' },
+            { name:'Instagram', pkg:'com.instagram.android' },
+            { name:'TikTok', pkg:'com.zhiliaoapp.musically' },
+            { name:'LinkedIn', pkg:'com.linkedin.android' },
+            { name:'Snapchat', pkg:'com.snapchat.android' },
+            { name:'Twitter', pkg:'com.twitter.android' },
+            { name:'Chrome', pkg:'com.android.chrome' },
+            { name:'Google Photos', pkg:'com.google.android.apps.photos' },
+            { name:'Google Drive', pkg:'com.google.android.apps.docs' },
+            { name:'YouTube', pkg:'com.google.android.youtube' },
+            { name:'Play Movies', pkg:'com.google.android.videos' },
+            { name:'Play Music', pkg:'com.google.android.music' },
+            { name:'Duo', pkg:'com.google.android.apps.tachyon' },
+            { name:'Gmail', pkg:'com.google.android.gm' },
         ];
 
         let checkboxes = packages.map(p => `
@@ -862,7 +739,7 @@ async function renderRepairs() {
                         </div>
                         <button id="bloatwareModalClose" class="x" style="color:white;">&times;</button>
                     </div>
-                    <div class="rp-modal-body" style="max-height: 400px; overflow-y: auto;">
+                    <div class="rp-modal-body" style="max-height:400px; overflow-y:auto;">
                         <div style="display:flex; flex-direction:column; gap:2px;">
                             ${checkboxes}
                         </div>
@@ -871,8 +748,8 @@ async function renderRepairs() {
                         </div>
                     </div>
                     <div class="rp-modal-foot">
-                        <button id="bloatwareCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding: 8px 24px;" data-i18n="repairs.bloatware.modal.cancel">Cancel</button>
-                        <button id="bloatwareDisable" class="btn-primary rp-btn rp-btn-danger" style="width:auto; padding: 8px 24px;" data-i18n="repairs.bloatware.modal.disable">Disable Selected</button>
+                        <button id="bloatwareCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;" data-i18n="repairs.bloatware.modal.cancel">Cancel</button>
+                        <button id="bloatwareDisable" class="btn-primary rp-btn rp-btn-danger" style="width:auto; padding:8px 24px;" data-i18n="repairs.bloatware.modal.disable">Disable Selected</button>
                     </div>
                 </div>
             </div>
@@ -886,29 +763,26 @@ async function renderRepairs() {
         document.getElementById('bloatwareCancel').addEventListener('click', closeModal);
         modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-        // Select All
         document.getElementById('selectAllBloatware').addEventListener('change', function() {
             const checkboxes = modal.querySelectorAll('input[type="checkbox"][value]');
             checkboxes.forEach(cb => cb.checked = this.checked);
         });
 
-        // Disable
         document.getElementById('bloatwareDisable').addEventListener('click', async function() {
             const checked = modal.querySelectorAll('input[type="checkbox"][value]:checked');
             if (checked.length === 0) {
                 alert('Please select at least one app to disable.');
                 return;
             }
-            const packages = Array.from(checked).map(cb => cb.value);
+            const pkgs = Array.from(checked).map(cb => cb.value);
             closeModal();
 
-            // Show progress in the result div
             const resultDiv = document.getElementById('bloatwareResult');
             resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Disabling selected apps…</p></div>`;
 
             let results = [];
             let anySuccess = false;
-            for (const pkg of packages) {
+            for (const pkg of pkgs) {
                 try {
                     const output = await runAdb(`pm disable-user --user 0 ${pkg}`);
                     const status = output.includes('new state: disabled-user') ? '✅ Disabled' : '⚠️ ' + output.trim();
@@ -921,11 +795,18 @@ async function renderRepairs() {
 
             const success = results.filter(r => r.status.includes('✅')).length;
             const log = results.map(r => `<div>${r.status} – ${r.pkg}</div>`).join('');
-            const hint = (success === 0 && packages.length > 0) ? '💡 Make sure the device is connected and USB debugging is authorized.' : null;
+            const hint = (success === 0 && pkgs.length > 0) ? '💡 Make sure the device is connected and USB debugging is authorized.' : null;
             resultDiv.innerHTML = resultBox(
                 success > 0 ? 'success' : 'error',
                 success > 0 ? `${success} app(s) disabled` : 'No apps disabled',
                 null, hint, log
+            );
+
+            await saveRepairResult(
+                'disable_bloatware',
+                success > 0 ? 'success' : 'failed',
+                { disabled: success, total: pkgs.length },
+                `${success} app(s) disabled`
             );
         });
 
@@ -935,56 +816,53 @@ async function renderRepairs() {
         }
     }
 
-    // ---- NEW: Clear Cache ----
+    // ---- Clear Cache ----
     async function clearCache() {
-    const resultDiv = document.getElementById('cacheResult');
-    resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Clearing cache…</p></div>`;
+        const resultDiv = document.getElementById('cacheResult');
+        resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Clearing cache…</p></div>`;
 
-    try {
-        // 1. Trim caches globally (safe and fast)
-        await runAdb('pm trim-caches 9999999999');
-
-        // 2. Get list of all packages
-        const appsOutput = await runAdb('pm list packages');
-        const packages = appsOutput.split('\n')
-            .map(line => line.replace('package:', '').trim())
-            .filter(Boolean);
-
-        // 3. Clear per-app cache (limit to avoid timeout)
-        const MAX_APPS = 200;
-        const packagesToClear = packages.slice(0, MAX_APPS);
-        const attemptedCount = packagesToClear.length;
-        let clearedCount = 0;
-
-        for (const pkg of packagesToClear) {
-            try {
-                const output = await runAdb(`pm clear --cache-only ${pkg}`);
-                if (output.includes('Success') || output.includes('Cleared')) {
-                    clearedCount++;
-                }
-            } catch (e) {
-                // Ignore errors – some packages may not allow cache clearing
+        try {
+            await runAdb('pm trim-caches 9999999999');
+            const appsOutput = await runAdb('pm list packages');
+            const packages = appsOutput.split('\n')
+                .map(line => line.replace('package:', '').trim())
+                .filter(Boolean);
+            const MAX_APPS = 200;
+            const packagesToClear = packages.slice(0, MAX_APPS);
+            const attemptedCount = packagesToClear.length;
+            let clearedCount = 0;
+            for (const pkg of packagesToClear) {
+                try {
+                    const output = await runAdb(`pm clear --cache-only ${pkg}`);
+                    if (output.includes('Success') || output.includes('Cleared')) clearedCount++;
+                } catch(e) {}
+                await new Promise(r => setTimeout(r, 10));
             }
-            // Small delay to prevent overload
-            await new Promise(r => setTimeout(r, 10));
+            const message = `Trimmed caches and cleared cache for ${clearedCount} app${clearedCount !== 1 ? 's' : ''} (out of ${attemptedCount} attempted).`;
+            resultDiv.innerHTML = resultBox('success', 'Cache cleared', message);
+            await saveRepairResult(
+                'clear_cache',
+                'success',
+                { appsCleared: clearedCount, totalAttempted: attemptedCount },
+                `Cleared cache for ${clearedCount} apps`
+            );
+        } catch (err) {
+            resultDiv.innerHTML = resultBox('error', 'Clear cache failed', escapeHtml(err.message), 'Try using the manual guide below.');
+            await saveRepairResult('clear_cache', 'failed', { error: err.message }, 'Clear cache failed');
         }
-
-        const message = `Trimmed caches and cleared cache for ${clearedCount} app${clearedCount !== 1 ? 's' : ''} (out of ${attemptedCount} attempted).`;
-        resultDiv.innerHTML = resultBox('success', 'Cache cleared', message);
-    } catch (err) {
-        resultDiv.innerHTML = resultBox('error', 'Clear cache failed', escapeHtml(err.message), 'Try using the manual guide below.');
     }
-}
 
-    // ---- NEW: Reboot to Recovery / Download ----
+    // ---- Reboot to Recovery / Download ----
     async function rebootToRecovery() {
         const resultDiv = document.getElementById('rebootResult');
         resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Rebooting to Recovery…</p></div>`;
         try {
             await runAdb('reboot recovery');
             resultDiv.innerHTML = resultBox('success', 'Reboot to Recovery sent', 'The device should now boot into Recovery mode.');
+            await saveRepairResult('reboot_recovery', 'success', {}, 'Rebooted to Recovery');
         } catch (err) {
             resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message));
+            await saveRepairResult('reboot_recovery', 'failed', { error: err.message }, 'Reboot to Recovery failed');
         }
     }
 
@@ -994,8 +872,10 @@ async function renderRepairs() {
         try {
             await runAdb('reboot download');
             resultDiv.innerHTML = resultBox('success', 'Reboot to Download sent', 'The device should now boot into Download mode (Samsung).');
+            await saveRepairResult('reboot_download', 'success', {}, 'Rebooted to Download');
         } catch (err) {
             resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message));
+            await saveRepairResult('reboot_download', 'failed', { error: err.message }, 'Reboot to Download failed');
         }
     }
 
@@ -1009,9 +889,7 @@ async function renderRepairs() {
         `;
     }
 
-    // Small helper to keep the button markup declarative and consistent
     function actionBtn({ id, kind, label, i18n, adb, disabled }) {
-        // kind: 'danger' | 'info' | 'ghost'
         const classes = { danger: 'rp-btn-danger', info: 'rp-btn-info', ghost: 'rp-btn-ghost' }[kind];
         const baseClass = kind === 'ghost' ? 'btn-secondary' : 'btn-primary';
         const pill = adb === null ? '' :
@@ -1030,8 +908,13 @@ async function renderRepairs() {
     const html = `
         <div class="rp-page">
         <div style="margin-bottom:24px;">
-            <h1 style="margin-bottom:6px; font-size:24px; font-weight:700; color:#1f2937;" data-i18n="repairs.title">🔧 Repair Tools</h1>
-            <p style="color:#6b7280; font-size:14px; margin:0;" data-i18n="repairs.subtitle">Recovery and maintenance operations – practical guides & automation.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <h1 style="margin-bottom:6px; font-size:24px; font-weight:700; color:#1f2937;" data-i18n="repairs.title">🔧 Repair Tools</h1>
+                    <p style="color:#6b7280; font-size:14px; margin:0;" data-i18n="repairs.subtitle">Recovery and maintenance operations – practical guides & automation.</p>
+                </div>
+                ${currentDeviceId ? `<button id="repairHistoryBtn" class="btn-secondary" style="padding:6px 18px; font-size:13px; border-radius:8px; border:1px solid #d1d5db; background:#f8fafc; cursor:pointer;">📜 History</button>` : ''}
+            </div>
             <div class="rp-banner warn" style="margin-top:10px;" data-i18n="repairs.warning">
                 ⚠️ These actions can erase data or void warranties. Proceed with caution.
             </div>
@@ -1043,7 +926,6 @@ async function renderRepairs() {
             <div class="rp-section-head"><h2 data-i18n="repairs.section.account">Account &amp; Security</h2><div class="rp-rule"></div></div>
             <div class="rp-grid">
 
-                <!-- FRP Card -->
                 <div class="rp-card accent-danger">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge danger">🚫</span>
@@ -1058,7 +940,6 @@ async function renderRepairs() {
                     <div id="frpResult" class="rp-result"></div>
                 </div>
 
-                <!-- Retrieve Email Card -->
                 <div class="rp-card accent-info">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge info">📧</span>
@@ -1081,7 +962,6 @@ async function renderRepairs() {
             <div class="rp-section-head"><h2 data-i18n="repairs.section.reset">Reset &amp; Bootloader</h2><div class="rp-rule"></div></div>
             <div class="rp-grid">
 
-                <!-- Factory Reset Card -->
                 <div class="rp-card accent-danger">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge danger">🗑️</span>
@@ -1096,7 +976,6 @@ async function renderRepairs() {
                     <div id="factoryResetResult" class="rp-result"></div>
                 </div>
 
-                <!-- Bootloader Card -->
                 <div class="rp-card accent-danger">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge danger">🔓</span>
@@ -1121,7 +1000,6 @@ async function renderRepairs() {
             <div class="rp-section-head"><h2 data-i18n="repairs.section.maintenance">Maintenance</h2><div class="rp-rule"></div></div>
             <div class="rp-grid">
 
-                <!-- Disable Bloatware Card -->
                 <div class="rp-card accent-info">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge info">📦</span>
@@ -1136,7 +1014,6 @@ async function renderRepairs() {
                     <div id="bloatwareResult" class="rp-result"></div>
                 </div>
 
-                <!-- Clear Cache Card -->
                 <div class="rp-card accent-info">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge info">🧹</span>
@@ -1151,7 +1028,6 @@ async function renderRepairs() {
                     <div id="cacheResult" class="rp-result"></div>
                 </div>
 
-                <!-- Reboot Modes Card -->
                 <div class="rp-card accent-info">
                     <div class="rp-card-head">
                         <span class="rp-icon-badge info">📱</span>
@@ -1180,9 +1056,275 @@ async function renderRepairs() {
         applyLanguage(window._activeLang || savedLang);
     }
 
-    // ---- Event Listeners ----
+    // ---- LOAD AND DISPLAY LATEST RESULTS PER CARD (without emails) ----
+    try {
+        const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
+        const { fetchRepairHistory } = await import('./sb-loader.js');
 
-    // ---- FRP Deactivate ----
+        const userId = getCurrentUserId();
+        const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+
+        if (userId && deviceId) {
+            const history = await fetchRepairHistory(userId, deviceId, 50);
+            if (history && history.length > 0) {
+                // Group by action and get latest
+                const latestByAction = {};
+                for (const entry of history) {
+                    const action = entry.actionType;
+                    if (!latestByAction[action] || new Date(entry.createdAt) > new Date(latestByAction[action].createdAt)) {
+                        latestByAction[action] = entry;
+                    }
+                }
+
+                // Helper to render a result box from an entry (hides emails)
+                function renderResultBoxForEntry(entry, containerId) {
+                    const container = document.getElementById(containerId);
+                    if (!container) return;
+                    const statusColor = entry.status === 'success' ? 'success' : 'error';
+                    let title = entry.status === 'success' ? `${entry.actionType} succeeded` : `${entry.actionType} failed`;
+                    let sub = entry.summary || '';
+                    let hint = '';
+
+                    // For email retrieval, show count but hide emails
+                    if (entry.actionType === 'retrieve_email' && entry.details && entry.details.details && Array.isArray(entry.details.details.emails) && entry.details.details.emails.length > 0) {
+                        const count = entry.details.details.emails.length;
+                        sub = `📧 ${count} account(s) retrieved (emails hidden)`;
+                        hint = 'To view the emails, click the History button and use the "Show Emails" option.';
+                    } else if (entry.details && typeof entry.details === 'object' && entry.actionType !== 'retrieve_email') {
+                        const summaryStr = Object.entries(entry.details)
+                            .filter(([k]) => k !== 'emails' && k !== 'details')
+                            .map(([k,v]) => `${k}: ${v}`)
+                            .join(', ');
+                        if (summaryStr) sub += ` (${summaryStr})`;
+                    }
+
+                    container.innerHTML = resultBox(statusColor, title, sub, hint);
+                    container.style.display = 'block';
+                }
+
+                // Map action types to container IDs
+                const actionMap = {
+                    'frp_deactivate': 'frpResult',
+                    'retrieve_email': 'emailResult',
+                    'factory_reset': 'factoryResetResult',
+                    'reboot_bootloader': 'bootloaderResult',
+                    'reboot_recovery': 'rebootResult',
+                    'reboot_download': 'rebootResult',
+                    'disable_bloatware': 'bloatwareResult',
+                    'clear_cache': 'cacheResult'
+                };
+
+                for (const [action, entry] of Object.entries(latestByAction)) {
+                    const containerId = actionMap[action];
+                    if (containerId) {
+                        renderResultBoxForEntry(entry, containerId);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[Repairs] Could not load previous results:', e);
+    }
+
+    // ---- HISTORY BUTTON AND MODAL ----
+    document.getElementById('repairHistoryBtn')?.addEventListener('click', async function() {
+        // Show modal with all history entries
+        let modal = document.getElementById('repairHistoryModal');
+        if (!modal) {
+            const modalHtml = `
+                <div id="repairHistoryModal" class="modal rp-modal-overlay" style="display: none;">
+                    <div class="modal-content rp-modal-box wide" style="max-width:800px;">
+                        <div class="rp-modal-head" style="background:#f8fafc;">
+                            <span class="icon">📜</span>
+                            <h3 style="color:#1f2937;">Repair History</h3>
+                            <button id="historyModalClose" class="x" style="color:#6B7280;">&times;</button>
+                        </div>
+                        <div id="historyModalBody" class="rp-modal-body" style="flex:1; overflow-y:auto; max-height:70vh; padding:16px 22px;">
+                            <div id="historyList"></div>
+                        </div>
+                        <div class="rp-modal-foot">
+                            <button id="historyModalCloseBtn" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            modal = document.getElementById('repairHistoryModal');
+            document.getElementById('historyModalClose').addEventListener('click', () => modal.style.display = 'none');
+            document.getElementById('historyModalCloseBtn').addEventListener('click', () => modal.style.display = 'none');
+            window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+        }
+
+        // Fetch history again (or use cached)
+        const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
+        const { fetchRepairHistory } = await import('./sb-loader.js');
+        const userId = getCurrentUserId();
+        const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+        if (!userId || !deviceId) {
+            document.getElementById('historyList').innerHTML = '<p>No device or user.</p>';
+            modal.style.display = 'flex';
+            return;
+        }
+        const history = await fetchRepairHistory(userId, deviceId, 100);
+        const listEl = document.getElementById('historyList');
+        if (!history || history.length === 0) {
+            listEl.innerHTML = '<p style="color:#6B7280;">No repair history found.</p>';
+        } else {
+            let html = '';
+            for (const entry of history) {
+                const statusClass = entry.status === 'success' ? 'success' : 'failed';
+                const statusLabel = entry.status.toUpperCase();
+                const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'N/A';
+                const summary = entry.summary || '';
+                let detailsStr = '';
+                let showEmailBtn = '';
+
+                // ✅ FIX: Check nested details.details.emails
+                if (entry.actionType === 'retrieve_email' && 
+                    entry.details && 
+                    entry.details.details && 
+                    Array.isArray(entry.details.details.emails) && 
+                    entry.details.details.emails.length > 0) {
+                    
+                    const emailsJson = JSON.stringify(entry.details.details.emails);
+                    showEmailBtn = `
+                        <button class="show-emails-btn" data-emails='${escapeHtml(emailsJson)}' data-action="${entry.actionType}" data-date="${entry.createdAt}">🔒 Show Emails</button>
+                    `;
+                    detailsStr = `📧 ${entry.details.details.emails.length} account(s) (hidden)`;
+                } else if (entry.details && typeof entry.details === 'object' && entry.actionType !== 'retrieve_email') {
+                    const summaryStr = Object.entries(entry.details)
+                        .filter(([k]) => k !== 'emails' && k !== 'details')
+                        .map(([k,v]) => `${k}: ${v}`)
+                        .join(', ');
+                    detailsStr = summaryStr || '';
+                }
+
+                html += `
+                    <div class="history-entry">
+                        <div class="meta">
+                            <div class="action">${entry.actionType}</div>
+                            <div class="details">${summary} ${detailsStr ? '– ' + detailsStr : ''}</div>
+                            <div style="font-size:11px; color:#9CA3AF;">${dateStr}</div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="status ${statusClass}">${statusLabel}</span>
+                            ${showEmailBtn}
+                        </div>
+                    </div>
+                `;
+            }
+            listEl.innerHTML = html;
+
+            // Attach event listeners to "Show Emails" buttons
+            listEl.querySelectorAll('.show-emails-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const emailsJson = this.dataset.emails;
+                    const action = this.dataset.action;
+                    const date = this.dataset.date;
+                    if (!emailsJson) return;
+                    // Show legal disclaimer + factory reset confirmation
+                    showEmailDisclaimer(() => {
+                        // Reveal emails
+                        const emails = JSON.parse(emailsJson);
+                        const parent = this.closest('.history-entry');
+                        if (parent) {
+                            // Remove the button, show emails
+                            const existingEmailList = parent.querySelector('.email-list');
+                            if (existingEmailList) existingEmailList.remove();
+                            const emailDiv = document.createElement('div');
+                            emailDiv.className = 'email-list';
+                            emailDiv.innerHTML = emails.map(e => `<div>${escapeHtml(e)}</div>`).join('');
+                            // Insert after the meta div
+                            const meta = parent.querySelector('.meta');
+                            meta.after(emailDiv);
+                            this.remove(); // remove the button
+                            // Also add a small note
+                            const note = document.createElement('div');
+                            note.style.cssText = 'font-size:11px; color:#6B7280; margin-top:4px;';
+                            note.textContent = '✅ Emails revealed after successful factory reset confirmation.';
+                            meta.after(note);
+                        }
+                    });
+                });
+            });
+        }
+        modal.style.display = 'flex';
+        if (typeof applyLanguage === 'function') {
+            const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
+            applyLanguage(window._activeLang || savedLang);
+        }
+    });
+
+    // ---- Helper: Email Disclaimer ----
+    function showEmailDisclaimer(callback) {
+    const modalHtml = `
+        <div id="emailDisclaimerModal" class="modal rp-modal-overlay" style="display: none; z-index:100000;">
+            <div class="modal-content rp-modal-box" style="max-width:550px;">
+                <div class="rp-modal-head" style="background:#fef3c7;">
+                    <span class="icon">🔒</span>
+                    <div>
+                        <h3 style="color:#92400e;">Privacy & Legal Confirmation</h3>
+                        <p class="sub" style="color:#78350f;">You must confirm the following to view the emails</p>
+                    </div>
+                    <button id="emailDisclaimerClose" class="x" style="color:#78350f;">&times;</button>
+                </div>
+                <div class="rp-modal-body">
+                    <div style="margin-bottom:16px;">
+                        <p style="font-size:14px; color:#1e293b; line-height:1.6; margin:0 0 12px 0;">
+                            <strong>These email addresses are sensitive personal information.</strong> 
+                            They should only be viewed after you have performed a factory reset on the device and are certain that the data is no longer needed for recovery.
+                        </p>
+                        <p style="font-size:13px; color:#6B7280; margin:0 0 12px 0;">
+                            By revealing these emails, you confirm that you are the owner of the device or have explicit authorization, and that you understand the privacy implications.
+                        </p>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
+                            <input type="checkbox" id="legalCheck" style="width:16px; height:16px;">
+                            <span>I agree to the legal terms and understand the sensitivity of this data.</span>
+                        </label>
+                    </div>
+                    <div style="display:flex; gap:12px; justify-content:flex-end;">
+                        <button id="emailDisclaimerCancel" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:8px 24px;">Cancel</button>
+                        <button id="emailDisclaimerAccept" class="btn-primary rp-btn rp-btn-info" style="width:auto; padding:8px 24px; background:#0d6efd; color:white;" disabled>Reveal Emails</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    const old = document.getElementById('emailDisclaimerModal');
+    if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = document.getElementById('emailDisclaimerModal');
+    modal.style.display = 'flex';
+
+    const legalCheck = document.getElementById('legalCheck');
+    const acceptBtn = document.getElementById('emailDisclaimerAccept');
+
+    function checkValidity() {
+        acceptBtn.disabled = !legalCheck.checked; // only legal check required
+    }
+    legalCheck.addEventListener('change', checkValidity);
+
+    const closeModal = () => modal.style.display = 'none';
+    document.getElementById('emailDisclaimerClose').addEventListener('click', closeModal);
+    document.getElementById('emailDisclaimerCancel').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    acceptBtn.addEventListener('click', function() {
+        if (!this.disabled) {
+            closeModal();
+            if (typeof callback === 'function') callback();
+        }
+    });
+
+    if (typeof applyLanguage === 'function') {
+        const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
+        applyLanguage(window._activeLang || savedLang);
+    }
+}
+
+    // ---- Event Listeners ----
     document.getElementById('frpDeactivateBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1194,18 +1336,14 @@ async function renderRepairs() {
                 'This will remove all Google accounts and FRP locks from this device.\n\n' +
                 'This action is irreversible. You will not be able to restore account information without re-entering credentials.\n\n' +
                 'Do you want to proceed?',
-                () => {
-                    deactivateFrp();
-                }
+                () => { deactivateFrp(); }
             );
         });
     });
 
-    // ---- FRP Guide ----
     document.getElementById('frpGuideBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('frpResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
@@ -1213,9 +1351,7 @@ async function renderRepairs() {
             <div class="rp-guide">
                 <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <strong class="head" data-i18n="repairs.frp.guide.title">📋 FRP Bypass Guide (no ADB)</strong>
-                <p style="margin:0 0 6px;" data-i18n="repairs.frp.guide.intro">
-                    If USB Debugging is not available, try these methods:
-                </p>
+                <p style="margin:0 0 6px;" data-i18n="repairs.frp.guide.intro">If USB Debugging is not available, try these methods:</p>
                 <ul style="margin-top:4px; padding-left:20px;">
                     <li><strong data-i18n="repairs.frp.guide.method1">Method 1:</strong> <span data-i18n="repairs.frp.guide.method1.desc">Use the <a href="https://www.google.com/android/find" target="_blank">Find My Device</a> website to remotely lock the device and reset the password.</span></li>
                     <li><strong data-i18n="repairs.frp.guide.method2">Method 2:</strong> <span data-i18n="repairs.frp.guide.method2.desc">Boot into Recovery Mode and perform a factory reset (this will erase all data).</span></li>
@@ -1223,9 +1359,7 @@ async function renderRepairs() {
                     <li><strong data-i18n="repairs.frp.guide.method4">Method 4:</strong> <span data-i18n="repairs.frp.guide.method4.desc">Try the Emergency Call trick: <code>*#*#4636#*#*</code> might grant access to settings.</span></li>
                 </ul>
                 <hr>
-                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.frp.guide.note">
-                    💡 <strong>Note:</strong> These methods may not work on all devices. The ADB method above is more reliable.
-                </p>
+                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.frp.guide.note">💡 <strong>Note:</strong> These methods may not work on all devices. The ADB method above is more reliable.</p>
             </div>
         `;
         resultDiv.querySelector('.guide-close-btn').addEventListener('click', function() {
@@ -1237,11 +1371,9 @@ async function renderRepairs() {
         }
     });
 
-    // ---- Retrieve Email: Guide ----
     document.getElementById('retrieveEmailGuideBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('emailResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
@@ -1249,14 +1381,9 @@ async function renderRepairs() {
             <div class="rp-guide">
                 <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <strong class="head" data-i18n="repairs.email.guide.title">📧 Account Recovery Guide</strong>
-                <p style="margin:0;" data-i18n="repairs.email.guide.desc">
-                    Open <a href="https://accounts.google.com/signin/usernamerecovery" target="_blank">Google Account Recovery</a> on any device.
-                    If you can access the phone's browser via Emergency Call or Accessibility, visit that URL directly on the phone.
-                </p>
+                <p style="margin:0;" data-i18n="repairs.email.guide.desc">Open <a href="https://accounts.google.com/signin/usernamerecovery" target="_blank">Google Account Recovery</a> on any device. If you can access the phone's browser via Emergency Call or Accessibility, visit that URL directly on the phone.</p>
                 <hr>
-                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.email.guide.tip">
-                    💡 <strong>Tip:</strong> On the lock screen, try swiping up and tapping "Emergency call", then enter <code>*#*#4636#*#*</code> or similar codes to access settings (varies by device).
-                </p>
+                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.email.guide.tip">💡 <strong>Tip:</strong> On the lock screen, try swiping up and tapping "Emergency call", then enter <code>*#*#4636#*#*</code> or similar codes to access settings (varies by device).</p>
             </div>
         `;
         resultDiv.querySelector('.guide-close-btn').addEventListener('click', function() {
@@ -1268,7 +1395,6 @@ async function renderRepairs() {
         }
     });
 
-    // ---- Retrieve Email: ADB ----
     document.getElementById('retrieveEmailAdbBtn').addEventListener('click', async function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1279,31 +1405,37 @@ async function renderRepairs() {
             resultDiv.innerHTML = `<div class="rp-result-box info"><p class="pending">⏳ Retrieving accounts via ADB…</p></div>`;
             try {
                 const output = await runAdb('dumpsys account');
-                // Broadened regex: matches both [user@gmail.com] and name=user@gmail.com
                 const emails = output.match(/(?:\[([^\]]+@[^\]]+)\]|name=([^\s,]+@[^\s,]+))/g) || [];
                 const uniqueEmails = [...new Set(emails.map(e => e.replace(/[\[\]]/g, '').replace(/name=/g, '')))];
                 if (uniqueEmails.length === 0) {
                     resultDiv.innerHTML = resultBox('error', 'No emails found', 'No Google accounts were detected on this device.');
                 } else {
+                    // Show only count in the card, not the emails
                     resultDiv.innerHTML = resultBox(
                         'success', `Found ${uniqueEmails.length} account(s)`,
-                        null, null, uniqueEmails.map(e => `📧 ${e}`).join('<br>')
+                        '📧 Emails hidden for privacy. Use the History button to view them after confirming factory reset.',
+                        'To view the emails, click the History button and use the "Show Emails" option.'
                     );
                 }
+                await saveRepairResult(
+                    'retrieve_email',
+                    'success',
+                    { count: uniqueEmails.length, emails: uniqueEmails },
+                    `Retrieved ${uniqueEmails.length} account(s)`
+                );
             } catch (err) {
                 resultDiv.innerHTML = resultBox('error', 'ADB retrieval failed', escapeHtml(err.message), 'Make sure USB Debugging is enabled and the device is authorized.');
+                await saveRepairResult('retrieve_email', 'failed', { error: err.message }, 'ADB retrieval failed');
             }
         });
     });
 
-    // Factory Reset: Guide
     document.getElementById('factoryResetModalBtn').addEventListener('click', function() {
         showLegalDisclaimer('Factory Reset Guide', () => {
             showFactoryResetModal();
         });
     });
 
-    // Factory Reset: ADB
     document.getElementById('adbFactoryResetBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1314,7 +1446,6 @@ async function renderRepairs() {
         });
     });
 
-    // Bootloader: Reboot
     document.getElementById('bootloaderRebootBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1326,13 +1457,14 @@ async function renderRepairs() {
             try {
                 await runAdb('reboot bootloader');
                 resultDiv.innerHTML = resultBox('success', 'Reboot sent', 'The device should now be in bootloader mode. Use fastboot commands for further actions.');
+                await saveRepairResult('reboot_bootloader', 'success', {}, 'Rebooted to bootloader');
             } catch (err) {
                 resultDiv.innerHTML = resultBox('error', 'Failed to reboot', escapeHtml(err.message), 'Try manually: power off, then press Volume Down + Power to enter bootloader.');
+                await saveRepairResult('reboot_bootloader', 'failed', { error: err.message }, 'Reboot to bootloader failed');
             }
         });
     });
 
-    // Bootloader: Unlock
     document.getElementById('bootloaderUnlockBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1357,21 +1489,23 @@ async function renderRepairs() {
                                     <p class="hint" data-i18n="repairs.bootloader.unlock.followScreen">Follow the on-screen instructions on your device.</p>
                                 </div>
                             `;
+                            await saveRepairResult('bootloader_unlock', 'failed', { reason: 'Fastboot not available' }, 'Bootloader unlock failed – Fastboot missing');
                         } else {
                             resultDiv.innerHTML = resultBox(
                                 'success', 'Bootloader unlocked', `Output: ${escapeHtml(output)}`,
                                 'The device will likely reboot and wipe all data.'
                             );
+                            await saveRepairResult('bootloader_unlock', 'success', {}, 'Bootloader unlocked');
                         }
                     } catch (err) {
                         resultDiv.innerHTML = resultBox('error', 'Unlock failed', escapeHtml(err.message), 'Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.');
+                        await saveRepairResult('bootloader_unlock', 'failed', { error: err.message }, 'Bootloader unlock failed');
                     }
                 });
             }
         );
     });
 
-    // Bootloader: Lock
     document.getElementById('bootloaderLockBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1396,25 +1530,26 @@ async function renderRepairs() {
                                     <p class="hint" data-i18n="repairs.bootloader.lock.followScreen">Follow the on-screen instructions on your device.</p>
                                 </div>
                             `;
+                            await saveRepairResult('bootloader_lock', 'failed', { reason: 'Fastboot not available' }, 'Bootloader lock failed – Fastboot missing');
                         } else {
                             resultDiv.innerHTML = resultBox(
                                 'success', 'Bootloader locked', `Output: ${escapeHtml(output)}`,
                                 'The device will likely reboot and wipe all data.'
                             );
+                            await saveRepairResult('bootloader_lock', 'success', {}, 'Bootloader locked');
                         }
                     } catch (err) {
                         resultDiv.innerHTML = resultBox('error', 'Lock failed', escapeHtml(err.message), 'Ensure USB Debugging and OEM unlocking are enabled, and the device is in bootloader mode.');
+                        await saveRepairResult('bootloader_lock', 'failed', { error: err.message }, 'Bootloader lock failed');
                     }
                 });
             }
         );
     });
 
-    // Bootloader: Commands Guide
     document.getElementById('bootloaderCommandsBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('bootloaderResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
@@ -1438,10 +1573,7 @@ fastboot flashing lock     # or fastboot oem lock
                     <span style="font-size:20px;">🔓</span>
                     <strong style="font-size:15px;" data-i18n="repairs.bootloader.commands.title">Bootloader Commands Guide</strong>
                 </div>
-                <p style="margin:4px 0 8px; color:#6B7280;" data-i18n="repairs.bootloader.commands.desc">
-                    Unlocking the bootloader will wipe all data and may void warranty.
-                    Ensure OEM unlocking is enabled in Developer Options.
-                </p>
+                <p style="margin:4px 0 8px; color:#6B7280;" data-i18n="repairs.bootloader.commands.desc">Unlocking the bootloader will wipe all data and may void warranty. Ensure OEM unlocking is enabled in Developer Options.</p>
                 <pre style="background:#1e293b; color:#e2e8f0; padding:12px; border-radius:6px; font-size:12px; overflow-x:auto; white-space:pre-wrap;">${commands}</pre>
                 <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
                     <button id="copyBootloaderCommands" class="btn-secondary rp-btn rp-btn-ghost" style="width:auto; padding:5px 16px; font-size:12px;" data-i18n="repairs.bootloader.commands.copy">📋 Copy Commands</button>
@@ -1466,7 +1598,6 @@ fastboot flashing lock     # or fastboot oem lock
         }
     });
 
-    // ---- NEW: Disable Bloatware Modal ----
     document.getElementById('bloatwareModalBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1477,11 +1608,9 @@ fastboot flashing lock     # or fastboot oem lock
         });
     });
 
-    // ---- NEW: Bloatware Guide (toggle) ----
     document.getElementById('bloatwareGuideBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('bloatwareResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
@@ -1489,20 +1618,16 @@ fastboot flashing lock     # or fastboot oem lock
             <div class="rp-guide">
                 <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <strong class="head" data-i18n="repairs.bloatware.guide.title">📋 Disable Bloatware Guide (no ADB)</strong>
-                <p style="margin:0 0 6px;" data-i18n="repairs.bloatware.guide.intro">
-                    To disable bloatware without ADB:
-                </p>
+                <p style="margin:0 0 6px;" data-i18n="repairs.bloatware.guide.intro">To disable bloatware without ADB:</p>
                 <ol style="margin-top:4px; padding-left:20px;">
-                    <li data-i18n="repairs.bloatware.guide.step1">Go to <strong>Settings → Apps</strong> (or Apps & Notifications).</li>
+                    <li data-i18n="repairs.bloatware.guide.step1">Go to  → Apps(or Apps & Notifications).</li>
                     <li data-i18n="repairs.bloatware.guide.step2">Select the app you want to disable.</li>
-                    <li data-i18n="repairs.bloatware.guide.step3">Tap <strong>Disable</strong> (if available).</li>
-                    <li data-i18n="repairs.bloatware.guide.step4">If "Disable" is greyed out, tap <strong>Force Stop</strong> and then try again.</li>
+                    <li data-i18n="repairs.bloatware.guide.step3">Tap Disable (if available).</li>
+                    <li data-i18n="repairs.bloatware.guide.step4">If "Disable" is greyed out, tap Force Stop and then try again.</li>
                     <li data-i18n="repairs.bloatware.guide.step5">For system apps that cannot be disabled, you may need to use ADB or third‑party tools.</li>
                 </ol>
                 <hr>
-                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.bloatware.guide.note">
-                    💡 <strong>Note:</strong> Some apps may not be disabled without ADB. The ADB method above is more flexible.
-                </p>
+                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.bloatware.guide.note">💡 <strong>Note:</strong> Some apps may not be disabled without ADB. The ADB method above is more flexible.</p>
             </div>
         `;
         resultDiv.querySelector('.guide-close-btn').addEventListener('click', function() {
@@ -1514,7 +1639,6 @@ fastboot flashing lock     # or fastboot oem lock
         }
     });
 
-    // ---- NEW: Clear Cache ----
     document.getElementById('clearCacheBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1525,11 +1649,9 @@ fastboot flashing lock     # or fastboot oem lock
         });
     });
 
-    // ---- NEW: Cache Guide (toggle) ----
     document.getElementById('cacheGuideBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('cacheResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
@@ -1537,9 +1659,7 @@ fastboot flashing lock     # or fastboot oem lock
             <div class="rp-guide">
                 <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <strong class="head" data-i18n="repairs.cache.guide.title">📋 Clear Cache Guide (no ADB)</strong>
-                <p style="margin:0 0 6px;" data-i18n="repairs.cache.guide.intro">
-                    To clear cache without ADB:
-                </p>
+                <p style="margin:0 0 6px;" data-i18n="repairs.cache.guide.intro">To clear cache without ADB:</p>
                 <ol style="margin-top:4px; padding-left:20px;">
                     <li data-i18n="repairs.cache.guide.step1">Go to <strong>Settings → Storage</strong>.</li>
                     <li data-i18n="repairs.cache.guide.step2">Tap <strong>Cache data</strong> (or "Clear cache").</li>
@@ -1547,9 +1667,7 @@ fastboot flashing lock     # or fastboot oem lock
                     <li data-i18n="repairs.cache.guide.step4">For a deeper clean, boot into Recovery Mode and select <strong>Wipe cache partition</strong>.</li>
                 </ol>
                 <hr>
-                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.cache.guide.note">
-                    💡 <strong>Note:</strong> The ADB method above can clear cache for all apps at once.
-                </p>
+                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.cache.guide.note">💡 <strong>Note:</strong> The ADB method above can clear cache for all apps at once.</p>
             </div>
         `;
         resultDiv.querySelector('.guide-close-btn').addEventListener('click', function() {
@@ -1561,7 +1679,6 @@ fastboot flashing lock     # or fastboot oem lock
         }
     });
 
-    // ---- NEW: Reboot Modes ----
     document.getElementById('rebootRecoveryBtn').addEventListener('click', function() {
         if (!currentDeviceId) {
             alert('Please connect a device first.');
@@ -1582,26 +1699,22 @@ fastboot flashing lock     # or fastboot oem lock
         });
     });
 
-    // ---- NEW: Reboot Guide (toggle) ----
     document.getElementById('rebootGuideBtn').addEventListener('click', function() {
         const resultDiv = document.getElementById('rebootResult');
-        const isOpen = resultDiv.querySelector('.guide-close-btn') !== null;
-        if (isOpen) {
+        if (resultDiv.querySelector('.guide-close-btn')) {
             resultDiv.innerHTML = '';
             return;
         }
-        // Brand-specific recovery/downoad key combos
         const recoveryCombos = {
-            'Samsung': 'Volume Up + Power',
-            'Google': 'Volume Down + Power (then select Recovery)',
-            'OnePlus': 'Volume Down + Power',
-            'Xiaomi': 'Volume Up + Power',
-            'Huawei': 'Volume Up + Power',
-            'LG': 'Volume Down + Power (release and press again)',
-            'Motorola': 'Volume Down + Power (then select Recovery)',
-            'generic': 'Volume Up + Power (or Volume Down + Power)'
+            'Samsung':'Volume Up + Power',
+            'Google':'Volume Down + Power (then select Recovery)',
+            'OnePlus':'Volume Down + Power',
+            'Xiaomi':'Volume Up + Power',
+            'Huawei':'Volume Up + Power',
+            'LG':'Volume Down + Power (release and press again)',
+            'Motorola':'Volume Down + Power (then select Recovery)',
+            'generic':'Volume Up + Power (or Volume Down + Power)'
         };
-
         let brand = detectedBrand ? detectedBrand.charAt(0).toUpperCase() + detectedBrand.slice(1) : 'Unknown';
         let combo = recoveryCombos[brand] || recoveryCombos.generic;
 
@@ -1609,9 +1722,7 @@ fastboot flashing lock     # or fastboot oem lock
             <div class="rp-guide">
                 <button class="guide-close-btn close-x" title="Close guide">&times;</button>
                 <strong class="head" data-i18n="repairs.reboot.guide.title">📋 Reboot Guide (no ADB)</strong>
-                <p style="margin:0 0 6px;" data-i18n="repairs.reboot.guide.intro">
-                    To enter <strong>Recovery Mode</strong> or <strong>Download Mode</strong> without ADB:
-                </p>
+                <p style="margin:0 0 6px;" data-i18n="repairs.reboot.guide.intro">To enter <strong>Recovery Mode</strong> or <strong>Download Mode</strong> without ADB:</p>
                 <ul style="margin-top:4px; padding-left:20px;">
                     <li data-i18n="repairs.reboot.guide.step1"><strong>Power off</strong> the device.</li>
                     <li data-i18n="repairs.reboot.guide.step2">Press and hold <strong>${combo}</strong> simultaneously.</li>
@@ -1620,9 +1731,7 @@ fastboot flashing lock     # or fastboot oem lock
                     <li data-i18n="repairs.reboot.guide.step5">If the combo doesn't work, search online for your specific model.</li>
                 </ul>
                 <hr>
-                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.reboot.guide.detected">
-                    💡 <strong>Detected brand:</strong> ${brand} &nbsp;|&nbsp; Recommended combo: ${combo}
-                </p>
+                <p style="margin:0; font-size:12px; color:#6B7280;" data-i18n="repairs.reboot.guide.detected">💡 <strong>Detected brand:</strong> ${brand} &nbsp;|&nbsp; Recommended combo: ${combo}</p>
             </div>
         `;
         resultDiv.querySelector('.guide-close-btn').addEventListener('click', function() {

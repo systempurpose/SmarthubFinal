@@ -46,6 +46,18 @@ export async function fetchLatestAdvancedScan(userId, deviceId) {
     const { fetchLatestAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
     return fetchLatestAdvancedDiagnosticResults(userId, deviceId);
 }
+// js/sb-loader.js (add these at the bottom or in the exports section)
+
+// ---- Repair Results ----
+export async function fetchLatestRepairScan(userId, deviceId) {
+    const { fetchLatestRepairScan } = await import('./repairs_sb.js');
+    return fetchLatestRepairScan(userId, deviceId);
+}
+
+export async function fetchRepairHistory(userId, deviceId, limit = 20) {
+    const { fetchRepairHistory } = await import('./repairs_sb.js');
+    return fetchRepairHistory(userId, deviceId, limit);
+}
 /**
  * Fetch the latest storage scan result for the given user and device.
  * Returns null if none found.

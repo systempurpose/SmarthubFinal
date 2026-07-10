@@ -99,7 +99,31 @@ async function renderHardwareTests() {
     } catch (e) {
         console.warn('[HardwareTests] Could not load from Supabase, using localStorage:', e);
     }
+        // ---- Load and display latest repair result ----
+    const resultContainer = document.getElementById('repairLatestResult');
+    if (resultContainer) {
+        try {
+            const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
+            const { fetchLatestRepairScan } = await import('./sb-loader.js');
 
+            const userId = getCurrentUserId();
+            const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+
+            if (userId && deviceId) {
+                const result = await fetchLatestRepairScan(userId, deviceId);
+                if (result && typeof renderRepairResults === 'function') {
+                    renderRepairResults(result, 'repairLatestResult');
+                } else {
+                    resultContainer.style.display = 'none';
+                }
+            } else {
+                resultContainer.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn('[Repairs] Could not load latest repair:', e);
+            resultContainer.style.display = 'none';
+        }
+    }
     // ========== ADB HELPERS ==========
     async function runAdb(command) {
         const resp = await fetch('/adb-shell', {
