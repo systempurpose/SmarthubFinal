@@ -31,6 +31,7 @@ export async function fetchLatestAppScan(userId, deviceId) {
         _source: 'supabase'
     };
 }
+
 // ---- Hardware Test Results ----
 export async function fetchLatestHardwareScan(userId, deviceId) {
     const { fetchLatestHardwareTestResults } = await import('./hardware_sb.js');
@@ -46,7 +47,6 @@ export async function fetchLatestAdvancedScan(userId, deviceId) {
     const { fetchLatestAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
     return fetchLatestAdvancedDiagnosticResults(userId, deviceId);
 }
-// js/sb-loader.js (add these at the bottom or in the exports section)
 
 // ---- Repair Results ----
 export async function fetchLatestRepairScan(userId, deviceId) {
@@ -58,10 +58,8 @@ export async function fetchRepairHistory(userId, deviceId, limit = 20) {
     const { fetchRepairHistory } = await import('./repairs_sb.js');
     return fetchRepairHistory(userId, deviceId, limit);
 }
-/**
- * Fetch the latest storage scan result for the given user and device.
- * Returns null if none found.
- */
+
+// ---- Storage Scan ----
 export async function fetchLatestStorageScan(userId, deviceId) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
@@ -87,3 +85,12 @@ export async function fetchLatestStorageScan(userId, deviceId) {
         _source: 'supabase'
     };
 }
+
+// ---- AI Conclusion ----
+export async function fetchLatestAIConclusion(userId, deviceId) {
+    const { fetchLatestAIConclusion } = await import('./aiConclusion_sb.js');
+    return fetchLatestAIConclusion(userId, deviceId);
+}
+
+// ---- Also export all scan fetcher as a combined function (optional) ----
+// (You can keep the existing ones above)

@@ -1165,55 +1165,54 @@ async function renderRepairs() {
             modal.style.display = 'flex';
             return;
         }
-        const history = await fetchRepairHistory(userId, deviceId, 100);
-        const listEl = document.getElementById('historyList');
-        if (!history || history.length === 0) {
-            listEl.innerHTML = '<p style="color:#6B7280;">No repair history found.</p>';
-        } else {
-            let html = '';
-            for (const entry of history) {
-                const statusClass = entry.status === 'success' ? 'success' : 'failed';
-                const statusLabel = entry.status.toUpperCase();
-                const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'N/A';
-                const summary = entry.summary || '';
-                let detailsStr = '';
-                let showEmailBtn = '';
+        // Inside the history modal click handler:
+const history = await fetchRepairHistory(userId, deviceId, 100);
+const listEl = document.getElementById('historyList');
+if (!history || history.length === 0) {
+    listEl.innerHTML = '<p style="color:#6B7280;">No repair history found.</p>';
+} else {
+    let html = '';
+    for (const entry of history) {
+        const statusClass = entry.status === 'success' ? 'success' : 'failed';
+        const statusLabel = entry.status.toUpperCase();
+        const dateStr = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'N/A';
+        const summary = entry.summary || '';
+        let detailsStr = '';
+        let showEmailBtn = '';
 
-                // ✅ FIX: Check nested details.details.emails
-                if (entry.actionType === 'retrieve_email' && 
-                    entry.details && 
-                    entry.details.details && 
-                    Array.isArray(entry.details.details.emails) && 
-                    entry.details.details.emails.length > 0) {
-                    
-                    const emailsJson = JSON.stringify(entry.details.details.emails);
-                    showEmailBtn = `
-                        <button class="show-emails-btn" data-emails='${escapeHtml(emailsJson)}' data-action="${entry.actionType}" data-date="${entry.createdAt}">🔒 Show Emails</button>
-                    `;
-                    detailsStr = `📧 ${entry.details.details.emails.length} account(s) (hidden)`;
-                } else if (entry.details && typeof entry.details === 'object' && entry.actionType !== 'retrieve_email') {
-                    const summaryStr = Object.entries(entry.details)
-                        .filter(([k]) => k !== 'emails' && k !== 'details')
-                        .map(([k,v]) => `${k}: ${v}`)
-                        .join(', ');
-                    detailsStr = summaryStr || '';
-                }
+        if (entry.actionType === 'retrieve_email' && 
+            entry.details && 
+            Array.isArray(entry.details.emails) && 
+            entry.details.emails.length > 0) {
+            
+            const emailsJson = JSON.stringify(entry.details.emails);
+            showEmailBtn = `
+                <button class="show-emails-btn" data-emails='${escapeHtml(emailsJson)}' data-action="${entry.actionType}" data-date="${entry.createdAt}">🔒 Show Emails</button>
+            `;
+            detailsStr = `📧 ${entry.details.emails.length} account(s) (hidden)`;
+        } else if (entry.details && typeof entry.details === 'object') {
+            const summaryStr = Object.entries(entry.details)
+                .filter(([k]) => k !== 'emails')
+                .map(([k,v]) => `${k}: ${v}`)
+                .join(', ');
+            detailsStr = summaryStr || '';
+        }
 
-                html += `
-                    <div class="history-entry">
-                        <div class="meta">
-                            <div class="action">${entry.actionType}</div>
-                            <div class="details">${summary} ${detailsStr ? '– ' + detailsStr : ''}</div>
-                            <div style="font-size:11px; color:#9CA3AF;">${dateStr}</div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="status ${statusClass}">${statusLabel}</span>
-                            ${showEmailBtn}
-                        </div>
-                    </div>
-                `;
-            }
-            listEl.innerHTML = html;
+        html += `
+            <div class="history-entry">
+                <div class="meta">
+                    <div class="action">${entry.actionType}</div>
+                    <div class="details">${summary} ${detailsStr ? '– ' + detailsStr : ''}</div>
+                    <div style="font-size:11px; color:#9CA3AF;">${dateStr}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="status ${statusClass}">${statusLabel}</span>
+                    ${showEmailBtn}
+                </div>
+            </div>
+        `;
+    }
+    listEl.innerHTML = html;
 
             // Attach event listeners to "Show Emails" buttons
             listEl.querySelectorAll('.show-emails-btn').forEach(btn => {

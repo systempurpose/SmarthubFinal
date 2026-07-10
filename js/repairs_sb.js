@@ -9,13 +9,14 @@ import {
 } from './sb-utils.js';
 
 /**
- * Save a repair result – keeps only the latest per (user_id, device_id, action_type).
- * Deletes any existing row for the same action, then inserts the new one.
+ * Save a repair result – merges into a single row per (user_id, device_id).
+ * If a row exists, it decrypts, merges the new action, and updates.
+ * If not, it creates a new row.
  */
 export async function saveRepairResult(resultData, deviceId) {
     const userId = getCurrentUserId();
     if (!userId) {
-        console.warn('[Repairs] No user logged in – not saving to Supabase.');
+        console.warn('[Repairs] No user logged in – not saving.');
         return null;
     }
 
@@ -37,81 +38,123 @@ export async function saveRepairResult(resultData, deviceId) {
 
     const supabase = await getSupabaseClient();
 
-    // ---- For retrieve_email: skip if no emails ----
-    if (payload.actionType === 'retrieve_email') {
-        const emails = payload.details.emails;
-        if (!emails || !Array.isArray(emails) || emails.length === 0) {
-            console.log('[Repairs] No emails found – skipping save.');
-            return null;
+    // ---- Check for existing row ----
+    const { data: existing, error: fetchError } = await supabase
+        .from('repair_results')
+        .select('details, summary, created_at')
+        .eq('user_id', userId)
+        .eq('device_id', finalDeviceId)
+        .maybeSingle();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 means no rows found
+        console.error('[Repairs] Fetch error:', fetchError);
+        throw fetchError;
+    }
+
+    let combinedDetails = {};
+    let allSummaries = [];
+    let latestTimestamp = payload.createdAt;
+
+    if (existing) {
+        try {
+            const decrypted = await decryptAndDecompress(existing.details);
+            combinedDetails = decrypted.actions || {};
+            // Add any existing summary to the list
+            if (existing.summary) allSummaries.push(existing.summary);
+            // Keep the latest timestamp from existing
+            if (existing.created_at && new Date(existing.created_at) > new Date(latestTimestamp)) {
+                latestTimestamp = existing.created_at;
+            }
+        } catch (e) {
+            console.warn('[Repairs] Could not decrypt existing details, starting fresh.', e);
         }
     }
 
-    // ---- Delete existing row for this (user_id, device_id, action_type) ----
-    const { error: deleteError } = await supabase
-        .from('repair_results')
-        .delete()
-        .eq('user_id', userId)
-        .eq('device_id', finalDeviceId)
-        .eq('action_type', payload.actionType);
+    // ---- Merge new action ----
+    combinedDetails[payload.actionType] = {
+        status: payload.status,
+        summary: payload.summary,
+        createdAt: payload.createdAt,
+        details: payload.details
+    };
 
-    if (deleteError) {
-        console.error('[Repairs] Failed to delete existing entry:', deleteError);
-        // Continue to insert anyway (maybe no existing row)
+    // Update latest timestamp if new action is newer
+    if (new Date(payload.createdAt) > new Date(latestTimestamp)) {
+        latestTimestamp = payload.createdAt;
     }
 
-    // ---- Insert the new row ----
-    const encrypted = await encryptCompressedData(payload);
+    // Build combined summary (list of action summaries)
+    const summaryParts = Object.entries(combinedDetails).map(([action, data]) =>
+        `${action}: ${data.status} (${data.summary})`
+    );
+    const combinedSummary = summaryParts.join('; ');
+
+    const combinedPayload = {
+        actions: combinedDetails,
+        lastUpdated: latestTimestamp
+    };
+
+    const encrypted = await encryptCompressedData(combinedPayload);
+
     const record = {
         user_id: userId,
         device_id: finalDeviceId,
         device_model: deviceInfo.model || 'Unknown',
         device_brand: deviceInfo.brand || 'Unknown',
         android_version: deviceInfo.android || 'Unknown',
-        action_type: payload.actionType,
-        status: payload.status,
+        action_type: 'combined',               // Indicates combined record
+        status: 'combined',                    // Overall status (you can compute later)
         details: encrypted,
-        summary: payload.summary,
-        created_at: payload.createdAt
+        summary: combinedSummary,
+        created_at: latestTimestamp
     };
 
+    // ---- Upsert (if exists, update; else insert) ----
     const { data, error } = await supabase
         .from('repair_results')
-        .insert(record)
+        .upsert(record, { onConflict: 'user_id, device_id' })
         .select();
 
     if (error) {
-        console.error('[Repairs] Insert failed:', error);
-        throw error;
+        console.error('[Repairs] Upsert failed:', error);
+        // Fallback: delete + insert if upsert fails (e.g., no unique constraint)
+        const { error: delError } = await supabase
+            .from('repair_results')
+            .delete()
+            .eq('user_id', userId)
+            .eq('device_id', finalDeviceId);
+        if (delError) throw delError;
+        const { data: insData, error: insError } = await supabase
+            .from('repair_results')
+            .insert(record)
+            .select();
+        if (insError) throw insError;
+        console.log('✅ Inserted combined repair (delete+insert fallback)');
+        return insData;
     }
 
-    console.log(`✅ ${payload.actionType} result saved (overwrote previous)`);
+    console.log('✅ Combined repair saved (upsert)');
     return data;
 }
 
 /**
- * Fetch the latest repair result for a given user and device (any action).
+ * Fetch the latest combined repair for a given user and device.
  */
 export async function fetchLatestRepairScan(userId, deviceId) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('repair_results')
-        .select('details, created_at, action_type, status, summary')
+        .select('details, created_at, summary')
         .eq('user_id', userId)
         .eq('device_id', deviceId)
-        .order('created_at', { ascending: false })
-        .limit(1)
         .maybeSingle();
 
-    if (error) {
-        console.warn('[Repairs] Failed to fetch latest repair:', error);
-        return null;
-    }
-    if (!data) return null;
+    if (error || !data) return null;
 
     const decrypted = await decryptAndDecompress(data.details);
     return {
-        actionType: data.action_type,
-        status: data.status,
+        actionType: 'combined',
+        status: 'combined',
         summary: data.summary,
         details: decrypted,
         createdAt: data.created_at ? new Date(data.created_at).toLocaleString() : null,
@@ -120,37 +163,31 @@ export async function fetchLatestRepairScan(userId, deviceId) {
 }
 
 /**
- * Fetch repair history – now each action type has only one row (the latest).
+ * Fetch repair history – returns an array of individual actions
+ * extracted from the combined row.
  */
 export async function fetchRepairHistory(userId, deviceId, limit = 50) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('repair_results')
-        .select('details, created_at, action_type, status, summary')
+        .select('details, created_at, summary')
         .eq('user_id', userId)
         .eq('device_id', deviceId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+        .maybeSingle();
 
-    if (error) {
-        console.warn('[Repairs] Failed to fetch repair history:', error);
-        return [];
-    }
+    if (error || !data) return [];
 
-    const history = [];
-    for (const row of data) {
-        try {
-            const decrypted = await decryptAndDecompress(row.details);
-            history.push({
-                actionType: row.action_type,
-                status: row.status,
-                summary: row.summary,
-                details: decrypted,      // decrypted is the full payload
-                createdAt: row.created_at ? new Date(row.created_at).toLocaleString() : null
-            });
-        } catch (e) {
-            console.warn('[Repairs] Failed to decrypt a repair record:', e);
-        }
-    }
-    return history;
+    const decrypted = await decryptAndDecompress(data.details);
+    const actions = decrypted.actions || {};
+    // Convert to array, most recent first
+    const entries = Object.entries(actions).map(([actionType, actionData]) => ({
+        actionType,
+        status: actionData.status,
+        summary: actionData.summary,
+        details: actionData.details,
+        createdAt: actionData.createdAt ? new Date(actionData.createdAt).toLocaleString() : null
+    }));
+    // Sort by createdAt descending
+    entries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return entries.slice(0, limit);
 }

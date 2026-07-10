@@ -20,6 +20,8 @@ import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
 
+// In server.ts
+const { getAIKey } = require('./decrypt-ai-key.js');
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
 
 // At the top with other imports
@@ -93,7 +95,7 @@ import {
   loadSmartLinkConfig,
   verifySmartLinkSignature,
 } from './serverContext';
-
+const { searchAndEnrich } = require('./aiIntelligence.js');
 import { registerAiRoutes } from './routes/aiRoutes';
 import { registerConnectionCheckRoutes } from './routes/connectionCheckRoutes';
 import { registerDeviceRoutes } from './routes/deviceRoutes';
@@ -111,7 +113,7 @@ import { registerAndroidConnectivityRoutes } from './routes/androidConnectivityR
 import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
-
+const { callMistralAI } = require('./ai-service.js');
 
 
 
@@ -598,6 +600,86 @@ async function connectToAndroidRealTime(deviceId: string) {
     });
   });
 }
+
+function getErrorMessage(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (typeof err === 'string') return err;
+    return 'An unknown error occurred.';
+}
+
+// ============================================================
+// AI Conclusion Route – Mistral AI Integration
+// ============================================================
+
+// 👇 Ensure this helper is defined at the top of the file (after imports)
+// function getErrorMessage(err: unknown): string {
+//     if (err instanceof Error) return err.message;
+//     if (typeof err === 'string') return err;
+//     return 'An unknown error occurred.';
+// }
+
+// 👇 Require the service (already at the top)
+// const { callMistralAI } = require('./ai-service.js');
+// const { getAIKey } = require('./decrypt-ai-key.js');
+
+app.post('/ai-adb-conclude', async (req: Request, res: Response) => {
+    try {
+        const { selectedReports, userInput, lang, reports, deviceId, model } = req.body;
+
+        if (!selectedReports || selectedReports.length === 0) {
+            return res.status(400).json({ error: 'No reports selected.' });
+        }
+
+        // 1. Decrypt AI key
+        const apiKey = await getAIKey();
+        const aiModel = model || process.env.AI_MODEL || 'open-mistral-7b';
+
+        // 2. Perform web search to enrich the context
+        const searchContext = await searchAndEnrich(userInput, selectedReports, reports);
+
+        // 3. Build the final prompt for Mistral, including search context
+        const userPrompt = `Selected reports: ${selectedReports.join(', ')}.\n` +
+                           `User symptoms: ${userInput || 'None provided.'}\n` +
+                           `Scan data: ${JSON.stringify(reports, null, 2).substring(0, 1000)}\n\n` +
+                           (searchContext.context ? `\n${searchContext.context}\n` : '') +
+                           `Based on the above information (including the web search), provide a diagnostic conclusion. Return JSON only.`;
+
+        // 4. Call Mistral
+        const conclusion = await callMistralAI({
+            apiKey,
+            model: aiModel,
+            userInput: userPrompt,   // override with enriched prompt
+            reports,                 // still pass reports for reference
+            selectedReports,
+            lang: lang || 'en'
+        });
+
+        // 5. (Optional) Save to Supabase
+        // ...
+
+        // 6. Return result
+        res.json({
+            ok: true,
+            conclusion: {
+                humanSummary: conclusion.humanSummary,
+                likelyCause: conclusion.likelyCause,
+                confidence: conclusion.confidence,
+                actions: conclusion.actions,
+                nextStep: conclusion.nextStep,
+                details: conclusion.details
+            },
+            // Include search query used (for debugging)
+            searchQuery: searchContext.query,
+            searchResults: searchContext.results
+        });
+
+    } catch (err) {
+        const errorMsg = getErrorMessage(err);
+        console.error('[AI] Error:', errorMsg);
+        res.status(500).json({ error: errorMsg });
+    }
+});
+
 app.post('/api/adb-forward', async (req, res) => {
   const { deviceId } = req.body;
   if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
@@ -1983,6 +2065,7 @@ app.get('/history/:id', async (req: Request, res: Response) => {
 // Get device info (manufacturer, model, Android version, resolution)
 // Get device info (manufacturer, model, Android version, resolution)
 // Get device info (manufacturer, model, Android version, resolution)
+
 app.get('/device-info', async (req, res) => {
     const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId : undefined;
     if (!deviceId) return res.status(400).json({ error: 'Device ID required' });
