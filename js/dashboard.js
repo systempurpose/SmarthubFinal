@@ -22,13 +22,16 @@ async function renderDashboard() {
 
     // ---- If ADB is available, render full dashboard ----
     if (currentDeviceId) {
-    await renderAdbDashboard(container);
-    // 👇 Load saved scan results from Supabase (or localStorage fallback)
-    if (typeof loadSavedScanResults === 'function') {
-        await loadSavedScanResults();
+        await renderAdbDashboard(container);
+        if (typeof updateDeviceInfo === 'function') {
+            await updateDeviceInfo().catch(err => console.warn('[Dashboard] updateDeviceInfo failed:', err));
+        }
+        // 👇 Load saved scan results from Supabase (or localStorage fallback)
+        if (typeof loadSavedScanResults === 'function') {
+            await loadSavedScanResults();
+        }
+        return;
     }
-    return;
-}
 
     // ---- No ADB – check USB state ----
     try {

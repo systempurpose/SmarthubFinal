@@ -1113,5 +1113,15 @@
 'wizard.connectionSuccess': '✅ Device found! You can close this wizard.',
 'wizard.connectionFail': '❌ No device. Re-check USB debugging and cable.',
 'wizard.adbError': '❌ ADB error. Is ADB installed?',
+
+'adv.page.waitingDevice': 'Waiting for device…',
+'adv.page.connectHint': 'Connect your Android phone via USB and enable USB debugging. The page will refresh automatically.',
+
+'adv.loading.results': 'Loading diagnostic results...',
+'adv.lastScanSummary': 'Last Scan Summary',
+'adv.checksPassed': 'checks passed',
+'adv.noResultsFound': 'No diagnostic results found. Run a scan to see them here.',
+
+
     };
 })();

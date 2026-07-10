@@ -1,8 +1,7 @@
 // js/app_scan_sb.js
 import { getSupabaseClient } from './supabase.js';
-import { getCurrentUserId, getCurrentDeviceInfo, encryptCompressedData } from './sb-utils.js';
+import { getCurrentUserId, getCurrentDeviceInfo, getCurrentDeviceId, encryptCompressedData } from './sb-utils.js';
 
-// 👇 Added deviceId parameter
 export async function saveAppScanToSupabase(results, deviceId) {
     const userId = getCurrentUserId();
     if (!userId) {
@@ -10,7 +9,6 @@ export async function saveAppScanToSupabase(results, deviceId) {
         return null;
     }
 
-    // Use provided deviceId, or fallback to getCurrentDeviceId()
     const finalDeviceId = deviceId || getCurrentDeviceId();
     if (!finalDeviceId) {
         console.warn('No device connected – app scan not saved.');
@@ -39,7 +37,7 @@ export async function saveAppScanToSupabase(results, deviceId) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('app_scan_results')
-        .insert({
+        .upsert({
             user_id: userId,
             device_id: finalDeviceId,
             device_model: deviceInfo.model,
@@ -48,12 +46,13 @@ export async function saveAppScanToSupabase(results, deviceId) {
             results: encrypted,
             summary: `Suspicious: ${payload.summary.suspiciousCount} / ${payload.summary.totalApps} apps`,
             scan_time: new Date().toISOString(),
-        });
+        }, { onConflict: 'user_id, device_id' })   // 👈 FIXED: use column names
+        .select();
 
     if (error) {
         console.error('Failed to save app scan to Supabase:', error);
         throw error;
     }
-    console.log('✅ App scan saved to Supabase');
+    console.log('✅ App scan saved to Supabase (upserted)');
     return data;
 }

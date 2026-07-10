@@ -6,7 +6,7 @@ import { getCurrentUserId, encryptCompressedData, decryptAndDecompress } from '.
 /**
  * Save user settings to Supabase (encrypted + compressed)
  * @param {string} userId - Supabase user ID
- * @param {object} settings - Settings object (language, themeColor, bgColor, cardColor, textColor)
+ * @param {object} settings - Settings object (language, themeColor, buttonColor, bgColor, cardColor, textColor)
  * @returns {Promise<boolean>} true if saved successfully
  */
 export async function saveUserSettings(userId, settings) {
@@ -115,6 +115,7 @@ export async function loadSettingsWithFallback(userId) {
         settings = {
             language: 'en',
             themeColor: '#0d6efd',
+            buttonColor: '#0d6efd',   // 🆕 added
             bgColor: '#ffffff',
             cardColor: '#ffffff',
             textColor: '#1f2937',
@@ -125,6 +126,7 @@ export async function loadSettingsWithFallback(userId) {
     const defaults = {
         language: 'en',
         themeColor: '#0d6efd',
+        buttonColor: '#0d6efd',       // 🆕 added
         bgColor: '#ffffff',
         cardColor: '#ffffff',
         textColor: '#1f2937',

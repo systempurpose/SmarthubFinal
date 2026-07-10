@@ -31,7 +31,21 @@ export async function fetchLatestAppScan(userId, deviceId) {
         _source: 'supabase'
     };
 }
+// ---- Hardware Test Results ----
+export async function fetchLatestHardwareScan(userId, deviceId) {
+    const { fetchLatestHardwareTestResults } = await import('./hardware_sb.js');
+    return fetchLatestHardwareTestResults(userId, deviceId);
+}
 
+export async function fetchLatestConnectionScan(userId, deviceId) {
+    const { fetchLatestConnectionTestResults } = await import('./connection_sb.js');
+    return fetchLatestConnectionTestResults(userId, deviceId);
+}
+
+export async function fetchLatestAdvancedScan(userId, deviceId) {
+    const { fetchLatestAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
+    return fetchLatestAdvancedDiagnosticResults(userId, deviceId);
+}
 /**
  * Fetch the latest storage scan result for the given user and device.
  * Returns null if none found.

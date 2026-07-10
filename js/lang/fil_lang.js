@@ -1077,5 +1077,15 @@
 'wizard.connectionSuccess': '✅ Natagpuan ang device! Maaari mo nang isara ang wizard na ito.',
 'wizard.connectionFail': '❌ Walang device. Suriin muli ang USB debugging at cable.',
 'wizard.adbError': '❌ Error sa ADB. Naka-install ba ang ADB?',
+
+'adv.page.waitingDevice': 'Naghihintay ng device…',
+'adv.page.connectHint': 'Ikonekta ang iyong Android phone sa pamamagitan ng USB at i-enable ang USB debugging. Awtomatikong magre-refresh ang pahina.',
+
+'adv.loading.results': 'Naglo-load ng mga resulta ng diagnostic...',
+'adv.lastScanSummary': 'Buod ng Huling Scan',
+'adv.checksPassed': 'na pumasa',
+'adv.noResultsFound': 'Walang nakitang resulta ng diagnostic. Magpatakbo ng scan para makita sila dito.',
+
+
     };
 })();

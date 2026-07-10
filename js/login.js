@@ -85,7 +85,7 @@ export async function handleRegister(email, password) {
     }
 }
 
-// ---- 👇 UPDATED Login Handler (saves to AppData) ----
+// ---- Login Handler (saves to AppData + loads settings) ----
 export async function handleLogin(email, password) {
     if (authLoadError) {
         showError('loginError', 'Login system failed to load. Check the console for details.');
@@ -95,14 +95,18 @@ export async function handleLogin(email, password) {
         const user = await login(email, password);
         console.log('Logged in as:', user.email);
 
-        // Save to localStorage (fast access)
         localStorage.setItem('smarthub.user', JSON.stringify(user));
-        // 👇 NEW: Save encrypted account to AppData
         await saveAccount(user);
 
         updateUIAfterLogin(user);
         closeModal(loginModal);
         toast('👋 Welcome, ' + user.email + '!', 'success');
+
+        // 👇 NEW: Load settings from Supabase and apply theme/language
+        if (typeof window.loadAndApplySettings === 'function') {
+            await window.loadAndApplySettings();
+        }
+
         return user;
     } catch (err) {
         showError('loginError', err.message);
@@ -135,7 +139,6 @@ function updateUIAfterLogout() {
         loginBtn.hidden = false;
     }
     localStorage.removeItem('smarthub.user');
-    // 👇 NEW: Also remove from sessionStorage (if we ever use it)
     sessionStorage.removeItem('smarthub.session');
 }
 
@@ -178,24 +181,28 @@ export function showRegisterModal() {
     openModal(registerModal);
 }
 
-// ---- 👇 UPDATED Auto-login (loads from AppData first) ----
+// ---- Auto-login (loads from AppData first, then localStorage) ----
 export async function autoLogin() {
     console.log('[autoLogin] Checking for stored user...');
 
-    // 1. Try to load from AppData (encrypted file)
+    // 1. Try AppData
     let user = null;
     try {
         user = await loadAccount();
         if (user) {
-            // Also update localStorage for faster future loads
             localStorage.setItem('smarthub.user', JSON.stringify(user));
             updateUIAfterLogin(user);
             console.log('✅ Auto-logged in from AppData as:', user.email);
+
+            // 👇 NEW: Load settings from Supabase
+            if (typeof window.loadAndApplySettings === 'function') {
+                await window.loadAndApplySettings();
+            }
+
             return user;
         }
     } catch (err) {
         console.warn('[autoLogin] Failed to load from AppData:', err);
-        // Fall through to localStorage
     }
 
     // 2. Fallback to localStorage
@@ -204,14 +211,14 @@ export async function autoLogin() {
         try {
             user = JSON.parse(storedUser);
             updateUIAfterLogin(user);
-            // Attempt to re-save to AppData (if it was missing or failed)
-            try {
-                await saveAccount(user);
-                console.log('✅ Re-saved account to AppData from localStorage.');
-            } catch (saveErr) {
-                console.warn('Could not re-save account to AppData:', saveErr);
-            }
+            await saveAccount(user);
             console.log('✅ Auto-logged in from localStorage as:', user.email);
+
+            // 👇 NEW: Load settings from Supabase
+            if (typeof window.loadAndApplySettings === 'function') {
+                await window.loadAndApplySettings();
+            }
+
             return user;
         } catch (e) {
             localStorage.removeItem('smarthub.user');
@@ -223,7 +230,7 @@ export async function autoLogin() {
     return null;
 }
 
-// ---- 👇 UPDATED initAuthForms (async) ----
+// ---- initAuthForms (async) ----
 export async function initAuthForms() {
     if (initialized) return;
     initialized = true;
@@ -324,21 +331,19 @@ export async function initAuthForms() {
         });
     }
 
-    // 👇 NEW: Await autoLogin
     await autoLogin();
 }
 
-// ---- Expose modal functions globally (for inline onclick) ----
+// ---- Expose modal functions globally ----
 window.showLoginModal = showLoginModal;
 window.showRegisterModal = showRegisterModal;
 window.handleLogout = handleLogout;
 
-// ---- 👇 UPDATED initialization block (handles async initAuthForms) ----
+// ---- Initialize exactly once ----
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initAuthForms();
     });
 } else {
-    // No need to await – the function is async but we don't need to wait.
     initAuthForms();
 }

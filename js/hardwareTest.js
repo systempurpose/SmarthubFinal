@@ -1,7 +1,80 @@
-// ==================== HARDWARE TESTS PAGE (FULLY LOCALIZED) ====================
+// js/hardwareTest.js
+// ==================== HARDWARE TESTS PAGE (FULLY LOCALIZED + SUPABASE SYNC + THEME) ====================
+
+// ---- Helper to get current language ----
+function _getLang() {
+    return window._activeLang
+        || (window.SmartHubI18n && window.SmartHubI18n.getCurrentLang ? window.SmartHubI18n.getCurrentLang() : 'en');
+}
+
+// Central place to persist results to Supabase
+async function persistHardwareResults(results, summary, deviceId) {
+    try {
+        const { saveHardwareTestResults } = await import('./hardware_sb.js');
+        await saveHardwareTestResults(
+            { results, summary, scanTime: new Date().toISOString() },
+            deviceId
+        );
+        console.log('[HardwareTests] Saved to Supabase');
+    } catch (e) {
+        console.warn('[HardwareTests] Failed to save to Supabase:', e);
+    }
+}
+
+const TEST_ICONS = {
+    battery: 'fa-battery-three-quarters',
+    storage: 'fa-hard-drive',
+    sensors: 'fa-wave-square',
+    display: 'fa-display',
+    proximity: 'fa-ruler-combined',
+    gyro: 'fa-compass',
+    gps: 'fa-location-dot',
+    fingerprint: 'fa-fingerprint',
+    nfc: 'fa-wifi',
+    microphone: 'fa-microphone',
+    vibration: 'fa-mobile-screen-button',
+    flashlight: 'fa-lightbulb',
+    speaker: 'fa-volume-high',
+    headphone: 'fa-headphones',
+    touch: 'fa-hand-pointer',
+    multitouch: 'fa-hand-sparkles',
+    buttons: 'fa-table-cells',
+    colorsweep: 'fa-palette',
+    camerafront: 'fa-camera-rotate',
+    camerarear: 'fa-camera',
+    magnetometer: 'fa-magnet',
+    barometer: 'fa-gauge',
+    irblaster: 'fa-satellite-dish',
+    faceunlock: 'fa-face-smile',
+};
+
+function iconFor(testId) {
+    return TEST_ICONS[testId] || 'fa-microchip';
+}
+
+const STATUS_COLORS = {
+    pending: '#6B7280',
+    running: '#f59e0b',
+    passed: '#2e7d32',
+    failed: '#d32f2f',
+    error: '#d32f2f',
+};
+
 async function renderHardwareTests() {
+    // ========== GET THEME COLORS ==========
+    const theme = window._activeTheme || JSON.parse(localStorage.getItem('smartHubSettings') || '{}');
+    const textColor = theme.textColor || '#1f2937';
+    const cardBg = theme.cardColor || '#ffffff';
+    const btnColor = theme.buttonColor || theme.themeColor || '#0d6efd';
+    const bgColor = theme.bgColor || '#ffffff';
+
+    // ========== NO DEVICE ==========
     if (!currentDeviceId) {
-        document.getElementById('pageContent').innerHTML = `<div class="card" data-i18n="hw.noDevice">${t('hw.noDevice', _getLang())}</div>`;
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card" data-i18n="hw.noDevice" style="background:${cardBg}; color:${textColor}; padding:20px; border-radius:12px;">
+                ${t('hw.noDevice', _getLang())}
+            </div>
+        `;
         if (typeof applyLanguage === 'function') {
             const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
             applyLanguage(window._activeLang || savedLang);
@@ -9,7 +82,25 @@ async function renderHardwareTests() {
         return;
     }
 
-    // ========== HELPERS ==========
+    // ========== LOAD FROM SUPABASE ==========
+    try {
+        const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
+        const { fetchLatestHardwareTestResults } = await import('./hardware_sb.js');
+        const userId = getCurrentUserId();
+        const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+        if (userId && deviceId) {
+            const supabaseResults = await fetchLatestHardwareTestResults(userId, deviceId);
+            if (supabaseResults) {
+                window._hardwareTestResults = supabaseResults.results || {};
+                saveHardwareResults(supabaseResults.summary || null);
+                console.log('[HardwareTests] Loaded from Supabase');
+            }
+        }
+    } catch (e) {
+        console.warn('[HardwareTests] Could not load from Supabase, using localStorage:', e);
+    }
+
+    // ========== ADB HELPERS ==========
     async function runAdb(command) {
         const resp = await fetch('/adb-shell', {
             method: 'POST',
@@ -39,7 +130,7 @@ async function renderHardwareTests() {
         await launchAndroidApp();
     }
 
-    // ---- Hardware feature detection ----
+    // ========== FEATURE DETECTION ==========
     let hardwareFeaturesCache = null;
 
     async function getHardwareFeatures() {
@@ -70,7 +161,7 @@ async function renderHardwareTests() {
         }
     }
 
-    // ---- Modal helpers ----
+    // ========== MODAL SYSTEM ==========
     let modal, modalTitle, modalBody, yesBtn, noBtn, closeBtn;
     let currentResolver = null;
 
@@ -80,17 +171,20 @@ async function renderHardwareTests() {
             modal = document.createElement('div');
             modal.id = 'hwTestModal';
             modal.className = 'modal';
-            modal.style.display = 'none';
+            modal.style.cssText = 'display:none; z-index:99997; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px); align-items:center; justify-content:center;';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width: 500px; width: 90%; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb;">
-                        <h3 id="hwModalTitle" data-i18n="hw.modal.title" style="margin: 0; font-size: 18px;">${t('hw.modal.title', _getLang())}</h3>
-                        <span class="close-button" id="hwCloseModalBtn" style="cursor: pointer; font-size: 24px; color: #6B7280;">&times;</span>
+                <div class="modal-content acrylic" style="max-width: 480px; width: 90%; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: ${cardBg};">
+                    <div style="background: linear-gradient(135deg, #eef2ff 0%, #dbe4ff 100%); padding: 18px 24px 14px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 26px;"><i class="fas fa-microscope" style="color:#4338ca;"></i></span>
+                            <h3 id="hwModalTitle" data-i18n="hw.modal.title" style="margin: 0; font-size: 18px; font-weight: 700; color: #312e81;">${t('hw.modal.title', _getLang())}</h3>
+                            <span class="close-button" id="hwCloseModalBtn" style="margin-left: auto; cursor: pointer; font-size: 26px; color: #4338ca; opacity: 0.7;">&times;</span>
+                        </div>
                     </div>
-                    <div class="modal-body" id="hwModalBody" style="padding: 20px; text-align: center; min-height: 150px;"></div>
-                    <div class="modal-footer" id="hwModalFooter" style="padding: 16px 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-                        <button id="hwYesBtn" class="btn-primary" style="display: none; margin: 0 8px;" data-i18n="hw.modal.yes">${t('hw.modal.yes', _getLang())}</button>
-                        <button id="hwNoBtn" class="btn-secondary" style="display: none; margin: 0 8px;" data-i18n="hw.modal.no">${t('hw.modal.no', _getLang())}</button>
+                    <div class="modal-body" id="hwModalBody" style="padding: 24px; text-align: center; min-height: 150px; font-size: 14px; color: ${textColor}; line-height: 1.6; background: ${cardBg};"></div>
+                    <div class="modal-footer" id="hwModalFooter" style="padding: 16px 24px 24px 24px; display: flex; gap: 12px; justify-content: center; background: ${cardBg};">
+                        <button id="hwYesBtn" class="btn-primary" style="display: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; background: ${btnColor}; color: ${textColor}; border: none;">${t('hw.modal.yes', _getLang())}</button>
+                        <button id="hwNoBtn" class="btn-secondary" style="display: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; background: transparent; border: 1px solid ${textColor}30; color: ${textColor};">${t('hw.modal.no', _getLang())}</button>
                     </div>
                 </div>
             `;
@@ -113,7 +207,6 @@ async function renderHardwareTests() {
         modal.style.display = 'flex';
         yesBtn.style.display = 'none';
         noBtn.style.display = 'none';
-        // Apply translations to modal if needed
         if (typeof applyLanguage === 'function') {
             const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
             applyLanguage(window._activeLang || savedLang);
@@ -133,10 +226,15 @@ async function renderHardwareTests() {
             currentResolver = resolve;
             yesBtn.style.display = 'inline-block';
             noBtn.style.display = 'inline-block';
-            // Update button texts with current language
             const lang = _getLang();
             yesBtn.textContent = t('hw.modal.yes', lang);
             noBtn.textContent = t('hw.modal.no', lang);
+            // Apply button colors again
+            yesBtn.style.background = btnColor;
+            yesBtn.style.color = textColor;
+            noBtn.style.borderColor = textColor + '30';
+            noBtn.style.color = textColor;
+
             const onYes = () => { cleanup(); resolve('yes'); };
             const onNo = () => { cleanup(); resolve('no'); };
             const cleanup = () => {
@@ -154,7 +252,7 @@ async function renderHardwareTests() {
 
     initModal();
 
-    // ========== TEST DEFINITIONS (with i18n) ==========
+    // ========== TEST DEFINITIONS ==========
     const testDefs = {
         battery: {
             titleKey: 'hw.test.battery.title',
@@ -530,142 +628,178 @@ async function renderHardwareTests() {
         const title = t(def.titleKey, _getLang());
         const desc = t(def.descKey, _getLang());
         cardsHtml += `
-            <div class="test-card" id="card-${id}" style="background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid #6B7280;">
+            <div class="test-card" id="card-${id}" data-status="pending" style="background: ${cardBg}; padding: 16px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid ${STATUS_COLORS.pending}; transition: border-color .2s ease, box-shadow .2s ease; color: ${textColor};">
                 <div>
-                    <h3 style="margin: 0 0 4px 0; font-size: 16px;" data-i18n="${def.titleKey}">${title}</h3>
-                    <p style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;" data-i18n="${def.descKey}">${desc}</p>
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                        <span style="width:32px; height:32px; flex-shrink:0; border-radius:9px; background:#eef2ff; color:#4338ca; display:flex; align-items:center; justify-content:center; font-size:14px;">
+                            <i class="fas ${iconFor(id)}"></i>
+                        </span>
+                        <h3 style="margin: 0; font-size: 16px; color: ${textColor};" data-i18n="${def.titleKey}">${title}</h3>
+                    </div>
+                    <p style="margin: 0 0 12px 0; color: ${textColor}80; font-size: 13px;" data-i18n="${def.descKey}">${desc}</p>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" data-i18n="hw.status.pending" style="font-weight: 600; color: #6B7280; font-size: 14px;">${t('hw.status.pending', _getLang())}</span>
-                    <button class="btn-secondary run-single-test" data-test="${id}" data-i18n="hw.btn.start" style="font-size: 12px; padding: 4px 16px;">${t('hw.btn.start', _getLang())}</button>
+                    <span class="status-text" data-i18n="hw.status.pending" style="font-weight: 600; color: ${STATUS_COLORS.pending}; font-size: 13px; padding: 3px 10px; border-radius: 999px; background: #f3f4f6;">${t('hw.status.pending', _getLang())}</span>
+                    <button class="btn-secondary run-single-test" data-test="${id}" data-i18n="hw.btn.start" style="font-size: 12px; padding: 5px 16px; border-radius: 8px; background: transparent; border: 1px solid ${textColor}30; color: ${textColor}; cursor: pointer;">${t('hw.btn.start', _getLang())}</button>
                 </div>
-                <div class="result-message" style="font-size: 12px; color: #6B7280; margin-top: 4px; word-break: break-word; display: none;"></div>
+                <div class="result-message" style="font-size: 12px; color: ${textColor}80; margin-top: 6px; word-break: break-word; display: none;"></div>
             </div>
         `;
     }
     cardsHtml += `</div>`;
 
     const fullHtml = `
-        <div class="info-card" style="text-align: center; margin-bottom: 24px;">
-            <div class="card-header"><i class="fas fa-microscope"></i> <span data-i18n="hw.page.title">${t('hw.page.title', _getLang())}</span></div>
-            <div class="card-content">
-                <p data-i18n="hw.page.subtitle">${t('hw.page.subtitle', _getLang())}</p>
-                <button id="startHwTestBtn" class="btn-primary" style="font-size: 16px;" data-i18n="hw.btn.fullSuite">${t('hw.btn.fullSuite', _getLang())}</button>
+        <div style="background: ${bgColor}; padding: 4px 0;">
+            <div class="info-card" style="text-align: center; margin-bottom: 24px; background: ${cardBg}; color: ${textColor}; padding: 20px; border-radius: 12px;">
+                <div class="card-header"><i class="fas fa-microscope"></i> <span data-i18n="hw.page.title">${t('hw.page.title', _getLang())}</span></div>
+                <div class="card-content">
+                    <p data-i18n="hw.page.subtitle">${t('hw.page.subtitle', _getLang())}</p>
+    <button id="startHwTestBtn" class="btn-primary" style="font-size: 16px; color: ${textColor} !important;" data-i18n="hw.btn.fullSuite">${t('hw.btn.fullSuite', _getLang())}</button>
             </div>
-        </div>
-        ${cardsHtml}
-        <div id="hwResults" style="display: none;">
-            <div class="cards-container" id="hwCardsContainer"></div>
-            <div id="hwSummaryCard" class="info-card" style="margin-top: 24px;"></div>
+            ${cardsHtml}
+            <div id="hwResults" style="display: none;">
+                <div class="cards-container" id="hwCardsContainer"></div>
+                <div id="hwSummaryCard" class="info-card" style="margin-top: 24px; background: ${cardBg}; color: ${textColor}; padding: 20px; border-radius: 12px;"></div>
+            </div>
         </div>
     `;
 
     document.getElementById('pageContent').innerHTML = fullHtml;
 
-    // ---- APPLY LANGUAGE ----
-    if (typeof applyLanguage === 'function') {
-        const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
-        applyLanguage(window._activeLang || savedLang);
+// ---- APPLY LANGUAGE ----
+if (typeof applyLanguage === 'function') {
+    const savedLang = (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language || 'en';
+    applyLanguage(window._activeLang || savedLang);
+}
+
+// ---- RE-APPLY THEME ----
+if (window._activeTheme) {
+    applyThemeColor(window._activeTheme);
+}
+
+// ---- 🆕 FORCE HARDWARE BUTTON TEXT COLOR ----
+const hwBtn = document.getElementById('startHwTestBtn');
+if (hwBtn) {
+    hwBtn.style.setProperty('color', textColor, 'important');
+}
+
+    // ---- SET CARD STATUS (helper) ----
+    function setCardStatus(card, status, label, message) {
+        const statusSpan = card.querySelector('.status-text');
+        const msgSpan = card.querySelector('.result-message');
+        const color = STATUS_COLORS[status] || STATUS_COLORS.pending;
+        card.dataset.status = status;
+        card.style.borderLeftColor = color;
+        statusSpan.style.color = color;
+        statusSpan.style.background = status === 'passed' ? '#e8f5e9'
+            : status === 'failed' || status === 'error' ? '#ffebee'
+            : status === 'running' ? '#fff7ed'
+            : '#f3f4f6';
+        statusSpan.textContent = label;
+        if (message !== undefined) {
+            msgSpan.textContent = message || '';
+            msgSpan.style.display = message ? 'block' : 'none';
+            msgSpan.style.color = color;
+        }
     }
 
-    // ========== RESTORE SAVED RESULTS ON MOUNT ==========
+    // ========== RESTORE SAVED RESULTS ==========
     const saved = loadHardwareResults();
     if (saved && saved.results) {
         window._hardwareTestResults = saved.results;
         Object.entries(saved.results).forEach(([id, r]) => {
             const card = document.getElementById(`card-${id}`);
             if (!card) return;
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
             const btn = card.querySelector('.run-single-test');
-            const color = r.passed ? '#2e7d32' : '#d32f2f';
-            statusSpan.style.color = color;
-            statusSpan.textContent = r.passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang());
-            msgSpan.textContent = r.message || '';
-            msgSpan.style.display = 'block';
-            msgSpan.style.color = color;
+            // ✅ FIX: Use translation directly (already contains emoji) – no extra icon
+            const label = r.passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang());
+            setCardStatus(card, r.passed ? 'passed' : 'failed', label, r.message);
             if (btn) btn.textContent = r.passed ? t('hw.btn.rerun', _getLang()) : t('hw.btn.details', _getLang());
         });
         if (saved.summary) {
-            const summaryDiv = document.getElementById('hwSummaryCard');
-            if (summaryDiv) {
-                const { total, passed, percentage } = saved.summary;
-                summaryDiv.innerHTML = `
-                    <div class="card-header"><i class="fas fa-clipboard-list"></i> <span data-i18n="hw.summary.title">${t('hw.summary.title', _getLang())}</span></div>
-                    <div class="card-content">
-                        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                            <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
-                                <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-                                    <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
-                                    <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
-                                        stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
-                                </svg>
-                                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
-                            </div>
-                            <div>
-                                <h3 style="margin: 0; font-size: 20px;">${passed}/${total} ${t('hw.summary.testsPassed', _getLang())}</h3>
-                                <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? t('hw.summary.allPassed', _getLang()) : percentage >= 80 ? t('hw.summary.mostPassed', _getLang()) : t('hw.summary.multipleFailures', _getLang())}</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
+            renderSummary(saved.summary, Object.values(saved.results));
         }
     }
 
-    // ========== SINGLE TEST HANDLER (with per‑test save) ==========
+    // ========== RENDER SUMMARY ==========
+    function renderSummary(summary, resultList) {
+        const { total, passed, percentage } = summary;
+        const summaryDiv = document.getElementById('hwSummaryCard');
+        if (!summaryDiv) return;
+        summaryDiv.innerHTML = `
+            <div class="card-header"><i class="fas fa-clipboard-list"></i> <span data-i18n="hw.summary.title">${t('hw.summary.title', _getLang())}</span></div>
+            <div class="card-content">
+                <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
+                        <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+                            <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
+                            <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
+                                stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
+                        </svg>
+                        <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold; color: ${textColor};">${percentage}%</span>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; color: ${textColor};">${passed}/${total} ${t('hw.summary.testsPassed', _getLang())}</h3>
+                        <p style="margin: 4px 0 0; color: ${textColor}80;">${percentage === 100 ? t('hw.summary.allPassed', _getLang()) : percentage >= 80 ? t('hw.summary.mostPassed', _getLang()) : t('hw.summary.multipleFailures', _getLang())}</p>
+                    </div>
+                </div>
+                ${resultList ? `
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+                    ${resultList.map(r => `
+                        <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'};">
+                            <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; font-size: 14px; color: ${textColor};">${escapeHtml(r.name)}</div>
+                                <div style="font-size: 12px; color: ${textColor}80; word-break: break-word;">${escapeHtml(r.message)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    // ========== SINGLE TEST HANDLER ==========
     document.querySelectorAll('.run-single-test').forEach(btn => {
         btn.addEventListener('click', async function() {
             const testId = this.dataset.test;
             const card = document.getElementById(`card-${testId}`);
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
-            const btn = card.querySelector('.run-single-test');
+            const btnEl = card.querySelector('.run-single-test');
             const def = testDefs[testId];
             if (!def) return;
 
-            btn.disabled = true;
-            btn.textContent = t('hw.btn.running', _getLang());
-            statusSpan.style.color = '#f59e0b';
-            statusSpan.textContent = t('hw.status.running', _getLang());
-            msgSpan.style.display = 'none';
+            btnEl.disabled = true;
+            btnEl.textContent = t('hw.btn.running', _getLang());
+            setCardStatus(card, 'running', t('hw.status.running', _getLang()), null);
 
             try {
                 const result = await def.run();
-                const passed = result.passed;
-                const icon = passed ? '✅' : '❌';
-                const color = passed ? '#2e7d32' : '#d32f2f';
-                statusSpan.style.color = color;
-                statusSpan.textContent = `${icon} ${passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang())}`;
-                msgSpan.textContent = result.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = color;
-                btn.textContent = passed ? t('hw.btn.rerun', _getLang()) : t('hw.btn.details', _getLang());
+                const status = result.passed ? 'passed' : 'failed';
+                // ✅ FIX: Use translation directly (already contains emoji)
+                const label = result.passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang());
+                setCardStatus(card, status, label, result.message);
+                btnEl.textContent = result.passed ? t('hw.btn.rerun', _getLang()) : t('hw.btn.details', _getLang());
 
-                window._hardwareTestResults[testId] = { name: t(def.titleKey, _getLang()), passed, message: result.message };
+                window._hardwareTestResults[testId] = { name: t(def.titleKey, _getLang()), passed: result.passed, message: result.message };
                 saveHardwareResults(null);
+                await persistHardwareResults(window._hardwareTestResults, null, currentDeviceId);
             } catch (err) {
-                statusSpan.style.color = '#d32f2f';
-                statusSpan.textContent = t('hw.status.error', _getLang());
-                msgSpan.textContent = err.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = '#d32f2f';
-                btn.textContent = t('hw.btn.retry', _getLang());
+                setCardStatus(card, 'error', t('hw.status.error', _getLang()), err.message);
+                btnEl.textContent = t('hw.btn.retry', _getLang());
 
                 window._hardwareTestResults[testId] = { name: t(def.titleKey, _getLang()), passed: false, message: err.message };
                 saveHardwareResults(null);
+                await persistHardwareResults(window._hardwareTestResults, null, currentDeviceId);
             } finally {
-                btn.disabled = false;
+                btnEl.disabled = false;
             }
         });
     });
 
-    // ========== FULL SUITE HANDLER (with summary save) ==========
+    // ========== FULL SUITE HANDLER ==========
     document.getElementById('startHwTestBtn').addEventListener('click', async function() {
         const resultsContainer = document.getElementById('hwResults');
         resultsContainer.style.display = 'block';
-        const cardsContainer = document.getElementById('hwCardsContainer');
-        cardsContainer.innerHTML = '';
         const results = {};
 
         try {
@@ -677,87 +811,40 @@ async function renderHardwareTests() {
         for (const id of testIds) {
             const def = testDefs[id];
             const card = document.getElementById(`card-${id}`);
-            const statusSpan = card.querySelector('.status-text');
-            const msgSpan = card.querySelector('.result-message');
             const btn = card.querySelector('.run-single-test');
             btn.disabled = true;
             btn.textContent = t('hw.btn.running', _getLang());
-            statusSpan.style.color = '#f59e0b';
-            statusSpan.textContent = t('hw.status.running', _getLang());
-            msgSpan.style.display = 'none';
+            setCardStatus(card, 'running', t('hw.status.running', _getLang()), null);
 
             try {
                 const result = await def.run();
                 results[id] = { name: t(def.titleKey, _getLang()), passed: result.passed, message: result.message };
-                const passed = result.passed;
-                const icon = passed ? '✅' : '❌';
-                const color = passed ? '#2e7d32' : '#d32f2f';
-                statusSpan.style.color = color;
-                statusSpan.textContent = `${icon} ${passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang())}`;
-                msgSpan.textContent = result.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = color;
-                btn.textContent = passed ? t('hw.btn.rerun', _getLang()) : t('hw.btn.details', _getLang());
-                btn.disabled = false;
+                // ✅ FIX: Use translation directly
+                const label = result.passed ? t('hw.status.passed', _getLang()) : t('hw.status.failed', _getLang());
+                setCardStatus(card, result.passed ? 'passed' : 'failed', label, result.message);
+                btn.textContent = result.passed ? t('hw.btn.rerun', _getLang()) : t('hw.btn.details', _getLang());
             } catch (err) {
                 results[id] = { name: t(def.titleKey, _getLang()), passed: false, message: err.message };
-                statusSpan.style.color = '#d32f2f';
-                statusSpan.textContent = t('hw.status.error', _getLang());
-                msgSpan.textContent = err.message || '';
-                msgSpan.style.display = 'block';
-                msgSpan.style.color = '#d32f2f';
+                setCardStatus(card, 'error', t('hw.status.error', _getLang()), err.message);
                 btn.textContent = t('hw.btn.retry', _getLang());
-                btn.disabled = false;
             }
+            btn.disabled = false;
             await new Promise(r => setTimeout(r, 500));
         }
 
         const passedCount = Object.values(results).filter(r => r.passed).length;
         const total = testIds.length;
         const percentage = Math.round((passedCount / total) * 100);
+        const summary = { total, passed: passedCount, percentage };
 
-        const summaryDiv = document.getElementById('hwSummaryCard');
-        summaryDiv.innerHTML = `
-            <div class="card-header"><i class="fas fa-clipboard-list"></i> <span data-i18n="hw.summary.title">${t('hw.summary.title', _getLang())}</span></div>
-            <div class="card-content">
-                <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <div style="position: relative; width: 80px; height: 80px; flex-shrink: 0;">
-                        <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
-                            <circle cx="18" cy="18" r="16" fill="none" stroke="#e6e6e6" stroke-width="3"/>
-                            <circle cx="18" cy="18" r="16" fill="none" stroke="${percentage >= 80 ? '#2e7d32' : percentage >= 60 ? '#ed6c02' : '#d32f2f'}" stroke-width="3"
-                                stroke-dasharray="${percentage} 100" stroke-linecap="round"/>
-                        </svg>
-                        <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: bold;">${percentage}%</span>
-                    </div>
-                    <div>
-                        <h3 style="margin: 0; font-size: 20px;">${passedCount}/${total} ${t('hw.summary.testsPassed', _getLang())}</h3>
-                        <p style="margin: 4px 0 0; color: #6B7280;">${percentage === 100 ? t('hw.summary.allPassed', _getLang()) : percentage >= 80 ? t('hw.summary.mostPassed', _getLang()) : t('hw.summary.multipleFailures', _getLang())}</p>
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
-                    ${Object.values(results).map(r => `
-                        <div style="background: ${r.passed ? '#e8f5e9' : '#ffebee'}; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${r.passed ? '#2e7d32' : '#d32f2f'};">
-                            <span style="font-size: 20px;">${r.passed ? '✅' : '❌'}</span>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; font-size: 14px;">${escapeHtml(r.name)}</div>
-                                <div style="font-size: 12px; color: #555; word-break: break-word;">${escapeHtml(r.message)}</div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+        renderSummary(summary, Object.values(results));
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
 
-        // ---- SAVE FULL SUITE SUMMARY ----
-        const summary = { total, passed: passedCount, percentage };
         window._hardwareTestResults = results;
         saveHardwareResults(summary);
+        await persistHardwareResults(results, summary, currentDeviceId);
     });
 }
 
-// ---- Helper to get current language ----
-function _getLang() {
-    return window._activeLang
-        || (window.SmartHubI18n && window.SmartHubI18n.getCurrentLang ? window.SmartHubI18n.getCurrentLang() : 'en');
-}
+// ---- EXPOSE GLOBALLY ----
+window.renderHardwareTests = renderHardwareTests;

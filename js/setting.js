@@ -7,7 +7,6 @@ async function renderSettings() {
     const container = document.getElementById('pageContent');
     const userId = getCurrentUserId();
 
-    // Load settings – Supabase first (if logged in), then localStorage
     const settings = await loadSettingsWithFallback(userId);
     const lang = settings.language || 'en';
 
@@ -65,7 +64,7 @@ async function renderSettings() {
                 <p data-i18n="languageHint" style="font-size:12px; color:${settings.textColor}80; margin-top:4px;">${t('languageHint', lang)}</p>
             </div>
 
-            <!-- 🎨 Accent Color (Primary) -->
+            <!-- Accent Color -->
             <div style="margin-bottom:24px;">
                 <label data-i18n="themeLabel" style="font-weight:600; font-size:15px; display:block; margin-bottom:6px; color:${settings.textColor};">${t('themeLabel', lang)}</label>
                 <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
@@ -78,6 +77,13 @@ async function renderSettings() {
                     <input type="color" id="customThemeColor" value="${settings.themeColor}" style="width:40px; height:40px; border:none; padding:0; cursor:pointer; background:none;">
                 </div>
                 <p data-i18n="themeHint" style="font-size:12px; color:${settings.textColor}80; margin-top:4px;">${t('themeHint', lang)}</p>
+            </div>
+
+            <!-- Button Color -->
+            <div style="margin-bottom:24px;">
+                <label for="buttonColorPicker" style="font-weight:600; font-size:15px; display:block; margin-bottom:6px; color:${settings.textColor};">Button Color</label>
+                <input type="color" id="buttonColorPicker" value="${settings.buttonColor || settings.themeColor}" style="width:60px; height:40px; border:1px solid ${settings.textColor}30; border-radius:6px; padding:2px; cursor:pointer; background:${settings.cardColor};">
+                <p style="font-size:12px; color:${settings.textColor}80; margin-top:4px;">Color used for primary buttons and action highlights.</p>
             </div>
 
             <!-- Page Background -->
@@ -103,7 +109,8 @@ async function renderSettings() {
 
             <!-- Actions -->
             <div style="border-top:1px solid ${settings.textColor}30; padding-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
-                <button id="saveSettingsBtn" data-i18n="saveBtn" class="btn-primary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:none; background:${settings.themeColor}; color:#fff; cursor:pointer; font-weight:600;">${t('saveBtn', lang)}</button>
+                <!-- ✅ Save button – no inline color; applyTheme will set text to theme text color -->
+                <button id="saveSettingsBtn" data-i18n="saveBtn" class="btn-primary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:none; background:${settings.buttonColor || settings.themeColor}; color:${settings.textColor}; cursor:pointer; font-weight:600;">${t('saveBtn', lang)}</button>
                 <button id="resetSettingsBtn" data-i18n="resetBtn" class="btn-secondary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:1px solid ${settings.textColor}30; background:${settings.cardColor}; color:${settings.textColor}; cursor:pointer;">${t('resetBtn', lang)}</button>
             </div>
 
@@ -137,6 +144,20 @@ async function renderSettings() {
         document.querySelectorAll('.theme-color-btn').forEach(b => b.style.borderColor = 'transparent');
         applyTheme({ ...settings, themeColor: color });
     }, 200));
+
+    // ---- Button color picker (live preview) ----
+    document.getElementById('buttonColorPicker').addEventListener('input', function() {
+        const color = this.value;
+        applyTheme({ ...settings, buttonColor: color });
+        // Update the save button background immediately, and set text to theme text color
+        const saveBtn = document.getElementById('saveSettingsBtn');
+        if (saveBtn) {
+            saveBtn.style.background = color;
+            saveBtn.style.borderColor = color;
+            // ✅ Use the theme's text color (not contrast color)
+            saveBtn.style.color = settings.textColor;
+        }
+    });
 
     // ---- Background color picker ----
     document.getElementById('bgColorPicker').addEventListener('input', function() {
@@ -208,18 +229,17 @@ async function renderSettings() {
     document.getElementById('saveSettingsBtn').addEventListener('click', async function() {
         const language = langBtn.dataset.value;
         const themeColor = document.getElementById('customThemeColor').value;
+        const buttonColor = document.getElementById('buttonColorPicker').value;
         const bgColor = document.getElementById('bgColorPicker').value;
         const cardColor = document.getElementById('cardColorPicker').value;
         const textColor = document.getElementById('textColorPicker').value;
 
-        const newSettings = { language, themeColor, bgColor, cardColor, textColor };
+        const newSettings = { language, themeColor, buttonColor, bgColor, cardColor, textColor };
 
-        // Save to localStorage (always)
         localStorage.setItem('smartHubSettings', JSON.stringify(newSettings));
         applyTheme(newSettings);
         applyLanguage(language);
 
-        // If user is logged in, sync to Supabase
         if (userId) {
             const saved = await saveUserSettings(userId, newSettings);
             if (saved) {
@@ -232,20 +252,17 @@ async function renderSettings() {
         const feedback = document.getElementById('settingsFeedback');
         feedback.innerHTML = `<span style="color:#16a34a;">${t('savedMsg', language)}</span>`;
 
-        // Reload after a short delay to apply changes everywhere
         setTimeout(() => location.reload(), 400);
     });
 
     // ---- RESET – with auto‑reload and Supabase sync ----
     document.getElementById('resetSettingsBtn').addEventListener('click', async function() {
-        const defaults = { language: 'en', themeColor: '#0d6efd', bgColor: '#ffffff', cardColor: '#ffffff', textColor: '#1f2937' };
+        const defaults = { language: 'en', themeColor: '#0d6efd', buttonColor: '#0d6efd', bgColor: '#ffffff', cardColor: '#ffffff', textColor: '#1f2937' };
 
-        // Reset localStorage
         localStorage.setItem('smartHubSettings', JSON.stringify(defaults));
         applyTheme(defaults);
         applyLanguage(defaults.language);
 
-        // If user is logged in, sync defaults to Supabase
         if (userId) {
             const saved = await saveUserSettings(userId, defaults);
             if (saved) {
@@ -256,12 +273,10 @@ async function renderSettings() {
         const feedback = document.getElementById('settingsFeedback');
         feedback.innerHTML = `<span style="color:#16a34a;">${t('resetMsg', defaults.language)}</span>`;
 
-        // Reload after a short delay
         setTimeout(() => location.reload(), 400);
     });
 }
 
-// ---- Debounce helper ----
 function debounce(fn, delay = 300) {
     let timer;
     return function(...args) {
@@ -270,6 +285,5 @@ function debounce(fn, delay = 300) {
     };
 }
 
-// ---- Expose globally ----
 window.renderSettings = renderSettings;
 window.debounce = debounce;

@@ -977,108 +977,95 @@
     }
 
     async function testImeiPresent() {
-        const name = _t('adv.test.imei.name', 'IMEI Present');
-        try {
-            let imei = null;
-            let method = '';
+    const name = _t('adv.test.imei.name', 'IMEI Present');
+    let imei = null;
+    let method = '';
+
+    // ---- Reliable methods only (no service call) ----
+    const attempts = [
+        // 1. getprop
+        async () => {
+            const props = ['ro.imei', 'gsm.imei', 'persist.radio.imei', 'ro.ril.imei'];
+            for (const prop of props) {
+                try {
+                    const result = await adb(`getprop ${prop}`);
+                    const val = result.output.trim();
+                    if (val && val.length >= 14) {
+                        imei = val;
+                        method = `getprop ${prop}`;
+                        return true;
+                    }
+                } catch (_) {}
+            }
+            return false;
+        },
+        // 2. dumpsys telephony.registry
+        async () => {
             try {
-                await adb('am broadcast -a com.smarthub.diagnostics.GET_IMEI');
-                await new Promise(r => setTimeout(r, 2000));
-                const result = await adb('cat /data/local/tmp/imei.txt 2>/dev/null');
-                const val = (result.output || '').trim();
-                if (val && val.length >= 14) {
-                    imei = val;
-                    method = 'companion app (broadcast)';
+                const result = await adb('dumpsys telephony.registry | grep -i "imei"');
+                const output = result.output || '';
+                const match = output.match(/imei[:=]\s*(\d{14,17})/i);
+                if (match) {
+                    imei = match[1];
+                    method = 'dumpsys telephony.registry';
+                    return true;
                 }
             } catch (_) {}
-            if (!imei) {
-                try {
-                    const result = await adb('service call iphonesubinfo 1 2>&1');
-                    const output = result.output || '';
-                    if (!output.includes('fffffffc')) {
-                        const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
-                        if (hexGroups.length > 0) {
-                            const chars = hexGroups.map(g => g.replace(/\./g, '')).join('').match(/.{1,4}/g)?.map(h => String.fromCharCode(parseInt(h, 16))).join('') || '';
-                            const digitsOnly = chars.replace(/[^\d]/g, '');
-                            if (digitsOnly.length >= 14) {
-                                imei = digitsOnly;
-                                method = 'service call (no root)';
-                            }
-                        }
-                    }
-                } catch (_) {}
-            }
-            if (!imei) {
-                const props = ['persist.radio.imei','gsm.imei','ro.imei','ro.ril.imei','ril.imei','ro.ril.imei1','ro.ril.imei2'];
-                for (const prop of props) {
-                    try {
-                        const result = await adb(`getprop ${prop}`);
-                        const val = (result.output || '').trim();
-                        if (val && val.length >= 14) {
-                            imei = val;
-                            method = `getprop ${prop}`;
-                            break;
-                        }
-                    } catch (_) {}
+            return false;
+        },
+        // 3. dumpsys iphonesubinfo
+        async () => {
+            try {
+                const result = await adb('dumpsys iphonesubinfo 2>&1');
+                const output = result.output || '';
+                const match = output.match(/Device ID[:=]\s*(\d{14,17})/i);
+                if (match) {
+                    imei = match[1];
+                    method = 'dumpsys iphonesubinfo';
+                    return true;
                 }
-            }
-            if (!imei) {
-                try {
-                    const result = await adb('dumpsys iphonesubinfo 2>&1');
-                    const output = result.output || '';
-                    const match = output.match(/Device ID[:=]\s*(\d{14,17})/i);
-                    if (match) { imei = match[1]; method = 'dumpsys iphonesubinfo (legacy)'; }
-                } catch (_) {}
-            }
-            if (!imei) {
-                try {
-                    const result = await adb('dumpsys telephony.registry | grep -i "imei"');
-                    const output = result.output || '';
-                    const match = output.match(/imei[:=]\s*(\d{14,17})/i);
-                    if (match) { imei = match[1]; method = 'dumpsys telephony.registry'; }
-                } catch (_) {}
-            }
-            if (!imei) {
-                try {
-                    const result = await adb('service call iphonesubinfo 2 2>&1');
-                    const output = result.output || '';
-                    if (!output.includes('fffffffc')) {
-                        const hexGroups = [...output.matchAll(/'([0-9a-fA-F.]{4})'/g)].map(m => m[1]);
-                        if (hexGroups.length > 0) {
-                            const chars = hexGroups.map(g => g.replace(/\./g, '')).join('').match(/.{1,4}/g)?.map(h => String.fromCharCode(parseInt(h, 16))).join('') || '';
-                            const digitsOnly = chars.replace(/[^\d]/g, '');
-                            if (digitsOnly.length >= 14) {
-                                imei = digitsOnly;
-                                method = 'service call (index 2)';
-                            }
-                        }
-                    }
-                } catch (_) {}
-            }
-            if (!imei) {
-                try {
-                    const result = await adb('dumpsys phone 2>/dev/null | grep -i "imei"');
-                    const output = result.output || '';
-                    const match = output.match(/imei[:=]\s*(\d{14,17})/i);
-                    if (match) { imei = match[1]; method = 'dumpsys phone'; }
-                } catch (_) {}
-            }
-            const passed = imei !== null && imei.length >= 14;
-            return {
-                name,
-                passed,
-                message: passed ? `IMEI present (${method})` : _t('adv.test.imei.message.fallback', 'IMEI not accessible — try dialing `*#06#` manually'),
-                fix: passed ? '' : _t('adv.test.imei.fix', 'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.')
-            };
-        } catch (e) {
-            return {
-                name,
-                passed: false,
-                message: _t('adv.common.error', 'Error: ') + e.message,
-                fix: _t('adv.test.imei.fixRadio', 'Check device radio.')
-            };
+            } catch (_) {}
+            return false;
+        },
+        // 4. dumpsys phone
+        async () => {
+            try {
+                const result = await adb('dumpsys phone 2>/dev/null | grep -i "imei"');
+                const output = result.output || '';
+                const match = output.match(/imei[:=]\s*(\d{14,17})/i);
+                if (match) {
+                    imei = match[1];
+                    method = 'dumpsys phone';
+                    return true;
+                }
+            } catch (_) {}
+            return false;
+        }
+    ];
+
+    // Run attempts with a timeout per attempt (15 seconds total)
+    const timeout = 15000;
+    const start = Date.now();
+
+    for (const attempt of attempts) {
+        if (Date.now() - start > timeout) break;
+        try {
+            if (await attempt()) break;
+        } catch (_) {
+            // Continue to next method
         }
     }
+
+    const passed = imei !== null && imei.length >= 14;
+    const message = passed
+        ? `IMEI present (${method})`
+        : _t('adv.test.imei.message.fallback', 'IMEI not accessible — try dialing `*#06#` manually');
+    const fix = passed
+        ? ''
+        : _t('adv.test.imei.fix', 'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.');
+
+    return { name, passed, message, fix };
+}
 
     async function testChargingCurrent() {
         const name = _t('adv.test.chargingCurrent.name', 'Charging Current');
@@ -1336,160 +1323,169 @@
         }
     }
 
-    // ---- Public API ----
-    window.SmartHub = window.SmartHub || {};
-    window.SmartHub.advanceDiagnostic = {
-        runFullSuite: async function(deviceId, onProgress) {
-            currentDeviceId = deviceId;
-            if (typeof onProgress === 'function') onProgress(_t('adv.progress.software', 'Running software diagnostics...'));
+   // ---- Public API ----
+window.SmartHub = window.SmartHub || {};
+window.SmartHub.advanceDiagnostic = {
+    runFullSuite: async function(deviceId, onProgress) {
+        currentDeviceId = deviceId;
+        if (typeof onProgress === 'function') onProgress(_t('adv.progress.software', 'Running software diagnostics...'));
 
-            const softwareResults = await runSoftwareDiagnostics();
+        const softwareResults = await runSoftwareDiagnostics();
 
-            if (typeof onProgress === 'function') onProgress(_t('adv.progress.deep', 'Running deep & rootkit scans...'));
-            const [deep, rootkit] = await Promise.all([
-                performDeepScan(deviceId),
-                performRootkitScan(deviceId)
-            ]);
+        if (typeof onProgress === 'function') onProgress(_t('adv.progress.deep', 'Running deep & rootkit scans...'));
+        const [deep, rootkit] = await Promise.all([
+            performDeepScan(deviceId),
+            performRootkitScan(deviceId)
+        ]);
 
-            if (typeof onProgress === 'function') onProgress(_t('adv.progress.ai', 'Analyzing with AI...'));
-            const aiConclusion = await runAIAnalysis(deviceId, softwareResults, deep, rootkit);
+        if (typeof onProgress === 'function') onProgress(_t('adv.progress.ai', 'Analyzing with AI...'));
+        const aiConclusion = await runAIAnalysis(deviceId, softwareResults, deep, rootkit);
 
-            diagResults = { software: softwareResults, deep, rootkit, ai: aiConclusion };
-            if (typeof onProgress === 'function') onProgress(_t('adv.progress.done', 'Done'));
-            return diagResults;
-        },
+        diagResults = { software: softwareResults, deep, rootkit, ai: aiConclusion };
+        if (typeof onProgress === 'function') onProgress(_t('adv.progress.done', 'Done'));
+        return diagResults;
+    },
 
-        getResults: function() { return diagResults; },
+    getResults: function() { return diagResults; },
 
-        renderResults: function(containerId) {
-            _currentContainerId = containerId;
-            _lastRenderResults = diagResults;
-            this._doRender(containerId);
-        },
+    // 👇 NEW: Load external data and render full results
+    loadAndRender: function(data, containerId) {
+        if (!data) return;
+        diagResults = data;
+        _currentContainerId = containerId || 'advancedDiagContainer';
+        _lastRenderResults = data;
+        this._doRender(_currentContainerId);
+    },
 
-        _doRender: function(containerId) {
-            if (_isRendering) return;
-            _isRendering = true;
-            try {
-                const container = document.getElementById(containerId);
-                if (!container || !diagResults) return;
+    renderResults: function(containerId) {
+        _currentContainerId = containerId;
+        _lastRenderResults = diagResults;
+        this._doRender(containerId);
+    },
 
-                const { software, deep, rootkit, ai } = diagResults;
-                let html = '';
+    _doRender: function(containerId) {
+        if (_isRendering) return;
+        _isRendering = true;
+        try {
+            const container = document.getElementById(containerId);
+            if (!container || !diagResults) return;
 
-                const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
-                const total = validSoftware.length;
-                const passed = validSoftware.filter(t => t.passed).length;
-                const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-                const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
-                const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+            const { software, deep, rootkit, ai } = diagResults;
+            let html = '';
 
-                html += `
-                    <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                        <div style="font-size:32px;">${icon}</div>
-                        <div>
-                            <strong style="font-size:20px; color:${color};">${pct}%</strong>
-                            <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
-                        </div>
-                        <div style="flex:1; min-width:100px;">
-                            <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
-                                <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
-                            </div>
+            const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
+            const total = validSoftware.length;
+            const passed = validSoftware.filter(t => t.passed).length;
+            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+            const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+
+            html += `
+                <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                    <div style="font-size:32px;">${icon}</div>
+                    <div>
+                        <strong style="font-size:20px; color:${color};">${pct}%</strong>
+                        <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
+                    </div>
+                    <div style="flex:1; min-width:100px;">
+                        <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
+                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
                         </div>
                     </div>
-                `;
+                </div>
+            `;
 
-                if (deep || rootkit) {
-                    html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
-                    if (deep) {
-                        let deepText = deep.summary || 'No issues';
-                        const match = deepText.match(/(\d+)\s+findings/);
-                        const displayText = match ? `${match[1]} issues` : deepText;
-                        html += `
-                            <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                                🔬 ${_t('adv.result.deepScan', 'Deep Scan')}: <strong>${escapeHtml(displayText)}</strong>
-                            </span>
-                        `;
-                    }
-                    if (rootkit) {
-                        const isOk = !rootkit.summary.toLowerCase().includes('unavailable') && !rootkit.summary.toLowerCase().includes('error');
-                        const icon = isOk ? '✅' : '⚠️';
-                        html += `
-                            <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                                🛡️ ${_t('adv.result.rootkit', 'Rootkit')}: <strong>${escapeHtml(rootkit.summary || 'Clean')}</strong> ${icon}
-                            </span>
-                        `;
-                    }
-                    html += `</div>`;
-                }
-
-                if (validSoftware.length > 0) {
-                    html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
-                    for (const test of validSoftware) {
-                        const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
-                        const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
-                        const icon = test.passed ? '✅' : '❌';
-                        let fixHtml = '';
-                        if (!test.passed && test.fix) {
-                            fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
-                                <strong>🔧 ${_t('adv.result.fix', 'Fix')}:</strong> ${escapeHtml(test.fix)}
-                            </div>`;
-                        }
-                        html += `
-                            <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
-                                <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
-                                <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
-                                ${fixHtml}
-                            </div>
-                        `;
-                    }
-                    html += `</div>`;
-                } else {
-                    html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">${_t('adv.result.noResults', 'No test results available.')}</div>`;
-                }
-
-                if (ai) {
-                    let confidenceColor = '#6B7280';
-                    if (ai.confidence === 'High') confidenceColor = '#2e7d32';
-                    else if (ai.confidence === 'Medium') confidenceColor = '#ed6c02';
-                    else if (ai.confidence === 'Low') confidenceColor = '#d32f2f';
-
+            if (deep || rootkit) {
+                html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
+                if (deep) {
+                    let deepText = deep.summary || 'No issues';
+                    const match = deepText.match(/(\d+)\s+findings/);
+                    const displayText = match ? `${match[1]} issues` : deepText;
                     html += `
-                        <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); border-radius:12px; border:1px solid #c7d2fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-                                <span style="font-size:28px;">🧠</span>
-                                <div>
-                                    <h3 style="margin:0; color:#1e3a8a; font-size:18px;">${_t('adv.result.conclusion', 'AI Diagnosis')}</h3>
-                                    <span style="font-size:12px; color:#6B7280;">${_t('adv.result.rootCause', 'Root cause analysis')}</span>
-                                </div>
-                                <span style="margin-left:auto; font-size:12px; background:${confidenceColor}20; color:${confidenceColor}; padding:2px 12px; border-radius:12px; font-weight:600;">
-                                    ${_t('adv.result.confidence', 'Confidence')}: ${escapeHtml(ai.confidence || 'Medium')}
-                                </span>
-                            </div>
-                            <div style="font-size:15px; color:#1e293b; margin-bottom:10px; padding:12px; background:rgba(255,255,255,0.5); border-radius:8px;">
-                                <strong>📋 ${_t('adv.result.summary', 'Conclusion')}:</strong><br>
-                                ${escapeHtml(ai.summary)}
-                            </div>
-                            <div style="margin-top:8px;">
-                                <strong style="color:#1e3a8a;">🔧 ${_t('adv.result.recommendedActions', 'Recommended Actions')}:</strong>
-                                <ul style="margin:6px 0 0 20px; padding:0; color:#334155;">
-                                    ${ai.actions.map(a => `<li style="margin-bottom:4px;">${escapeHtml(a)}</li>`).join('')}
-                                </ul>
-                            </div>
-                            ${ai.nextStep ? `
-                            <div style="margin-top:10px; padding:10px; background:#dbeafe; border-radius:6px; border-left:3px solid #3b82f6;">
-                                <strong>📌 ${_t('adv.result.nextStep', 'Next Step')}:</strong> ${escapeHtml(ai.nextStep)}
-                            </div>` : ''}
+                        <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                            🔬 ${_t('adv.result.deepScan', 'Deep Scan')}: <strong>${escapeHtml(displayText)}</strong>
+                        </span>
+                    `;
+                }
+                if (rootkit) {
+                    const isOk = !rootkit.summary.toLowerCase().includes('unavailable') && !rootkit.summary.toLowerCase().includes('error');
+                    const icon = isOk ? '✅' : '⚠️';
+                    html += `
+                        <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                            🛡️ ${_t('adv.result.rootkit', 'Rootkit')}: <strong>${escapeHtml(rootkit.summary || 'Clean')}</strong> ${icon}
+                        </span>
+                    `;
+                }
+                html += `</div>`;
+            }
+
+            if (validSoftware.length > 0) {
+                html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
+                for (const test of validSoftware) {
+                    const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
+                    const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
+                    const icon = test.passed ? '✅' : '❌';
+                    let fixHtml = '';
+                    if (!test.passed && test.fix) {
+                        fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
+                            <strong>🔧 ${_t('adv.result.fix', 'Fix')}:</strong> ${escapeHtml(test.fix)}
+                        </div>`;
+                    }
+                    html += `
+                        <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
+                            <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
+                            <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
+                            ${fixHtml}
                         </div>
                     `;
                 }
-
-                container.innerHTML = html;
-            } finally {
-                _isRendering = false;
+                html += `</div>`;
+            } else {
+                html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">${_t('adv.result.noResults', 'No test results available.')}</div>`;
             }
+
+            if (ai) {
+                let confidenceColor = '#6B7280';
+                if (ai.confidence === 'High') confidenceColor = '#2e7d32';
+                else if (ai.confidence === 'Medium') confidenceColor = '#ed6c02';
+                else if (ai.confidence === 'Low') confidenceColor = '#d32f2f';
+
+                html += `
+                    <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); border-radius:12px; border:1px solid #c7d2fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                            <span style="font-size:28px;">🧠</span>
+                            <div>
+                                <h3 style="margin:0; color:#1e3a8a; font-size:18px;">${_t('adv.result.conclusion', 'AI Diagnosis')}</h3>
+                                <span style="font-size:12px; color:#6B7280;">${_t('adv.result.rootCause', 'Root cause analysis')}</span>
+                            </div>
+                            <span style="margin-left:auto; font-size:12px; background:${confidenceColor}20; color:${confidenceColor}; padding:2px 12px; border-radius:12px; font-weight:600;">
+                                ${_t('adv.result.confidence', 'Confidence')}: ${escapeHtml(ai.confidence || 'Medium')}
+                            </span>
+                        </div>
+                        <div style="font-size:15px; color:#1e293b; margin-bottom:10px; padding:12px; background:rgba(255,255,255,0.5); border-radius:8px;">
+                            <strong>📋 ${_t('adv.result.summary', 'Conclusion')}:</strong><br>
+                            ${escapeHtml(ai.summary)}
+                        </div>
+                        <div style="margin-top:8px;">
+                            <strong style="color:#1e3a8a;">🔧 ${_t('adv.result.recommendedActions', 'Recommended Actions')}:</strong>
+                            <ul style="margin:6px 0 0 20px; padding:0; color:#334155;">
+                                ${ai.actions.map(a => `<li style="margin-bottom:4px;">${escapeHtml(a)}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ${ai.nextStep ? `
+                        <div style="margin-top:10px; padding:10px; background:#dbeafe; border-radius:6px; border-left:3px solid #3b82f6;">
+                            <strong>📌 ${_t('adv.result.nextStep', 'Next Step')}:</strong> ${escapeHtml(ai.nextStep)}
+                        </div>` : ''}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        } finally {
+            _isRendering = false;
         }
-    };
+    }
+};
 
     // ---- Language change listener (safe, non-looping) ----
     let _languageChangeHandler = function(e) {
@@ -1525,50 +1521,45 @@
     }
 
     // ---- Expose the page renderer as a global function ----
-    // ---- Expose the page renderer as a global function ----
-window.renderAdvancedDiagnostic = function() {
+    window.renderAdvancedDiagnostic = async function() {
     const container = document.getElementById('pageContent');
 
-    // Helper to get the current device ID from status bar or global
     function getCurrentDeviceId() {
-        // 1. From global (set by ui.js)
         if (window.currentDeviceId) return window.currentDeviceId;
-        // 2. From status bar text
         const statusSpan = document.querySelector('#connectionStatus span');
         if (statusSpan) {
             const text = statusSpan.textContent;
             const match = text.match(/ADB:\s*([A-Fa-f0-9]+)/);
             if (match) return match[1];
         }
-        // 3. From localStorage or any other place? Not needed.
         return null;
     }
 
-    // Use global translations – they're already defined at the top of this file
-    // We'll just use _t and _getLang from the outer scope (they are hoisted)
-
-    // ---- Render the page ----
     let deviceId = getCurrentDeviceId();
 
+    // ---- No device: show loading spinner ----
     if (!deviceId) {
-        // Show "No Device Connected" message – but still render the button?
-        // The user might connect later, so we'll render the UI but show a warning.
         container.innerHTML = `
             <div style="margin-bottom: 24px;">
                 <h1 style="margin-bottom: 6px; font-size: 24px; font-weight: 700; color: #1f2937;" data-i18n="adv.page.title">${_t('adv.page.title', '🔍 Advanced Diagnostics')}</h1>
                 <p style="color: #6b7280; font-size: 14px; margin: 0;" data-i18n="adv.page.subtitle">${_t('adv.page.subtitle', 'A deeper pass across software behavior, installed apps, and rootkit indicators.')}</p>
             </div>
-            <div class="card" style="text-align: center; padding: 40px; background: #fff8e1; border: 1px solid #ffecb3;">
-                <i class="fas fa-plug" style="font-size: 48px; color: #f57c00;"></i>
-                <h2 data-i18n="adv.page.noDeviceTitle">${_t('adv.page.noDeviceTitle', 'No Device Connected')}</h2>
-                <p data-i18n="adv.page.noDeviceDesc">${_t('adv.page.noDeviceDesc', 'Please connect your Android phone via USB and enable USB debugging.')}</p>
-                <button id="retryDeviceCheckBtn" style="margin-top: 12px; padding: 8px 24px; border: 1px solid #f57c00; background: white; border-radius: 8px; cursor: pointer;" data-i18n="adv.page.retryCheck">${_t('adv.page.retryCheck', '🔄 Check Again')}</button>
+            <div class="card" style="text-align: center; padding: 40px; background: #f8fafc; border: 1px solid #e5e7eb;">
+                <div style="position: relative; width: 60px; height: 60px; margin: 0 auto 16px;">
+                    <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; border-right-color: #60a5fa; border-bottom-color: #93c5fd; animation: spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;"></div>
+                    <div style="position: absolute; width: 80%; height: 80%; top: 10%; left: 10%; border-radius: 50%; border: 4px solid transparent; border-top-color: #7c3aed; border-right-color: #a78bfa; border-bottom-color: #c4b5fd; animation: spin 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite reverse;"></div>
+                    <div style="position: absolute; width: 60%; height: 60%; top: 20%; left: 20%; border-radius: 50%; border: 4px solid transparent; border-top-color: #10b981; border-right-color: #34d399; border-bottom-color: #6ee7b7; animation: spin 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;"></div>
+                </div>
+                <h2 style="color: #1f2937; font-size: 18px; font-weight: 600; margin-bottom: 8px;" data-i18n="adv.page.waitingDevice">${_t('adv.page.waitingDevice', 'Waiting for device…')}</h2>
+                <p style="color: #6b7280; font-size: 14px; margin: 0;" data-i18n="adv.page.connectHint">${_t('adv.page.connectHint', 'Connect your Android phone via USB and enable USB debugging. The page will refresh automatically.')}</p>
+                <div style="margin-top: 16px;">
+                    <button id="retryDeviceCheckBtn" class="btn-secondary" style="padding: 8px 24px; font-size: 13px; border-radius: 8px;" data-i18n="adv.page.retryCheck">${_t('adv.page.retryCheck', '🔄 Check Now')}</button>
+                </div>
             </div>
             <div id="advancedDiagContainer" style="margin-top: 20px;"></div>
         `;
         if (typeof applyLanguage === 'function') applyLanguage(_getLang());
 
-        // Retry button: re-run renderAdvancedDiagnostic
         document.getElementById('retryDeviceCheckBtn')?.addEventListener('click', function() {
             window.renderAdvancedDiagnostic();
         });
@@ -1634,14 +1625,104 @@ window.renderAdvancedDiagnostic = function() {
 
     container.innerHTML = pageHtml;
 
-    // Apply language
     if (typeof applyLanguage === 'function') applyLanguage(_getLang());
 
-    // ---- Button click handler ----
-    const runBtn = document.getElementById('runAdvancedDiagBtn');
+    // ---- 👇 NEW: Load saved results from Supabase (or localStorage) ----
     const diagContainer = document.getElementById('advancedDiagContainer');
 
-    // Helper to run ADB commands with the current device ID
+    async function loadAndRenderResults() {
+    let results = null;
+    let source = 'localStorage';
+
+    // ---- Show loading spinner in the container ----
+    if (diagContainer) {
+        diagContainer.innerHTML = `
+            <div style="text-align: center; padding: 30px 0;">
+                <div style="position: relative; width: 40px; height: 40px; margin: 0 auto;">
+                    <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 4px solid transparent; border-top-color: #3b82f6; border-right-color: #60a5fa; border-bottom-color: #93c5fd; animation: spin 0.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;"></div>
+                </div>
+                <p style="margin-top: 12px; color: #6B7280; font-size: 14px;">${_t('adv.loading.results', 'Loading diagnostic results...')}</p>
+            </div>
+        `;
+    }
+
+    try {
+        const { getCurrentUserId } = await import('./sb-utils.js');
+        const userId = getCurrentUserId();
+        if (userId && deviceId) {
+            const { fetchLatestAdvancedScan } = await import('./sb-loader.js');
+            const supabaseData = await fetchLatestAdvancedScan(userId, deviceId);
+            if (supabaseData) {
+                results = supabaseData;
+                source = 'Supabase';
+                console.log('[Advanced] Loaded from Supabase');
+            }
+        }
+    } catch (e) {
+        console.warn('[Advanced] Supabase load failed, using localStorage:', e);
+    }
+
+    if (!results) {
+        results = loadAdvancedResults();
+        if (results) console.log('[Advanced] Loaded from localStorage');
+    }
+
+    if (results) {
+        // ---- Try to render full cards using the public API ----
+        if (window.SmartHub && window.SmartHub.advanceDiagnostic && typeof window.SmartHub.advanceDiagnostic.loadAndRender === 'function') {
+            try {
+                window.SmartHub.advanceDiagnostic.loadAndRender(results, 'advancedDiagContainer');
+                console.log('[Advanced] Full results rendered (source:', source + ')');
+                return; // Success – exit early
+            } catch (renderErr) {
+                console.warn('[Advanced] Full render failed, falling back to summary:', renderErr);
+            }
+        }
+
+        // ---- Fallback: summary only (if full render fails or method missing) ----
+        const total = results.software ? results.software.length : 0;
+        const passed = results.software ? results.software.filter(r => r.passed).length : 0;
+        const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+        const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+
+        if (diagContainer) {
+            diagContainer.innerHTML = `
+                <div style="margin-top: 20px; border-left: 4px solid ${color}; padding: 12px 16px; background: #f8fafc; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <span><i class="fas fa-microchip"></i> ${_t('adv.lastScanSummary', 'Last Scan Summary')}</span>
+                        <span style="color: ${color};">${passed}/${total} ${_t('adv.checksPassed', 'checks passed')}</span>
+                        <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
+                    </div>
+                    <div style="margin-top: 4px;">
+                        <div style="background:#e5e7eb; border-radius:8px; height:6px; overflow:hidden; width:100%;">
+                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
+                        </div>
+                    </div>
+                    <div style="font-size:12px; color:#6b7280; margin-top:4px;">
+                        ${pct === 100 ? '✅ All checks passed' : pct >= 80 ? '⚠️ Most checks passed' : '❌ Many checks failed'}
+                        <span style="font-size:11px; color:#9ca3af; margin-left:8px;">(source: ${source})</span>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        // ---- No results at all – show a friendly message ----
+        if (diagContainer) {
+            diagContainer.innerHTML = `
+                <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border-radius: 8px; color: #92400e; text-align: center; border-left: 4px solid #f59e0b;">
+                    <span>${_t('adv.noResultsFound', 'No diagnostic results found. Run a scan to see them here.')}</span>
+                </div>
+            `;
+        }
+    }
+}
+
+    // Run the load immediately
+    await loadAndRenderResults();
+
+    // ---- Event handlers (unchanged) ----
+    const runBtn = document.getElementById('runAdvancedDiagBtn');
+
     async function runAdbWithDevice(command) {
         const currentDevice = getCurrentDeviceId();
         if (!currentDevice) throw new Error('No device connected.');
@@ -1655,7 +1736,6 @@ window.renderAdvancedDiagnostic = function() {
         return data.output;
     }
 
-    // Ensure modal exists
     function ensureScanModal() {
         let modal = document.getElementById('advancedDiagModal');
         if (!modal) {
@@ -1684,90 +1764,102 @@ window.renderAdvancedDiagnostic = function() {
     }
 
     runBtn.addEventListener('click', async function() {
-        const btn = this;
-        // ---- Get the current device ID at scan time ----
-        const currentDeviceId = getCurrentDeviceId();
-        if (!currentDeviceId) {
-            showAlert(_t('adv.scan.noDevice', 'No device connected. Please connect your phone and try again.'));
-            return;
-        }
+    const btn = this;
+    const currentDeviceId = getCurrentDeviceId();
+    if (!currentDeviceId) {
+        showAlert(_t('adv.scan.noDevice', 'No device connected. Please connect your phone and try again.'));
+        return;
+    }
 
-        btn.disabled = true;
-        btn.style.opacity = '0.75';
-        btn.style.cursor = 'not-allowed';
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span data-i18n="adv.scan.scanningBtn">' + _t('adv.scan.scanningBtn', 'Scanning...') + '</span>';
+    btn.disabled = true;
+    btn.style.opacity = '0.75';
+    btn.style.cursor = 'not-allowed';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span data-i18n="adv.scan.scanningBtn">' + _t('adv.scan.scanningBtn', 'Scanning...') + '</span>';
 
+    try {
         try {
-            // Launch companion app (optional)
-            try {
-                await runAdbWithDevice('am start -n com.smarthub.diagnostics/.MainActivity');
-            } catch (e) {
-                console.warn('[Advanced] Could not launch Android app:', e);
-            }
-
-            const modal = ensureScanModal();
-            const modalTitle = document.getElementById('advancedDiagModalTitle');
-            const modalBody = document.getElementById('advancedDiagModalBody');
-            modalTitle.textContent = _t('adv.modal.title', 'Advanced Diagnostics');
-            modalBody.innerHTML = window.getModernSpinnerHTML(_t('adv.scan.runningModal', 'Running advanced diagnostics... This may take 2-3 minutes.'));
-            modal.style.display = 'flex';
-
-            diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;" data-i18n="adv.scan.inProgress">${_t('adv.scan.inProgress', '⏳ Scan in progress... See modal for details.')}</div>`;
-
-            // Run the scan with the current device ID
-            const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
-                currentDeviceId,
-                (msg) => {
-                    const textEl = modalBody.querySelector('.loading-text');
-                    if (textEl) textEl.textContent = msg;
-                }
-            );
-
-            // Remove AI from results (we already have it embedded)
-            if (results && results.ai) {
-                delete results.ai;
-            }
-
-            modal.style.display = 'none';
-            window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
-
-            const advancedResults = {
-                software: results.software ? results.software.map(r => ({ name: r.name, passed: r.passed })) : [],
-                scanTime: new Date().toLocaleString()
-            };
-            saveAdvancedResults(advancedResults);
-
-        } catch (err) {
-            modal.style.display = 'none';
-            diagContainer.innerHTML = `
-                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
-                    <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
-                        <i class="fas fa-triangle-exclamation"></i> <span data-i18n="adv.scan.failedTitle">${_t('adv.scan.failedTitle', 'Scan failed')}</span>
-                    </div>
-                    <div style="font-size: 13px; color: #991b1b; margin-bottom: 12px;">${escapeHtml(err.message)}</div>
-                    <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;" data-i18n="adv.scan.retryBtn">
-                        ${_t('adv.scan.retryBtn', '🔄 Retry')}
-                    </button>
-                </div>
-            `;
-            if (typeof applyLanguage === 'function') applyLanguage(_getLang());
-        } finally {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.cursor = 'pointer';
-            btn.innerHTML = '<i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">' + _t('adv.page.runBtn', 'Run Advanced Scan') + '</span>';
+            await runAdbWithDevice('am start -n com.smarthub.diagnostics/.MainActivity');
+        } catch (e) {
+            console.warn('[Advanced] Could not launch Android app:', e);
         }
-    });
 
-    // ---- Restore previous results ----
-    const savedAdv = loadAdvancedResults();
-    if (savedAdv) {
+        const modal = ensureScanModal();
+        const modalTitle = document.getElementById('advancedDiagModalTitle');
+        const modalBody = document.getElementById('advancedDiagModalBody');
+        modalTitle.textContent = _t('adv.modal.title', 'Advanced Diagnostics');
+        modalBody.innerHTML = window.getModernSpinnerHTML(_t('adv.scan.runningModal', 'Running advanced diagnostics... This may take 2-3 minutes.'));
+        modal.style.display = 'flex';
+
+        diagContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: #6b7280;" data-i18n="adv.scan.inProgress">${_t('adv.scan.inProgress', '⏳ Scan in progress... See modal for details.')}</div>`;
+
+        const results = await window.SmartHub.advanceDiagnostic.runFullSuite(
+            currentDeviceId,
+            (msg) => {
+                const textEl = modalBody.querySelector('.loading-text');
+                if (textEl) textEl.textContent = msg;
+            }
+        );
+
+        if (results && results.ai) {
+            delete results.ai;
+        }
+
+        modal.style.display = 'none';
+        window.SmartHub.advanceDiagnostic.renderResults('advancedDiagContainer');
+
+        // ---- 👇 FIXED: Save FULL results with message & fix for Supabase ----
+        // 1. For dashboard summary (localStorage) – keep lightweight
+        const advancedResults = {
+            software: results.software ? results.software.map(r => ({
+                name: r.name,
+                passed: r.passed,
+                message: r.message || '',
+                fix: r.fix || ''
+            })) : [],
+            scanTime: new Date().toLocaleString()
+        };
+        saveAdvancedResults(advancedResults);
+
+        // 2. For Supabase – save the FULL original results (with message & fix)
+        const supabasePayload = {
+            software: results.software || [],   // Full objects with message and fix
+            deep: results.deep || null,
+            rootkit: results.rootkit || null,
+            scanTime: new Date().toISOString()
+        };
+        try {
+            const { saveAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
+            await saveAdvancedDiagnosticResults(supabasePayload, currentDeviceId);
+            console.log('[Advanced] Full results saved to Supabase (with details)');
+        } catch (e) {
+            console.warn('[Advanced] Could not save to Supabase:', e);
+        }
+
+        // Reload the results to show the newly saved data
+        await loadAndRenderResults();
+
+    } catch (err) {
+        modal.style.display = 'none';
         diagContainer.innerHTML = `
-            <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;" data-i18n="adv.scan.lastScan">
-                ${_t('adv.scan.lastScan', 'Last scan:')} ${new Date(savedAdv.date).toLocaleString()}
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px; color: #b91c1c;">
+                <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px;">
+                    <i class="fas fa-triangle-exclamation"></i> <span data-i18n="adv.scan.failedTitle">${_t('adv.scan.failedTitle', 'Scan failed')}</span>
+                </div>
+                <div style="font-size: 13px; color: #991b1b; margin-bottom: 12px;">${escapeHtml(err.message)}</div>
+                <button onclick="renderAdvancedDiagnostic()" style="border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;" data-i18n="adv.scan.retryBtn">
+                    ${_t('adv.scan.retryBtn', '🔄 Retry')}
+                </button>
             </div>
         `;
         if (typeof applyLanguage === 'function') applyLanguage(_getLang());
+    } finally {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.innerHTML = '<i class="fas fa-play"></i> <span data-i18n="adv.page.runBtn">' + _t('adv.page.runBtn', 'Run Advanced Scan') + '</span>';
     }
+});
+
+    // The savedAdv from localStorage is already handled by loadAndRenderResults()
 };
 })();

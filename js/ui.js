@@ -5,7 +5,41 @@ let lastUsbState = null; // Track last USB state for dashboard re-render
 // ---- Persistent test results ----
 window._hardwareTestResults = {};   // { testId: { status, message, passed } }
 window._connectionTestResults = {}; // { testId: { status, message, passed } }
+// ---- Load and apply settings from Supabase (if user is logged in) ----
+window.loadAndApplySettings = async function() {
+    try {
+        // Get user ID from sb-utils
+        const { getCurrentUserId } = await import('./sb-utils.js');
+        const userId = getCurrentUserId();
+        if (!userId) {
+            console.log('[Settings] No user logged in – using localStorage defaults.');
+            return;
+        }
 
+        const { loadSettingsWithFallback } = await import('./settings-sb.js');
+        const settings = await loadSettingsWithFallback(userId);
+
+        if (settings) {
+            applyTheme(settings);
+            applyLanguage(settings.language);
+            console.log('[Settings] Applied from Supabase:', settings);
+        } else {
+            console.log('[Settings] No settings found in Supabase – using localStorage.');
+        }
+    } catch (e) {
+        console.warn('[Settings] Failed to load from Supabase:', e);
+        // Fallback: try localStorage directly
+        try {
+            const stored = localStorage.getItem('smartHubSettings');
+            if (stored) {
+                const settings = JSON.parse(stored);
+                applyTheme(settings);
+                applyLanguage(settings.language);
+                console.log('[Settings] Applied from localStorage fallback.');
+            }
+        } catch (e2) { /* ignore */ }
+    }
+};
 // Expose save/load functions globally
 // Expose storage functions globally
 window.saveStorageResults = saveStorageResults;
@@ -52,22 +86,27 @@ function toggleDeviceSections(show) {
 // ---- Apply full theme (accent, background, text) ----
 // ---- Apply full theme (accent, background, card, text) ----
 function applyTheme(settings) {
+    // ---- 1. READ SETTINGS ----
     const accent = settings.themeColor || '#0d6efd';
+    const btnColor = settings.buttonColor || accent;
     const bg = settings.bgColor || '#ffffff';
     const cardBg = settings.cardColor || '#ffffff';
     const text = settings.textColor || '#1f2937';
 
-    // Store the settings for later use
+    // Store for later use
     window._activeTheme = settings;
 
-    // Set CSS custom properties
+    // ---- 2. SET CSS CUSTOM PROPERTIES ----
     document.documentElement.style.setProperty('--primary-color', accent);
     document.documentElement.style.setProperty('--primary-color-dark', adjustColor(accent, -20));
+    document.documentElement.style.setProperty('--button-color', btnColor);
+    document.documentElement.style.setProperty('--button-color-dark', adjustColor(btnColor, -18));
+    document.documentElement.style.setProperty('--button-text-color', getContrastColor(btnColor));
     document.documentElement.style.setProperty('--bg-color', bg);
     document.documentElement.style.setProperty('--card-color', cardBg);
     document.documentElement.style.setProperty('--text-color', text);
 
-    // ---- Body & Main Content ----
+    // ---- 3. APPLY TO BODY & MAIN CONTAINERS ----
     document.body.style.backgroundColor = bg;
     document.body.style.color = text;
 
@@ -83,43 +122,91 @@ function applyTheme(settings) {
         pageContent.style.color = text;
     }
 
-    // ---- Sidebar ----
+    // ---- 4. SIDEBAR ----
     const sidebar = document.querySelector('.sidebar');
     if (sidebar) {
         sidebar.style.color = text;
-        // Keep sidebar background dark (or you can make it customizable too)
-        // sidebar.style.backgroundColor = '#1e293b';
-        
-        // Update sidebar links and text
         sidebar.querySelectorAll('a, span, div, .nav-item, .sidebar-footer, .connection-status, .auth-email, .auth-role').forEach(el => {
             if (!el.style.color) {
                 el.style.color = text;
             }
         });
-        
-        // Also update the sidebar header
         const header = sidebar.querySelector('.sidebar-header h2');
         if (header) header.style.color = text;
     }
 
-    // ---- Cards & Panels ----
-    document.querySelectorAll('.card, .info-card, .status-card, .test-card, .action-card, .metric, .health-card, .summary-card, .overview-item').forEach(el => {
-        // Only override if they don't have explicit background set inline
-        if (!el.style.backgroundColor) {
-            el.style.backgroundColor = cardBg;
-        }
-        if (!el.style.color) {
-            el.style.color = text;
-        }
-        // Also update child text elements
-        el.querySelectorAll('div, span, p, h1, h2, h3, h4, h5, h6, label, strong, .item-label, .item-value').forEach(child => {
-            if (!child.style.color) {
-                child.style.color = text;
+    // ---- 5. SWEEP ALL INLINE STYLES (Fixes "white cards" issue) ----
+    function sweepInlineStyles(root) {
+        if (!root) return;
+        // Find all elements with inline style attributes
+        root.querySelectorAll('[style]').forEach(el => {
+            let style = el.getAttribute('style');
+            if (!style) return;
+
+            let modified = false;
+
+            // Replace hardcoded card backgrounds with the selected card background
+            const bgPatterns = [
+                /background:\s*white/gi,
+                /background:\s*#fff/gi,
+                /background:\s*#ffffff/gi,
+                /background:\s*#FFFFFF/gi,
+                /background:\s*rgb\(255,\s*255,\s*255\)/gi,
+                /background:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi,
+                /background-color:\s*white/gi,
+                /background-color:\s*#fff/gi,
+                /background-color:\s*#ffffff/gi,
+                /background-color:\s*#FFFFFF/gi,
+                /background-color:\s*rgb\(255,\s*255,\s*255\)/gi,
+                /background-color:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi
+            ];
+            bgPatterns.forEach(pattern => {
+                if (pattern.test(style)) {
+                    style = style.replace(pattern, `background: ${cardBg}`);
+                    modified = true;
+                }
+            });
+
+            // Replace hardcoded color: #6B7280 (muted text) with text color (with subtle opacity)
+            if (style.includes('color: #6B7280') || style.includes('color:#6B7280')) {
+                style = style.replace(/color:\s*#6B7280/g, `color: ${text}80`);
+                modified = true;
             }
+
+            // Replace hardcoded color: #1f2937 (dark text) with text color
+            if (style.includes('color: #1f2937') || style.includes('color:#1f2937')) {
+                style = style.replace(/color:\s*#1f2937/g, `color: ${text}`);
+                modified = true;
+            }
+
+            // Replace hardcoded color: #374151 (another dark text) with text color
+            if (style.includes('color: #374151') || style.includes('color:#374151')) {
+                style = style.replace(/color:\s*#374151/g, `color: ${text}`);
+                modified = true;
+            }
+
+            // Replace hardcoded color: #6B7280 in border-left etc. (keep as is, it's a status color)
+            // But if we want to change it, we can. Let's keep it for status indicators.
+
+            if (modified) {
+                el.setAttribute('style', style);
+            }
+        });
+    }
+
+    // Sweep the entire document, focusing on pageContent and modals
+    sweepInlineStyles(document.body);
+
+    // ---- 6. CARDS & PANELS (force card background and text color) ----
+    document.querySelectorAll('.card, .info-card, .status-card, .test-card, .action-card, .metric, .health-card, .summary-card, .overview-item').forEach(el => {
+        el.style.backgroundColor = cardBg;
+        el.style.color = text;
+        el.querySelectorAll('div, span, p, h1, h2, h3, h4, h5, h6, label, strong, .item-label, .item-value').forEach(child => {
+            child.style.color = text;
         });
     });
 
-    // ---- Modals ----
+    // ---- 7. MODALS ----
     document.querySelectorAll('.modal .modal-content, .modal .modal-body, .modal .modal-header, .modal .modal-footer').forEach(el => {
         el.style.backgroundColor = cardBg;
         el.style.color = text;
@@ -130,14 +217,10 @@ function applyTheme(settings) {
         });
     });
 
-    // ---- Buttons (accent) ----
-    document.querySelectorAll('.btn-primary, button.primary, .auth-login-btn, #saveSettingsBtn, .auth-login-btn').forEach(btn => {
-        btn.style.background = accent;
-        btn.style.borderColor = accent;
-        btn.style.color = '#ffffff';
-    });
+    // ---- 8. PRIMARY BUTTONS (use dedicated button color) ----
+    
 
-    // ---- Secondary buttons ----
+    // ---- 9. SECONDARY BUTTONS ----
     document.querySelectorAll('.btn-secondary, #resetSettingsBtn, .btn-secondary button').forEach(btn => {
         if (!btn.style.background) {
             btn.style.borderColor = text + '30';
@@ -145,7 +228,7 @@ function applyTheme(settings) {
         }
     });
 
-    console.log('[Theme] Applied:', { accent, bg, cardBg, text });
+    console.log('[Theme] Applied:', { accent, btnColor, bg, cardBg, text });
 }
 
 // ---- Helper to darken a hex color (used for gradients) ----
@@ -161,6 +244,21 @@ function adjustColor(hex, percent) {
     }
     const darken = (val) => Math.max(0, Math.min(255, val + percent));
     return `#${darken(r).toString(16).padStart(2,'0')}${darken(g).toString(16).padStart(2,'0')}${darken(b).toString(16).padStart(2,'0')}`;
+}
+
+function getContrastColor(hex) {
+    if (!hex) return '#ffffff';
+    let cleaned = String(hex).trim();
+    if (cleaned.startsWith('#')) cleaned = cleaned.slice(1);
+    if (cleaned.length === 3) {
+        cleaned = cleaned.split('').map(ch => ch + ch).join('');
+    }
+    if (cleaned.length !== 6) return '#ffffff';
+    const r = parseInt(cleaned.slice(0, 2), 16);
+    const g = parseInt(cleaned.slice(2, 4), 16);
+    const b = parseInt(cleaned.slice(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 128 ? '#000000' : '#ffffff';
 }
 let usbState = null; // track current USB state
 
@@ -437,19 +535,147 @@ function getBrandColor(brand) {
     return colorMap[key] || '#6B7280';
 }
 
-// ==================== UPDATE DEVICE INFO & STATUS BAR ====================
+// ========================================================================
+// DEVICE INFO CARD — self-contained: every helper this file needs lives
+// in this same file. (Previous crash was a ReferenceError because
+// showDeviceInfoSkeleton()/statPill()/etc. were defined in a separate
+// snippet that didn't make it into the project — that throws BEFORE the
+// try/catch even starts, so the card is left showing its raw static
+// placeholder text with nothing visibly wrong in the UI.)
+// ========================================================================
+
+const BRAND_LOGO_MAP = {
+    'alcatel': 'Alcatel-Logo.png',
+    'asus': 'Asus-Logo.png',
+    'blackberry': 'Blackberry-logo.png',
+    'cat': 'CAT-logo.png',
+    'doogee': 'Doogee-Logo.png',
+    'energizer': 'Energizer-logo.png',
+    'google': 'Google-Logo.png',
+    'htc': 'HTC-logo.png',
+    'honor': 'Honor-Logo.png',
+    'huawei': 'Huawei-Logo.png',
+    'infinix': 'Infinix-Logo.png',
+    'itel': 'Itel-Logo.png',
+    'lg': 'LG-Logo.png',
+    'lenovo': 'Lenovo-logo.png',
+    'meizu': 'Meizu-Logo.png',
+    'nokia': 'Nokia-Logo.png',
+    'oneplus': 'OnePlus-Logo.png',
+    'oppo': 'Oppo-logo.png',
+    'realme': 'Realme-Logo.png',
+    'samsung': 'Samsung-Logo-2.png',
+    'sharp': 'Sharp-logo.png',
+    'sony': 'Sony-logo.png',
+    'tcl': 'TCL-Logo.png',
+    'tecno': 'Tecno-Mobile-Logo.png',
+    'ulefone': 'Ulefone-Logo.png',
+    'vivo': 'Vivo-Logo.png',
+    'vodafone': 'Vodafone-logo.png',
+    'xiaomi': 'Xiaomi-logo.png',
+    'zte': 'ZTE-Logo.png'
+};
+
+// Fallback so this file works even if a project-wide getBrandColor() isn't loaded.
+function getBrandColorSafe(brandKey) {
+    if (typeof getBrandColor === 'function') {
+        try { return getBrandColor(brandKey); } catch (e) { /* fall through */ }
+    }
+    return '#6B7280';
+}
+
+function statPill(icon, text) {
+    return `
+        <span style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#4b5563; background:#f8fafc; border:1px solid #eef1f5; padding:4px 10px; border-radius:999px;">
+            <i class="fas ${icon}" style="font-size:11px; color:#9ca3af;"></i>${text}
+        </span>
+    `;
+}
+
+function formatPatchDate(raw) {
+    if (!raw || raw === 'Unknown') return 'Unknown';
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+}
+
+function showDeviceInfoSkeleton() {
+    const card = document.getElementById('device-info-card');
+    if (!card) return;
+    card.style.display = 'flex';
+    card.style.opacity = '1';
+    card.dataset.state = 'loading';
+
+    const shimmer = 'background: linear-gradient(90deg,#eef1f5 25%,#e2e8f0 37%,#eef1f5 63%); background-size:400% 100%; animation: dviShimmer 1.4s ease infinite; border-radius:6px;';
+    if (!document.getElementById('dviShimmerKeyframes')) {
+        const style = document.createElement('style');
+        style.id = 'dviShimmerKeyframes';
+        style.textContent = `@keyframes dviShimmer {0%{background-position:100% 0} 100%{background-position:0 0}}`;
+        document.head.appendChild(style);
+    }
+
+    const brandEl = document.getElementById('brand-icon');
+    if (brandEl) brandEl.innerHTML = `<div style="width:56px; height:56px; border-radius:14px; ${shimmer}"></div>`;
+
+    const modelEl = document.getElementById('device-model');
+    if (modelEl) modelEl.innerHTML = `<span style="display:inline-block; width:140px; height:18px; ${shimmer}"></span>`;
+
+    const brandLabel = document.getElementById('device-brand');
+    if (brandLabel) brandLabel.textContent = '';
+
+    ['device-android', 'device-security', 'device-resolution'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `<span style="display:inline-block; width:80px; height:14px; ${shimmer}"></span>`;
+    });
+}
+
+function showDeviceInfoError(message) {
+    const card = document.getElementById('device-info-card');
+    if (!card) return;
+    card.style.display = 'flex';
+    card.dataset.state = 'error';
+    card.innerHTML = `
+        <div style="display:flex; align-items:center; gap:14px; width:100%;">
+            <div style="width:48px; height:48px; border-radius:12px; background:#fef2f2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">
+                <i class="fas fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <div style="font-weight:600; color:#1e293b; font-size:15px;">Couldn't load device info</div>
+                <div style="font-size:13px; color:#6B7280; margin-top:2px;">${message || 'The connected device may have been disconnected.'}</div>
+            </div>
+        </div>
+    `;
+}
+
 async function updateDeviceInfo() {
+    // Everything lives inside one try/catch now — if ANY helper above is
+    // somehow still missing, we land in the catch and show a visible error
+    // banner instead of silently freezing on the static placeholder text.
     try {
-        console.log('[DeviceInfo] Fetching device data...');
+        // ---- Safety: no device – hide the card ----
+        if (!currentDeviceId) {
+            console.warn('[DeviceInfo] No device connected – hiding card.');
+            const card = document.getElementById('device-info-card');
+            if (card) card.style.display = 'none';
+            return;
+        }
+
+        showDeviceInfoSkeleton();
+
+        console.log('[DeviceInfo] Fetching device data for:', currentDeviceId);
         const res = await fetch(`${BACKEND_URL}/device/${currentDeviceId}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         let rawText = await res.text();
+        console.log('[DeviceInfo] Raw response length:', rawText.length);
+
         try {
             const parsedJson = JSON.parse(rawText);
             if (typeof parsedJson === 'string') rawText = parsedJson;
         } catch (e) {}
-        const lines = rawText.split(/\r?\n/);
+
         const props = {};
+        const lines = rawText.split(/\r?\n/);
         for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
@@ -457,100 +683,114 @@ async function updateDeviceInfo() {
             if (match) props[match[1]] = match[2];
         }
 
-        const manufacturer = props['ro.product.manufacturer'] || 'Unknown';
-        const model = props['ro.product.model'] || 'Device';
-        const androidVersion = props['ro.build.version.release'] || '';
-        const width = props['sys.logical.width'] || '';
-        const height = props['sys.logical.height'] || '';
-        const resolution = (width && height) ? `${width} x ${height}` : '';
+        console.log('[DeviceInfo] Parsed props:', Object.keys(props).length, 'keys');
 
-        // ---- Brand Logo Mapping ----
-        const brandKey = manufacturer.toLowerCase().trim();
-        const color = getBrandColor(brandKey) || '#6B7280';
+        // ---- Extract values with fallbacks ----
+        const manufacturer = props['ro.product.manufacturer'] || props['ro.product.vendor.manufacturer'] || props['ro.product.brand'] || 'Unknown';
+        const model = props['ro.product.model'] || props['ro.product.vendor.model'] || 'Device';
+        const androidVersion = props['ro.build.version.release'] || props['ro.build.version.release_or_codename'] || 'Unknown';
+        const patch = props['ro.build.version.security_patch'] || 'Unknown';
 
-        // Map manufacturer to logo filename (exact filenames from android_logo folder)
-        const brandLogoMap = {
-            'alcatel': 'Alcatel-Logo.png',
-            'asus': 'Asus-Logo.png',
-            'blackberry': 'Blackberry-logo.png',
-            'cat': 'CAT-logo.png',
-            'doogee': 'Doogee-Logo.png',
-            'energizer': 'Energizer-logo.png',
-            'google': 'Google-Logo.png',
-            'htc': 'HTC-logo.png',
-            'honor': 'Honor-Logo.png',
-            'huawei': 'Huawei-Logo.png',
-            'infinix': 'Infinix-Logo.png',
-            'itel': 'Itel-Logo.png',
-            'lg': 'LG-Logo.png',
-            'lenovo': 'Lenovo-logo.png',
-            'meizu': 'Meizu-Logo.png',
-            'nokia': 'Nokia-Logo.png',
-            'oneplus': 'OnePlus-Logo.png',
-            'oppo': 'Oppo-logo.png',
-            'realme': 'Realme-Logo.png',
-            'samsung': 'Samsung-Logo-2.png',
-            'sharp': 'Sharp-logo.png',
-            'sony': 'Sony-logo.png',
-            'tcl': 'TCL-Logo.png',
-            'tecno': 'Tecno-Mobile-Logo.png',
-            'ulefone': 'Ulefone-Logo.png',
-            'vivo': 'Vivo-Logo.png',
-            'vodafone': 'Vodafone-logo.png',
-            'xiaomi': 'Xiaomi-logo.png',
-            'zte': 'ZTE-Logo.png'
-        };
+        // ---- Resolution (fallback to wm size) ----
+        let width = props['sys.logical.width'] || '';
+        let height = props['sys.logical.height'] || '';
+        if (!width || !height) {
+            try {
+                const wmRes = await fetch(`/adb-shell`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId: currentDeviceId, command: 'wm size' })
+                });
+                if (wmRes.ok) {
+                    const wmData = await wmRes.json();
+                    const wmOutput = wmData.output || '';
+                    const match = wmOutput.match(/(?:Physical size|Override size):\s*(\d+)x(\d+)/i);
+                    if (match) {
+                        width = match[1];
+                        height = match[2];
+                    }
+                }
+            } catch (e) {
+                console.warn('[DeviceInfo] wm size fallback failed:', e);
+            }
+        }
+        const resolution = (width && height) ? `${width} × ${height}` : 'Unknown';
 
-        // Update the brand icon container
+        // ---- Brand badge ----
+        const brandCandidates = [
+            manufacturer,
+            props['ro.product.brand'],
+            props['ro.product.vendor.brand'],
+            props['ro.product.name'],
+            props['ro.product.marketname']
+        ].filter(Boolean).map(value => String(value).toLowerCase().trim());
+        const brandKey = brandCandidates.find(key => BRAND_LOGO_MAP[key]) || brandCandidates[0] || 'unknown';
+        const color = getBrandColorSafe(brandKey);
         const brandEl = document.getElementById('brand-icon');
         if (brandEl) {
-            const logoFile = brandLogoMap[brandKey];
+            const logoFile = BRAND_LOGO_MAP[brandKey];
+            const initial = (manufacturer || '?').trim().charAt(0).toUpperCase();
+            const logoUrl = logoFile ? new URL(`../android_logo/${logoFile}`, window.location.href).href : '';
+
+            brandEl.innerHTML = `
+                <div style="width:56px; height:56px; border-radius:14px; background:${logoFile ? '#f8fafc' : color}; border:1px solid #eef1f5; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+                    ${logoFile
+                        ? `<img id="brandLogoImg" alt="${manufacturer}" style="height:34px; width:auto; max-width:44px; object-fit:contain;">`
+                        : `<span style="font-size:22px; font-weight:700; color:#fff;">${initial}</span>`
+                    }
+                </div>
+            `;
             if (logoFile) {
-                // Build the image tag with a fallback to text on error
-                const imgSrc = `/android_logo/${logoFile}`;
-                brandEl.innerHTML = `
-                    <img src="${imgSrc}" alt="${manufacturer}" style="height: 48px; width: auto; max-width: 120px; object-fit: contain;"
-                         onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\\'font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;\\'>${manufacturer}</span>'">
-                `;
-                // Also set a timeout fallback in case the image loads very slowly or fails silently
-                const img = brandEl.querySelector('img');
+                const img = document.getElementById('brandLogoImg');
                 if (img) {
-                    setTimeout(() => {
-                        if (img && !img.complete) {
-                            const parent = img.parentElement;
-                            if (parent) {
-                                parent.innerHTML = `<span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${manufacturer}</span>`;
-                            }
+                    img.addEventListener('error', () => {
+                        const parent = img.parentElement;
+                        if (parent) {
+                            parent.style.background = color;
+                            parent.innerHTML = `<span style="font-size:22px; font-weight:700; color:#fff;">${initial}</span>`;
                         }
-                    }, 3000);
+                    }, { once: true });
+                    img.src = logoUrl;
                 }
-                console.log('[DeviceInfo] Using logo:', imgSrc);
-            } else {
-                // No logo file: show text logo
-                brandEl.innerHTML = `<span style="font-size: 28px; font-weight: 700; color: ${color}; letter-spacing: 1px;">${manufacturer}</span>`;
-                console.log('[DeviceInfo] No logo found, using text');
             }
-        } else {
-            console.warn('[DeviceInfo] brand-icon element not found');
         }
 
-        // ---- Update other device details ----
+        // ---- Update DOM ----
         const modelEl = document.getElementById('device-model');
         if (modelEl) modelEl.textContent = model;
+
         const brandLabel = document.getElementById('device-brand');
         if (brandLabel) brandLabel.textContent = manufacturer;
-        const androidEl = document.getElementById('device-android');
-        if (androidEl) androidEl.textContent = `Android ${androidVersion}`;
-        const resEl = document.getElementById('device-resolution');
-        if (resEl) resEl.textContent = resolution;
 
-        // Update the status bar
-        await updateStatusBar();
+        const androidEl = document.getElementById('device-android');
+        if (androidEl) androidEl.innerHTML = statPill('fa-mobile-screen', `Android ${androidVersion}`);
+
+        const patchEl = document.getElementById('device-security');
+        if (patchEl) patchEl.innerHTML = statPill('fa-shield-halved', `Patch: ${formatPatchDate(patch)}`);
+
+        const resEl = document.getElementById('device-resolution');
+        if (resEl) resEl.innerHTML = statPill('fa-expand', resolution);
+
+        // ---- Reveal the card ----
+        const card = document.getElementById('device-info-card');
+        if (card) {
+            card.style.display = 'flex';
+            card.dataset.state = 'ready';
+            card.style.opacity = '1';
+        }
+
+        console.log('[DeviceInfo] ✅ Updated device info card:', { model, manufacturer, androidVersion, patch, resolution });
+
+        // ---- Update status bar ----
+        if (typeof updateStatusBar === 'function') {
+            await updateStatusBar();
+        }
+
     } catch (err) {
-        console.warn('[DeviceInfo] Failed:', err);
+        console.error('[DeviceInfo] Failed:', err);
+        showDeviceInfoError(err.message);
     }
 }
-
 async function updateStatusBar() {
     try {
         console.log('[StatusBar] Fetching hardware data...');
@@ -779,26 +1019,23 @@ function formatWifiStatus(wifi) {
 
 // ==================== CONNECTION STATUS ====================
 async function fetchDevices() {
-    try {
-        return await apiCall('/devices');
-    } catch (err) {
-        console.warn('[fetchDevices] /api/devices failed, retrying direct /api/devices fetch', err);
+    const endpoints = [
+        `${BACKEND_URL}/api/devices`,
+        `${BACKEND_URL}/devices`
+    ];
+    for (const url of endpoints) {
         try {
-            const res = await fetchWithTimeout(`${BACKEND_URL}/api/devices`, { headers: { 'Content-Type': 'application/json' } }, 6000);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return await res.json();
-        } catch (err2) {
-            console.warn('[fetchDevices] direct /api/devices failed, trying /devices fallback', err2);
-            try {
-                const res2 = await fetchWithTimeout(`${BACKEND_URL}/devices`, { headers: { 'Content-Type': 'application/json' } }, 6000);
-                if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
-                return await res2.json();
-            } catch (err3) {
-                console.error('[fetchDevices] /devices fallback failed', err3);
-                throw err3;
+            const res = await fetchWithTimeout(url, { headers: { 'Content-Type': 'application/json' } }, 6000);
+            if (res.ok) {
+                return await res.json();
             }
+        } catch (err) {
+            console.warn(`[fetchDevices] Failed to fetch from ${url}:`, err.message);
         }
     }
+    // All attempts failed – return empty list so caller can use USB fallback
+    console.warn('[fetchDevices] All endpoints failed, returning empty device list.');
+    return { devices: [] };
 }
 
 // js/ui.js
@@ -824,133 +1061,158 @@ function connectSSE() {
 // Call this once on app start (after initNavigation)
 connectSSE();
 
-async function updateConnectionStatus() {
-    console.log('[updateConnectionStatus] called');
+// ---- Smart connection status updater (no spam) ----
+// ---- Improved connection status with triple‑layer detection ----
+let _lastConnectionState = null;
+let _updatingConnection = false;
+let _connectionUpdateTimer = null;
+let _connectionAttempts = 0;
+
+async function updateConnectionStatus(force = false) {
+    if (_updatingConnection) return;
+    _updatingConnection = true;
+
     const statusSpan = document.querySelector('#connectionStatus span');
     if (!statusSpan) {
-        console.warn('[updateConnectionStatus] #connectionStatus span not found');
+        _updatingConnection = false;
         return;
     }
-    statusSpan.innerText = 'Checking…';
-    statusSpan.style.color = '#6B7280';
-    const previousDeviceId = currentDeviceId;
-    let foundDevice = false;
-    let usbStateChanged = false;
 
-    // 1. Try ADB
     try {
-        console.log('[updateConnectionStatus] fetching devices via ADB');
-        const data = await fetchDevices();
-        const devices = Array.isArray(data.devices) ? data.devices : Array.isArray(data) ? data : [];
-        if (devices.length) {
-            const firstDevice = typeof devices[0] === 'string' ? devices[0] : (devices[0].id || devices[0].serial || devices[0].device || String(devices[0]));
-            currentDeviceId = firstDevice;
-            console.log('[updateConnectionStatus] ADB device found:', currentDeviceId);
-            statusSpan.innerText = `ADB: ${currentDeviceId}`;
-            statusSpan.style.color = '#107c10';
-            foundDevice = true;
-            // Clear USB state when ADB is found
-            if (lastUsbState !== null) {
-                lastUsbState = null;
-                usbStateChanged = true;
-            }
-            try {
-                await updateDeviceInfo();
-            } catch (deviceInfoErr) {
-                console.warn('[updateConnectionStatus] updateDeviceInfo failed', deviceInfoErr);
-            }
-        } else {
-            // No ADB device – clear currentDeviceId
-            if (currentDeviceId !== null) {
-                currentDeviceId = null;
-            }
-        }
-    } catch (err) {
-        console.warn('[updateConnectionStatus] ADB fetch failed:', err);
-        currentDeviceId = null;
-    }
+        console.log('[ConnStatus] Checking connection...');
+        let found = false;
+        let deviceId = null;
+        let displayText = '';
+        let color = '#6B7280';
+        const previousDeviceId = currentDeviceId; // ✅ Save previous ID
+        let usbStateChanged = false;
 
-    // 2. If no ADB device, try USB state detection
-    if (!foundDevice) {
+        // ---- Layer 1: ADB ----
         try {
-            console.log('[updateConnectionStatus] checking USB state via /api/device-state');
-            const resp = await fetch(`${BACKEND_URL}/api/device-state`);
-            if (resp.ok) {
-                const stateData = await resp.json();
-                const state = stateData.state;
-                const details = stateData.details || '';
-                // Map state to display label
-                const stateLabels = {
-                    'adb_ready': { label: 'ADB Ready', color: '#107c10' },
-                    'adb_unauthorized': { label: 'ADB Unauthorized', color: '#ed6c02' },
-                    'recovery': { label: 'Recovery Mode', color: '#ed6c02' },
-                    'sideload': { label: 'Sideload Mode', color: '#ed6c02' },
-                    'mtp_normal': { label: 'MTP (OS Booted)', color: '#107c10' },
-                    'bootloader': { label: 'Fastboot', color: '#ed6c02' },
-                    'samsung_download': { label: 'Download Mode (Odin)', color: '#ed6c02' },
-                    'edl_qualcomm': { label: 'Qualcomm EDL', color: '#d32f2f' },
-                    'preloader_mediatek': { label: 'MediaTek Preloader', color: '#d32f2f' },
-                    'unknown_enumeration': { label: 'Unknown USB', color: '#6B7280' },
-                    'generic_usb_detected': { label: 'USB Detected (unclassified)', color: '#6B7280' },
-                    'no_response': { label: 'No Device', color: '#6B7280' }
-                };
-                const info = stateLabels[state] || { label: state || 'Unknown', color: '#6B7280' };
-                // Truncate details
-                const shortDetails = details && details.length > 40 ? details.substring(0, 40) + '…' : details;
-                const displayText = shortDetails ? `${info.label} – ${shortDetails}` : info.label;
-                statusSpan.innerText = displayText;
-                statusSpan.style.color = info.color;
-                // Track state change for dashboard re-render
-                if (lastUsbState !== state) {
-                    lastUsbState = state;
-                    usbStateChanged = true;
+            const data = await fetchDevices();
+            const devices = Array.isArray(data.devices) ? data.devices : Array.isArray(data) ? data : [];
+            if (devices.length > 0) {
+                const first = devices[0];
+                deviceId = typeof first === 'string' ? first : (first.id || first.serial || first.device || String(first));
+                if (deviceId) {
+                    found = true;
+                    displayText = `ADB: ${deviceId}`;
+                    color = '#107c10';
+                    currentDeviceId = deviceId;
+                    window.currentDeviceId = deviceId; // ✅ Sync global
+                    console.log('[ConnStatus] ✅ ADB device found:', deviceId);
                 }
-                // Clear currentDeviceId since ADB not available
+            } else {
+                // No ADB devices – clear global
                 if (currentDeviceId !== null) {
                     currentDeviceId = null;
-                }
-                console.log('[updateConnectionStatus] USB state:', state, displayText);
-                foundDevice = true;
-            } else {
-                console.warn('[updateConnectionStatus] /api/device-state returned non-OK');
-                // No USB state – ensure lastUsbState is null
-                if (lastUsbState !== null) {
-                    lastUsbState = null;
-                    usbStateChanged = true;
+                    window.currentDeviceId = null;
                 }
             }
-        } catch (err) {
-            console.warn('[updateConnectionStatus] USB state fetch failed:', err);
-            // No USB state – ensure lastUsbState is null
-            if (lastUsbState !== null) {
-                lastUsbState = null;
-                usbStateChanged = true;
-            }
-        }
-    }
-
-    // 3. If nothing found at all
-    if (!foundDevice) {
-        // Ensure USB state is cleared
-        if (lastUsbState !== null) {
-            lastUsbState = null;
-            usbStateChanged = true;
-        }
-        if (currentDeviceId !== null) {
+        } catch (adbErr) {
+            console.warn('[ConnStatus] ADB failed:', adbErr.message);
+            // On error, clear global
             currentDeviceId = null;
+            window.currentDeviceId = null;
         }
-        statusSpan.innerText = 'No device found';
-        statusSpan.style.color = '#d83b01';
-    }
 
-    // 4. Re-render dashboard if needed
-    const activePage = document.querySelector('.nav-item.active')?.dataset.page;
-    if (activePage === 'dashboard' && (currentDeviceId !== previousDeviceId || usbStateChanged)) {
-        console.log('[updateConnectionStatus] re-rendering dashboard (ADB changed or USB state changed)');
-        await renderDashboard();
+        // ---- Layer 2: USB State (if no ADB) ----
+        if (!found) {
+            try {
+                const resp = await fetch(`${BACKEND_URL}/api/device-state`);
+                if (resp.ok) {
+                    const stateData = await resp.json();
+                    const state = stateData.state;
+                    const details = stateData.details || '';
+
+                    const stateMap = {
+                        'adb_ready': { label: 'ADB Ready', color: '#107c10' },
+                        'adb_unauthorized': { label: 'ADB Unauthorized', color: '#ed6c02' },
+                        'recovery': { label: 'Recovery Mode', color: '#ed6c02' },
+                        'sideload': { label: 'Sideload Mode', color: '#ed6c02' },
+                        'mtp_normal': { label: 'MTP (OS Booted)', color: '#107c10' },
+                        'bootloader': { label: 'Fastboot', color: '#ed6c02' },
+                        'samsung_download': { label: 'Download Mode (Odin)', color: '#ed6c02' },
+                        'edl_qualcomm': { label: 'Qualcomm EDL', color: '#d32f2f' },
+                        'preloader_mediatek': { label: 'MediaTek Preloader', color: '#d32f2f' },
+                        'unknown_enumeration': { label: 'Unknown USB', color: '#6B7280' },
+                        'generic_usb_detected': { label: 'USB Detected', color: '#6B7280' },
+                        'no_response': { label: 'No Device', color: '#6B7280' }
+                    };
+                    const info = stateMap[state] || { label: state || 'Unknown', color: '#6B7280' };
+                    const shortDetails = details && details.length > 40 ? details.substring(0, 40) + '…' : details;
+                    displayText = shortDetails ? `${info.label} – ${shortDetails}` : info.label;
+                    color = info.color;
+                    found = true;
+                    // No ADB device – clear global
+                    currentDeviceId = null;
+                    window.currentDeviceId = null;
+                    console.log('[ConnStatus] 🔌 USB state:', state, displayText);
+                } else {
+                    console.warn('[ConnStatus] USB state endpoint returned non-OK');
+                }
+            } catch (usbErr) {
+                console.warn('[ConnStatus] USB state fetch failed:', usbErr.message);
+            }
+        }
+
+        // ---- Layer 3: Fallback to no device ----
+        if (!found) {
+            displayText = 'No device found';
+            color = '#d83b01';
+            if (currentDeviceId !== null) {
+                currentDeviceId = null;
+                window.currentDeviceId = null;
+            }
+            console.log('[ConnStatus] ❌ No device detected');
+        }
+
+        // ---- Update UI ----
+        statusSpan.innerText = displayText;
+        statusSpan.style.color = color;
+
+        // ---- Notify if state changed ----
+        const stateKey = `${displayText}_${color}`;
+        const stateChanged = (_lastConnectionState !== stateKey) || force || (currentDeviceId !== previousDeviceId);
+        if (stateChanged) {
+            _lastConnectionState = stateKey;
+            if (currentDeviceId && typeof updateDeviceInfo === 'function') {
+                updateDeviceInfo().catch(err => console.warn('[updateConnectionStatus] updateDeviceInfo failed:', err));
+            }
+            // Re‑render dashboard if on dashboard page or advanced page
+            const activePage = document.querySelector('.nav-item.active')?.dataset.page;
+            if (activePage === 'dashboard') {
+                console.log('[updateConnectionStatus] re-rendering dashboard');
+                await renderDashboard();
+            } else if (activePage === 'advanced') {
+                console.log('[updateConnectionStatus] re-rendering advanced diagnostic');
+                if (typeof window.renderAdvancedDiagnostic === 'function') {
+                    window.renderAdvancedDiagnostic();
+                }
+            }
+        }
+
+        // Update device sections visibility
+        toggleDeviceSections(!!currentDeviceId);
+
+    } catch (err) {
+        console.error('[ConnStatus] Unexpected error:', err);
+    } finally {
+        _updatingConnection = false;
+        _connectionAttempts = 0;
+        // Schedule next update (10 seconds later)
+        if (_connectionUpdateTimer) clearTimeout(_connectionUpdateTimer);
+        _connectionUpdateTimer = setTimeout(() => {
+            updateConnectionStatus();
+        }, 10000);
     }
-    // Update visibility of device sections
-    toggleDeviceSections(!!currentDeviceId);
+}
+
+function scheduleNextConnectionUpdate() {
+    if (_connectionUpdateTimer) clearTimeout(_connectionUpdateTimer);
+    _connectionUpdateTimer = setTimeout(() => {
+        updateConnectionStatus();
+    }, 10000); // 10 seconds instead of 5
 }
 
 // ==================== SUSPICIOUS SCAN DEBUG ====================
@@ -1414,89 +1676,7 @@ function loadStorageResults() {
 }
 
 // ===== LOAD SAVED SCAN RESULTS (async, Supabase first) =====
-async function loadSavedScanResults() {
-    try {
-        // Dynamically import Supabase helpers (since ui.js is not a module)
-        const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
-        const { fetchLatestAppScan, fetchLatestStorageScan } = await import('./sb-loader.js');
 
-        const userId = getCurrentUserId();
-        const deviceId = getCurrentDeviceId() || window.currentDeviceId;
-
-        // ---- App Scan ----
-        let appResults = null;
-        if (userId && deviceId) {
-            try {
-                appResults = await fetchLatestAppScan(userId, deviceId);
-                console.log('[loadSavedScanResults] App scan loaded from Supabase');
-            } catch (e) {
-                console.warn('[loadSavedScanResults] Supabase app scan fetch failed:', e);
-            }
-        }
-        if (!appResults) {
-            appResults = loadAppScanResults(); // localStorage fallback
-        }
-        if (appResults) {
-            renderAppScanResults(appResults);
-        }
-
-        // ---- Storage Scan ----
-        let storageResults = null;
-        if (userId && deviceId) {
-            try {
-                storageResults = await fetchLatestStorageScan(userId, deviceId);
-                console.log('[loadSavedScanResults] Storage scan loaded from Supabase');
-            } catch (e) {
-                console.warn('[loadSavedScanResults] Supabase storage scan fetch failed:', e);
-            }
-        }
-        if (!storageResults) {
-            storageResults = loadStorageResults();
-        }
-        if (storageResults) {
-            renderStorageResults(storageResults);
-        }
-
-        // ---- Local‑only scans ----
-        const hardwareResults = loadHardwareResults();
-        if (hardwareResults) renderHardwareResults(hardwareResults);
-
-        const connectionResults = loadConnectionResults();
-        if (connectionResults) renderConnectionResults(connectionResults);
-
-        const advancedResults = loadAdvancedResults();
-        if (advancedResults) renderAdvancedResults(advancedResults);
-
-    } catch (err) {
-        console.warn('[loadSavedScanResults] Failed to load from Supabase, using localStorage only:', err);
-        // Fallback: just load from localStorage
-        const appResults = loadAppScanResults();
-        if (appResults) renderAppScanResults(appResults);
-        const storageResults = loadStorageResults();
-        if (storageResults) renderStorageResults(storageResults);
-        const hardwareResults = loadHardwareResults();
-        if (hardwareResults) renderHardwareResults(hardwareResults);
-        const connectionResults = loadConnectionResults();
-        if (connectionResults) renderConnectionResults(connectionResults);
-        const advancedResults = loadAdvancedResults();
-        if (advancedResults) renderAdvancedResults(advancedResults);
-    }
-}
-
-// ---- Expose globally so other modules can trigger a reload ----
-window.loadSavedScanResults = loadSavedScanResults;
-
-function clearScanResults(type) {
-    if (type === 'app') {
-        localStorage.removeItem('smartHubAppScanResults');
-        document.getElementById('appScanResults').style.display = 'none';
-        document.getElementById('appScanResults').innerHTML = '';
-    } else if (type === 'storage') {
-        localStorage.removeItem('smartHubStorageResults');
-        document.getElementById('storageResults').style.display = 'none';
-        document.getElementById('storageResults').innerHTML = '';
-    }
-}
 
 // ===== RENDER SCAN RESULTS ON DASHBOARD =====
 
@@ -1746,6 +1926,55 @@ function renderStorageResults(results) {
     container.style.display = 'block';
     container.innerHTML = html;
 }
+
+function renderHardwareResults(results) {
+    const container = document.getElementById('hardwareResults');
+    if (!container) return;
+
+    if (!results || !results.results || Object.keys(results.results).length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const total = Object.keys(results.results).length;
+    const passed = Object.values(results.results).filter(r => r.passed).length;
+    const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+    const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+
+    let html = `
+        <div class="card" style="border-left: 4px solid ${color}; margin-bottom: 16px;">
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span><i class="fas fa-microscope"></i> Hardware Tests</span>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
+                    <span style="color: ${color};">${passed}/${total} tests passed</span>
+                    <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
+                </div>
+            </div>
+            <div class="card-content">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+                    <div style="flex:1; min-width:100px;">
+                        <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
+                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
+                        </div>
+                    </div>
+                    <span style="font-weight:600; font-size:16px; color:${color};">${pct}%</span>
+                </div>
+                <div style="font-size:12px; color:#6b7280;">
+                    ${pct === 100 ? '✅ All tests passed' : pct >= 80 ? '⚠️ Most tests passed' : '❌ Many tests failed'}
+                </div>
+                <div style="margin-top:8px;">
+                    <button onclick="document.querySelector('.nav-item[data-page=\\'hardware-tests\\']')?.click()" style="background:none; border:1px solid #d1d5db; border-radius:12px; padding:4px 16px; font-size:11px; cursor:pointer;">📊 View Details</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.style.display = 'block';
+    container.innerHTML = html;
+}
+
+// Expose globally
+window.renderHardwareResults = renderHardwareResults;
 
 function ensureInfoModal(modalId, title) {
     let modal = document.getElementById(modalId);
@@ -2963,47 +3192,184 @@ async function forgetBluetoothDevice(mac) {
 const DEFAULT_PRIMARY = '#0d6efd';
 const DEFAULT_PRIMARY_DARK = '#0b5ed7';
 
-function sweepThemeColors(root, color, darker) {
+// ---- Helper: get black or white text based on background color ----
+function getContrastColor(hex) {
+    if (!hex) return '#ffffff';
+    let cleaned = String(hex).trim();
+    if (cleaned.startsWith('#')) cleaned = cleaned.slice(1);
+    if (cleaned.length === 3) {
+        cleaned = cleaned.split('').map(ch => ch + ch).join('');
+    }
+    const r = parseInt(cleaned.slice(0, 2), 16);
+    const g = parseInt(cleaned.slice(2, 4), 16);
+    const b = parseInt(cleaned.slice(4, 6), 16);
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return '#ffffff';
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 128 ? '#000000' : '#ffffff';
+}
+
+// ---- Helper: darken a hex color ----
+function adjustColor(hex, percent) {
+    if (!hex) return '#0b5ed7';
+    let r, g, b;
+    if (hex.startsWith('#')) {
+        const full = hex.length === 7 ? hex : `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+        r = parseInt(full.slice(1, 3), 16);
+        g = parseInt(full.slice(3, 5), 16);
+        b = parseInt(full.slice(5, 7), 16);
+    } else {
+        return '#0b5ed7';
+    }
+    const darken = (val) => Math.max(0, Math.min(255, val + percent));
+    return `#${darken(r).toString(16).padStart(2, '0')}${darken(g).toString(16).padStart(2, '0')}${darken(b).toString(16).padStart(2, '0')}`;
+}
+
+// ---- Sweep inline styles: replace hardcoded colors with theme values ----
+function sweepThemeColors(root, colors) {
+    // colors = { accent, btnColor, bgColor, cardColor, textColor }
     if (!root) return;
-    const primaryRe = new RegExp(DEFAULT_PRIMARY, 'gi');
-    const darkRe = new RegExp(DEFAULT_PRIMARY_DARK, 'gi');
+
+    // Prepare regex patterns for replacement
+    const accent = colors.accent || '#0d6efd';
+    const btnColor = colors.btnColor || accent;
+    const cardBg = colors.cardColor || '#ffffff';
+    const text = colors.textColor || '#1f2937';
+    const bg = colors.bgColor || '#ffffff';
+
+    const btnDark = adjustColor(btnColor, -20);
+    const accentDark = adjustColor(accent, -20);
+    const buttonTextColor = getContrastColor(btnColor);
+
     root.querySelectorAll('[style]').forEach(el => {
         let style = el.getAttribute('style');
         if (!style) return;
-        const lower = style.toLowerCase();
-        if (!lower.includes(DEFAULT_PRIMARY) && !lower.includes(DEFAULT_PRIMARY_DARK)) return;
-        style = style.replace(primaryRe, color).replace(darkRe, darker);
-        el.setAttribute('style', style);
+        let modified = false;
+
+        // ---- 1. Replace old primary colors with new accent ----
+        // (Keep for backward compatibility with old inline styles)
+        const oldPrimary = '#0d6efd';
+        const oldPrimaryDark = '#0b5ed7';
+        if (style.toLowerCase().includes(oldPrimary) || style.toLowerCase().includes(oldPrimaryDark)) {
+            style = style.replace(new RegExp(oldPrimary, 'gi'), accent);
+            style = style.replace(new RegExp(oldPrimaryDark, 'gi'), accentDark);
+            modified = true;
+        }
+
+        // ---- 2. Replace hardcoded card backgrounds (white) with cardBg ----
+        const bgPatterns = [
+            /background:\s*white/gi,
+            /background:\s*#fff/gi,
+            /background:\s*#ffffff/gi,
+            /background:\s*#FFFFFF/gi,
+            /background:\s*rgb\(255,\s*255,\s*255\)/gi,
+            /background:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi,
+            /background-color:\s*white/gi,
+            /background-color:\s*#fff/gi,
+            /background-color:\s*#ffffff/gi,
+            /background-color:\s*#FFFFFF/gi,
+            /background-color:\s*rgb\(255,\s*255,\s*255\)/gi,
+            /background-color:\s*rgba\(255,\s*255,\s*255,\s*1\)/gi
+        ];
+        bgPatterns.forEach(pattern => {
+            if (pattern.test(style)) {
+                style = style.replace(pattern, `background: ${cardBg}`);
+                modified = true;
+            }
+        });
+
+        // ---- 3. Replace hardcoded text colors with textColor ----
+        const textPatterns = [
+            /color:\s*#1f2937/gi,
+            /color:\s*#374151/gi,
+            /color:\s*#6B7280/gi, // muted text – replace with textColor (opacity can be added later)
+        ];
+        textPatterns.forEach(pattern => {
+            if (pattern.test(style)) {
+                style = style.replace(pattern, `color: ${text}`);
+                modified = true;
+            }
+        });
+
+        // ---- 4. Replace primary button backgrounds with btnColor ----
+        // (We'll handle buttons separately, but we can also catch inline button styles)
+        const btnBgPatterns = [
+            /background:\s*#0d6efd/gi,
+            /background:\s*#0b5ed7/gi,
+            /background:\s*rgb\(13,\s*110,\s*253\)/gi,
+        ];
+        btnBgPatterns.forEach(pattern => {
+            if (pattern.test(style)) {
+                style = style.replace(pattern, `background: ${btnColor}`);
+                // Also set text color to contrast
+                style = style.replace(/color:\s*[^;]+/gi, `color: ${buttonTextColor}`);
+                modified = true;
+            }
+        });
+
+        if (modified) {
+            el.setAttribute('style', style);
+        }
+    });
+
+    // ---- Additionally, apply to .btn-primary elements directly ----
+    root.querySelectorAll('.btn-primary, button.primary, .auth-login-btn, #saveSettingsBtn, .auth-login-btn').forEach(btn => {
+        btn.style.setProperty('background', btnColor, 'important');
+        btn.style.setProperty('border-color', btnColor, 'important');
+        btn.style.setProperty('color', buttonTextColor, 'important');
     });
 }
 
-function applyThemeColor(color) {
-    window._activeThemeColor = color;
-    const darker = adjustColor(color, -20);
-    document.documentElement.style.setProperty('--primary-color', color);
-    document.documentElement.style.setProperty('--primary-color-dark', darker);
-    // Also expose an RGB triple for use with rgba() in CSS (hover backgrounds)
-    try {
-        const rgb = hexToRgb(color);
-        if (rgb) document.documentElement.style.setProperty('--primary-color-rgb', `${rgb.r},${rgb.g},${rgb.b}`);
-    } catch (e) {
-        // ignore
+// ---- Apply full theme (accent, button color, background, card, text) ----
+function applyThemeColor(colors) {
+    // Accepts either a settings object or individual values
+    const accent = colors.themeColor || colors.accent || '#0d6efd';
+    const btnColor = colors.buttonColor || colors.btnColor || accent;
+    const bg = colors.bgColor || colors.bg || '#ffffff';
+    const cardBg = colors.cardColor || colors.cardBg || '#ffffff';
+    const text = colors.textColor || colors.text || '#1f2937';
+
+    // Store the active theme for later use
+    window._activeTheme = { themeColor: accent, buttonColor: btnColor, bgColor: bg, cardColor: cardBg, textColor: text };
+
+    // Set CSS custom properties
+    document.documentElement.style.setProperty('--primary-color', accent);
+    document.documentElement.style.setProperty('--primary-color-dark', adjustColor(accent, -20));
+    document.documentElement.style.setProperty('--button-color', btnColor);
+    document.documentElement.style.setProperty('--button-color-dark', adjustColor(btnColor, -20));
+    document.documentElement.style.setProperty('--bg-color', bg);
+    document.documentElement.style.setProperty('--card-color', cardBg);
+    document.documentElement.style.setProperty('--text-color', text);
+
+    // Apply to body and main containers
+    document.body.style.backgroundColor = bg;
+    document.body.style.color = text;
+
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.backgroundColor = bg;
+        mainContent.style.color = text;
     }
-    // Sweep the visible page content plus key chrome regions so inline
-    // background colors and gradients update without scanning the whole DOM.
-    const container = document.getElementById('pageContent');
-    if (container) sweepThemeColors(container, color, darker);
 
-    const header = document.querySelector('header.app-header');
-    if (header) sweepThemeColors(header, color, darker);
+    const pageContent = document.getElementById('pageContent');
+    if (pageContent) {
+        pageContent.style.backgroundColor = bg;
+        pageContent.style.color = text;
+    }
 
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar) sweepThemeColors(sidebar, color, darker);
+    // Sweep inline styles across the whole document
+    const colorsObj = { accent, btnColor, bgColor: bg, cardColor: cardBg, textColor: text };
+    sweepThemeColors(document.body, colorsObj);
 
-    // Update any open modal headers / cards
-    document.querySelectorAll('.modal, .modal-header, .card-header').forEach(el => {
-        try { sweepThemeColors(el, color, darker); } catch (e) { /* ignore */ }
+    // Also sweep modals, sidebar, etc.
+    document.querySelectorAll('.modal, .modal-content, .modal-header, .modal-body, .modal-footer').forEach(el => {
+        sweepThemeColors(el, colorsObj);
     });
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sweepThemeColors(sidebar, colorsObj);
+    const header = document.querySelector('header.app-header');
+    if (header) sweepThemeColors(header, colorsObj);
+
+    console.log('[Theme] Applied (full):', colorsObj);
 }
 
 function hexToRgb(hex) {
@@ -3519,12 +3885,12 @@ function initNavigation() {
 
             // ---- ADB Required Check ----
             const adbRequiredPages = [
-    'device-info',
-    'hardware-tests',
-    'connection-troubleshoot',
-    'ai-conclusion',
-    'advanced'
-];
+                'device-info',
+                'hardware-tests',
+                'connection-troubleshoot',
+                'ai-conclusion',
+                'advanced'
+            ];
             if (adbRequiredPages.includes(page) && !currentDeviceId) {
                 showAdbRequiredModal();
                 return;
@@ -3553,6 +3919,12 @@ function initNavigation() {
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
                 else if (page === 'settings') await renderSettings();
                 else await renderDashboard();
+
+                // ---- 🆕 RE-APPLY THEME TO NEWLY RENDERED CONTENT ----
+                if (window._activeTheme) {
+                    applyTheme(window._activeTheme);
+                }
+
             } catch (err) {
                 console.error('Page render error:', err);
             } finally {
@@ -3592,15 +3964,34 @@ function showAdbRequiredModal() {
 function openTutorial() {
     window.open('https://www.youtube.com/watch?v=6KbKqQVJXcQ', '_blank');
 }
+
 // ==================== INIT ====================
 (async () => {
     try {
-        // Show loading overlay
         showLoading();
 
         initNavigation();
         await updateConnectionStatus();
-        setInterval(updateConnectionStatus, 5000);
+
+        // ---- Smart connection status updater (no spam) ----
+        function scheduleNextConnectionUpdate() {
+            if (_connectionUpdateTimer) clearTimeout(_connectionUpdateTimer);
+            _connectionUpdateTimer = setTimeout(() => {
+                updateConnectionStatus();
+            }, 10000);
+        }
+
+        // ---- Debounced focus handler ----
+        let focusTimer = null;
+        window.addEventListener('focus', () => {
+            if (focusTimer) clearTimeout(focusTimer);
+            focusTimer = setTimeout(() => {
+                updateConnectionStatus(true);
+            }, 300);
+        });
+
+        // Start the update loop
+        scheduleNextConnectionUpdate();
 
         // Ensure the dashboard nav item is active on startup
         const defaultNav = document.querySelector('.nav-item[data-page="dashboard"]');
@@ -3610,24 +4001,9 @@ function openTutorial() {
         }
 
         await renderDashboard();
-
-        // Also refresh when the window regains focus, so the app updates automatically.
-        window.addEventListener('focus', async () => {
-            try {
-                await updateConnectionStatus();
-                if (document.querySelector('.nav-item.active')?.dataset.page === 'dashboard') {
-                    await renderDashboard();
-                }
-            } catch (err) {
-                console.error('[Window focus] refresh failed', err);
-            }
-        });
-
-        // Hide loading after dashboard is rendered
         hideLoading();
     } catch (err) {
         console.error('[Init] Error:', err);
-        // Hide loading even if error occurs
         hideLoading();
     }
 })();

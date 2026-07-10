@@ -1,6 +1,6 @@
 // js/storage_analysis_sb.js
 import { getSupabaseClient } from './supabase.js';
-import { getCurrentUserId, getCurrentDeviceInfo, encryptCompressedData } from './sb-utils.js';
+import { getCurrentUserId, getCurrentDeviceInfo, getCurrentDeviceId, encryptCompressedData } from './sb-utils.js';
 
 export async function saveStorageAnalysisToSupabase(results, deviceId) {
     const userId = getCurrentUserId();
@@ -35,7 +35,7 @@ export async function saveStorageAnalysisToSupabase(results, deviceId) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('storage_scan_results')
-        .insert({
+        .upsert({
             user_id: userId,
             device_id: finalDeviceId,
             device_model: deviceInfo.model,
@@ -44,12 +44,13 @@ export async function saveStorageAnalysisToSupabase(results, deviceId) {
             results: encrypted,
             summary: `Files: ${payload.summary.totalFiles}, Size: ${(payload.summary.totalSize / (1024*1024*1024)).toFixed(2)} GB`,
             scan_time: new Date().toISOString(),
-        });
+        }, { onConflict: 'user_id, device_id' })   // 👈 FIXED: use column names
+        .select();
 
     if (error) {
         console.error('Failed to save storage analysis to Supabase:', error);
         throw error;
     }
-    console.log('✅ Storage analysis saved to Supabase');
+    console.log('✅ Storage analysis saved to Supabase (upserted)');
     return data;
 }

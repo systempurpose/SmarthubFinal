@@ -1,6 +1,100 @@
+function applyTroubleshootTheme(settings) {
+    const accent = settings.themeColor || '#0d6efd';
+    const bg = settings.bgColor || '#ffffff';
+    const cardBg = settings.cardColor || '#ffffff';
+    const text = settings.textColor || '#1f2937';
+    const buttonTextColor = getContrastColor(accent);
+
+    // Store the settings for later use
+    window._activeTheme = settings;
+
+    // Set CSS custom properties
+    document.documentElement.style.setProperty('--primary-color', accent);
+    document.documentElement.style.setProperty('--primary-color-dark', adjustColor(accent, -20));
+    document.documentElement.style.setProperty('--button-color', accent);
+    document.documentElement.style.setProperty('--button-color-dark', adjustColor(accent, -18));
+    document.documentElement.style.setProperty('--button-text-color', buttonTextColor);
+    document.documentElement.style.setProperty('--bg-color', bg);
+    document.documentElement.style.setProperty('--card-color', cardBg);
+    document.documentElement.style.setProperty('--text-color', text);
+
+    // ---- Body & Main Content ----
+    document.body.style.backgroundColor = bg;
+    document.body.style.color = text;
+
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.backgroundColor = bg;
+        mainContent.style.color = text;
+    }
+
+    const pageContent = document.getElementById('pageContent');
+    if (pageContent) {
+        pageContent.style.backgroundColor = bg;
+        pageContent.style.color = text;
+    }
+
+    // ---- Sidebar ----
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+        sidebar.style.color = text;
+        // Keep sidebar background dark (or you can make it customizable too)
+        // sidebar.style.backgroundColor = '#1e293b';
+        
+        // Update sidebar links and text
+        sidebar.querySelectorAll('a, span, div, .nav-item, .sidebar-footer, .connection-status, .auth-email, .auth-role').forEach(el => {
+            if (!el.style.color) {
+                el.style.color = text;
+            }
+        });
+        
+        // Also update the sidebar header
+        const header = sidebar.querySelector('.sidebar-header h2');
+        if (header) header.style.color = text;
+    }
+
+    // ---- Cards & Panels ----
+    document.querySelectorAll('.card, .info-card, .status-card, .test-card, .action-card, .metric, .health-card, .summary-card, .overview-item').forEach(el => {
+        // Only override if they don't have explicit background set inline
+        if (!el.style.backgroundColor) {
+            el.style.backgroundColor = cardBg;
+        }
+        if (!el.style.color) {
+            el.style.color = text;
+        }
+        // Also update child text elements
+        el.querySelectorAll('div, span, p, h1, h2, h3, h4, h5, h6, label, strong, .item-label, .item-value').forEach(child => {
+            if (!child.style.color) {
+                child.style.color = text;
+            }
+        });
+    });
+
+    // ---- Modals ----
+    document.querySelectorAll('.modal .modal-content, .modal .modal-body, .modal .modal-header, .modal .modal-footer').forEach(el => {
+        el.style.backgroundColor = cardBg;
+        el.style.color = text;
+        el.querySelectorAll('h3, p, span, label, div').forEach(child => {
+            if (!child.style.color) {
+                child.style.color = text;
+            }
+        });
+    });
+
+    
+
+    // ---- Secondary buttons ----
+    document.querySelectorAll('.btn-secondary, #resetSettingsBtn, .btn-secondary button').forEach(btn => {
+        if (!btn.style.background) {
+            btn.style.borderColor = text + '30';
+            btn.style.color = text;
+        }
+    });
+
+    console.log('[Theme] Applied:', { accent, bg, cardBg, text });
+}
 // ==================== CONNECTION TROUBLESHOOT ====================
 async function renderConnectionTroubleshoot() {
-    // ---- current language (kept in sync by applyLanguage()) ----
     const lang = window._activeLang
         || (JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en"}')).language
         || 'en';
@@ -11,7 +105,35 @@ async function renderConnectionTroubleshoot() {
         return;
     }
 
-    // ---- fetch with timeout so a dropped device can't hang the UI forever ----
+    // ---- 👇 NEW: Load from Supabase first ----
+    let testResults = {};
+    try {
+        const { getCurrentUserId } = await import('./sb-utils.js');
+        const { fetchLatestConnectionScan } = await import('./sb-loader.js');
+        const userId = getCurrentUserId();
+        if (userId && currentDeviceId) {
+            const supabaseData = await fetchLatestConnectionScan(userId, currentDeviceId);
+            if (supabaseData && supabaseData.results) {
+                testResults = supabaseData.results;
+                window._connectionTestResults = testResults;
+                console.log('[ConnectionTroubleshoot] Loaded from Supabase');
+            }
+        }
+    } catch (e) {
+        console.warn('[ConnectionTroubleshoot] Supabase load failed, using localStorage:', e);
+    }
+
+    // ---- If no Supabase data, fallback to localStorage ----
+    if (!testResults || Object.keys(testResults).length === 0) {
+        const savedData = loadConnectionResults();
+        if (savedData && savedData.results) {
+            testResults = savedData.results;
+            window._connectionTestResults = testResults;
+            console.log('[ConnectionTroubleshoot] Loaded from localStorage');
+        }
+    }
+
+    // ---- fetch with timeout ----
     async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -33,8 +155,6 @@ async function renderConnectionTroubleshoot() {
         return data.output;
     }
 
-    // ---- Poll a radio's state instead of guessing a fixed delay ----
-    // getStateFn should return true once the radio is actually ready.
     async function waitUntil(getStateFn, { intervalMs = 500, timeoutMs = 6000 } = {}) {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
@@ -43,7 +163,7 @@ async function renderConnectionTroubleshoot() {
             } catch { /* keep polling */ }
             await new Promise(r => setTimeout(r, intervalMs));
         }
-        return false; // timed out — caller should still proceed and let diagnose report the real failure
+        return false;
     }
 
     async function isWifiEnabled() {
@@ -62,23 +182,10 @@ async function renderConnectionTroubleshoot() {
     }
 
     let isRunning = false;
-    let testResults = {};
-    // ---- Remember the radio state as we found it, so we can restore it after an isolation test ----
     let radioSnapshot = null;
+    // ---- Use the loaded testResults ----
+    window._connectionTestResults = testResults;
 
-    // ---- Load saved results from localStorage ----
-    const savedData = loadConnectionResults();
-    if (savedData && savedData.results) {
-        testResults = savedData.results;
-        window._connectionTestResults = testResults;
-    }
-
-    // NOTE: titles/descs below are looked up at build time via t(). Since this
-    // whole block is rebuilt from scratch every time the page is opened, a
-    // stale translation here just means the user hasn't switched language
-    // since the last time they opened this page — the data-i18n attributes we
-    // stamp onto the cards let the applyLanguage() sweep at the bottom (and any
-    // later language switch while this page is open) correct it live.
     const testCards = [
         { id: 'wifi', titleKey: 'conn.wifi.title', descKey: 'conn.wifi.desc' },
         { id: 'bluetooth', titleKey: 'conn.bluetooth.title', descKey: 'conn.bluetooth.desc' },
@@ -101,7 +208,7 @@ async function renderConnectionTroubleshoot() {
                     <p data-i18n="${card.descKey}" style="margin: 0 0 12px 0; color: #6B7280; font-size: 13px;">${t(card.descKey, lang)}</p>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                    <span class="status-text" id="conn-status-${card.id}" ${saved ? '' : `data-i18n="${statusKey}"`} style="font-weight: 600; color: ${color}; font-size: 14px;">${t(statusKey, lang)}</span>
+                    <span class="status-text" id="conn-status-${card.id}" ${saved ? '' : `data-i18n="${statusKey}"`} style="font-weight: 600; color: ${color}; font-size: 14px;">${saved ? t(statusKey, lang) : t(statusKey, lang)}</span>
                     <button class="btn-primary run-conn-test" data-test="${card.id}" data-i18n="conn.btn.test" style="font-size: 12px; padding: 4px 16px;">${t('conn.btn.test', lang)}</button>
                 </div>
             </div>
@@ -127,21 +234,10 @@ async function renderConnectionTroubleshoot() {
         ${fixOptionsHtml}
     `;
 
-    // ---- Re-apply the active language across the freshly-built markup.
-    // The card titles/descs/buttons above were already rendered in `lang` at
-    // template time, but this sweep is what keeps them correct if the user
-    // switches languages *while this page is open* (data-i18n is the hook the
-    // global applyLanguage() sweep needs — without it this page would be
-    // frozen in whatever language it happened to be built in, same bug the
-    // dashboard had). ----
     if (typeof applyLanguage === 'function') {
         applyLanguage(window._activeLang || lang);
     }
 
-    // ---- Per-service fix action definitions, now translation-aware.
-    // Re-reads t() each time it's called (rather than being built once at
-    // module scope) so it always reflects window._activeLang, even if the
-    // language changed after this page loaded. ----
     function getFixActions(service) {
         const curLang = window._activeLang || lang;
         const actions = {
@@ -234,10 +330,6 @@ async function renderConnectionTroubleshoot() {
         document.querySelectorAll('.run-conn-test').forEach(b => b.disabled = true);
         btn.disabled = true;
         btn.textContent = t('conn.btn.running', curLang);
-        // This card's status is now driven by live test state, not the
-        // static list — remove data-i18n so a later applyLanguage() sweep
-        // (which runs on a snapshot of the DOM, not the live test) doesn't
-        // clobber it back to "Pending".
         statusSpan.removeAttribute('data-i18n');
         statusSpan.style.color = '#f59e0b';
         statusSpan.textContent = t('conn.status.running', curLang);
@@ -246,14 +338,12 @@ async function renderConnectionTroubleshoot() {
         restoreNotice.style.display = 'none';
 
         try {
-            // ---- Snapshot current radio state BEFORE we touch anything, so we can restore it ----
             radioSnapshot = {
                 wifi: await isWifiEnabled().catch(() => null),
                 data: await isDataEnabled().catch(() => null),
                 bluetooth: await isBluetoothEnabled().catch(() => null),
             };
 
-            // ---- Toggle radios for isolation, then POLL for the radio to actually be ready ----
             if (testId === 'wifi') {
                 await runAdb('svc wifi enable');
                 await runAdb('svc data disable');
@@ -261,9 +351,8 @@ async function renderConnectionTroubleshoot() {
             } else if (testId === 'mobile') {
                 await runAdb('svc data enable');
                 await runAdb('svc wifi disable');
-                await waitUntil(isDataEnabled, { timeoutMs: 8000 }); // data attach can be slower than wifi
+                await waitUntil(isDataEnabled, { timeoutMs: 8000 });
             } else if (testId === 'bluetooth') {
-                // Correct primary method first (svc has no "bluetooth" service in AOSP).
                 try {
                     await runAdb('cmd bluetooth_manager enable');
                 } catch {
@@ -272,20 +361,26 @@ async function renderConnectionTroubleshoot() {
                 await waitUntil(isBluetoothEnabled, { timeoutMs: 5000 });
             }
 
-            // ---- Call diagnostic ----
             const endpoint = `/connectivity/diagnose/${testId}/${currentDeviceId}`;
             const resp = await fetchWithTimeout(`${BACKEND_URL}${endpoint}`, {}, 10000);
             const data = await resp.json();
             const pass = data.ok === true;
             testResults[testId] = { passed: pass, status: pass ? 'pass' : 'fail', message: data.message || '' };
 
-            // ---- SAVE THIS TEST ----
+            // ---- SAVE TO LOCALSTORAGE ----
             saveConnectionResults(testId, testResults[testId]);
+
+            // ---- 👇 NEW: SAVE TO SUPABASE ----
+            try {
+                const { saveConnectionTestResults } = await import('./connection_sb.js');
+                await saveConnectionTestResults({ results: testResults, scanTime: new Date().toISOString() }, currentDeviceId);
+                console.log('[ConnectionTroubleshoot] Results saved to Supabase');
+            } catch (e) {
+                console.warn('[ConnectionTroubleshoot] Could not save to Supabase:', e);
+            }
 
             const icon = pass ? '✅' : '❌';
             const color = pass ? '#2e7d32' : '#d32f2f';
-            // `message`/`error` come from the backend and are left as-is
-            // (not translated) since we don't control their language server-side.
             let msg = pass ? data.message : (data.error || t('conn.status.failed', curLang));
             if (testId === 'bluetooth' && pass) {
                 msg += ` | ${t('conn.paired', curLang)}: ${data.pairedCount || 0} | ${t('conn.opp', curLang)}: ${data.oppSupported ? '✅' : '❌'}`;
@@ -294,8 +389,6 @@ async function renderConnectionTroubleshoot() {
                 msg += ` | ${t('conn.signal', curLang)}: ${data.signalStrength}`;
             }
 
-            // conn.status.passed/failed already include their own icon, so use
-            // them directly rather than re-prefixing with a separate `icon` var.
             statusSpan.style.color = color;
             statusSpan.textContent = pass ? t('conn.status.passed', curLang) : t('conn.status.failed', curLang);
             btn.textContent = pass ? t('conn.btn.rerun', curLang) : t('conn.btn.retry', curLang);
@@ -315,9 +408,6 @@ async function renderConnectionTroubleshoot() {
             btn.disabled = false;
             resultDiv.innerHTML = `<div style="background: #ffebee; padding: 12px; border-radius: 8px; color: #d32f2f;">${t('conn.error.prefix', curLang)}${timedOut ? t('conn.error.timeout', curLang) : err.message}</div>`;
         } finally {
-            // ---- Restore the radios we changed to isolate this test ----
-            // We only touch the *other* radios back to what they were before —
-            // the radio we were actually testing stays as the diagnose result found it.
             if (radioSnapshot) {
                 const restoreCmds = [];
                 if (testId === 'wifi' && radioSnapshot.data === true) {
