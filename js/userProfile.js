@@ -166,15 +166,19 @@ async function saveProfile(userId) {
         const result = await saveUserProfile(updateData, userId);
         console.log('✅ Save result:', result);
 
+        // Always update localStorage – even if result is null
+        const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
         if (result) {
-            const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
             storedUser.name = result.name || name;
             storedUser.avatar_url = result.avatar_url || updateData.avatar_url;
-            localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
-            updateSidebarUser(storedUser);
+        } else {
+            storedUser.name = name;
+            storedUser.avatar_url = updateData.avatar_url || storedUser.avatar_url;
         }
+        localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
+        updateSidebarUser(storedUser);
 
-        // ---- Re‑fetch fresh profile and re‑render ----
+        // Re-fetch and re-render
         const freshProfile = await fetchProfileFromDB();
         if (freshProfile) {
             const updatedUser = {
@@ -186,13 +190,12 @@ async function saveProfile(userId) {
             };
             renderProfileUI(updatedUser);
         } else {
-            // Fallback: use the data we just saved
-            const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
+            // Use local data
             const updatedUser = {
                 id: userId,
-                email: storedUser.email || email,
-                name: name || storedUser.name || '',
-                avatar_url: avatar || storedUser.avatar_url || '',
+                email: email,
+                name: name,
+                avatar_url: updateData.avatar_url || '',
                 confirmed: storedUser.confirmed || false,
             };
             renderProfileUI(updatedUser);
@@ -202,7 +205,6 @@ async function saveProfile(userId) {
     } catch (err) {
         alert('Failed: ' + err.message);
     } finally {
-        // ---- Hide loading overlay ----
         if (typeof hideLoading === 'function') {
             hideLoading();
         }

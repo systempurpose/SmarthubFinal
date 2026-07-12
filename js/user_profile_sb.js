@@ -1,9 +1,5 @@
 // js/user_profile_sb.js
 import { getSupabaseClient } from './supabase.js';
-import {
-    encryptCompressedData,
-    decryptAndDecompress,
-} from './sb-utils.js';
 
 /**
  * Compute SHA-256 hash of an email (normalized, lowercase)
@@ -18,36 +14,14 @@ async function hashEmail(email) {
 }
 
 /**
- * Encrypt a value using compress + encrypt.
- */
-async function encryptValue(value) {
-    if (value === null || value === undefined) return null;
-    return await encryptCompressedData(value);
-}
-
-/**
- * Decrypt a value; fallback to raw value if decryption fails.
- */
-async function decryptValue(value) {
-    if (value === null || value === undefined) return null;
-    if (typeof value !== 'string') return value;
-    try {
-        return await decryptAndDecompress(value);
-    } catch {
-        return value;
-    }
-}
-
-/**
- * Save user profile – uses `id` (userId) for RLS compliance.
+ * Save user profile – stores name and avatar_url as plaintext.
  */
 export async function saveUserProfile(profileData, userId) {
     if (!userId) {
-        console.warn('No userId provided – cannot save profile.');
+        console.warn('❌ No userId provided.');
         return null;
     }
 
-    // Get email from localStorage
     let email = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
@@ -57,14 +31,14 @@ export async function saveUserProfile(profileData, userId) {
         } catch {}
     }
     if (!email) {
-        console.warn('No email found – cannot save profile.');
+        console.warn('❌ No email found in localStorage.');
         return null;
     }
 
     const emailHash = await hashEmail(email);
     const supabase = await getSupabaseClient();
 
-    // 1. Check if row exists for this userId
+    // Check existence
     const { data: existingRow, error: findError } = await supabase
         .from('user_account')
         .select('id')
@@ -72,25 +46,24 @@ export async function saveUserProfile(profileData, userId) {
         .maybeSingle();
 
     if (findError) {
-        console.error('Error checking existence:', findError);
+        console.error('❌ Error checking existence:', findError);
         throw new Error(`Lookup failed: ${findError.message}`);
     }
 
-    const encryptedName = await encryptValue(profileData.name);
-    const encryptedAvatar = await encryptValue(profileData.avatar_url);
-    const confirmed = profileData.confirmed !== undefined ? profileData.confirmed : false;
-
+    // 👇 NO ENCRYPTION – store plaintext
     const record = {
-        name: encryptedName,
-        avatar_url: encryptedAvatar,
-        confirmed: confirmed,
+        name: profileData.name || null,
+        avatar_url: profileData.avatar_url || null,
+        confirmed: profileData.confirmed !== undefined ? profileData.confirmed : false,
         updated_at: new Date().toISOString(),
     };
+
+    console.log('📤 Final update record (plaintext):', record);
 
     let result = null;
 
     if (existingRow) {
-        // Row exists – update using `id`
+        // UPDATE
         const { data, error } = await supabase
             .from('user_account')
             .update(record)
@@ -98,20 +71,66 @@ export async function saveUserProfile(profileData, userId) {
             .select('*');
 
         if (error) {
-            console.error('Update failed:', error);
+            console.error('❌ Update failed:', error);
             throw new Error(`Update failed: ${error.message}`);
         }
-        result = data?.[0] || null;
-        console.log('✅ Profile updated');
+
+        console.log('📡 Update response data:', data);
+
+        if (!data || data.length === 0) {
+            console.warn('⚠️ Update returned no rows – fetching row by id:', userId);
+            const { data: fetched, error: fetchErr } = await supabase
+                .from('user_account')
+                .select('*')
+                .eq('id', userId)
+                .maybeSingle();
+
+            if (fetchErr) {
+                console.error('❌ Fetch after update failed:', fetchErr);
+                throw new Error(`Fetch after update failed: ${fetchErr.message}`);
+            }
+
+            if (!fetched) {
+                console.warn('⚠️ Row not found after update – inserting new row.');
+                const insertRecord = {
+                    id: userId,
+                    email: email,
+                    email_hash: emailHash,
+                    password: emailHash, // placeholder
+                    name: record.name,
+                    avatar_url: record.avatar_url,
+                    confirmed: record.confirmed,
+                    created_at: new Date().toISOString(),
+                    updated_at: record.updated_at,
+                };
+                const { data: insertData, error: insertError } = await supabase
+                    .from('user_account')
+                    .insert(insertRecord)
+                    .select('*');
+                if (insertError) {
+                    console.error('❌ Insert failed:', insertError);
+                    throw new Error(`Insert failed: ${insertError.message}`);
+                }
+                result = insertData?.[0] || null;
+            } else {
+                result = fetched;
+            }
+        } else {
+            result = data[0];
+        }
+        console.log('✅ Profile updated (or fetched)');
     } else {
-        // Row missing – insert using the provided `userId`
+        // INSERT
         const insertRecord = {
             id: userId,
             email: email,
             email_hash: emailHash,
-            password: emailHash, // placeholder; not used for Auth
-            ...record,
+            password: emailHash,
+            name: record.name,
+            avatar_url: record.avatar_url,
+            confirmed: record.confirmed,
             created_at: new Date().toISOString(),
+            updated_at: record.updated_at,
         };
 
         const { data, error } = await supabase
@@ -120,7 +139,7 @@ export async function saveUserProfile(profileData, userId) {
             .select('*');
 
         if (error) {
-            console.error('Insert failed:', error);
+            console.error('❌ Insert failed:', error);
             throw new Error(`Insert failed: ${error.message}`);
         }
         result = data?.[0] || null;
@@ -131,14 +150,14 @@ export async function saveUserProfile(profileData, userId) {
         throw new Error('No rows affected – profile not saved.');
     }
 
+    console.log('🎯 Final result:', result);
     return result;
 }
 
 /**
- * Fetch user profile – uses `id` from localStorage (or Auth session).
+ * Fetch user profile – no decryption needed.
  */
 export async function fetchUserProfile() {
-    // Get userId from localStorage
     let userId = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
@@ -169,11 +188,6 @@ export async function fetchUserProfile() {
         return null;
     }
 
-    // Decrypt name and avatar_url
-    const decryptedName = await decryptValue(data.name);
-    const decryptedAvatar = await decryptValue(data.avatar_url);
-
-    // Get plain email from localStorage for display
     let plainEmail = null;
     if (stored) {
         try {
@@ -184,14 +198,12 @@ export async function fetchUserProfile() {
 
     return {
         ...data,
-        name: decryptedName,
-        avatar_url: decryptedAvatar,
         plainEmail: plainEmail || data.email,
     };
 }
 
 /**
- * Update avatar only – uses `id`.
+ * Update avatar only – plaintext.
  */
 export async function updateUserAvatar(avatarUrl) {
     let userId = null;
@@ -204,13 +216,11 @@ export async function updateUserAvatar(avatarUrl) {
     }
     if (!userId) return null;
 
-    const encryptedAvatar = await encryptValue(avatarUrl);
-
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('user_account')
         .update({
-            avatar_url: encryptedAvatar,
+            avatar_url: avatarUrl,
             updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
@@ -220,14 +230,11 @@ export async function updateUserAvatar(avatarUrl) {
         console.error('Failed to update avatar:', error);
         throw error;
     }
-    if (data && data.length > 0) {
-        data[0].avatar_url = await decryptValue(data[0].avatar_url);
-    }
     return data?.[0] || null;
 }
 
 /**
- * Update confirmation status – uses `id`.
+ * Update confirmation status.
  */
 export async function updateUserConfirmed(confirmed) {
     let userId = null;
