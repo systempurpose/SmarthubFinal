@@ -1594,12 +1594,12 @@ window.navigateTo = function(page) {
 // ---- Render profile page ----
 // ---- Render profile page ----
 // ---- Render profile page ----
+// ---- Render profile page ----
 async function renderProfilePage() {
     // 1. Ensure the profile module is loaded
     if (typeof window.renderProfilePageContent !== 'function') {
         console.log('[Profile] Module not loaded – importing dynamically...');
         try {
-            // ✅ Use absolute path to avoid double /js/
             await import('/js/userProfile.js');
             if (typeof window.renderProfilePageContent !== 'function') {
                 throw new Error('Profile module did not define renderProfilePageContent');
@@ -1652,6 +1652,9 @@ async function renderProfilePage() {
         `;
     }
 }
+
+// Expose globally
+window.renderProfilePage = renderProfilePage;
 // Expose globally
 window.renderProfilePage = renderProfilePage;
 

@@ -1,53 +1,142 @@
-// js/user_profile_sb.js
+// js/userProfile.js
 import { getSupabaseClient } from './supabase.js';
-import {
-    encryptCompressedData,
-    decryptAndDecompress,
-} from './sb-utils.js';
+import { saveUserProfile, fetchUserProfile as fetchProfileFromDB } from './user_profile_sb.js';
 
-/**
- * Compute SHA-256 hash of an email (normalized, lowercase)
- */
-async function hashEmail(email) {
-    const normalized = email.trim().toLowerCase();
-    const encoder = new TextEncoder();
-    const data = encoder.encode(normalized);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+let avatarFile = null;
 
-/**
- * Encrypt a value using compress + encrypt.
- */
-async function encryptValue(value) {
-    if (value === null || value === undefined) return null;
-    return await encryptCompressedData(value);
-}
-
-/**
- * Decrypt a value; fallback to raw value if decryption fails.
- */
-async function decryptValue(value) {
-    if (value === null || value === undefined) return null;
-    if (typeof value !== 'string') return value;
+async function getCurrentUser() {
     try {
-        return await decryptAndDecompress(value);
-    } catch {
-        return value;
+        const supabase = await getSupabaseClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) return session.user;
+    } catch (err) {
+        console.error('getSession failed:', err);
+    }
+    const stored = localStorage.getItem('smarthub.user');
+    if (stored) try { return JSON.parse(stored); } catch {}
+    return null;
+}
+
+export async function showProfilePage() {
+    const user = await getCurrentUser();
+    if (!user) {
+        alert('Please log in first.');
+        return;
+    }
+    if (!user.id) {
+        console.warn('⚠️ getCurrentUser() returned a user with no id — profile saves will likely fail.', user);
+    }
+    if (typeof window.navigateTo === 'function') {
+        window.navigateTo('profile');
+    } else {
+        renderProfilePageContent(user);
     }
 }
 
-/**
- * Save user profile – uses `id` (userId) for RLS compliance.
- */
-export async function saveUserProfile(profileData, userId) {
-    if (!userId) {
-        console.warn('No userId provided – cannot save profile.');
-        return null;
+export async function renderProfilePageContent(user) {
+    const container = document.getElementById('pageContent');
+    if (!container) return;
+
+    let profile = null;
+    try {
+        profile = await fetchProfileFromDB();
+        console.log('📥 Fetched profile from Supabase:', profile);
+    } catch (err) {
+        console.error('❌ Failed to fetch profile:', err);
     }
 
-    // Get email from localStorage
+    const displayUser = {
+        id: user.id,
+        email: profile?.plainEmail || user.email,
+        name: profile?.name || user.name || '',
+        avatar_url: profile?.avatar_url || user.avatar_url || '',
+        confirmed: profile?.confirmed ?? user.confirmed ?? false,
+    };
+
+    renderProfileUI(displayUser);
+}
+
+function renderProfileUI(user) {
+    const container = document.getElementById('pageContent');
+    const email = user.email || '';
+    const name = user.name || '';
+    const avatar = user.avatar_url || '';
+    const confirmed = user.confirmed || false;
+
+    container.innerHTML = `
+        <div style="max-width:500px;margin:0 auto;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
+                <button id="profileBackBtn" class="btn-secondary" style="padding:6px 14px;">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <h2 style="margin:0;">User Profile</h2>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:20px;background:white;padding:24px;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+                <div style="display:flex;align-items:center;gap:24px;">
+                    <div style="position:relative;width:80px;height:80px;border-radius:50%;overflow:hidden;background:#e2e8f0;border:2px solid #e2e8f0;flex-shrink:0;">
+                        <img id="profileAvatarImg" src="${avatar || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"%3E%3Crect width="80" height="80" fill="%2364748b"/%3E%3Ctext x="40" y="48" font-size="32" text-anchor="middle" fill="white" font-family="sans-serif"%3E${email.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" style="width:100%;height:100%;object-fit:cover;" alt="Avatar">
+                        <label for="avatarUpload" style="position:absolute;bottom:0;right:0;background:#0d6efd;color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;border:2px solid white;">
+                            <i class="fas fa-camera"></i>
+                            <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
+                        </label>
+                    </div>
+                    <div>
+                        <div style="font-weight:600;font-size:20px;">${name || email}</div>
+                        <div style="font-size:14px;color:#64748b;">${email}</div>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-weight:500;font-size:14px;color:#1e293b;">Email</label>
+                    <input type="email" value="${email}" readonly style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#f1f5f9;color:#475569;font-size:14px;">
+                </div>
+                <div>
+                    <label for="profileName" style="font-weight:500;font-size:14px;color:#1e293b;">Full Name</label>
+                    <input type="text" id="profileName" value="${name}" placeholder="Your full name" style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;background:${confirmed ? '#dcfce7' : '#fef3c7'};padding:12px 16px;border-radius:8px;">
+                    <span style="font-size:20px;">${confirmed ? '✅' : '⚠️'}</span>
+                    <span style="font-size:14px;color:${confirmed ? '#166534' : '#92400e'};">
+                        ${confirmed ? 'Email confirmed' : 'Email not confirmed'}
+                    </span>
+                    ${!confirmed ? `<button id="resendConfirmBtn" class="btn-secondary" style="margin-left:auto;padding:4px 14px;font-size:12px;border-radius:6px;">Resend</button>` : ''}
+                </div>
+                <button id="profileSaveBtn" class="btn-primary" style="padding:12px;font-weight:600;width:100%;background:#0d6efd;border:none;color:white;border-radius:10px;">
+                    Save Profile
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('avatarUpload')?.addEventListener('change', handleAvatarUpload);
+    document.getElementById('profileSaveBtn')?.addEventListener('click', () => saveProfile(user.id));
+    document.getElementById('resendConfirmBtn')?.addEventListener('click', () => alert('Resend confirmation'));
+    document.getElementById('profileBackBtn')?.addEventListener('click', () => {
+        if (typeof window.navigateTo === 'function') window.navigateTo('dashboard');
+        else document.querySelector('.nav-item[data-page="dashboard"]')?.click();
+    });
+}
+
+function handleAvatarUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        document.getElementById('profileAvatarImg').src = ev.target.result;
+        avatarFile = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function saveProfile(userId) {
+    if (!userId) {
+        alert('Missing user id — please log out and back in, then try again.');
+        console.error('saveProfile called with no userId');
+        return;
+    }
+
+    const name = document.getElementById('profileName').value.trim();
+    const avatar = avatarFile || document.getElementById('profileAvatarImg')?.src || '';
+
     let email = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
@@ -56,203 +145,101 @@ export async function saveUserProfile(profileData, userId) {
             email = user.email;
         } catch {}
     }
+
+    const updateData = {
+        name,
+        email,
+    };
+    if (avatar && avatar.startsWith('data:image')) updateData.avatar_url = avatar;
+
     if (!email) {
-        console.warn('No email found – cannot save profile.');
-        return null;
+        alert('Email not found – please log in again.');
+        return;
     }
 
-    const emailHash = await hashEmail(email);
-    const supabase = await getSupabaseClient();
-
-    // 1. Check if row exists for this userId
-    const { data: existingRow, error: findError } = await supabase
-        .from('user_account')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
-
-    if (findError) {
-        console.error('Error checking existence:', findError);
-        throw new Error(`Lookup failed: ${findError.message}`);
+    // ---- Show loading overlay ----
+    if (typeof showLoading === 'function') {
+        showLoading();
     }
 
-    const encryptedName = await encryptValue(profileData.name);
-    const encryptedAvatar = await encryptValue(profileData.avatar_url);
-    const confirmed = profileData.confirmed !== undefined ? profileData.confirmed : false;
+    try {
+        const result = await saveUserProfile(updateData, userId);
+        console.log('✅ Save result:', result);
 
-    const record = {
-        name: encryptedName,
-        avatar_url: encryptedAvatar,
-        confirmed: confirmed,
-        updated_at: new Date().toISOString(),
-    };
-
-    let result = null;
-
-    if (existingRow) {
-        // Row exists – update using `id`
-        const { data, error } = await supabase
-            .from('user_account')
-            .update(record)
-            .eq('id', userId)
-            .select('*');
-
-        if (error) {
-            console.error('Update failed:', error);
-            throw new Error(`Update failed: ${error.message}`);
+        if (result) {
+            const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
+            storedUser.name = result.name || name;
+            storedUser.avatar_url = result.avatar_url || updateData.avatar_url;
+            localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
+            updateSidebarUser(storedUser);
         }
-        result = data?.[0] || null;
-        console.log('✅ Profile updated');
-    } else {
-        // Row missing – insert using the provided `userId`
-        const insertRecord = {
-            id: userId,
-            email: email,
-            email_hash: emailHash,
-            password: emailHash, // placeholder; not used for Auth
-            ...record,
-            created_at: new Date().toISOString(),
-        };
 
-        const { data, error } = await supabase
-            .from('user_account')
-            .insert(insertRecord)
-            .select('*');
-
-        if (error) {
-            console.error('Insert failed:', error);
-            throw new Error(`Insert failed: ${error.message}`);
+        // ---- Re‑fetch fresh profile and re‑render ----
+        const freshProfile = await fetchProfileFromDB();
+        if (freshProfile) {
+            const updatedUser = {
+                id: freshProfile.id,
+                email: freshProfile.plainEmail || freshProfile.email || email,
+                name: freshProfile.name || '',
+                avatar_url: freshProfile.avatar_url || '',
+                confirmed: freshProfile.confirmed || false,
+            };
+            renderProfileUI(updatedUser);
+        } else {
+            // Fallback: use the data we just saved
+            const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
+            const updatedUser = {
+                id: userId,
+                email: storedUser.email || email,
+                name: name || storedUser.name || '',
+                avatar_url: avatar || storedUser.avatar_url || '',
+                confirmed: storedUser.confirmed || false,
+            };
+            renderProfileUI(updatedUser);
         }
-        result = data?.[0] || null;
-        console.log('✅ Profile inserted');
-    }
 
-    if (!result) {
-        throw new Error('No rows affected – profile not saved.');
+        alert('Profile updated!');
+    } catch (err) {
+        alert('Failed: ' + err.message);
+    } finally {
+        // ---- Hide loading overlay ----
+        if (typeof hideLoading === 'function') {
+            hideLoading();
+        }
     }
-
-    return result;
 }
 
-/**
- * Fetch user profile – uses `id` from localStorage (or Auth session).
- */
-export async function fetchUserProfile() {
-    // Get userId from localStorage
-    let userId = null;
-    const stored = localStorage.getItem('smarthub.user');
-    if (stored) {
-        try {
-            const user = JSON.parse(stored);
-            userId = user.id;
-        } catch {}
+function updateSidebarUser(user) {
+    const avatarEl = document.getElementById('userAvatar');
+    const emailEl = document.getElementById('userEmailDisplay');
+    if (avatarEl) {
+        if (user.avatar_url?.startsWith('data:image')) {
+            avatarEl.style.backgroundImage = `url(${user.avatar_url})`;
+            avatarEl.style.backgroundSize = 'cover';
+            avatarEl.style.backgroundPosition = 'center';
+            avatarEl.textContent = '';
+        } else {
+            avatarEl.style.background = 'linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%)';
+            avatarEl.textContent = (user.name || user.email || 'U')[0].toUpperCase();
+        }
     }
-    if (!userId) {
-        console.warn('No user ID found – cannot fetch profile.');
-        return null;
-    }
-
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
-        .from('user_account')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-    if (error) {
-        console.error('Failed to fetch user profile:', error.message);
-        return null;
-    }
-
-    if (!data) {
-        console.warn('⚠️ No user_account row for id:', userId);
-        return null;
-    }
-
-    // Decrypt name and avatar_url
-    const decryptedName = await decryptValue(data.name);
-    const decryptedAvatar = await decryptValue(data.avatar_url);
-
-    // Get plain email from localStorage for display
-    let plainEmail = null;
-    if (stored) {
-        try {
-            const user = JSON.parse(stored);
-            plainEmail = user.email;
-        } catch {}
-    }
-
-    return {
-        ...data,
-        name: decryptedName,
-        avatar_url: decryptedAvatar,
-        plainEmail: plainEmail || data.email,
-    };
+    if (emailEl) emailEl.textContent = user.name || user.email || 'User';
 }
 
-/**
- * Update avatar only – uses `id`.
- */
-export async function updateUserAvatar(avatarUrl) {
-    let userId = null;
-    const stored = localStorage.getItem('smarthub.user');
-    if (stored) {
-        try {
-            const user = JSON.parse(stored);
-            userId = user.id;
-        } catch {}
-    }
-    if (!userId) return null;
-
-    const encryptedAvatar = await encryptValue(avatarUrl);
-
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
-        .from('user_account')
-        .update({
-            avatar_url: encryptedAvatar,
-            updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-        .select('*');
-
-    if (error) {
-        console.error('Failed to update avatar:', error);
-        throw error;
-    }
-    if (data && data.length > 0) {
-        data[0].avatar_url = await decryptValue(data[0].avatar_url);
-    }
-    return data?.[0] || null;
+export async function initUserProfile() {
+    const chip = document.getElementById('userInfo');
+    if (!chip) return;
+    chip.addEventListener('click', async (e) => {
+        if (e.target.closest('#logoutBtn')) return;
+        if (!chip.hasAttribute('hidden')) {
+            if (typeof window.navigateTo === 'function') window.navigateTo('profile');
+            else await showProfilePage();
+        }
+    });
 }
 
-/**
- * Update confirmation status – uses `id`.
- */
-export async function updateUserConfirmed(confirmed) {
-    let userId = null;
-    const stored = localStorage.getItem('smarthub.user');
-    if (stored) {
-        try {
-            const user = JSON.parse(stored);
-            userId = user.id;
-        } catch {}
-    }
-    if (!userId) return null;
+document.addEventListener('DOMContentLoaded', initUserProfile);
 
-    const supabase = await getSupabaseClient();
-    const { data, error } = await supabase
-        .from('user_account')
-        .update({
-            confirmed: confirmed,
-            updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-        .select('*');
-
-    if (error) {
-        console.error('Failed to update confirmation:', error);
-        throw error;
-    }
-    return data?.[0] || null;
-}
+window.showProfilePage = showProfilePage;
+window.renderProfilePageContent = renderProfilePageContent;
+window.updateSidebarUser = updateSidebarUser;

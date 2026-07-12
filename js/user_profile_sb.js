@@ -1,7 +1,6 @@
 // js/user_profile_sb.js
 import { getSupabaseClient } from './supabase.js';
 import {
-    getCurrentUserId,
     encryptCompressedData,
     decryptAndDecompress,
 } from './sb-utils.js';
@@ -20,7 +19,6 @@ async function hashEmail(email) {
 
 /**
  * Encrypt a value using compress + encrypt.
- * Returns null if value is null/undefined.
  */
 async function encryptValue(value) {
     if (value === null || value === undefined) return null;
@@ -28,8 +26,7 @@ async function encryptValue(value) {
 }
 
 /**
- * Decrypt a value using decrypt + decompress.
- * If decryption fails, returns the raw value (for backward compatibility).
+ * Decrypt a value; fallback to raw value if decryption fails.
  */
 async function decryptValue(value) {
     if (value === null || value === undefined) return null;
@@ -37,16 +34,19 @@ async function decryptValue(value) {
     try {
         return await decryptAndDecompress(value);
     } catch {
-        // Fallback to plaintext (for existing data)
         return value;
     }
 }
 
 /**
- * Save user profile – upsert by email_hash.
- * Encrypts `name` and `avatar_url` before storing.
+ * Save user profile – uses `id` (userId) for RLS compliance.
  */
 export async function saveUserProfile(profileData, userId) {
+    if (!userId) {
+        console.warn('No userId provided – cannot save profile.');
+        return null;
+    }
+
     // Get email from localStorage
     let email = null;
     const stored = localStorage.getItem('smarthub.user');
@@ -64,7 +64,18 @@ export async function saveUserProfile(profileData, userId) {
     const emailHash = await hashEmail(email);
     const supabase = await getSupabaseClient();
 
-    // Encrypt sensitive fields
+    // 1. Check if row exists for this userId
+    const { data: existingRow, error: findError } = await supabase
+        .from('user_account')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (findError) {
+        console.error('Error checking existence:', findError);
+        throw new Error(`Lookup failed: ${findError.message}`);
+    }
+
     const encryptedName = await encryptValue(profileData.name);
     const encryptedAvatar = await encryptValue(profileData.avatar_url);
     const confirmed = profileData.confirmed !== undefined ? profileData.confirmed : false;
@@ -76,69 +87,76 @@ export async function saveUserProfile(profileData, userId) {
         updated_at: new Date().toISOString(),
     };
 
-    // 1. Try upsert (requires unique constraint on email_hash)
-    let { data, error } = await supabase
-        .from('user_account')
-        .upsert(
-            {
-                id: userId,
-                email: email,
-                email_hash: emailHash,
-                password: emailHash, // placeholder
-                ...record,
-            },
-            { onConflict: 'email_hash' }
-        )
-        .select('*');
+    let result = null;
 
-    if (error) {
-        // If upsert fails (e.g., constraint conflict), try update
-        console.warn('Upsert failed, falling back to update:', error.message);
-        const { data: updateData, error: updateError } = await supabase
+    if (existingRow) {
+        // Row exists – update using `id`
+        const { data, error } = await supabase
             .from('user_account')
             .update(record)
-            .eq('email_hash', emailHash)
+            .eq('id', userId)
             .select('*');
-        if (updateError) {
-            console.error('Update failed:', updateError);
-            throw new Error(`Update failed: ${updateError.message}`);
+
+        if (error) {
+            console.error('Update failed:', error);
+            throw new Error(`Update failed: ${error.message}`);
         }
-        data = updateData;
+        result = data?.[0] || null;
+        console.log('✅ Profile updated');
+    } else {
+        // Row missing – insert using the provided `userId`
+        const insertRecord = {
+            id: userId,
+            email: email,
+            email_hash: emailHash,
+            password: emailHash, // placeholder; not used for Auth
+            ...record,
+            created_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+            .from('user_account')
+            .insert(insertRecord)
+            .select('*');
+
+        if (error) {
+            console.error('Insert failed:', error);
+            throw new Error(`Insert failed: ${error.message}`);
+        }
+        result = data?.[0] || null;
+        console.log('✅ Profile inserted');
     }
 
-    if (!data || data.length === 0) {
-        console.error('❌ No rows affected for email_hash:', emailHash);
-        throw new Error('Failed to save profile – no rows affected.');
+    if (!result) {
+        throw new Error('No rows affected – profile not saved.');
     }
 
-    console.log('✅ User profile saved to Supabase');
-    return data[0];
+    return result;
 }
 
 /**
- * Fetch user profile – decrypts `name` and `avatar_url`.
+ * Fetch user profile – uses `id` from localStorage (or Auth session).
  */
 export async function fetchUserProfile() {
-    let email = null;
+    // Get userId from localStorage
+    let userId = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
         try {
             const user = JSON.parse(stored);
-            email = user.email;
+            userId = user.id;
         } catch {}
     }
-    if (!email) {
-        console.warn('No email found – cannot fetch profile.');
+    if (!userId) {
+        console.warn('No user ID found – cannot fetch profile.');
         return null;
     }
-
-    const emailHash = await hashEmail(email);
 
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
         .from('user_account')
         .select('*')
-        .eq('email_hash', emailHash)
+        .eq('id', userId)
         .maybeSingle();
 
     if (error) {
@@ -147,7 +165,7 @@ export async function fetchUserProfile() {
     }
 
     if (!data) {
-        console.warn('⚠️ No user_account row for email_hash:', emailHash);
+        console.warn('⚠️ No user_account row for id:', userId);
         return null;
     }
 
@@ -155,29 +173,37 @@ export async function fetchUserProfile() {
     const decryptedName = await decryptValue(data.name);
     const decryptedAvatar = await decryptValue(data.avatar_url);
 
+    // Get plain email from localStorage for display
+    let plainEmail = null;
+    if (stored) {
+        try {
+            const user = JSON.parse(stored);
+            plainEmail = user.email;
+        } catch {}
+    }
+
     return {
         ...data,
         name: decryptedName,
         avatar_url: decryptedAvatar,
-        plainEmail: email, // for display
+        plainEmail: plainEmail || data.email,
     };
 }
 
 /**
- * Update only the avatar URL – encrypts and saves.
+ * Update avatar only – uses `id`.
  */
 export async function updateUserAvatar(avatarUrl) {
-    let email = null;
+    let userId = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
         try {
             const user = JSON.parse(stored);
-            email = user.email;
+            userId = user.id;
         } catch {}
     }
-    if (!email) return null;
+    if (!userId) return null;
 
-    const emailHash = await hashEmail(email);
     const encryptedAvatar = await encryptValue(avatarUrl);
 
     const supabase = await getSupabaseClient();
@@ -187,14 +213,13 @@ export async function updateUserAvatar(avatarUrl) {
             avatar_url: encryptedAvatar,
             updated_at: new Date().toISOString(),
         })
-        .eq('email_hash', emailHash)
+        .eq('id', userId)
         .select('*');
 
     if (error) {
         console.error('Failed to update avatar:', error);
         throw error;
     }
-    // Decrypt the returned avatar for the caller
     if (data && data.length > 0) {
         data[0].avatar_url = await decryptValue(data[0].avatar_url);
     }
@@ -202,20 +227,18 @@ export async function updateUserAvatar(avatarUrl) {
 }
 
 /**
- * Update confirmation status – plain boolean, no encryption needed.
+ * Update confirmation status – uses `id`.
  */
 export async function updateUserConfirmed(confirmed) {
-    let email = null;
+    let userId = null;
     const stored = localStorage.getItem('smarthub.user');
     if (stored) {
         try {
             const user = JSON.parse(stored);
-            email = user.email;
+            userId = user.id;
         } catch {}
     }
-    if (!email) return null;
-
-    const emailHash = await hashEmail(email);
+    if (!userId) return null;
 
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
@@ -224,7 +247,7 @@ export async function updateUserConfirmed(confirmed) {
             confirmed: confirmed,
             updated_at: new Date().toISOString(),
         })
-        .eq('email_hash', emailHash)
+        .eq('id', userId)
         .select('*');
 
     if (error) {
