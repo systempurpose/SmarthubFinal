@@ -23,9 +23,6 @@ export async function showProfilePage() {
         alert('Please log in first.');
         return;
     }
-    if (!user.id) {
-        console.warn('⚠️ getCurrentUser() returned a user with no id — profile saves will likely fail.', user);
-    }
     if (typeof window.navigateTo === 'function') {
         window.navigateTo('profile');
     } else {
@@ -40,7 +37,7 @@ export async function renderProfilePageContent(user) {
     let profile = null;
     try {
         profile = await fetchProfileFromDB();
-        console.log('📥 Fetched profile from Supabase:', profile);
+        console.log('📥 Fetched profile:', profile);
     } catch (err) {
         console.error('❌ Failed to fetch profile:', err);
     }
@@ -52,6 +49,9 @@ export async function renderProfilePageContent(user) {
         avatar_url: profile?.avatar_url || user.avatar_url || '',
         confirmed: profile?.confirmed ?? user.confirmed ?? false,
     };
+
+    // Update sidebar with the loaded data
+    updateSidebarUser(displayUser);
 
     renderProfileUI(displayUser);
 }
@@ -116,20 +116,57 @@ function renderProfileUI(user) {
     });
 }
 
-function handleAvatarUpload(e) {
+async function handleAvatarUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        document.getElementById('profileAvatarImg').src = ev.target.result;
-        avatarFile = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+    try {
+        // Compress image to max 150px, quality 0.7
+        const compressedDataUrl = await compressImage(file, 150, 150, 0.7);
+        document.getElementById('profileAvatarImg').src = compressedDataUrl;
+        avatarFile = compressedDataUrl;
+    } catch (err) {
+        console.error('Image compression failed:', err);
+        alert('Failed to process image. Please try a smaller file.');
+    }
+}
+
+function compressImage(file, maxWidth = 200, maxHeight = 200, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round(width * (maxHeight / height));
+                        height = maxHeight;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 }
 
 async function saveProfile(userId) {
     if (!userId) {
-        alert('Missing user id — please log out and back in, then try again.');
+        alert('Missing user id — please log out and back in.');
         console.error('saveProfile called with no userId');
         return;
     }
@@ -147,38 +184,34 @@ async function saveProfile(userId) {
     }
 
     const updateData = {
-        name,
-        email,
+        name: name, // explicitly set
+        email: email,
     };
-    if (avatar && avatar.startsWith('data:image')) updateData.avatar_url = avatar;
+    if (avatar && avatar.startsWith('data:image')) {
+        updateData.avatar_url = avatar;
+    }
 
     if (!email) {
         alert('Email not found – please log in again.');
         return;
     }
 
-    // ---- Show loading overlay ----
-    if (typeof showLoading === 'function') {
-        showLoading();
-    }
+    if (typeof showLoading === 'function') showLoading();
 
     try {
         const result = await saveUserProfile(updateData, userId);
         console.log('✅ Save result:', result);
 
-        // Always update localStorage – even if result is null
+        // Update localStorage with the new data
         const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
-        if (result) {
-            storedUser.name = result.name || name;
-            storedUser.avatar_url = result.avatar_url || updateData.avatar_url;
-        } else {
-            storedUser.name = name;
-            storedUser.avatar_url = updateData.avatar_url || storedUser.avatar_url;
-        }
+        storedUser.name = result?.name || name;
+        storedUser.avatar_url = result?.avatar_url || updateData.avatar_url;
         localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
+
+        // Update sidebar immediately
         updateSidebarUser(storedUser);
 
-        // Re-fetch and re-render
+        // Re-fetch and re-render the profile page
         const freshProfile = await fetchProfileFromDB();
         if (freshProfile) {
             const updatedUser = {
@@ -190,7 +223,7 @@ async function saveProfile(userId) {
             };
             renderProfileUI(updatedUser);
         } else {
-            // Use local data
+            // Use the updated local data
             const updatedUser = {
                 id: userId,
                 email: email,
@@ -205,13 +238,12 @@ async function saveProfile(userId) {
     } catch (err) {
         alert('Failed: ' + err.message);
     } finally {
-        if (typeof hideLoading === 'function') {
-            hideLoading();
-        }
+        if (typeof hideLoading === 'function') hideLoading();
     }
 }
 
 function updateSidebarUser(user) {
+    console.log('🔄 Updating sidebar with:', user);
     const avatarEl = document.getElementById('userAvatar');
     const emailEl = document.getElementById('userEmailDisplay');
     if (avatarEl) {
@@ -225,7 +257,10 @@ function updateSidebarUser(user) {
             avatarEl.textContent = (user.name || user.email || 'U')[0].toUpperCase();
         }
     }
-    if (emailEl) emailEl.textContent = user.name || user.email || 'User';
+    if (emailEl) {
+        emailEl.textContent = user.name || user.email || 'User';
+        console.log('📧 Sidebar email set to:', emailEl.textContent);
+    }
 }
 
 export async function initUserProfile() {

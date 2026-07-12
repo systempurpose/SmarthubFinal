@@ -2,7 +2,7 @@
 import { getSupabaseClient } from './supabase.js';
 
 /**
- * Compute SHA-256 hash of an email (normalized, lowercase)
+ * Compute SHA-256 hash of an email
  */
 async function hashEmail(email) {
     const normalized = email.trim().toLowerCase();
@@ -14,9 +14,11 @@ async function hashEmail(email) {
 }
 
 /**
- * Save user profile – stores name and avatar_url as plaintext.
+ * Save user profile – plaintext (no encryption).
  */
 export async function saveUserProfile(profileData, userId) {
+    console.log('🔍 saveUserProfile called with:', { profileData, userId });
+
     if (!userId) {
         console.warn('❌ No userId provided.');
         return null;
@@ -31,14 +33,14 @@ export async function saveUserProfile(profileData, userId) {
         } catch {}
     }
     if (!email) {
-        console.warn('❌ No email found in localStorage.');
+        console.warn('❌ No email found.');
         return null;
     }
 
     const emailHash = await hashEmail(email);
     const supabase = await getSupabaseClient();
 
-    // Check existence
+    // Check if row exists
     const { data: existingRow, error: findError } = await supabase
         .from('user_account')
         .select('id')
@@ -50,15 +52,15 @@ export async function saveUserProfile(profileData, userId) {
         throw new Error(`Lookup failed: ${findError.message}`);
     }
 
-    // 👇 NO ENCRYPTION – store plaintext
+    // Build record – ensure values are passed correctly
     const record = {
-        name: profileData.name || null,
-        avatar_url: profileData.avatar_url || null,
+        name: profileData.name !== undefined ? profileData.name : null,
+        avatar_url: profileData.avatar_url !== undefined ? profileData.avatar_url : null,
         confirmed: profileData.confirmed !== undefined ? profileData.confirmed : false,
         updated_at: new Date().toISOString(),
     };
 
-    console.log('📤 Final update record (plaintext):', record);
+    console.log('📤 Final update record:', record);
 
     let result = null;
 
@@ -78,6 +80,7 @@ export async function saveUserProfile(profileData, userId) {
         console.log('📡 Update response data:', data);
 
         if (!data || data.length === 0) {
+            // If update returns no rows, fetch the row directly
             console.warn('⚠️ Update returned no rows – fetching row by id:', userId);
             const { data: fetched, error: fetchErr } = await supabase
                 .from('user_account')
@@ -91,12 +94,13 @@ export async function saveUserProfile(profileData, userId) {
             }
 
             if (!fetched) {
+                // Row missing – insert as fallback
                 console.warn('⚠️ Row not found after update – inserting new row.');
                 const insertRecord = {
                     id: userId,
                     email: email,
                     email_hash: emailHash,
-                    password: emailHash, // placeholder
+                    password: emailHash,
                     name: record.name,
                     avatar_url: record.avatar_url,
                     confirmed: record.confirmed,
@@ -155,7 +159,7 @@ export async function saveUserProfile(profileData, userId) {
 }
 
 /**
- * Fetch user profile – no decryption needed.
+ * Fetch user profile – plaintext.
  */
 export async function fetchUserProfile() {
     let userId = null;
@@ -167,7 +171,7 @@ export async function fetchUserProfile() {
         } catch {}
     }
     if (!userId) {
-        console.warn('No user ID found – cannot fetch profile.');
+        console.warn('No user ID found.');
         return null;
     }
 
@@ -179,12 +183,12 @@ export async function fetchUserProfile() {
         .maybeSingle();
 
     if (error) {
-        console.error('Failed to fetch user profile:', error.message);
+        console.error('Failed to fetch profile:', error.message);
         return null;
     }
 
     if (!data) {
-        console.warn('⚠️ No user_account row for id:', userId);
+        console.warn('⚠️ No row found for id:', userId);
         return null;
     }
 
@@ -203,7 +207,7 @@ export async function fetchUserProfile() {
 }
 
 /**
- * Update avatar only – plaintext.
+ * Update avatar only.
  */
 export async function updateUserAvatar(avatarUrl) {
     let userId = null;
