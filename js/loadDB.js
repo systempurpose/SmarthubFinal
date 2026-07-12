@@ -1,3 +1,4 @@
+// js/loadDB.js (excerpt – full function)
 async function loadSavedScanResults() {
     try {
         const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
@@ -73,7 +74,7 @@ async function loadSavedScanResults() {
         if (!repairResults) repairResults = typeof loadRepairResults === 'function' ? loadRepairResults() : null;
         if (repairResults && typeof renderRepairResults === 'function') renderRepairResults(repairResults);
 
-        // ========== 🆕 AI CONCLUSION ==========
+        // ---- AI Conclusion (Summary) ----
         let aiConclusion = null;
         if (userId && deviceId) {
             try {
@@ -89,14 +90,12 @@ async function loadSavedScanResults() {
         if (aiConclusion && typeof renderAIConclusionSummary === 'function') {
             renderAIConclusionSummary(aiConclusion);
         } else {
-            // Optionally hide the container if no AI result
             const container = document.getElementById('aiConclusionSummary');
             if (container) container.style.display = 'none';
         }
 
     } catch (err) {
         console.warn('[loadSavedScanResults] Failed to load from Supabase, using localStorage only:', err);
-        // All localStorage fallbacks as before...
-        // (keep the existing fallback code)
+        // Fallback to localStorage for all modules (already handled above)
     }
 }

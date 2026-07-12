@@ -20,7 +20,7 @@
     // ===== ADB wrapper =====
     async function runAdb(command) {
         const deviceId = getDeviceId();
-        if (!deviceId) throw new Error('No device connected');
+        if (!deviceId) throw new Error(t('common.noDevice', 'No device connected'));
         const resp = await fetch('/adb-shell', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -68,9 +68,12 @@
         const deviceId = getDeviceId();
         if (!deviceId) {
             if (window.showAlert) {
-                await window.showAlert('No Device', 'Please connect a device first.');
+                await window.showAlert(
+                    t('common.noDevice', 'No Device'),
+                    t('common.connectFirst', 'Please connect a device first.')
+                );
             } else {
-                alert('Please connect a device first.');
+                alert(t('common.connectFirst', 'Please connect a device first.'));
             }
             return;
         }
@@ -91,12 +94,12 @@
                 <div id="appScanModal" class="modal" style="display: none; z-index: 99999;">
                     <div class="modal-content" style="max-width: 900px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
                         <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 id="appScanTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">🛡️ App Security Scan</h3>
+                            <h3 id="appScanTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">🛡️ ${t('action.appSecurity.title', 'App Security Scan')}</h3>
                             <span class="close-button" id="closeAppScanModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
                         </div>
                         <div id="appScanBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
                         <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                            <button id="closeAppScanModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">Close</button>
+                            <button id="closeAppScanModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">${t('common.close', 'Close')}</button>
                         </div>
                     </div>
                 </div>
@@ -112,13 +115,13 @@
         modal.style.display = 'flex';
         const bodyEl = document.getElementById('appScanBody');
         const titleEl = document.getElementById('appScanTitle');
-        titleEl.textContent = '🛡️ App Security Scan';
-        bodyEl.innerHTML = window.getModernSpinnerHTML('Scanning for suspicious apps...');
+        titleEl.textContent = '🛡️ ' + t('action.appSecurity.title', 'App Security Scan');
+        bodyEl.innerHTML = window.getModernSpinnerHTML(t('appScan.scanning', 'Scanning for suspicious apps...'));
 
         let scanStillRunning = true;
         const timeoutId = setTimeout(() => {
             if (scanStillRunning) {
-                bodyEl.innerHTML = window.getModernSpinnerHTML('Still scanning... This may take a moment.');
+                bodyEl.innerHTML = window.getModernSpinnerHTML(t('appScan.stillScanning', 'Still scanning... This may take a moment.'));
             }
         }, 15000);
 
@@ -154,15 +157,14 @@
                 scanTime: new Date().toLocaleString()
             };
 
-            // 👇 NEW CODE: Save results to Supabase (compressed + encrypted)
-           // Inside the try block, after building results
-try {
-    const { saveAppScanToSupabase } = await import('./app_scan_sb.js');
-    await saveAppScanToSupabase(results, deviceId);  // 👈 Pass deviceId
-    console.log('[AppScan] Results saved to Supabase');
-} catch (saveErr) {
-    console.warn('[AppScan] Could not save results to Supabase:', saveErr);
-}
+            // Save to Supabase
+            try {
+                const { saveAppScanToSupabase } = await import('./app_scan_sb.js');
+                await saveAppScanToSupabase(results, deviceId);
+                console.log('[AppScan] Results saved to Supabase');
+            } catch (saveErr) {
+                console.warn('[AppScan] Could not save results to Supabase:', saveErr);
+            }
 
             // Save to localStorage (existing behavior)
             if (typeof saveAppScanResults === 'function') {
@@ -184,9 +186,9 @@ try {
             bodyEl.innerHTML = `
                 <div style="color: #d32f2d; padding: 20px; text-align: center;">
                     <div style="font-size: 48px; margin-bottom: 12px;">⚠️</div>
-                    <strong>Scan Failed</strong>
+                    <strong>${t('appScan.failed', 'Scan Failed')}</strong>
                     <p>${escapeHtml(err.message)}</p>
-                    <button id="retryAppScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 Retry</button>
+                    <button id="retryAppScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 ${t('common.retry', 'Retry')}</button>
                 </div>
             `;
             document.getElementById('retryAppScan')?.addEventListener('click', window.runAppScan);

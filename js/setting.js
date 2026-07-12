@@ -1,4 +1,5 @@
-// js/setting.js – Settings page UI (with Supabase sync + auto‑reload)
+// js/settings.js – Settings page UI (with Supabase sync + auto‑reload)
+// Bulk translation of stored data has been removed.
 
 import { saveUserSettings, loadSettingsWithFallback } from './settings-sb.js';
 import { getCurrentUserId } from './sb-utils.js';
@@ -109,7 +110,6 @@ async function renderSettings() {
 
             <!-- Actions -->
             <div style="border-top:1px solid ${settings.textColor}30; padding-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
-                <!-- ✅ Save button – no inline color; applyTheme will set text to theme text color -->
                 <button id="saveSettingsBtn" data-i18n="saveBtn" class="btn-primary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:none; background:${settings.buttonColor || settings.themeColor}; color:${settings.textColor}; cursor:pointer; font-weight:600;">${t('saveBtn', lang)}</button>
                 <button id="resetSettingsBtn" data-i18n="resetBtn" class="btn-secondary" style="padding:10px 28px; font-size:14px; border-radius:10px; border:1px solid ${settings.textColor}30; background:${settings.cardColor}; color:${settings.textColor}; cursor:pointer;">${t('resetBtn', lang)}</button>
             </div>
@@ -145,16 +145,14 @@ async function renderSettings() {
         applyTheme({ ...settings, themeColor: color });
     }, 200));
 
-    // ---- Button color picker (live preview) ----
+    // ---- Button color picker ----
     document.getElementById('buttonColorPicker').addEventListener('input', function() {
         const color = this.value;
         applyTheme({ ...settings, buttonColor: color });
-        // Update the save button background immediately, and set text to theme text color
         const saveBtn = document.getElementById('saveSettingsBtn');
         if (saveBtn) {
             saveBtn.style.background = color;
             saveBtn.style.borderColor = color;
-            // ✅ Use the theme's text color (not contrast color)
             saveBtn.style.color = settings.textColor;
         }
     });
@@ -225,8 +223,13 @@ async function renderSettings() {
         }
     });
 
-    // ---- SAVE – with auto‑reload and Supabase sync ----
+    // ---- SAVE – without bulk translation ----
     document.getElementById('saveSettingsBtn').addEventListener('click', async function() {
+        const saveBtn = this;
+        saveBtn.disabled = true;
+        saveBtn.style.opacity = '0.6';
+        saveBtn.style.cursor = 'not-allowed';
+
         const language = langBtn.dataset.value;
         const themeColor = document.getElementById('customThemeColor').value;
         const buttonColor = document.getElementById('buttonColorPicker').value;
@@ -236,10 +239,12 @@ async function renderSettings() {
 
         const newSettings = { language, themeColor, buttonColor, bgColor, cardColor, textColor };
 
+        // Save locally
         localStorage.setItem('smartHubSettings', JSON.stringify(newSettings));
         applyTheme(newSettings);
         applyLanguage(language);
 
+        // Save to Supabase
         if (userId) {
             const saved = await saveUserSettings(userId, newSettings);
             if (saved) {
@@ -252,6 +257,7 @@ async function renderSettings() {
         const feedback = document.getElementById('settingsFeedback');
         feedback.innerHTML = `<span style="color:#16a34a;">${t('savedMsg', language)}</span>`;
 
+        // Reload after a moment
         setTimeout(() => location.reload(), 400);
     });
 

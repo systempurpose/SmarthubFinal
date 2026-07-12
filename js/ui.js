@@ -60,6 +60,8 @@ window.loadConnectionResults = loadConnectionResults;
 window.saveAdvancedResults = saveAdvancedResults;
 window.loadAdvancedResults = loadAdvancedResults;
 
+
+
 function openTutorial() {
     // Replace the URL with your actual tutorial video
  
@@ -1647,20 +1649,58 @@ function loadStorageResults() {
 function renderAdvancedResults(results) {
     const container = document.getElementById('advancedResults');
     if (!container) return;
-    if (!results) { container.style.display = 'none'; return; }
-    const software = results.software || [];
-    const passed = software.filter(s => s.passed).length;
-    const total = software.length;
-    container.style.display = 'block';
-    container.innerHTML = `
-        <div class="card" style="border-left: 4px solid ${passed === total ? '#16a34a' : '#f59e0b'}; margin-bottom: 16px;">
-            <div class="card-title"><i class="fas fa-microchip"></i> Advanced Diagnostic</div>
-            <div class="card-content">
-                <p>${passed}/${total} software checks passed</p>
-                <p style="font-size:12px; color:#6B7280;">${results.scanTime || ''}</p>
+
+    if (!results || !results.software || results.software.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    const checks = results.software;
+    const total = checks.length;
+    const passed = checks.filter(r => r.passed).length;
+    const scanTime = results.scanTime || t('common.unknown', 'Unknown');
+
+    const allPassed = passed === total;
+    const borderColor = allPassed ? '#16a34a' : '#f59e0b';
+    const textColor = allPassed ? '#16a34a' : '#f59e0b';
+
+    let html = `
+        <div class="card" style="border-left: 4px solid ${borderColor}; margin-bottom: 16px;">
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span><i class="fas fa-microscope"></i> ${t('ai.report.advanced', 'Advanced Diagnostic')}</span>
+                <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
+                    <span style="color: ${textColor}; font-weight: 600;">${passed}/${total} ${t('adv.checksPassed', 'checks passed')}</span>
+                    <span style="color: #6b7280; font-size: 12px;">${scanTime}</span>
+                    <button onclick="clearScanResults('advanced')" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px;">✕</button>
+                </div>
+            </div>
+            <div class="card-content" style="padding: 12px 0;">
+                <!-- Progress bar -->
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="font-size: 24px; font-weight: 700; color: ${textColor};">
+                        ${Math.round((passed / total) * 100)}%
+                    </div>
+                    <div style="flex: 1; background: #e5e7eb; border-radius: 8px; height: 8px;">
+                        <div style="width: ${(passed / total) * 100}%; background: ${borderColor}; height: 100%; border-radius: 8px;"></div>
+                    </div>
+                </div>
+                <!-- Status message -->
+                <div style="margin-top: 8px; font-size: 13px; color: ${textColor};">
+                    ${allPassed 
+                        ? t('adv.summary.allPassed', '✅ All software checks passed.')
+                        : t('adv.summary.issues', '⚠️ Some software issues detected. Run the advanced diagnostic for details.')
+                    }
+                </div>
+                <!-- View Details button -->
+                <div style="margin-top: 8px;">
+                    <button onclick="navigateTo && navigateTo('advanced')" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">📊 ${t('adv.btn.details', 'View Details')}</button>
+                </div>
             </div>
         </div>
     `;
+
+    container.style.display = 'block';
+    container.innerHTML = html;
 }
 
 // ---- Connection Results Rendering (Dashboard) ----
@@ -1764,6 +1804,22 @@ function renderAppScanResults(results) {
     const container = document.getElementById('appScanResults');
     if (!container) return;
 
+    // Update global appSecurityResults for safety card
+    const deviceId = typeof currentDeviceId !== 'undefined' ? currentDeviceId : null;
+    if (deviceId) {
+        if (!window._appSecurityResults) window._appSecurityResults = {};
+        const suspiciousApps = results && results.suspiciousApps ? results.suspiciousApps : [];
+        window._appSecurityResults[deviceId] = suspiciousApps;
+
+        // Update safety card count
+        const safetyEl = document.getElementById('safetySuspicious');
+        if (safetyEl) {
+            const count = suspiciousApps.length;
+            safetyEl.textContent = count > 0 ? `⚠️ ${count}` : '✅ 0';
+            safetyEl.style.color = count > 0 ? '#dc2626' : '#16a34a';
+        }
+    }
+
     if (!results || !results.suspiciousApps || results.suspiciousApps.length === 0) {
         container.style.display = 'none';
         return;
@@ -1779,9 +1835,12 @@ function renderAppScanResults(results) {
     let html = `
         <div class="card" style="border-left: 4px solid ${total > 0 ? '#dc2626' : '#16a34a'}; margin-bottom: 16px;">
             <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <span><i class="fas fa-shield-halved"></i> App Security Scan</span>
+                <span><i class="fas fa-shield-halved"></i> ${t('action.appSecurity.title', 'App Security Scan')}</span>
                 <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
-                    ${total > 0 ? `<span style="color: #dc2626;">⚠️ ${total} suspicious app(s)</span>` : '<span style="color: #16a34a;">✅ All clear</span>'}
+                    ${total > 0 
+                        ? `<span style="color: #dc2626;">⚠️ ${total} ${t('security.suspiciousApps', 'suspicious app(s)')}</span>`
+                        : `<span style="color: #16a34a;">✅ ${t('security.noSuspicious', 'All clear')}</span>`
+                    }
                     <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
                     <button onclick="clearScanResults('app')" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px;">✕</button>
                 </div>
@@ -1789,10 +1848,10 @@ function renderAppScanResults(results) {
             <div class="card-content">
                 <!-- Summary bar -->
                 <div style="display: flex; gap: 16px; padding: 8px 0; flex-wrap: wrap;">
-                    ${critical > 0 ? `<span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> Critical</span>` : ''}
-                    ${high > 0 ? `<span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> High</span>` : ''}
-                    ${medium > 0 ? `<span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> Medium</span>` : ''}
-                    ${low > 0 ? `<span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> Low</span>` : ''}
+                    ${critical > 0 ? `<span><span style="color: #c62828; font-weight: bold;">🔴 ${critical}</span> ${t('security.riskLevel.critical', 'Critical')}</span>` : ''}
+                    ${high > 0 ? `<span><span style="color: #e65100; font-weight: bold;">🟠 ${high}</span> ${t('security.riskLevel.high', 'High')}</span>` : ''}
+                    ${medium > 0 ? `<span><span style="color: #e67e22; font-weight: bold;">🟡 ${medium}</span> ${t('security.riskLevel.medium', 'Medium')}</span>` : ''}
+                    ${low > 0 ? `<span><span style="color: #2e7d32; font-weight: bold;">🟢 ${low}</span> ${t('security.riskLevel.low', 'Low')}</span>` : ''}
                 </div>
                 <!-- App list -->
                 <div style="max-height: 500px; overflow-y: auto;">
@@ -1803,10 +1862,10 @@ function renderAppScanResults(results) {
                         const humanReasons = window.getHumanFriendlyRiskReasons(app);
 
                         let riskFactors = [];
-                        if (app.isSideloaded) riskFactors.push('📦 Sideloaded (not from Play Store)');
-                        if (app.installer && app.installer.toLowerCase().includes('unknown')) riskFactors.push('❓ Unknown installer');
-                        if (app.dangerousPermissions && app.dangerousPermissions.length > 5) riskFactors.push('🔓 Requests many dangerous permissions');
-                        if (app.entropy && app.entropy > 0.85) riskFactors.push('🧩 High code entropy (possible obfuscation/packing)');
+                        if (app.isSideloaded) riskFactors.push(t('security.sideloaded', '📦 Sideloaded (not from Play Store)'));
+                        if (app.installer && app.installer.toLowerCase().includes('unknown')) riskFactors.push(t('security.unknownInstaller', '❓ Unknown installer'));
+                        if (app.dangerousPermissions && app.dangerousPermissions.length > 5) riskFactors.push(t('security.manyPermissions', '🔓 Requests many dangerous permissions'));
+                        if (app.entropy && app.entropy > 0.85) riskFactors.push(t('security.highEntropy', '🧩 High code entropy (possible obfuscation/packing)'));
 
                         const pkg = app.packageName;
                         const onclickHandler = `
@@ -1834,7 +1893,7 @@ function renderAppScanResults(results) {
                                                    transition: background 0.2s ease, transform 0.15s ease;"
                                             onmouseover="this.style.background='#b71c1c'; this.style.transform='scale(1.05)'"
                                             onmouseout="this.style.background='#d32f2f'; this.style.transform='scale(1)'">
-                                        🗑️ Uninstall
+                                        🗑️ ${t('common.uninstall', 'Uninstall')}
                                     </button>
                                 </div>
 
@@ -1842,24 +1901,24 @@ function renderAppScanResults(results) {
 
                                 ${humanReasons.length ? `<div style="font-size: 13px; margin-top: 4px; color: #424242; background: rgba(255,255,255,0.5); padding: 6px 10px; border-radius: 6px;">${humanReasons.join('; ')}</div>` : ''}
 
-                                ${malwareCapabilities.length ? `<div style="font-size: 13px; margin-top: 4px; color: #4a148c; background: rgba(255,255,255,0.65); padding: 6px 10px; border-radius: 6px;"><strong>What this malware can do:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${malwareCapabilities.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
+                                ${malwareCapabilities.length ? `<div style="font-size: 13px; margin-top: 4px; color: #4a148c; background: rgba(255,255,255,0.65); padding: 6px 10px; border-radius: 6px;"><strong>${t('security.malwareCapabilities', 'What this malware can do:')}</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${malwareCapabilities.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}
 
                                 ${riskFactors.length ? `
                                     <div style="margin-top:6px; font-size:13px; color:#555; background:#f8f9fa; padding:6px 10px; border-radius:6px;">
-                                        <strong>⚠️ Risk factors:</strong> ${riskFactors.join(' • ')}
+                                        <strong>${t('security.riskFactors', '⚠️ Risk factors:')}</strong> ${riskFactors.join(' • ')}
                                     </div>
                                 ` : ''}
 
-                                ${app.entropy ? `<div style="font-size: 12px; color: #666; margin-top: 8px; background: #f5f5f5; padding: 6px 10px; border-radius: 6px;">Entropy: ${app.entropy.toFixed(3)} ${app.entropy > 0.85 ? '⚠️ (high → possible packing/obfuscation)' : ''}</div>` : ''}
+                                ${app.entropy ? `<div style="font-size: 12px; color: #666; margin-top: 8px; background: #f5f5f5; padding: 6px 10px; border-radius: 6px;">${t('security.entropy', 'Entropy:')} ${app.entropy.toFixed(3)} ${app.entropy > 0.85 ? t('security.entropyHigh', '⚠️ (high → possible packing/obfuscation)') : ''}</div>` : ''}
 
                                 <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666; flex-wrap: wrap;">
-                                    ${app.installer ? `<span>📦 Installed via: ${escapeHtml(app.installer)}</span>` : ''}
-                                    ${app.installDate ? `<span>📅 Installed: ${escapeHtml(app.installDate)}</span>` : ''}
+                                    ${app.installer ? `<span>${t('security.installedVia', '📦 Installed via:')} ${escapeHtml(app.installer)}</span>` : ''}
+                                    ${app.installDate ? `<span>${t('security.installedDate', '📅 Installed:')} ${escapeHtml(app.installDate)}</span>` : ''}
                                 </div>
 
                                 <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed #ddd; padding-top: 10px;">
                                     <span style="background: ${threat.bg}; color: ${threat.color}; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px;">${threat.label}</span>
-                                    &nbsp; Risk Score: <strong>${app.riskScore}/100</strong>
+                                    &nbsp; ${t('security.riskScore', 'Risk Score:')} <strong>${app.riskScore}/100</strong>
                                 </div>
                             </div>
                         `;
@@ -1867,8 +1926,8 @@ function renderAppScanResults(results) {
                 </div>
             </div>
             <div style="padding: 8px 16px 12px; font-size: 12px; color: #6b7280; border-top: 1px solid #f1f3f5; display: flex; justify-content: space-between; align-items: center;">
-                <span>Last scan: ${results.scanTime || 'N/A'}</span>
-                <button onclick="window.runAppScan()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 Rescan</button>
+                <span>${t('hw.modal.lastScan', 'Last scan:')} ${results.scanTime || t('common.unknown', 'N/A')}</span>
+                <button onclick="window.runAppScan()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 ${t('common.rescan', 'Rescan')}</button>
             </div>
         </div>
     `;
@@ -1888,34 +1947,34 @@ function renderStorageResults(results) {
         container.innerHTML = `
             <div class="card" style="border-left: 4px solid #22c55e; margin-bottom: 16px;">
                 <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                    <span><i class="fas fa-hdd"></i> Storage Analysis</span>
-                    <span style="color: #6b7280; font-size: 12px;">${results ? results.scanTime : 'N/A'}</span>
+                    <span><i class="fas fa-hdd"></i> ${t('action.storageAnalysis.title', 'Storage Analysis')}</span>
+                    <span style="color: #6b7280; font-size: 12px;">${results ? results.scanTime : t('common.unknown', 'N/A')}</span>
                 </div>
                 <div class="card-content" style="padding: 16px; text-align: center; color: #6b7280;">
-                    ✅ No large files (>500 MB) found on your device.
-                    ${results ? `<br><small>Last scan: ${results.scanTime}</small>` : ''}
+                    ✅ ${t('storage.noLargeFiles', 'No large files (>500 MB) found on your device.')}
+                    ${results ? `<br><small>${t('hw.modal.lastScan', 'Last scan:')} ${results.scanTime}</small>` : ''}
                 </div>
             </div>
         `;
         return;
     }
 
-    // --- Existing code for displaying files (keep as is) ---
+    // --- Existing code for displaying files ---
     const files = results.files;
     const totalSize = files.reduce((sum, f) => sum + (f.bytes || 0), 0);
     const count = files.length;
 
     // ---- Group files by category ----
     const categories = {
-        'DCIM': { label: '📸 Camera (DCIM)', files: [] },
-        'Movies': { label: '🎬 Movies', files: [] },
-        'Music': { label: '🎵 Music', files: [] },
-        'Pictures': { label: '🖼️ Pictures', files: [] },
-        'Download': { label: '📥 Downloads', files: [] },
-        'Android/obb': { label: '🎮 Game OBB', files: [] },
-        'Android/data': { label: '📂 App Data (Games)', files: [] },
-        'Documents': { label: '📄 Documents', files: [] },
-        'Other': { label: '📦 Other', files: [] }
+        'DCIM': { label: t('storage.category.dcim', '📸 Camera (DCIM)'), files: [] },
+        'Movies': { label: t('storage.category.movies', '🎬 Movies'), files: [] },
+        'Music': { label: t('storage.category.music', '🎵 Music'), files: [] },
+        'Pictures': { label: t('storage.category.pictures', '🖼️ Pictures'), files: [] },
+        'Download': { label: t('storage.category.download', '📥 Downloads'), files: [] },
+        'Android/obb': { label: t('storage.category.obb', '🎮 Game OBB'), files: [] },
+        'Android/data': { label: t('storage.category.appData', '📂 App Data (Games)'), files: [] },
+        'Documents': { label: t('storage.category.documents', '📄 Documents'), files: [] },
+        'Other': { label: t('storage.category.other', '📦 Other'), files: [] }
     };
 
     files.forEach(file => {
@@ -1932,12 +1991,17 @@ function renderStorageResults(results) {
         categories[category].files.push(file);
     });
 
+    // Format storage values, with fallback
+    const storageUsed = results.storageUsed || '?';
+    const storageTotal = results.storageTotal || '?';
+    const percentUsed = results.percentUsed !== undefined && results.percentUsed !== null ? results.percentUsed : 0;
+
     let html = `
         <div class="card" style="border-left: 4px solid #f59e0b; margin-bottom: 16px;">
             <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <span><i class="fas fa-hdd"></i> Storage Analysis</span>
+                <span><i class="fas fa-hdd"></i> ${t('action.storageAnalysis.title', 'Storage Analysis')}</span>
                 <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; flex-wrap: wrap;">
-                    <span style="color: #f59e0b;">📁 ${count} large files (${formatSize(totalSize)})</span>
+                    <span style="color: #f59e0b;">📁 ${count} ${t('storage.largeFiles', 'large files')} (${formatSize(totalSize)})</span>
                     <span style="color: #6b7280; font-size: 12px;">${results.scanTime || ''}</span>
                     <button onclick="clearScanResults('storage')" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 14px;">✕</button>
                 </div>
@@ -1946,11 +2010,11 @@ function renderStorageResults(results) {
                 <!-- Storage summary -->
                 <div style="margin-bottom: 12px; padding: 12px; background: #f8fafc; border-radius: 8px;">
                     <div style="display: flex; justify-content: space-between; font-size: 14px;">
-                        <span><strong>💾 Storage</strong> ${results.storageUsed || '?'} / ${results.storageTotal || '?'}</span>
-                        <span style="color: ${(results.percentUsed || 0) > 90 ? '#dc2626' : '#22c55e'};">${(results.percentUsed || 0).toFixed(1)}% used</span>
+                        <span><strong>💾 ${t('storage.summary.title', 'Storage')}</strong> ${storageUsed} / ${storageTotal}</span>
+                        <span style="color: ${percentUsed > 90 ? '#dc2626' : '#22c55e'};">${percentUsed.toFixed(1)}% ${t('storage.summary.used', 'used')}</span>
                     </div>
                     <div style="margin-top: 4px; background: #e5e7eb; border-radius: 8px; height: 6px; overflow: hidden;">
-                        <div style="width: ${Math.min(results.percentUsed || 0, 100)}%; background: ${(results.percentUsed || 0) > 90 ? '#dc2626' : '#22c55e'}; height: 100%; border-radius: 8px;"></div>
+                        <div style="width: ${Math.min(percentUsed, 100)}%; background: ${percentUsed > 90 ? '#dc2626' : '#22c55e'}; height: 100%; border-radius: 8px;"></div>
                     </div>
                 </div>
     `;
@@ -1962,7 +2026,7 @@ function renderStorageResults(results) {
         html += `
             <div style="margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #ffffff;">
                 <div style="background: #f8fafc; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
-                    <span><strong>${cat.label}</strong> (${cat.files.length} files)</span>
+                    <span><strong>${cat.label}</strong> (${cat.files.length} ${t('storage.files', 'files')})</span>
                     <span style="color: #6b7280; font-size: 13px;">${formatSize(catSize)}</span>
                 </div>
                 <div style="padding: 6px 12px; display: block; max-height: 300px; overflow-y: auto;">
@@ -1972,7 +2036,7 @@ function renderStorageResults(results) {
                         const size = file.size || formatSize(file.bytes);
                         const isApp = path.startsWith('package:');
                         const displayPath = isApp ? path.replace('package:', '') : path;
-                        const buttonLabel = isApp ? '🗑️ Uninstall' : '🗑️ Delete';
+                        const buttonLabel = isApp ? t('common.uninstall', '🗑️ Uninstall') : t('storage.delete.btn', '🗑️ Delete');
                         const icon = isApp ? '📱' : getFileIcon(path);
                         const sizeColor = getSizeColor(file.bytes || 0);
                         const onClick = isApp
@@ -1997,8 +2061,8 @@ function renderStorageResults(results) {
     html += `
             </div>
             <div style="padding: 8px 16px 12px; font-size: 12px; color: #6b7280; border-top: 1px solid #f1f3f5; display: flex; justify-content: space-between; align-items: center;">
-                <span>Last scan: ${results.scanTime || 'N/A'}</span>
-                <button onclick="window.runStorageAnalysis()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 Rescan</button>
+                <span>${t('hw.modal.lastScan', 'Last scan:')} ${results.scanTime || t('common.unknown', 'N/A')}</span>
+                <button onclick="window.runStorageAnalysis()" style="background: none; border: 1px solid #d1d5db; border-radius: 12px; padding: 4px 16px; font-size: 11px; cursor: pointer;">🔄 ${t('common.rescan', 'Rescan')}</button>
             </div>
         </div>
     `;
@@ -2119,139 +2183,176 @@ function renderPieChart(svgElement, segments) {
 // Temperature modal – show temperature + top CPU-consuming apps
 
 
-// Security Modal – shows malware scan summary
+// ==================== UPDATED SECURITY MODAL ====================
+
+// ---- Helper: get threat level with translations ----
+function getThreatLevel(riskScore) {
+    if (riskScore >= 80) return { 
+        level: 'critical', 
+        label: t('security.riskLevel.critical', '🔥 CRITICAL'), 
+        color: '#c62828', 
+        bg: '#ffebee' 
+    };
+    if (riskScore >= 60) return { 
+        level: 'high', 
+        label: t('security.riskLevel.high', '⚠️ HIGH RISK'), 
+        color: '#e65100', 
+        bg: '#fff3e0' 
+    };
+    if (riskScore >= 35) return { 
+        level: 'medium', 
+        label: t('security.riskLevel.medium', '⚠️ MEDIUM RISK'), 
+        color: '#e67e22', 
+        bg: '#fef9e7' 
+    };
+    return { 
+        level: 'low', 
+        label: t('security.riskLevel.low', 'ℹ️ LOW RISK'), 
+        color: '#2e7d32', 
+        bg: '#e8f5e9' 
+    };
+}
+
+// ---- Helper: human‑readable threat descriptions (translated) ----
+function getHumanReadableThreats(malwareTypes, suspiciousIndicators) {
+    const threats = [];
+    const typeMap = {
+        'spyware': 'threat.spyware',
+        'ransomware': 'threat.ransomware',
+        'adware': 'threat.adware',
+        'click_fraud': 'threat.click_fraud',
+        'banking_trojan': 'threat.banking_trojan',
+        'data stealer': 'threat.data_stealer',
+        'backdoor': 'threat.backdoor',
+        'fake app': 'threat.fake_app',
+        'riskware': 'threat.riskware',
+        'information stealer': 'threat.information_stealer',
+        'premium dialer': 'threat.premium_dialer',
+        'trojan': 'threat.trojan',
+        'generic_risk': 'threat.generic_risk'
+    };
+    const types = Array.isArray(malwareTypes) 
+        ? malwareTypes.map(t => String(typeof t === 'string' ? t : t.type || '').trim().toLowerCase()) 
+        : [];
+    for (const type of types) {
+        if (type && typeMap[type]) {
+            threats.push(t(typeMap[type], ''));
+        } else if (type) {
+            threats.push(t('threat.unknown', '⚠️ Detected as "{type}" — potentially harmful.').replace('{type}', type));
+        }
+    }
+    if (suspiciousIndicators && suspiciousIndicators.length > 0) {
+        const hasObfuscation = suspiciousIndicators.some(i => 
+            i.toLowerCase().includes('packed') || 
+            i.toLowerCase().includes('polymorphic') || 
+            i.toLowerCase().includes('entropy')
+        );
+        if (hasObfuscation) threats.push(t('threat.obfuscation', ''));
+        const hasManyComponents = suspiciousIndicators.some(i => i.includes('Unusually many'));
+        if (hasManyComponents) threats.push(t('threat.many_components', ''));
+        const hasBroadcastReceiver = suspiciousIndicators.some(i => i.includes('broadcast receivers'));
+        if (hasBroadcastReceiver) threats.push(t('threat.broadcast_receiver', ''));
+    }
+    if (threats.length === 0) threats.push(t('threat.no_specific', ''));
+    return threats;
+}
+
+// ---- Helper: human‑friendly risk reasons (translated) ----
+function getHumanFriendlyRiskReasons(app) {
+    const reasons = [];
+    if (app.isSideloaded) {
+        const installer = app.installer || t('risk.unknownSource', 'Unknown source');
+        reasons.push(t('risk.installedFrom', '📦 Installed from: {installer} (not from official app store)')
+            .replace('{installer}', installer));
+    }
+    if (app.dangerousPermCount > 0) {
+        const permLabels = [];
+        const perms = app.dangerousPermissions || [];
+        const permMap = {
+            'CAMERA': 'perm.camera',
+            'RECORD_AUDIO': 'perm.microphone',
+            'READ_CONTACTS': 'perm.contacts',
+            'READ_SMS': 'perm.sms',
+            'SEND_SMS': 'perm.smsSend',
+            'ACCESS_FINE_LOCATION': 'perm.locationFine',
+            'ACCESS_COARSE_LOCATION': 'perm.locationCoarse',
+            'READ_CALL_LOG': 'perm.callLog',
+            'WRITE_CALL_LOG': 'perm.callLogModify',
+            'CALL_PHONE': 'perm.phoneCalls',
+            'SYSTEM_ALERT_WINDOW': 'perm.overlay',
+            'BIND_ACCESSIBILITY_SERVICE': 'perm.accessibility',
+            'DEVICE_ADMIN': 'perm.deviceAdmin',
+            'REQUEST_INSTALL_PACKAGES': 'perm.installPackages',
+            'PACKAGE_USAGE_STATS': 'perm.usageStats',
+            'WRITE_SETTINGS': 'perm.writeSettings',
+            'READ_EXTERNAL_STORAGE': 'perm.readStorage',
+            'WRITE_EXTERNAL_STORAGE': 'perm.writeStorage'
+        };
+        for (const p of perms) {
+            for (const [key, labelKey] of Object.entries(permMap)) {
+                if (p.includes(key)) {
+                    const label = t(labelKey, key);
+                    if (!permLabels.includes(label)) permLabels.push(label);
+                }
+            }
+        }
+        if (permLabels.length > 0) {
+            reasons.push(t('risk.canAccess', '🔓 Can access: {permissions}').replace('{permissions}', permLabels.join(', ')));
+        } else {
+            reasons.push(t('risk.requestsPerms', '🔓 Requests {count} dangerous permission(s)')
+                .replace('{count}', app.dangerousPermCount));
+        }
+    }
+    if (app.riskScore >= 70) reasons.push(t('risk.highRisk', '🚨 High risk — strongly recommended to uninstall.'));
+    else if (app.riskScore >= 40) reasons.push(t('risk.moderateRisk', '⚠️ Moderate risk — review carefully.'));
+    return reasons;
+}
+
+// ---- Updated showSecurityModal ----
 async function showSecurityModal() {
-    const modal = ensureInfoModal('securityModal', '🛡️ Security Overview');
+    const modal = ensureInfoModal('securityModal', t('security.title', '🛡️ Security Overview'));
     const body = document.getElementById('securityModalBody');
-body.innerHTML = getModernSpinnerHTML('Loading security status...');
+    body.innerHTML = getModernSpinnerHTML(t('security.loading', 'Loading security status...'));
     modal.style.display = 'flex';
+
     try {
         const response = await fetch(`${BACKEND_URL}/api/suspicious-apps?deviceId=${currentDeviceId}`);
         const data = await response.json();
         const suspiciousApps = data.suspiciousApps || [];
         let html = `
             <div style="margin-bottom: 16px;">
-                <strong>Total Apps:</strong> ${data.totalApps || '?'}<br>
-                <strong>Suspicious Apps:</strong> ${suspiciousApps.length}<br>
+                <strong>${t('security.totalApps', 'Total Apps:')}</strong> ${data.totalApps || '?'}<br>
+                <strong>${t('security.suspiciousApps', 'Suspicious Apps:')}</strong> ${suspiciousApps.length}<br>
             </div>
         `;
         if (suspiciousApps.length === 0) {
-            html += `<p style="color: #2e7d32;">✅ No suspicious apps found.</p>`;
+            html += `<p style="color: #2e7d32;">${t('security.noSuspicious', '✅ No suspicious apps found.')}</p>`;
         } else {
             html += `<ul style="list-style: none; padding-left: 0;">`;
             for (const app of suspiciousApps.slice(0, 10)) {
+                const threat = getThreatLevel(app.riskScore);
+                const reasons = getHumanFriendlyRiskReasons(app);
+                const threatDescriptions = getHumanReadableThreats(app.malwareTypes || [], app.suspiciousIndicators || []);
                 html += `
-                    <li style="margin-bottom: 12px; padding: 10px; background: #fff3e0; border-radius: 8px;">
+                    <li style="margin-bottom: 16px; padding: 12px; background: ${threat.bg}; border-radius: 8px; border-left: 4px solid ${threat.color};">
                         <strong>${escapeHtml(app.displayName)}</strong> (${escapeHtml(app.packageName)})<br>
-                        <span style="font-size: 12px;">Risk: ${app.threatLevel}</span><br>
-                        <span style="font-size: 12px;">${escapeHtml(app.reason)}</span>
+                        <span style="font-weight: bold; color: ${threat.color};">${threat.label}</span><br>
+                        ${reasons.map(r => `<span style="font-size: 13px;">${r}</span><br>`).join('')}
+                        ${threatDescriptions.map(d => `<span style="font-size: 13px;">${d}</span><br>`).join('')}
+                        ${app.riskScore !== undefined ? `<span style="font-size: 12px; color: #666;">${t('security.riskScore', 'Risk Score:')} ${app.riskScore}/100</span>` : ''}
                     </li>
                 `;
             }
             if (suspiciousApps.length > 10) {
-                html += `<li>... and ${suspiciousApps.length - 10} more</li>`;
+                html += `<li>${t('security.moreApps', '... and {count} more').replace('{count}', suspiciousApps.length - 10)}</li>`;
             }
             html += `</ul>`;
         }
         body.innerHTML = html;
     } catch (err) {
-        body.innerHTML = `<p style="color: red;">Error: ${err.message}</p>`;
+        body.innerHTML = `<p style="color: red;">${t('security.error', 'Error: {message}').replace('{message}', err.message)}</p>`;
     }
 }
-// ==================== HUMAN-FRIENDLY THREAT SUMMARIES ====================
-
-function getThreatLevel(riskScore) {
-    if (riskScore >= 80) return { level: 'critical', label: '🔥 CRITICAL', color: '#c62828', bg: '#ffebee' };
-    if (riskScore >= 60) return { level: 'high', label: '⚠️ HIGH RISK', color: '#e65100', bg: '#fff3e0' };
-    if (riskScore >= 35) return { level: 'medium', label: '⚠️ MEDIUM RISK', color: '#e67e22', bg: '#fef9e7' };
-    return { level: 'low', label: 'ℹ️ LOW RISK', color: '#2e7d32', bg: '#e8f5e9' };
-}
-
-function getHumanReadableThreats(malwareTypes, suspiciousIndicators) {
-    const threats = [];
-    const typeDescriptions = {
-        'spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
-        'ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
-        'adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
-        'click_fraud': '🖱️ Simulates taps and clicks to generate fake ad revenue or drive unwanted installs.',
-        'banking_trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
-        'data stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
-        'backdoor': '🚪 Allows remote control of your device without your permission.',
-        'fake app': '🎭 Pretends to be a legitimate app but may steal your information.',
-        'riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
-        'information stealer': '🔐 Collects your passwords, emails, and personal data.',
-        'premium dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
-        'trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.',
-        'generic_risk': '⚠️ Suspicious behavior was detected, but there is not enough evidence to name one malware family.'
-    };
-    // Handle both array of strings and array of objects with .type
-    const types = Array.isArray(malwareTypes) ? malwareTypes.map(t => String(typeof t === 'string' ? t : t.type || '').trim().toLowerCase()) : [];
-    for (const type of types) {
-        if (type && typeDescriptions[type]) {
-            threats.push(typeDescriptions[type]);
-        } else if (type) {
-            threats.push(`⚠️ Detected as "${type}" — potentially harmful.`);
-        }
-    }
-    if (suspiciousIndicators && suspiciousIndicators.length > 0) {
-        const hasObfuscation = suspiciousIndicators.some(i => i.toLowerCase().includes('packed') || i.toLowerCase().includes('polymorphic') || i.toLowerCase().includes('entropy'));
-        if (hasObfuscation) threats.push('🕵️ Uses advanced hiding techniques to avoid detection (packed/obfuscated code).');
-        const hasManyComponents = suspiciousIndicators.some(i => i.includes('Unusually many'));
-        if (hasManyComponents) threats.push('🧩 Has many background services — can run in the background without your knowledge.');
-        const hasBroadcastReceiver = suspiciousIndicators.some(i => i.includes('broadcast receivers'));
-        if (hasBroadcastReceiver) threats.push('📡 Can automatically start when certain events happen (e.g., boot, network change).');
-    }
-    if (threats.length === 0) threats.push('📋 No specific threats detected, but the app has suspicious characteristics.');
-    return threats;
-}
-
-function getHumanFriendlyRiskReasons(app) {
-    const reasons = [];
-    if (app.isSideloaded) {
-        const installer = app.installer || 'Unknown source';
-        reasons.push(`📦 Installed from: ${installer} (not from official app store)`);
-    }
-    if (app.dangerousPermCount > 0) {
-        const permLabels = [];
-        const perms = app.dangerousPermissions || [];
-        const permMap = {
-            'CAMERA': '📷 Camera',
-            'RECORD_AUDIO': '🎙️ Microphone',
-            'READ_CONTACTS': '📇 Contacts',
-            'READ_SMS': '📩 SMS messages',
-            'SEND_SMS': '📤 SMS sending',
-            'ACCESS_FINE_LOCATION': '📍 Location (GPS)',
-            'ACCESS_COARSE_LOCATION': '📍 Location (approximate)',
-            'READ_CALL_LOG': '📞 Call log',
-            'WRITE_CALL_LOG': '✏️ Call log (modify)',
-            'CALL_PHONE': '📞 Phone calls',
-            'SYSTEM_ALERT_WINDOW': '🖼️ Draw overlays on other apps',
-            'BIND_ACCESSIBILITY_SERVICE': '♿ Accessibility (control your screen)',
-            'DEVICE_ADMIN': '🔒 Device administration',
-            'REQUEST_INSTALL_PACKAGES': '📥 Install other apps',
-            'PACKAGE_USAGE_STATS': '📊 See which apps you use',
-            'WRITE_SETTINGS': '⚙️ Modify system settings',
-            'READ_EXTERNAL_STORAGE': '📂 Read files',
-            'WRITE_EXTERNAL_STORAGE': '📂 Write/delete files'
-        };
-        for (const p of perms) {
-            for (const [key, label] of Object.entries(permMap)) {
-                if (p.includes(key)) {
-                    if (!permLabels.includes(label)) permLabels.push(label);
-                }
-            }
-        }
-        if (permLabels.length > 0) {
-            reasons.push(`🔓 Can access: ${permLabels.join(', ')}`);
-        } else {
-            reasons.push(`🔓 Requests ${app.dangerousPermCount} dangerous permission(s)`);
-        }
-    }
-    if (app.riskScore >= 70) reasons.push('🚨 High risk — strongly recommended to uninstall.');
-    else if (app.riskScore >= 40) reasons.push('⚠️ Moderate risk — review carefully.');
-    return reasons;
-}
-
 // ==================== DEEP DIAGNOSTIC ====================
 
 // ==================== STORAGE ANALYSIS (standalone) ====================

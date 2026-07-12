@@ -108,9 +108,9 @@
     // ===== DELETE / UNINSTALL HANDLERS =====
     async function deleteFile(path) {
         const confirmed = await (window.showConfirm || confirm)(
-            'Delete File',
-            `Are you sure you want to delete this file?\n\n${path}`,
-            { icon: '🗑️', danger: true, yesText: 'Delete', isPath: true }
+            t('storage.delete.title', 'Delete File'),
+            t('storage.delete.confirm', 'Are you sure you want to delete this file?') + '\n\n' + path,
+            { icon: '🗑️', danger: true, yesText: t('storage.delete.btn', 'Delete'), isPath: true }
         );
         if (!confirmed) return false;
         try {
@@ -121,19 +121,25 @@
             });
             const data = await resp.json();
             if (resp.ok) return true;
-            await (window.showAlert || alert)('Error', `Failed to delete: ${data.error || 'Unknown error'}`);
+            await (window.showAlert || alert)(
+                t('common.error', 'Error'),
+                t('storage.delete.error', 'Failed to delete: {error}').replace('{error}', data.error || t('common.unknown', 'Unknown error'))
+            );
             return false;
         } catch (err) {
-            await (window.showAlert || alert)('Error', `Error: ${err.message}`);
+            await (window.showAlert || alert)(
+                t('common.error', 'Error'),
+                t('common.errorPrefix', 'Error: ') + err.message
+            );
             return false;
         }
     }
 
     async function uninstallApp(packageName) {
         const confirmed = await (window.showConfirm || confirm)(
-            'Uninstall App',
-            `Are you sure you want to uninstall this app?\n\n📱 ${packageName}`,
-            { icon: '🗑️', danger: true, yesText: 'Uninstall', isPath: false }
+            t('storage.uninstall.title', 'Uninstall App'),
+            t('storage.uninstall.confirm', 'Are you sure you want to uninstall this app?') + '\n\n📱 ' + packageName,
+            { icon: '🗑️', danger: true, yesText: t('common.uninstall', 'Uninstall'), isPath: false }
         );
         if (!confirmed) return false;
         try {
@@ -144,10 +150,16 @@
             });
             const data = await resp.json();
             if (resp.ok) return true;
-            await (window.showAlert || alert)('Error', `Failed to uninstall: ${data.error || 'Unknown error'}`);
+            await (window.showAlert || alert)(
+                t('common.error', 'Error'),
+                t('storage.uninstall.error', 'Failed to uninstall: {error}').replace('{error}', data.error || t('common.unknown', 'Unknown error'))
+            );
             return false;
         } catch (err) {
-            await (window.showAlert || alert)('Error', `Error: ${err.message}`);
+            await (window.showAlert || alert)(
+                t('common.error', 'Error'),
+                t('common.errorPrefix', 'Error: ') + err.message
+            );
             return false;
         }
     }
@@ -159,7 +171,7 @@
         if (success) removeItemFromList(path);
         else {
             button.disabled = false;
-            button.textContent = '🗑️ Delete';
+            button.textContent = '🗑️ ' + t('storage.delete.btn', 'Delete');
         }
     };
 
@@ -170,7 +182,7 @@
         if (success) removeItemFromList('package:' + packageName);
         else {
             button.disabled = false;
-            button.textContent = '🗑️ Uninstall';
+            button.textContent = '🗑️ ' + t('common.uninstall', 'Uninstall');
         }
     };
 
@@ -206,13 +218,16 @@
             const usedBytes = parseSize(storage.used);
             const percent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
             const warningColor = percent > 90 ? '#dc2626' : percent > 75 ? '#f59e0b' : '#22c55e';
-            const warningText = percent > 90 ? '⚠️ Storage is nearly full!' : percent > 75 ? '⚠️ Storage is getting full' : '✅ Storage is healthy';
+            let warningText = '';
+            if (percent > 90) warningText = t('storage.summary.nearlyFull', '⚠️ Storage is nearly full!');
+            else if (percent > 75) warningText = t('storage.summary.gettingFull', '⚠️ Storage is getting full');
+            else warningText = t('storage.summary.healthy', '✅ Storage is healthy');
 
             const summaryEl = document.getElementById('storage-summary');
             if (summaryEl) {
                 summaryEl.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px; flex-wrap: wrap; gap: 8px;">
-                        <span><strong>💾 Storage</strong> <span style="color: #1f2937;">${formatSize(usedBytes)}</span> / <span style="color: #6b7280;">${formatSize(totalBytes)}</span></span>
+                        <span><strong>💾 ${t('storage.summary.title', 'Storage')}</strong> <span style="color: #1f2937;">${formatSize(usedBytes)}</span> / <span style="color: #6b7280;">${formatSize(totalBytes)}</span></span>
                         <span style="color: ${warningColor}; font-weight: 600;">${percent.toFixed(1)}% used</span>
                     </div>
                     <div style="margin-top: 8px; background: #e5e7eb; border-radius: 8px; height: 6px; overflow: hidden;">
@@ -229,9 +244,12 @@
         const deviceId = getDeviceId();
         if (!deviceId) {
             if (window.showAlert) {
-                await window.showAlert('No Device', 'Please connect a device first.');
+                await window.showAlert(
+                    t('common.noDevice', 'No Device'),
+                    t('common.connectFirst', 'Please connect a device first.')
+                );
             } else {
-                alert('Please connect a device first.');
+                alert(t('common.connectFirst', 'Please connect a device first.'));
             }
             return;
         }
@@ -251,12 +269,12 @@
                 <div id="storageAnalysisModal" class="modal" style="display: none; z-index: 99999;">
                     <div class="modal-content" style="max-width: 1100px; width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #ffffff;">
                         <div class="modal-header" style="padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 id="storageAnalysisTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">💾 Storage Analysis</h3>
+                            <h3 id="storageAnalysisTitle" style="margin: 0; font-size: 18px; font-weight: 600; color: #1f2937;">💾 ${t('storage.modal.title', 'Storage Analysis')}</h3>
                             <span class="close-button" id="closeStorageModal" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
                         </div>
                         <div id="storageAnalysisBody" class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px 24px; background: #ffffff;"></div>
                         <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                            <button id="closeStorageModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">Close</button>
+                            <button id="closeStorageModalBtn" class="btn-secondary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #f1f3f5; border: 1px solid #e5e7eb; color: #374151;">${t('common.close', 'Close')}</button>
                         </div>
                     </div>
                 </div>
@@ -271,13 +289,13 @@
         modal.style.display = 'flex';
         const bodyEl = document.getElementById('storageAnalysisBody');
         const titleEl = document.getElementById('storageAnalysisTitle');
-        titleEl.textContent = '💾 Storage Analysis';
-        bodyEl.innerHTML = window.getModernSpinnerHTML('Scanning for large files... This may take 2-3 minutes.');
+        titleEl.textContent = '💾 ' + t('storage.modal.title', 'Storage Analysis');
+        bodyEl.innerHTML = window.getModernSpinnerHTML(t('storage.scan.start', 'Scanning for large files... This may take 2-3 minutes.'));
 
         let scanStillRunning = true;
         const timeoutId = setTimeout(() => {
             if (scanStillRunning) {
-                bodyEl.innerHTML = window.getModernSpinnerHTML('Still scanning... This may take a while.');
+                bodyEl.innerHTML = window.getModernSpinnerHTML(t('storage.scan.still', 'Still scanning... This may take a while.'));
             }
         }, 30000);
 
@@ -302,9 +320,9 @@
                 bodyEl.innerHTML = `
                     <div style="color: #d32f2d; padding: 20px; text-align: center;">
                         <div style="font-size: 48px; margin-bottom: 12px;">⚠️</div>
-                        <strong>Scan Failed</strong>
+                        <strong>${t('storage.scan.failed', 'Scan Failed')}</strong>
                         <p>${escapeHtml(err.message)}</p>
-                        <button id="retryStorageScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 Retry</button>
+                        <button id="retryStorageScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 ${t('common.retry', 'Retry')}</button>
                     </div>
                 `;
                 document.getElementById('retryStorageScan')?.addEventListener('click', window.runStorageAnalysis);
@@ -333,15 +351,14 @@
                 percentUsed: percent
             };
 
-            // 👇 NEW CODE: Save results to Supabase (compressed + encrypted)
+            // Save to Supabase
             try {
-    const { saveStorageAnalysisToSupabase } = await import('./storage_analysis_sb.js');
-    await saveStorageAnalysisToSupabase(results, deviceId);  // 👈 Pass deviceId
-    console.log('[StorageAnalysis] Results saved to Supabase');
-} catch (saveErr) {
-    console.warn('[StorageAnalysis] Could not save results to Supabase:', saveErr);
-}
-            // 👆 END NEW CODE
+                const { saveStorageAnalysisToSupabase } = await import('./storage_analysis_sb.js');
+                await saveStorageAnalysisToSupabase(results, deviceId);
+                console.log('[StorageAnalysis] Results saved to Supabase');
+            } catch (saveErr) {
+                console.warn('[StorageAnalysis] Could not save results to Supabase:', saveErr);
+            }
 
             // Save to localStorage (existing behavior)
             if (typeof saveStorageResults === 'function') {
@@ -362,9 +379,9 @@
             bodyEl.innerHTML = `
                 <div style="color: #d32f2d; padding: 20px; text-align: center;">
                     <div style="font-size: 48px; margin-bottom: 12px;">⚠️</div>
-                    <strong>Unexpected Error</strong>
+                    <strong>${t('storage.scan.unexpectedError', 'Unexpected Error')}</strong>
                     <p>${escapeHtml(err.message)}</p>
-                    <button id="retryStorageScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 Retry</button>
+                    <button id="retryStorageScan" class="btn-primary" style="padding: 8px 24px; font-size: 14px;">🔄 ${t('common.retry', 'Retry')}</button>
                 </div>
             `;
             document.getElementById('retryStorageScan')?.addEventListener('click', window.runStorageAnalysis);

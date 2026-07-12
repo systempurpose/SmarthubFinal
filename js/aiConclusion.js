@@ -1,7 +1,7 @@
 // js/aiConclusion.js
-import { trackTokenUsage, getTokenData, formatTokenCount, resetTokenUsage } from './tokenTracker.js';
+// No translation – displays the original conclusion as‑is.
 
-// ---- Helpers defined locally to avoid globals ----
+// ---- Helpers ----
 function escapeHtml(str) {
     if (str == null) return '';
     if (typeof str !== 'string') str = String(str);
@@ -45,21 +45,85 @@ function timeAgo(iso) {
     return t('ai.time.daysAgo', '{days} days ago').replace('{days}', days);
 }
 
-// ---- Lightweight, SAFE markdown renderer ----
-// Escapes HTML first (so nothing the model or user typed can inject markup),
-// then re-introduces a small, deliberate set of markdown affordances.
-// Without this, any "**bold**" or "- bullet" text coming back from the LLM
-// renders as literal asterisks/dashes instead of formatting.
+function cleanSummary(text) {
+    if (!text) return '';
+    let cleaned = text.trim();
+    if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+        try {
+            const parsed = JSON.parse(cleaned);
+            if (parsed && typeof parsed === 'object') {
+                if (parsed.humanSummary) return String(parsed.humanSummary);
+                if (parsed.likelyCause) return String(parsed.likelyCause);
+            }
+        } catch (_) {}
+    }
+    cleaned = cleaned.replace(/^\{+/, '').replace(/\}+$/, '');
+    return cleaned.trim();
+}
+
+function tryParseJSON(str) {
+    if (typeof str !== 'string') return null;
+    const trimmed = str.trim();
+    if (!trimmed.startsWith('{')) return null;
+    try {
+        return JSON.parse(trimmed);
+    } catch (e) {
+        const match = trimmed.match(/\{[\s\S]*\}/);
+        if (match) {
+            try { return JSON.parse(match[0]); } catch (e2) { return null; }
+        }
+        return null;
+    }
+}
+
+function looksLikeConclusionSchema(obj) {
+    return !!(obj && typeof obj === 'object' && (obj.humanSummary || obj.likelyCause || obj.actions || obj.nextStep));
+}
+
+function normalizeConclusion(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+    let c = { ...raw };
+
+    const candidateFields = ['humanSummary', 'likelyCause', 'details', 'nextStep'];
+    for (const field of candidateFields) {
+        const val = c[field];
+        let inner = null;
+        if (typeof val === 'string') {
+            inner = tryParseJSON(val);
+        } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+            inner = val;
+        }
+        if (looksLikeConclusionSchema(inner)) {
+            const merged = { ...inner };
+            for (const [k, v] of Object.entries(c)) {
+                if (k !== field && v !== undefined && v !== null && merged[k] === undefined) {
+                    merged[k] = v;
+                }
+            }
+            c = merged;
+            break;
+        }
+    }
+
+    if (c.details) {
+        const innerDetails = typeof c.details === 'string' ? tryParseJSON(c.details) : c.details;
+        if (looksLikeConclusionSchema(innerDetails)) {
+            delete c.details;
+        }
+    }
+
+    if (c.humanSummary) c.humanSummary = cleanSummary(c.humanSummary);
+    if (c.likelyCause) c.likelyCause = cleanSummary(c.likelyCause);
+
+    return c;
+}
+
 function renderRichText(str) {
     if (!str) return '';
     let safe = escapeHtml(str);
-
-    // Bold
-    safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Italic (single asterisk/underscore not already consumed by bold)
+    safe = safe.replace(/\*\*(.+?)\*\*/g, '<span class="highlight-important">$1</span>');
     safe = safe.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
 
-    // Bullet lines → <li>, then wrap consecutive <li> runs in <ul>
     const lines = safe.split('\n');
     let html = '';
     let inList = false;
@@ -77,7 +141,19 @@ function renderRichText(str) {
     return html;
 }
 
-// ---- Small circular gauge (reused for confidence) ----
+function detailsToDisplayString(details) {
+    if (details == null) return '';
+    if (typeof details === 'string') return details;
+    if (typeof details === 'object') {
+        try {
+            return JSON.stringify(details, null, 2);
+        } catch (e) {
+            return '';
+        }
+    }
+    return String(details);
+}
+
 function confidenceRing(percent, color) {
     return `
         <div style="position: relative; width: 56px; height: 56px; flex-shrink: 0;">
@@ -91,12 +167,14 @@ function confidenceRing(percent, color) {
     `;
 }
 
+// ---- Main render function ----
 async function renderAIConclusion() {
     const container = document.getElementById('pageContent');
+    let isAnalyzing = false;
 
-    // ---- Function to load all reports (Supabase first, then localStorage) ----
-    async function loadAllReports() {
+    async function loadAllData() {
         let reports = [];
+        let existingConclusion = null;
 
         let supabaseData = null;
         try {
@@ -104,6 +182,9 @@ async function renderAIConclusion() {
             supabaseData = await fetchAllScanResultsFromSupabase();
             if (supabaseData) {
                 console.log('[AI] Loaded scans from Supabase:', Object.keys(supabaseData).filter(k => supabaseData[k] !== null));
+                if (supabaseData.ai) {
+                    existingConclusion = supabaseData.ai;
+                }
             }
         } catch (e) {
             console.warn('[AI] Supabase load failed, falling back to localStorage.', e);
@@ -118,7 +199,6 @@ async function renderAIConclusion() {
             }
         }
 
-        // ---- 1. App Security Scan ----
         const appData = supabaseData?.app || (typeof loadAppScanResults === 'function' ? loadAppScanResults() : null);
         addReportFromData(
             appData, 'app', t('ai.report.appSecurity', 'App Security'), '🛡️',
@@ -131,7 +211,6 @@ async function renderAIConclusion() {
             (d) => d?.scanTime || d?.date || d?.timestamp
         );
 
-        // ---- 2. Storage Analysis ----
         const storageData = supabaseData?.storage || (typeof loadStorageResults === 'function' ? loadStorageResults() : null);
         addReportFromData(
             storageData, 'storage', t('ai.report.storage', 'Storage'), '💾',
@@ -147,7 +226,6 @@ async function renderAIConclusion() {
             (d) => d?.scanTime || d?.date || d?.timestamp
         );
 
-        // ---- 3. Hardware Tests ----
         const hwData = supabaseData?.hardware || (typeof loadHardwareResults === 'function' ? loadHardwareResults() : null);
         addReportFromData(
             hwData, 'hardware', t('ai.report.hardware', 'Hardware'), '🔬',
@@ -163,7 +241,6 @@ async function renderAIConclusion() {
             (d) => d?.scanTime || d?.date || d?.timestamp
         );
 
-        // ---- 4. Connection Troubleshoot ----
         const connData = supabaseData?.connection || (typeof loadConnectionResults === 'function' ? loadConnectionResults() : null);
         addReportFromData(
             connData, 'connection', t('ai.report.connection', 'Connection'), '📶',
@@ -179,7 +256,6 @@ async function renderAIConclusion() {
             (d) => d?.scanTime || d?.date || d?.timestamp
         );
 
-        // ---- 5. Advanced Diagnostic ----
         const advData = supabaseData?.advanced || (typeof loadAdvancedResults === 'function' ? loadAdvancedResults() : null);
         addReportFromData(
             advData, 'advanced', t('ai.report.advanced', 'Advanced Diagnostic'), '🔍',
@@ -196,13 +272,10 @@ async function renderAIConclusion() {
         );
 
         reports = reports.filter(r => r.summary !== null && r.summary !== undefined);
-        return reports;
+        return { reports, existingConclusion };
     }
 
-    const availableReports = await loadAllReports();
-
-    const tokenData = getTokenData();
-    const totalTokens = tokenData.total || 0;
+    const { reports: availableReports, existingConclusion } = await loadAllData();
 
     const modelOptions = [
         { value: 'open-mistral-7b', label: 'Mistral 7B', group: 'Free' },
@@ -216,7 +289,6 @@ async function renderAIConclusion() {
         return acc;
     }, {});
 
-    // ---- Build UI ----
     let reportsHtml = '';
     if (availableReports.length === 0) {
         reportsHtml = `
@@ -247,28 +319,18 @@ async function renderAIConclusion() {
                          role="checkbox"
                          aria-checked="false"
                          tabindex="0"
-                         style="
-                            background: white; border-radius: 12px; padding: 16px;
-                            border: 2px solid #e5e7eb; cursor: pointer;
-                            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.06); outline: none;
-                        "
-                        onclick="toggleReportCard(this)"
-                        onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleReportCard(this);}"
+                         style="background: white; border-radius: 12px; padding: 16px; border: 2px solid #e5e7eb; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.06); outline: none;"
+                         onclick="toggleReportCard(this)"
+                         onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleReportCard(this);}"
                     >
                         <div style="display: flex; align-items: flex-start; gap: 12px;">
                             <span style="font-size: 26px; line-height: 1;">${report.icon}</span>
                             <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; font-size: 14.5px; color: #1f2937;">${escapeHtml(report.name)}</div>
+                                <div class="report-name" style="font-weight: 600; font-size: 14.5px; color: #1f2937;">${escapeHtml(report.name)}</div>
                                 <div style="font-size: 12.5px; color: #6B7280; margin-top: 2px;">${escapeHtml(report.summary)}</div>
                                 ${report.timestamp ? `<div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">${timeAgo(report.timestamp)}</div>` : ''}
                             </div>
-                            <div class="report-checkbox" style="
-                                width: 20px; height: 20px; border-radius: 6px;
-                                border: 2px solid #d1d5db; background: white;
-                                display: flex; align-items: center; justify-content: center;
-                                flex-shrink: 0; transition: all 0.15s ease;
-                            ">
+                            <div class="report-checkbox" style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid #d1d5db; background: white; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s ease;">
                                 <span class="checkmark" style="display: none; color: white; font-size: 13px; font-weight: 700;">✓</span>
                             </div>
                         </div>
@@ -276,7 +338,7 @@ async function renderAIConclusion() {
                 `).join('')}
             </div>
 
-            <!-- Model & Token -->
+            <!-- Model selection -->
             <div style="margin-top: 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border: 1px solid #e5e7eb;">
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label for="aiModelSelect" style="font-weight: 500; font-size: 13px; color: #1f2937;">🧠 ${t('ai.model.label', 'Model:')}</label>
@@ -288,11 +350,6 @@ async function renderAIConclusion() {
                         `).join('')}
                     </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6B7280;">
-                    <span>💰</span>
-                    <span>${t('ai.token.used', 'Tokens used')}: <strong id="tokenTotalDisplay" style="color: #1f2937;">${formatTokenCount(totalTokens)}</strong></span>
-                    <button id="resetTokenBtn" style="background: none; border: none; color: #9ca3af; font-size: 12px; cursor: pointer; text-decoration: underline;" title="${t('ai.token.resetTooltip', 'Reset token counter')}">↺</button>
-                </div>
             </div>
 
             <!-- User Input -->
@@ -303,16 +360,12 @@ async function renderAIConclusion() {
                 <p style="font-size: 12px; color: #6B7280; margin: 0 0 8px 0;">
                     ${t('ai.input.hint', 'What is the phone doing (or not doing)? The more detail you provide, the better the AI diagnosis.')}
                 </p>
-                <textarea id="aiUserInput" rows="3" style="
-                    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #e5e7eb;
-                    font-size: 14px; font-family: inherit; resize: vertical;
-                    transition: border-color 0.15s ease; outline: none; background: white;
-                " placeholder="${t('ai.input.placeholder', 'e.g. Phone restarts randomly when charging...')}"></textarea>
+                <textarea id="aiUserInput" rows="3" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #e5e7eb; font-size: 14px; font-family: inherit; resize: vertical; transition: border-color 0.15s ease; outline: none; background: white;" placeholder="${t('ai.input.placeholder', 'e.g. Phone restarts randomly when charging...')}"></textarea>
             </div>
 
             <div style="margin-top: 22px; text-align: center;">
                 <button id="runAIConclusionBtn" class="btn-primary" style="padding: 12px 40px; font-size: 15px; font-weight: 600; border-radius: 12px; border: none; background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); color: white; cursor: pointer; box-shadow: 0 4px 14px rgba(13,110,253,0.3);">
-                    🧠 <span id="runAIConclusionBtnLabel">${t('ai.analyzeButton.default', 'Analyze {count} reports').replace('{count}', availableReports.length)}</span>
+                    🧠 <span id="runAIConclusionBtnLabel">${t('ai.analyzeButton.default', 'Analyze {count} reports').replace(/\{count\}/g, availableReports.length)}</span>
                 </button>
                 <div id="runAIConclusionHint" style="font-size: 12px; color: #9ca3af; margin-top: 8px;">${t('ai.analyzeButton.hint', 'Select reports above and add details for better results')}</div>
             </div>
@@ -340,15 +393,140 @@ async function renderAIConclusion() {
                 </div>
                 <div id="aiResultContent" style="line-height: 1.7; color: #374151;"></div>
                 <div id="aiWebSearchSection" style="display: none; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb;"></div>
-                <div id="aiRequestTokens" style="margin-top: 12px; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; display: none;"></div>
             </div>
         </div>
         <style>
             @keyframes aiResultFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            .highlight-important {
+                background: #fef08a;
+                padding: 1px 4px;
+                border-radius: 3px;
+                font-weight: 500;
+                display: inline-block;
+            }
         </style>
     `;
 
     container.innerHTML = html;
+
+    // ---- Render conclusion (no translation) ----
+    function renderConclusion(c, userInput, selectedIds) {
+        const resultContainer = document.getElementById('aiResultContainer');
+        const resultCard = document.getElementById('aiResultCard');
+        const resultContent = document.getElementById('aiResultContent');
+        const timestampEl = document.getElementById('aiTimestamp');
+        const copyBtn = document.getElementById('copyAiResultBtn');
+        const webSearchSection = document.getElementById('aiWebSearchSection');
+
+        resultContainer.style.display = 'block';
+        let conclusionHtml = '';
+
+        let sevColor = '#0d6efd', sevBg = '#eff6ff', sevLabel = null, confPercent = null;
+        if (c.confidence !== undefined && c.confidence !== null) {
+            confPercent = Math.round(c.confidence * 100);
+            if (confPercent >= 70) { sevColor = '#16a34a'; sevBg = '#f0fdf4'; sevLabel = t('ai.confidence.high', 'High confidence'); }
+            else if (confPercent >= 40) { sevColor = '#d97706'; sevBg = '#fffbeb'; sevLabel = t('ai.confidence.moderate', 'Moderate confidence'); }
+            else { sevColor = '#dc2626'; sevBg = '#fef2f2'; sevLabel = t('ai.confidence.low', 'Low confidence'); }
+            resultCard.style.borderLeftColor = sevColor;
+        }
+
+        const summary = c.humanSummary || c.likelyCause || t('ai.result.noCause', 'No clear cause identified.');
+        conclusionHtml += `
+            <div style="margin-bottom: 16px; padding: 16px; background: ${sevBg}; border-radius: 10px; border-left: 4px solid ${sevColor}; display:flex; gap:14px; align-items:center;">
+                ${confPercent !== null ? confidenceRing(confPercent, sevColor) : ''}
+                <div style="flex:1; min-width:0;">
+                    ${sevLabel ? `<div style="font-size:11px; font-weight:600; color:${sevColor}; background:white; padding:2px 8px; border-radius:999px; border:1px solid ${sevColor}33; display:inline-block; margin-bottom:4px;">${sevLabel}</div>` : ''}
+                    <div style="color: #374151; font-size: 15px;">${renderRichText(summary)}</div>
+                </div>
+            </div>
+        `;
+
+        // ---- Recommended Actions ----
+        if (c.actions && c.actions.length > 0) {
+            conclusionHtml += `
+                <div style="margin-bottom: 12px;">
+                    <div style="font-weight: 600; font-size: 15px; color: #1f2937;">🔧 ${t('ai.result.actionsLabel', 'Recommended Actions')}</div>
+                    <ul style="margin: 8px 0 0 0; padding-left: 0; list-style: none; color: #374151;">
+                        ${c.actions.map((a) => `
+                            <li style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px;">
+                                <span style="display: inline-block; width: 6px; height: 6px; background: #0d6efd; border-radius: 50%; margin-top: 8px; flex-shrink: 0;"></span>
+                                <span>${renderRichText(a)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        // ---- Next Step ----
+        if (c.nextStep) {
+            conclusionHtml += `
+                <div style="margin-top: 12px; padding: 12px 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
+                    <span style="font-weight: 600;">📌 ${t('ai.result.nextStepLabel', 'Next Step')}</span>
+                    <span style="color: #374151;"> ${renderRichText(c.nextStep)}</span>
+                </div>
+            `;
+        }
+
+        // ---- Details ----
+        if (c.details && !looksLikeConclusionSchema(c.details)) {
+            const detailsStr = detailsToDisplayString(c.details);
+            if (detailsStr) {
+                conclusionHtml += `
+                    <details style="margin-top: 12px; background: #f1f5f9; border-radius: 8px; padding: 10px 16px;">
+                        <summary style="cursor:pointer; font-weight: 600; font-size: 14px; color: #1f2937; list-style:none;">📊 ${t('ai.result.detailsLabel', 'Technical Details')}</summary>
+                        <div style="margin-top: 8px; color: #374151; font-size: 13px;">${renderRichText(detailsStr)}</div>
+                    </details>
+                `;
+            }
+        }
+
+        // ---- User Input ----
+        if (userInput) {
+            conclusionHtml += `
+                <div style="margin-top: 12px; padding: 12px 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                    <div style="font-weight: 600; font-size: 14px; color: #92400e;">📝 ${t('ai.result.userInputLabel', 'Your Input')}</div>
+                    <div style="margin-top: 4px; color: #78350f; font-size: 13px;">${escapeHtml(userInput)}</div>
+                </div>
+            `;
+        }
+
+        // ---- Included reports chips ----
+        if (selectedIds && selectedIds.length) {
+            const includedChips = selectedIds.map(id => {
+                const found = availableReports.find(r => r.id === id);
+                return found ? `<span style="display:inline-flex; align-items:center; gap:4px; background:#eef2ff; color:#4338ca; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; margin:2px 4px 2px 0;">${found.icon} ${escapeHtml(found.name)}</span>` : '';
+            }).join('');
+            conclusionHtml += `
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
+                    <div style="margin-bottom:6px;">${t('ai.result.includedReports', 'Included reports:')}</div>
+                    <div>${includedChips}</div>
+                </div>
+            `;
+        }
+
+        resultContent.innerHTML = conclusionHtml;
+        timestampEl.textContent = t('ai.result.analyzedAt', 'Analyzed at {time}').replace('{time}', new Date().toLocaleString());
+
+        copyBtn.style.display = 'inline-block';
+        copyBtn.onclick = () => {
+            const plainText = resultContent.innerText;
+            navigator.clipboard.writeText(plainText).then(() => {
+                copyBtn.textContent = '✅ ' + t('ai.result.copied', 'Copied!');
+                setTimeout(() => { copyBtn.textContent = '📋 ' + t('ai.result.copy', 'Copy'); }, 1500);
+            });
+        };
+
+        webSearchSection.style.display = 'none';
+    }
+
+    // ---- If there is an existing conclusion, render it ----
+    if (existingConclusion) {
+        const c = normalizeConclusion(existingConclusion);
+        const userInput = existingConclusion.user_input || '';
+        const selectedIds = existingConclusion.selected_reports || [];
+        renderConclusion(c, userInput, selectedIds);
+    }
 
     // ---- Toggle report card selection ----
     window.toggleReportCard = function(card) {
@@ -378,11 +556,14 @@ async function renderAIConclusion() {
             btn.style.pointerEvents = 'none';
             hint.textContent = t('ai.analyzeButton.noneHint', 'Select at least one report');
         } else {
-            label.textContent = t('ai.analyzeButton.some', 'Analyze {count} of {total} reports')
-                .replace('{count}', count).replace('{total}', total);
+            const labelText = t('ai.analyzeButton.some', 'Analyze {count} reports')
+                .replace(/\{count\}/g, count);
+            label.textContent = labelText;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
-            hint.textContent = t('ai.analyzeButton.someHint', '{count} reports selected for analysis').replace('{count}', count);
+            const hintText = t('ai.analyzeButton.someHint', '{count} reports selected for analysis')
+                .replace(/\{count\}/g, count);
+            hint.textContent = hintText;
         }
     }
 
@@ -399,33 +580,15 @@ async function renderAIConclusion() {
         });
     }
 
-    // ---- Reset token button (bug fix: resetTokenUsage wasn't imported before) ----
-    const resetBtn = document.getElementById('resetTokenBtn');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-            if (confirm(t('ai.token.resetConfirm', 'Reset token usage counter?'))) {
-                resetTokenUsage();
-                document.getElementById('tokenTotalDisplay').textContent = '0';
-            }
-        });
-    }
-
     // ---- Handle AI conclusion button ----
     const runBtn = document.getElementById('runAIConclusionBtn');
-    const resultContainer = document.getElementById('aiResultContainer');
-    const resultCard = document.getElementById('aiResultCard');
-    const resultContent = document.getElementById('aiResultContent');
-    const timestampEl = document.getElementById('aiTimestamp');
-    const copyBtn = document.getElementById('copyAiResultBtn');
-    const webSearchSection = document.getElementById('aiWebSearchSection');
-
     if (runBtn) {
-        console.log('[AI] Run button found, attaching listener.');
         runBtn.addEventListener('click', async function() {
-            console.log('[AI] Analyze button clicked.');
+            if (isAnalyzing) return;
+            isAnalyzing = true;
+            runBtn.disabled = true;
+            runBtn.style.opacity = '0.7';
 
-            // Multi-stage loading copy, cycled while the request is in
-            // flight, instead of one static spinner message the whole time.
             const loadingStages = [
                 t('ai.loading.stage1', '🔍 Analyzing selected reports…'),
                 t('ai.loading.stage2', '🧬 Cross-referencing symptoms…'),
@@ -439,7 +602,9 @@ async function renderAIConclusion() {
                 const selectedCards = document.querySelectorAll('.report-card[aria-checked="true"]');
                 const selectedIds = Array.from(selectedCards).map(card => card.dataset.reportId);
                 if (selectedIds.length === 0) {
-                    console.warn('[AI] No reports selected.');
+                    isAnalyzing = false;
+                    runBtn.disabled = false;
+                    runBtn.style.opacity = '1';
                     return;
                 }
 
@@ -458,7 +623,12 @@ async function renderAIConclusion() {
                         .reduce((acc, r) => { acc[r.id] = r.data; return acc; }, {})
                 };
 
-                console.log('[AI] Sending payload:', payload);
+                const resultContainer = document.getElementById('aiResultContainer');
+                const resultCard = document.getElementById('aiResultCard');
+                const resultContent = document.getElementById('aiResultContent');
+                const timestampEl = document.getElementById('aiTimestamp');
+                const copyBtn = document.getElementById('copyAiResultBtn');
+                const webSearchSection = document.getElementById('aiWebSearchSection');
 
                 resultContainer.style.display = 'block';
                 resultCard.style.borderLeftColor = '#0d6efd';
@@ -476,8 +646,6 @@ async function renderAIConclusion() {
                 timestampEl.textContent = '';
                 copyBtn.style.display = 'none';
                 webSearchSection.style.display = 'none';
-                const requestTokensEl = document.getElementById('aiRequestTokens');
-                requestTokensEl.style.display = 'none';
                 resultContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
                 const response = await fetch(`${BACKEND_URL}/ai-adb-conclude`, {
@@ -492,83 +660,10 @@ async function renderAIConclusion() {
                 }
 
                 const data = await response.json();
-                console.log('[AI] Response received:', data);
 
                 if (data.ok && data.conclusion) {
-                    const c = data.conclusion;
-                    let conclusionHtml = '';
-
-                    let sevColor = '#0d6efd', sevBg = '#eff6ff', sevLabel = null, confPercent = null;
-                    if (c.confidence !== undefined && c.confidence !== null) {
-                        confPercent = Math.round(c.confidence * 100);
-                        if (confPercent >= 70) { sevColor = '#16a34a'; sevBg = '#f0fdf4'; sevLabel = t('ai.confidence.high', 'High confidence'); }
-                        else if (confPercent >= 40) { sevColor = '#d97706'; sevBg = '#fffbeb'; sevLabel = t('ai.confidence.moderate', 'Moderate confidence'); }
-                        else { sevColor = '#dc2626'; sevBg = '#fef2f2'; sevLabel = t('ai.confidence.low', 'Low confidence'); }
-                        resultCard.style.borderLeftColor = sevColor;
-                    }
-
-                    if (c.humanSummary || c.likelyCause) {
-                        conclusionHtml += `
-                            <div style="margin-bottom: 16px; padding: 16px; background: ${sevBg}; border-radius: 10px; border-left: 4px solid ${sevColor}; display:flex; gap:14px; align-items:center;">
-                                ${confPercent !== null ? confidenceRing(confPercent, sevColor) : ''}
-                                <div style="flex:1; min-width:0;">
-                                    <div style="display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap;">
-                                        <div style="font-weight: 600; font-size: 16px; color: #1f2937;">📋 ${t('ai.result.conclusionLabel', 'Conclusion')}</div>
-                                        ${sevLabel ? `<span style="font-size:11px; font-weight:600; color:${sevColor}; background:white; padding:2px 8px; border-radius:999px; border:1px solid ${sevColor}33;">${sevLabel}</span>` : ''}
-                                    </div>
-                                    <div style="margin-top: 6px; color: #374151;">${renderRichText(c.humanSummary || c.likelyCause || t('ai.result.noCause', 'No clear cause identified.'))}</div>
-                                </div>
-                            </div>
-                        `;
-                    }
-
-                    if (c.actions && c.actions.length > 0) {
-                        conclusionHtml += `
-                            <div style="margin-bottom: 12px;">
-                                <div style="font-weight: 600; font-size: 15px; color: #1f2937;">🔧 ${t('ai.result.actionsLabel', 'Recommended Actions')}</div>
-                                <ul style="margin: 8px 0 0 0; padding-left: 0; list-style: none; color: #374151;">
-                                    ${c.actions.map((a, i) => `
-                                        <li style="margin-bottom: 6px;">
-                                            <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:6px 8px; border-radius:8px; transition:background .15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                                                <input type="checkbox" style="margin-top:3px; accent-color:#0d6efd;" onchange="this.closest('li').querySelector('span').style.textDecoration = this.checked ? 'line-through' : 'none'; this.closest('li').querySelector('span').style.opacity = this.checked ? '0.55' : '1';">
-                                                <span style="transition: opacity .15s ease;">${escapeHtml(a)}</span>
-                                            </label>
-                                        </li>
-                                    `).join('')}
-                                </ul>
-                            </div>
-                        `;
-                    }
-
-                    if (c.nextStep) {
-                        conclusionHtml += `
-                            <div style="margin-top: 12px; padding: 12px 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
-                                <span style="font-weight: 600;">📌 ${t('ai.result.nextStepLabel', 'Next Step')}</span>
-                                <span style="color: #374151;"> ${renderRichText(c.nextStep)}</span>
-                            </div>
-                        `;
-                    }
-
-                    if (c.details) {
-                        conclusionHtml += `
-                            <details style="margin-top: 12px; background: #f1f5f9; border-radius: 8px; padding: 10px 16px;">
-                                <summary style="cursor:pointer; font-weight: 600; font-size: 14px; color: #1f2937; list-style:none;">📊 ${t('ai.result.detailsLabel', 'Technical Details')}</summary>
-                                <div style="margin-top: 8px; color: #374151; font-size: 13px;">${renderRichText(c.details)}</div>
-                            </details>
-                        `;
-                    }
-
-                    if (userInput) {
-                        conclusionHtml += `
-                            <div style="margin-top: 12px; padding: 12px 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                                <div style="font-weight: 600; font-size: 14px; color: #92400e;">📝 ${t('ai.result.userInputLabel', 'Your Input')}</div>
-                                <div style="margin-top: 4px; color: #78350f; font-size: 13px;">${escapeHtml(userInput)}</div>
-                            </div>
-                        `;
-                    }
-
-                    resultContent.innerHTML = conclusionHtml;
-                    timestampEl.textContent = t('ai.result.analyzedAt', 'Analyzed at {time}').replace('{time}', new Date().toLocaleString());
+                    const c = normalizeConclusion(data.conclusion);
+                    renderConclusion(c, userInput, selectedIds);
 
                     // ---- Web search ----
                     if (data.searchQuery || (data.searchResults && data.searchResults.length > 0)) {
@@ -593,43 +688,32 @@ async function renderAIConclusion() {
                                 }
                             </div>
                         `;
-                        webSearchSection.innerHTML = searchHtml;
-                        webSearchSection.style.display = 'block';
+                        const ws = document.getElementById('aiWebSearchSection');
+                        if (ws) {
+                            ws.innerHTML = searchHtml;
+                            ws.style.display = 'block';
+                        }
                     } else {
-                        webSearchSection.style.display = 'none';
+                        const ws = document.getElementById('aiWebSearchSection');
+                        if (ws) ws.style.display = 'none';
                     }
 
-                    const includedChips = selectedIds.map(id => {
-                        const found = availableReports.find(r => r.id === id);
-                        return found ? `<span style="display:inline-flex; align-items:center; gap:4px; background:#eef2ff; color:#4338ca; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; margin:2px 4px 2px 0;">${found.icon} ${escapeHtml(found.name)}</span>` : '';
-                    }).join('');
-                    resultContent.innerHTML += `
-                        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
-                            <div style="margin-bottom:6px;">${t('ai.result.includedReports', 'Included reports:')}</div>
-                            <div>${includedChips}</div>
-                        </div>
-                    `;
-
-                    copyBtn.style.display = 'inline-block';
-                    copyBtn.onclick = () => {
-                        const plainText = resultContent.innerText;
-                        navigator.clipboard.writeText(plainText).then(() => {
-                            copyBtn.textContent = '✅ ' + t('ai.result.copied', 'Copied!');
-                            setTimeout(() => { copyBtn.textContent = '📋 ' + t('ai.result.copy', 'Copy'); }, 1500);
+                    // ---- Save to Supabase (original language only) ----
+                    try {
+                        const { saveAIConclusion } = await import('./aiConclusion_sb.js');
+                        await saveAIConclusion({
+                            selectedReports: selectedIds,
+                            userInput: userInput,
+                            conclusionText: c.humanSummary || c.likelyCause || '',
+                            confidence: c.confidence,
+                            actions: c.actions || [],
+                            nextStep: c.nextStep || '',
+                            details: (typeof c.details === 'string' ? c.details : (c.details ? JSON.stringify(c.details) : '')),
+                            lang: lang,
                         });
-                    };
-
-                    if (data.usage) {
-                        const usage = data.usage;
-                        trackTokenUsage(usage);
-                        const newTotal = getTokenData().total;
-                        document.getElementById('tokenTotalDisplay').textContent = formatTokenCount(newTotal);
-
-                        const promptTokens = usage.prompt_tokens || 0;
-                        const completionTokens = usage.completion_tokens || 0;
-                        const totalUsed = usage.total_tokens || usage.total || 0;
-                        requestTokensEl.textContent = `📊 Tokens: ${formatTokenCount(promptTokens)} prompt · ${formatTokenCount(completionTokens)} completion · ${formatTokenCount(totalUsed)} total`;
-                        requestTokensEl.style.display = 'block';
+                        console.log('[AI] Conclusion saved to Supabase');
+                    } catch (saveErr) {
+                        console.warn('[AI] Could not save conclusion to Supabase:', saveErr);
                     }
 
                 } else {
@@ -637,26 +721,31 @@ async function renderAIConclusion() {
                 }
             } catch (err) {
                 console.error('[AI] Error:', err);
-                resultCard.style.borderLeftColor = '#dc2626';
-                resultContent.innerHTML = `
-                    <div style="color: #991b1b; padding: 14px 16px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #dc2626;">
-                        <div style="font-weight:600; margin-bottom:4px;">❌ ${t('ai.result.error', 'Something went wrong')}</div>
-                        <div style="font-size: 13px;">${escapeHtml(err.message || 'Unknown error')}</div>
-                        <button onclick="document.getElementById('runAIConclusionBtn').click()" style="margin-top:10px; border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;">🔄 ${t('common.retry', 'Retry')}</button>
-                    </div>
-                `;
-                webSearchSection.style.display = 'none';
+                const resultCard = document.getElementById('aiResultCard');
+                const resultContent = document.getElementById('aiResultContent');
+                if (resultCard) resultCard.style.borderLeftColor = '#dc2626';
+                if (resultContent) {
+                    resultContent.innerHTML = `
+                        <div style="color: #991b1b; padding: 14px 16px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #dc2626;">
+                            <div style="font-weight:600; margin-bottom:4px;">❌ ${t('ai.result.error', 'Something went wrong')}</div>
+                            <div style="font-size: 13px;">${escapeHtml(err.message || 'Unknown error')}</div>
+                            <button onclick="document.getElementById('runAIConclusionBtn').click()" style="margin-top:10px; border: 1px solid #fca5a5; background: white; color: #b91c1c; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;">🔄 ${t('common.retry', 'Retry')}</button>
+                        </div>
+                    `;
+                }
+                const ws = document.getElementById('aiWebSearchSection');
+                if (ws) ws.style.display = 'none';
             } finally {
                 if (stageTimer) clearInterval(stageTimer);
+                isAnalyzing = false;
+                runBtn.disabled = false;
+                runBtn.style.opacity = '1';
             }
         });
-    } else {
-        console.error('[AI] Run button not found!');
     }
 
-    // ---- Auto-select all reports by default ----
+    // ---- Auto-select all reports ----
     document.querySelectorAll('.report-card').forEach(card => toggleReportCard(card));
 }
 
-// ---- Expose to window ----
 window.renderAIConclusion = renderAIConclusion;

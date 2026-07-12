@@ -1021,9 +1021,9 @@
 
         'ai.analyzeButton.default': 'Analyze {count} reports',
         'ai.analyzeButton.none': 'Select reports to analyze',
-        'ai.analyzeButton.some': 'Analyze {count} of {total} reports',
+        'ai.analyzeButton.some': 'Analyze {count} reports',
         'ai.analyzeButton.noneHint': 'Select at least one report above.',
-        'ai.analyzeButton.someHint': '{count} of {total} reports selected.',
+        'ai.analyzeButton.someHint': '{count} reports selected.',
         'ai.analyzeButton.hint': 'All reports selected by default — deselect any you don\'t want included.',
 
         'ai.result.title': 'AI Analysis',
@@ -1035,7 +1035,7 @@
         'ai.result.detailsLabel': 'Additional Details',
         'ai.result.userInputLabel': 'Your Symptom Description',
         'ai.result.analyzedAt': 'Analyzed at {time}',
-        'ai.result.includedReports': 'Included: {names}',
+        'ai.result.includedReports': 'Included: ',
         'ai.result.error': 'Something went wrong',
         'ai.result.noConclusion': 'AI could not generate a conclusion.',
         'ai.result.copy': 'Copy',
@@ -1106,6 +1106,230 @@
         'wizard.connectionSuccess': '✅ Device found! You can close this wizard.',
         'wizard.connectionFail': '❌ No device. Re-check USB debugging and cable.',
         'wizard.adbError': '❌ ADB error. Is ADB installed?',
-        'wizard.stepOf': 'Step {current} of {total}'
+        'wizard.stepOf': 'Step {current} of {total}',
+
+       // ---- SECURITY MODAL ----
+'security.title': '🛡️ Security Overview',
+'security.loading': 'Loading security status...',
+'security.totalApps': 'Total Apps:',
+'security.suspiciousApps': 'Suspicious Apps:',
+'security.noSuspicious': '✅ No suspicious apps found.',
+'security.error': 'Error: {message}',
+'security.riskScore': 'Risk Score:',
+'security.moreApps': '... and {count} more',
+
+'security.riskLevel.critical': '🔥 CRITICAL',
+'security.riskLevel.high': '⚠️ HIGH RISK',
+'security.riskLevel.medium': '⚠️ MEDIUM RISK',
+'security.riskLevel.low': 'ℹ️ LOW RISK',
+
+// ---- THREAT DESCRIPTIONS ----
+'threat.spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
+'threat.ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
+'threat.adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
+'threat.click_fraud': '🖱️ Simulates taps and clicks to generate fake ad revenue or drive unwanted installs.',
+'threat.banking_trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
+'threat.data_stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
+'threat.backdoor': '🚪 Allows remote control of your device without your permission.',
+'threat.fake_app': '🎭 Pretends to be a legitimate app but may steal your information.',
+'threat.riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
+'threat.information_stealer': '🔐 Collects your passwords, emails, and personal data.',
+'threat.premium_dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
+'threat.trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.',
+'threat.generic_risk': '⚠️ Suspicious behavior was detected, but there is not enough evidence to name one malware family.',
+'threat.unknown': '⚠️ Detected as "{type}" — potentially harmful.',
+'threat.obfuscation': '🕵️ Uses advanced hiding techniques to avoid detection (packed/obfuscated code).',
+'threat.many_components': '🧩 Has many background services — can run in the background without your knowledge.',
+'threat.broadcast_receiver': '📡 Can automatically start when certain events happen (e.g., boot, network change).',
+'threat.no_specific': '📋 No specific threats detected, but the app has suspicious characteristics.',
+
+// ---- RISK REASONS ----
+'risk.installedFrom': '📦 Installed from: {installer} (not from official app store)',
+'risk.unknownSource': 'Unknown source',
+'risk.canAccess': '🔓 Can access: {permissions}',
+'risk.requestsPerms': '🔓 Requests {count} dangerous permission(s)',
+'risk.highRisk': '🚨 High risk — strongly recommended to uninstall.',
+'risk.moderateRisk': '⚠️ Moderate risk — review carefully.',
+
+// ---- PERMISSION LABELS ----
+'perm.camera': '📷 Camera',
+'perm.microphone': '🎙️ Microphone',
+'perm.contacts': '📇 Contacts',
+'perm.sms': '📩 SMS messages',
+'perm.smsSend': '📤 SMS sending',
+'perm.locationFine': '📍 Location (GPS)',
+'perm.locationCoarse': '📍 Location (approximate)',
+'perm.callLog': '📞 Call log',
+'perm.callLogModify': '✏️ Call log (modify)',
+'perm.phoneCalls': '📞 Phone calls',
+'perm.overlay': '🖼️ Draw overlays on other apps',
+'perm.accessibility': '♿ Accessibility (control your screen)',
+'perm.deviceAdmin': '🔒 Device administration',
+'perm.installPackages': '📥 Install other apps',
+'perm.usageStats': '📊 See which apps you use',
+'perm.writeSettings': '⚙️ Modify system settings',
+'perm.readStorage': '📂 Read files',
+'perm.writeStorage': '📂 Write/delete files',
+
+// ---- APP SCAN CARD (rendered on dashboard) ----
+'common.rescan': 'Rescan',
+'common.uninstall': 'Uninstall',
+
+'security.suspiciousApps': 'suspicious app(s)',
+'security.malwareCapabilities': 'What this malware can do:',
+'security.riskFactors': '⚠️ Risk factors:',
+'security.sideloaded': '📦 Sideloaded (not from Play Store)',
+'security.unknownInstaller': '❓ Unknown installer',
+'security.manyPermissions': '🔓 Requests many dangerous permissions',
+'security.highEntropy': '🧩 High code entropy (possible obfuscation/packing)',
+'security.entropy': 'Entropy:',
+'security.entropyHigh': '⚠️ (high → possible packing/obfuscation)',
+'security.installedVia': '📦 Installed via:',
+'security.installedDate': '📅 Installed:',
+'hw.modal.lastScan': 'Last scan:',
+
+// Risk reasons
+'risk.installedFrom': '📦 Installed from: {installer} (not from official app store)',
+'risk.unknownSource': 'Unknown source',
+'risk.canAccess': '🔓 Can access: {permissions}',
+'risk.requestsPerms': '🔓 Requests {count} dangerous permission(s)',
+'risk.highRisk': '🚨 High risk — strongly recommended to uninstall.',
+'risk.moderateRisk': '⚠️ Moderate risk — review carefully.',
+
+// Permission labels
+'perm.camera': '📷 Camera',
+'perm.microphone': '🎙️ Microphone',
+'perm.contacts': '📇 Contacts',
+'perm.sms': '📩 SMS messages',
+'perm.smsSend': '📤 SMS sending',
+'perm.locationFine': '📍 Location (GPS)',
+'perm.locationCoarse': '📍 Location (approximate)',
+'perm.callLog': '📞 Call log',
+'perm.callLogModify': '✏️ Call log (modify)',
+'perm.phoneCalls': '📞 Phone calls',
+'perm.overlay': '🖼️ Draw overlays on other apps',
+'perm.accessibility': '♿ Accessibility (control your screen)',
+'perm.deviceAdmin': '🔒 Device administration',
+'perm.installPackages': '📥 Install other apps',
+'perm.usageStats': '📊 See which apps you use',
+'perm.writeSettings': '⚙️ Modify system settings',
+'perm.readStorage': '📂 Read files',
+'perm.writeStorage': '📂 Write/delete files',
+
+// ---- STORAGE ANALYSIS ----
+'storage.modal.title': 'Storage Analysis',
+'storage.scan.start': 'Scanning for large files... This may take 2-3 minutes.',
+'storage.scan.still': 'Still scanning... This may take a while.',
+'storage.scan.failed': 'Scan Failed',
+'storage.scan.unexpectedError': 'Unexpected Error',
+
+'storage.delete.title': 'Delete File',
+'storage.delete.confirm': 'Are you sure you want to delete this file?',
+'storage.delete.btn': 'Delete',
+'storage.delete.error': 'Failed to delete: {error}',
+
+'storage.uninstall.title': 'Uninstall App',
+'storage.uninstall.confirm': 'Are you sure you want to uninstall this app?',
+'storage.uninstall.error': 'Failed to uninstall: {error}',
+
+'storage.summary.title': 'Storage',
+'storage.summary.nearlyFull': '⚠️ Storage is nearly full!',
+'storage.summary.gettingFull': '⚠️ Storage is getting full',
+'storage.summary.healthy': '✅ Storage is healthy',
+
+// ---- COMMON (if not already present) ----
+'common.close': 'Close',
+// ---- APP SCAN ----
+'appScan.scanning': 'Scanning for suspicious apps...',
+'appScan.stillScanning': 'Still scanning... This may take a moment.',
+'appScan.failed': 'Scan Failed',
+// ---- Already existing keys used here ----
+// 'common.noDevice', 'common.connectFirst', 'common.error', 'common.errorPrefix',
+// 'common.unknown', 'common.retry', 'common.close', 'common.uninstall'
+
+// ---- DASHBOARD & ACTIONS ----
+'dashboard.title': 'Dashboard',
+'dashboard.phoneSummary': 'Phone Summary',
+
+'action.storageAnalysis.title': 'Storage Analysis',
+'action.storageAnalysis.desc': 'Check storage usage & large files',
+'action.appSecurity.title': 'App Security Scan',
+'action.appSecurity.desc': 'Detect suspicious & risky apps',
+'action.install.title': 'Install Android App',
+'action.install.desc': 'Deploy companion app',
+'action.install.installing': 'Installing...',
+'action.install.success': 'Android app installed successfully!',
+'action.install.failed': 'Installation failed: ',
+'action.wizard.title': 'USB Debugging Wizard',
+'action.wizard.desc': 'Connect your phone',
+'action.help.title': 'Help',
+'action.help.desc': 'Guides & support',
+
+// ---- SOFTWARE SAFETY ----
+'safety.title': 'Software Safety',
+'safety.patch': 'Security Patch',
+'safety.root': 'Root Status',
+'safety.playProtect': 'Play Protect',
+'safety.unknown': 'Unknown Sources',
+'safety.adb': 'USB Debugging',
+'safety.suspicious': 'Suspicious Apps',
+'safety.rooted': '⚠️ Rooted',
+'safety.safe': '✅ Safe',
+'safety.on': '✅ On',
+'safety.off': '⚠️ Off',
+'safety.allowed': '⚠️ Allowed',
+'safety.disabled': '✅ Disabled',
+'safety.enabled': '⚠️ Enabled',
+
+// ---- COMMON (if not already present) ----
+'common.success': 'Success',
+'common.errorPrefix': 'Error: ',
+'appScan.loadError': 'Failed to load module. Please refresh the page.',
+
+// ---- Storage ----
+'storage.noLargeFiles': 'No large files (>500 MB) found on your device.',
+'storage.largeFiles': 'large files',
+'storage.files': 'files',
+
+// ---- Storage Categories ----
+'storage.category.dcim': '📸 Camera (DCIM)',
+'storage.category.movies': '🎬 Movies',
+'storage.category.music': '🎵 Music',
+'storage.category.pictures': '🖼️ Pictures',
+'storage.category.download': '📥 Downloads',
+'storage.category.obb': '🎮 Game OBB',
+'storage.category.appData': '📂 App Data (Games)',
+'storage.category.documents': '📄 Documents',
+'storage.category.other': '📦 Other',
+
+// ---- Common ----
+'common.rescan': 'Rescan',
+'common.viewDetails': 'View Details',
+'storage.summary.used': 'used',
+
+// ---- Advanced Diagnostic Dashboard Card ----
+'adv.checksPassed': 'checks passed',
+'adv.summary.allPassed': '✅ All software checks passed.',
+'adv.summary.issues': '⚠️ Some software issues detected. Run the advanced diagnostic for details.',
+'adv.btn.details': 'View Details',
+
+'adv.rootkit.detected': 'Potential kernel or process anomalies were detected.',
+'adv.rootkit.clean': 'No obvious kernel or process anomalies were detected.',
+'adv.rootkit.unavailable': 'Unable to run rootkit scan: {message}',
+// eng_lang.js
+'adv.test.signalStrength.lte': 'LTE level',
+'adv.test.signalStrength.signal': 'Signal level',
+'adv.test.batteryHealth.message.good': 'Good',
+
+'adv.test.memoryLeak.message.leak': 'PSS grew from {old}KB to {new}KB (possible leak)',
+'adv.test.batteryCycle.message.invalid': 'Reported value ({count}) is not a valid cycle count on this device',
+
+// Deep Scan
+'adv.deepScan.issues': 'issues',
+
+// Ghost Touch
+'adv.test.ghostTouch.message.none': 'No ghost touch',
+'adv.test.ghostTouch.message.possible': 'Possible ghost touch',
+'adv.test.ghostTouch.events': 'events',
     };
 })();

@@ -924,9 +924,9 @@
         'ai.input.placeholder': 'Hal. Nag-overheat ang telepono at bigla na lang nagre-reboot, mabilis maubos ang baterya, at nag-crash ang camera app kapag binuksan.',
         'ai.analyzeButton.default': 'Suriin ang {count} na ulat',
         'ai.analyzeButton.none': 'Pumili ng mga ulat na susuriin',
-        'ai.analyzeButton.some': 'Suriin ang {count} ng {total} na ulat',
+        'ai.analyzeButton.some': 'Suriin ang {count} na ulat',
         'ai.analyzeButton.noneHint': 'Pumili ng kahit isang ulat sa itaas.',
-        'ai.analyzeButton.someHint': '{count} ng {total} na ulat ang napili.',
+        'ai.analyzeButton.someHint': '{count} na ulat ang napili.',
         'ai.analyzeButton.hint': 'Lahat ng ulat ay napili bilang default — i-deselect ang anumang ayaw mong isama.',
         'ai.result.title': 'Pagsusuri ng AI',
         'ai.result.loading': 'Sinusuri ng AI ang iyong diagnostic data at sintomas...',
@@ -937,7 +937,7 @@
         'ai.result.detailsLabel': 'Karagdagang Detalye',
         'ai.result.userInputLabel': 'Ang Iyong Paglalarawan ng Sintomas',
         'ai.result.analyzedAt': 'Sinuri noong {time}',
-        'ai.result.includedReports': 'Kasama: {names}',
+        'ai.result.includedReports': 'Kasama: ',
         'ai.result.error': 'May nangyaring mali',
         'ai.result.noConclusion': 'Hindi nakagawa ng konklusyon ang AI.',
         'ai.result.copy': 'Kopyahin',
@@ -1002,6 +1002,225 @@
         'wizard.connectionSuccess': '✅ Natagpuan ang device! Maaari mo nang isara ang wizard na ito.',
         'wizard.connectionFail': '❌ Walang device. Suriin muli ang USB debugging at cable.',
         'wizard.adbError': '❌ Error sa ADB. Naka-install ba ang ADB?',
-        'wizard.stepOf': 'Hakbang {current} ng {total}'
-    };
+        'wizard.stepOf': 'Hakbang {current} ng {total}',
+      // ---- SECURITY MODAL ----
+'security.title': '🛡️ Security Overview',
+'security.loading': 'Loading security status...',
+'security.totalApps': 'Total Apps:',
+'security.suspiciousApps': 'Suspicious Apps:',
+'security.noSuspicious': '✅ No suspicious apps found.',
+'security.error': 'Error: {message}',
+'security.riskScore': 'Risk Score:',
+'security.moreApps': '... and {count} more',
+
+'security.riskLevel.critical': '🔥 CRITICAL',
+'security.riskLevel.high': '⚠️ HIGH RISK',
+'security.riskLevel.medium': '⚠️ MEDIUM RISK',
+'security.riskLevel.low': 'ℹ️ LOW RISK',
+
+// ---- THREAT DESCRIPTIONS ----
+'threat.spyware': '📷 Accesses your camera, microphone, location, or messages without your knowledge.',
+'threat.ransomware': '💰 Can lock your device or encrypt your files and demand payment.',
+'threat.adware': '📢 Displays aggressive ads and may redirect you to malicious websites.',
+'threat.click_fraud': '🖱️ Simulates taps and clicks to generate fake ad revenue or drive unwanted installs.',
+'threat.banking_trojan': '🏦 Targets banking/financial apps to steal your login credentials.',
+'threat.data_stealer': '📁 Extracts your personal files, messages, or photos and sends them to a remote server.',
+'threat.backdoor': '🚪 Allows remote control of your device without your permission.',
+'threat.fake_app': '🎭 Pretends to be a legitimate app but may steal your information.',
+'threat.riskware': '⚠️ Legitimate app that can be exploited by malware — review its behavior.',
+'threat.information_stealer': '🔐 Collects your passwords, emails, and personal data.',
+'threat.premium_dialer': '💸 Can send SMS or make calls to premium numbers, causing unexpected charges.',
+'threat.trojan': '🐴 Disguised as a normal app; performs malicious actions in the background.',
+'threat.generic_risk': '⚠️ Suspicious behavior was detected, but there is not enough evidence to name one malware family.',
+'threat.unknown': '⚠️ Detected as "{type}" — potentially harmful.',
+'threat.obfuscation': '🕵️ Uses advanced hiding techniques to avoid detection (packed/obfuscated code).',
+'threat.many_components': '🧩 Has many background services — can run in the background without your knowledge.',
+'threat.broadcast_receiver': '📡 Can automatically start when certain events happen (e.g., boot, network change).',
+'threat.no_specific': '📋 No specific threats detected, but the app has suspicious characteristics.',
+
+// ---- RISK REASONS ----
+'risk.installedFrom': '📦 Installed from: {installer} (not from official app store)',
+'risk.unknownSource': 'Unknown source',
+'risk.canAccess': '🔓 Can access: {permissions}',
+'risk.requestsPerms': '🔓 Requests {count} dangerous permission(s)',
+'risk.highRisk': '🚨 High risk — strongly recommended to uninstall.',
+'risk.moderateRisk': '⚠️ Moderate risk — review carefully.',
+
+// ---- PERMISSION LABELS ----
+'perm.camera': '📷 Camera',
+'perm.microphone': '🎙️ Microphone',
+'perm.contacts': '📇 Contacts',
+'perm.sms': '📩 SMS messages',
+'perm.smsSend': '📤 SMS sending',
+'perm.locationFine': '📍 Location (GPS)',
+'perm.locationCoarse': '📍 Location (approximate)',
+'perm.callLog': '📞 Call log',
+'perm.callLogModify': '✏️ Call log (modify)',
+'perm.phoneCalls': '📞 Phone calls',
+'perm.overlay': '🖼️ Draw overlays on other apps',
+'perm.accessibility': '♿ Accessibility (control your screen)',
+'perm.deviceAdmin': '🔒 Device administration',
+'perm.installPackages': '📥 Install other apps',
+'perm.usageStats': '📊 See which apps you use',
+'perm.writeSettings': '⚙️ Modify system settings',
+'perm.readStorage': '📂 Read files',
+'perm.writeStorage': '📂 Write/delete files',
+
+// ---- APP SCAN CARD (dashboard) ----
+'common.rescan': 'I-scan muli',
+'common.uninstall': 'I-uninstall',
+
+'security.suspiciousApps': 'kahina-hinalang app(s)',
+'security.malwareCapabilities': 'Ano ang kayang gawin ng malware na ito:',
+'security.riskFactors': '⚠️ Mga salik ng panganib:',
+'security.sideloaded': '📦 Naka-sideload (hindi mula sa Play Store)',
+'security.unknownInstaller': '❓ Hindi kilalang installer',
+'security.manyPermissions': '🔓 Humihingi ng maraming mapanganib na permiso',
+'security.highEntropy': '🧩 Mataas na entropy ng code (posibleng obfuscation/packing)',
+'security.entropy': 'Entropy:',
+'security.entropyHigh': '⚠️ (mataas → posibleng packing/obfuscation)',
+'security.installedVia': '📦 Na-install sa pamamagitan ng:',
+'security.installedDate': '📅 Na-install noong:',
+'hw.modal.lastScan': 'Huling pag-scan:',
+
+// Mga dahilan ng panganib
+'risk.installedFrom': '📦 Naka-install mula sa: {installer} (hindi mula sa opisyal na app store)',
+'risk.unknownSource': 'Hindi kilalang pinagmulan',
+'risk.canAccess': '🔓 Maaaring ma-access ang: {permissions}',
+'risk.requestsPerms': '🔓 Humihingi ng {count} mapanganib na permiso',
+'risk.highRisk': '🚨 Mataas ang panganib — mariing inirerekomendang i-uninstall.',
+'risk.moderateRisk': '⚠️ Katamtamang panganib — suriin nang mabuti.',
+
+// Mga label ng permiso
+'perm.camera': '📷 Camera',
+'perm.microphone': '🎙️ Mikropono',
+'perm.contacts': '📇 Mga Contact',
+'perm.sms': '📩 Mga Mensahe ng SMS',
+'perm.smsSend': '📤 Pagpapadala ng SMS',
+'perm.locationFine': '📍 Lokasyon (GPS)',
+'perm.locationCoarse': '📍 Lokasyon (tinatayang)',
+'perm.callLog': '📞 Talaan ng Tawag',
+'perm.callLogModify': '✏️ Baguhin ang talaan ng tawag',
+'perm.phoneCalls': '📞 Mga Tawag',
+'perm.overlay': '🖼️ Gumuhit sa ibabaw ng ibang apps',
+'perm.accessibility': '♿ Accessibility (kontrolin ang iyong screen)',
+'perm.deviceAdmin': '🔒 Pangangasiwa ng device',
+'perm.installPackages': '📥 Mag-install ng ibang apps',
+'perm.usageStats': '📊 Makita kung aling apps ang ginagamit mo',
+'perm.writeSettings': '⚙️ Baguhin ang mga setting ng system',
+'perm.readStorage': '📂 Magbasa ng mga file',
+'perm.writeStorage': '📂 Sumulat/magbura ng mga file',
+// ---- PAGSUSURI NG STORAGE ----
+'storage.modal.title': 'Pagsusuri ng Storage',
+'storage.scan.start': 'Sinisipat ang malalaking file... Maaaring tumagal ng 2-3 minuto.',
+'storage.scan.still': 'Sinisipat pa rin... Maaaring tumagal.',
+'storage.scan.failed': 'Nabigo ang Scan',
+'storage.scan.unexpectedError': 'Hindi Inaasahang Error',
+
+'storage.delete.title': 'Burahin ang File',
+'storage.delete.confirm': 'Sigurado ka bang gusto mong burahin ang file na ito?',
+'storage.delete.btn': 'Burahin',
+'storage.delete.error': 'Nabigong burahin: {error}',
+
+'storage.uninstall.title': 'I-uninstall ang App',
+'storage.uninstall.confirm': 'Sigurado ka bang gusto mong i-uninstall ang app na ito?',
+'storage.uninstall.error': 'Nabigong i-uninstall: {error}',
+
+'storage.summary.title': 'Storage',
+'storage.summary.nearlyFull': '⚠️ Masyadong puno ang storage!',
+'storage.summary.gettingFull': '⚠️ Napupuno na ang storage',
+'storage.summary.healthy': '✅ Maayos ang storage',
+
+// ---- COMMON ----
+'common.close': 'Isara',
+// ---- APP SCAN ----
+'appScan.scanning': 'Sinisipat ang mga kahina-hinalang app...',
+'appScan.stillScanning': 'Sinisipat pa rin... Maaaring tumagal.',
+'appScan.failed': 'Nabigo ang Scan',
+// ---- Mga umiiral nang key na ginamit dito ----
+// 'common.noDevice', 'common.connectFirst', 'common.error', 'common.errorPrefix',
+// 'common.unknown', 'common.retry', 'common.close', 'common.uninstall'
+// ---- DASHBOARD & ACTIONS ----
+'dashboard.title': 'Dashboard',
+'dashboard.phoneSummary': 'Buod ng Telepono',
+
+'action.storageAnalysis.title': 'Pagsusuri ng Storage',
+'action.storageAnalysis.desc': 'Suriin ang paggamit ng storage & malalaking file',
+'action.appSecurity.title': 'Scan ng Seguridad ng App',
+'action.appSecurity.desc': 'Tuklasin ang mga kahina-hinala at mapanganib na app',
+'action.install.title': 'I-install ang Android App',
+'action.install.desc': 'I-deploy ang companion app',
+'action.install.installing': 'Nag-i-install...',
+'action.install.success': 'Matagumpay na na-install ang Android app!',
+'action.install.failed': 'Nabigo ang pag-install: ',
+'action.wizard.title': 'USB Debugging Wizard',
+'action.wizard.desc': 'Ikonekta ang iyong telepono',
+'action.help.title': 'Tulong',
+'action.help.desc': 'Mga gabay at suporta',
+
+// ---- SOFTWARE SAFETY ----
+'safety.title': 'Kaligtasan ng Software',
+'safety.patch': 'Security Patch',
+'safety.root': 'Root Status',
+'safety.playProtect': 'Play Protect',
+'safety.unknown': 'Unknown Sources',
+'safety.adb': 'USB Debugging',
+'safety.suspicious': 'Mga Kahina-hinalang App',
+'safety.rooted': '⚠️ Naka-root',
+'safety.safe': '✅ Ligtas',
+'safety.on': '✅ Naka-on',
+'safety.off': '⚠️ Naka-off',
+'safety.allowed': '⚠️ Pinapayagan',
+'safety.disabled': '✅ Hindi pinagana',
+'safety.enabled': '⚠️ Pinagana',
+
+// ---- COMMON ----
+'common.success': 'Tagumpay',
+'common.errorPrefix': 'Error: ',
+'appScan.loadError': 'Nabigong i-load ang module. Paki-refresh ang pahina.',
+// ---- Storage ----
+'storage.noLargeFiles': 'Walang nakitang malalaking file (>500 MB) sa iyong device.',
+'storage.largeFiles': 'malalaking file',
+'storage.files': 'mga file',
+
+// ---- Storage Categories ----
+'storage.category.dcim': '📸 Camera (DCIM)',
+'storage.category.movies': '🎬 Mga Pelikula',
+'storage.category.music': '🎵 Musika',
+'storage.category.pictures': '🖼️ Mga Larawan',
+'storage.category.download': '📥 Mga Download',
+'storage.category.obb': '🎮 Game OBB',
+'storage.category.appData': '📂 App Data (Mga Laro)',
+'storage.category.documents': '📄 Mga Dokumento',
+'storage.category.other': '📦 Iba pa',
+
+// ---- Common ----
+'common.rescan': 'I-scan muli',
+'common.viewDetails': 'Tingnan ang Detalye',
+'storage.summary.used': 'ginamit',
+
+// ---- Advanced Diagnostic Dashboard Card ----
+'adv.checksPassed': 'pumasa na tseke',
+'adv.summary.allPassed': '✅ Pumasa ang lahat ng software checks.',
+'adv.summary.issues': '⚠️ May nakitang isyu sa software. Patakbuhin ang advanced diagnostic para sa detalye.',
+'adv.btn.details': 'Tingnan ang Detalye',
+
+'adv.rootkit.detected': 'Natukoy ang posibleng kernel o process anomalies.',
+'adv.rootkit.clean': 'Walang natukoy na kernel o process anomalies.',
+'adv.rootkit.unavailable': 'Hindi maisagawa ang rootkit scan: {message}',
+// fil_lang.js
+'adv.test.signalStrength.lte': 'Antas ng LTE',
+'adv.test.signalStrength.signal': 'Antas ng Signal',
+'adv.test.batteryHealth.message.good': 'Mabuti',
+
+'adv.test.memoryLeak.message.leak': 'Tumaas ang PSS mula {old}KB hanggang {new}KB (posibleng leak)',
+'adv.test.batteryCycle.message.invalid': 'Ang naiulat na halaga ({count}) ay hindi wastong cycle count sa device na ito',
+// Deep Scan
+'adv.deepScan.issues': 'isyu',
+
+// Ghost Touch
+'adv.test.ghostTouch.message.none': 'Walang ghost touch',
+'adv.test.ghostTouch.message.possible': 'Posibleng ghost touch',
+'adv.test.ghostTouch.events': 'mga pangyayari',    
+};
 })();

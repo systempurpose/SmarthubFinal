@@ -1249,27 +1249,25 @@
         return { summary: `Deep scan unavailable: ${lastError}` };
     }
 
-    async function performRootkitScan(deviceId) {
-        const primaryUrl = `/api/rootkit-scan?deviceId=${encodeURIComponent(deviceId)}`;
-        try {
-            const res = await fetch(primaryUrl);
-            const data = await res.json().catch(() => ({}));
-            if (res.ok) {
-                let summary = 'Rootkit scan completed';
-                if (data.summary) summary = data.summary;
-                else if (data.message) summary = data.message;
-                else if (data.result) summary = data.result;
-                else if (data.error) summary = data.error;
-                return { summary };
-            }
-            let errorDetail = `HTTP ${res.status}`;
-            if (data.error) errorDetail = data.error;
-            else if (data.message) errorDetail = data.message;
-            return { summary: `Rootkit scan unavailable: ${errorDetail}` };
-        } catch (e) {
-            return { summary: `Rootkit scan unavailable: ${e.message}` };
+    async function performRootkitScan(deviceId, lang = _getLang()) {
+    const primaryUrl = `/api/rootkit-scan?deviceId=${encodeURIComponent(deviceId)}&lang=${encodeURIComponent(lang)}`;
+    try {
+        const res = await fetch(primaryUrl);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            let summary = data.summary || 'Rootkit scan completed';
+            let summaryKey = data.summaryKey || null;
+            // If summaryKey is provided, we will use it for translation
+            return { summary, summaryKey };
         }
+        let errorDetail = `HTTP ${res.status}`;
+        if (data.error) errorDetail = data.error;
+        else if (data.message) errorDetail = data.message;
+        return { summary: `Rootkit scan unavailable: ${errorDetail}`, summaryKey: 'rootkit.unavailable' };
+    } catch (e) {
+        return { summary: `Rootkit scan unavailable: ${e.message}`, summaryKey: 'rootkit.unavailable' };
     }
+}
 
     // ---- AI Root Cause Analysis ----
     async function runAIAnalysis(deviceId, softwareResults, deep, rootkit) {
@@ -1364,127 +1362,180 @@ window.SmartHub.advanceDiagnostic = {
     },
 
     _doRender: function(containerId) {
-        if (_isRendering) return;
-        _isRendering = true;
-        try {
-            const container = document.getElementById(containerId);
-            if (!container || !diagResults) return;
+    if (_isRendering) return;
+    _isRendering = true;
+    try {
+        const container = document.getElementById(containerId);
+        if (!container || !diagResults) return;
 
-            const { software, deep, rootkit, ai } = diagResults;
-            let html = '';
+        const { software, deep, rootkit, ai } = diagResults;
+        let html = '';
 
-            const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
-            const total = validSoftware.length;
-            const passed = validSoftware.filter(t => t.passed).length;
-            const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-            const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
-            const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+        const validSoftware = (software || []).filter(t => t && typeof t.passed !== 'undefined');
+        const total = validSoftware.length;
+        const passed = validSoftware.filter(t => t.passed).length;
+        const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+        const color = pct >= 80 ? '#2e7d32' : pct >= 50 ? '#ed6c02' : '#d32f2f';
+        const icon = pct >= 80 ? '✅' : pct >= 50 ? '⚠️' : '❌';
 
-            html += `
-                <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                    <div style="font-size:32px;">${icon}</div>
-                    <div>
-                        <strong style="font-size:20px; color:${color};">${pct}%</strong>
-                        <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} checks passed</span>
-                    </div>
-                    <div style="flex:1; min-width:100px;">
-                        <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
-                            <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
-                        </div>
+        html += `
+            <div style="margin-bottom:16px; padding:16px; background:${color}10; border-radius:12px; border:1px solid ${color}30; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                <div style="font-size:32px;">${icon}</div>
+                <div>
+                    <strong style="font-size:20px; color:${color};">${pct}%</strong>
+                    <span style="color:#6B7280; font-size:14px; margin-left:8px;">${passed}/${total} ${_t('adv.checksPassed', 'checks passed')}</span>
+                </div>
+                <div style="flex:1; min-width:100px;">
+                    <div style="background:#e5e7eb; border-radius:8px; height:8px; overflow:hidden;">
+                        <div style="width:${pct}%; background:${color}; height:100%; border-radius:8px;"></div>
                     </div>
                 </div>
-            `;
+            </div>
+        `;
 
-            if (deep || rootkit) {
-                html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
-                if (deep) {
-                    let deepText = deep.summary || 'No issues';
-                    const match = deepText.match(/(\d+)\s+findings/);
-                    const displayText = match ? `${match[1]} issues` : deepText;
-                    html += `
-                        <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                            🔬 ${_t('adv.result.deepScan', 'Deep Scan')}: <strong>${escapeHtml(displayText)}</strong>
-                        </span>
-                    `;
-                }
-                if (rootkit) {
-                    const isOk = !rootkit.summary.toLowerCase().includes('unavailable') && !rootkit.summary.toLowerCase().includes('error');
-                    const icon = isOk ? '✅' : '⚠️';
-                    html += `
-                        <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
-                            🛡️ ${_t('adv.result.rootkit', 'Rootkit')}: <strong>${escapeHtml(rootkit.summary || 'Clean')}</strong> ${icon}
-                        </span>
-                    `;
-                }
-                html += `</div>`;
+        // ---- Deep & Rootkit summaries ----
+        if (deep || rootkit) {
+            html += `<div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; font-size: 14px; color: #374151;">`;
+            if (deep) {
+                let deepText = deep.summary || 'No issues';
+                const match = deepText.match(/(\d+)\s+findings/);
+                const displayText = match 
+                    ? `${match[1]} ${_t('adv.deepScan.issues', 'issues')}` 
+                    : deepText;
+                html += `
+                    <span style="background: #e8f5e9; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                        🔬 ${_t('adv.result.deepScan', 'Deep Scan')}: <strong>${escapeHtml(displayText)}</strong>
+                    </span>
+                `;
             }
+            if (rootkit) {
+                let summaryText = rootkit.summary || 'Clean';
+                if (rootkit.summaryKey) {
+                    summaryText = _t('adv.rootkit.' + rootkit.summaryKey, summaryText);
+                }
+                const isOk = !rootkit.summary?.toLowerCase().includes('unavailable') && !rootkit.summary?.toLowerCase().includes('error');
+                const iconRoot = isOk ? '✅' : '⚠️';
+                html += `
+                    <span style="background: ${isOk ? '#e8f5e9' : '#ffebee'}; padding: 4px 14px; border-radius: 16px; display: inline-flex; align-items: center; gap: 6px;">
+                        🛡️ ${_t('adv.result.rootkit', 'Rootkit')}: <strong>${escapeHtml(summaryText)}</strong> ${iconRoot}
+                    </span>
+                `;
+            }
+            html += `</div>`;
+        }
 
-            if (validSoftware.length > 0) {
-                html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
-                for (const test of validSoftware) {
-                    const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
-                    const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
-                    const icon = test.passed ? '✅' : '❌';
-                    let fixHtml = '';
-                    if (!test.passed && test.fix) {
-                        fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
-                            <strong>🔧 ${_t('adv.result.fix', 'Fix')}:</strong> ${escapeHtml(test.fix)}
-                        </div>`;
+        // ---- Individual tests (with translation) ----
+        if (validSoftware.length > 0) {
+            // --- Translation maps (defined ONCE, before the loop) ---
+            const messageMap = {
+                'No recent crashes': _t('adv.test.appCrashes.message.noCrashes', 'No recent crashes'),
+                'No ANR detected': _t('adv.test.anr.message.noAnr', 'No ANR detected'),
+                'Uptime >24h, ignoring old panic logs': _t('adv.test.kernelPanic.message.uptimeOk', 'Uptime >24h, ignoring old panic logs'),
+                'Stable': _t('adv.test.systemService.message.stable', 'Stable'),
+                'No storage I/O errors found': _t('adv.test.storageIO.message.none', 'No storage I/O errors found'),
+                'No frame data available (app may be idle)': _t('adv.test.uiJank.message.noData', 'No frame data available (app may be idle)'),
+                'No ghost touch (0 recent events)': _t('adv.test.ghostTouch.message.none', 'No ghost touch (0 recent events)'),
+                'Unable to read (thermal zones not accessible on this device)': _t('adv.test.cpuTemp.message.unavailable', 'Unable to read (thermal zones not accessible on this device)'),
+                'Good': _t('adv.test.batteryHealth.message.good', 'Good'),
+                'LTE level 3/4 (Good)': _t('adv.test.signalStrength.message.lteGood', 'LTE level 3/4 (Good)'),
+                'PSS grew from {old}KB to {new}KB (possible leak)': _t('adv.test.memoryLeak.message.leak', 'PSS grew from {old}KB to {new}KB (possible leak)'),
+                'Reported value ({count}) is not a valid cycle count on this device': _t('adv.test.batteryCycle.message.invalid', 'Reported value ({count}) is not a valid cycle count on this device'),
+            };
+
+            const fixMap = {
+                'Restart the app or device. If persistent, app has memory leak.': _t('adv.test.memoryLeak.fix', 'Restart the app or device. If persistent, app has memory leak.'),
+                'Update your device via system settings to get the latest security fixes.': _t('adv.test.securityPatch.fix', 'Update your device via system settings to get the latest security fixes.'),
+                'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.': _t('adv.test.imei.fix', 'IMEI read requires privileged ADB context or root. This is expected on Android 10+. You can view it manually by dialing `*#06#`.'),
+                'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware.': _t('adv.test.ghostTouch.fix', 'Try recalibration via `*#*#2664#*#*`. Disable "High touch sensitivity". Reflash touch firmware.'),
+            };
+
+            html += `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px;">`;
+            for (const test of validSoftware) {
+                const cardColor = test.passed ? '#2e7d32' : '#d32f2f';
+                const bgColor = test.passed ? '#e8f5e9' : '#ffebee';
+                const iconTest = test.passed ? '✅' : '❌';
+
+                // ---- Translate message ----
+                let messageText = test.message || '';
+                if (messageMap[messageText]) {
+                    messageText = messageMap[messageText];
+                    // Handle dynamic placeholders
+                    if (test.message && test.message.includes('{old}')) {
+                        const match = test.message.match(/PSS grew from (\d+)KB to (\d+)KB/);
+                        if (match) {
+                            messageText = messageText.replace('{old}', match[1]).replace('{new}', match[2]);
+                        }
                     }
-                    html += `
-                        <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
-                            <div style="font-weight:600; font-size:14px;">${icon} ${escapeHtml(test.name)}</div>
-                            <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(test.message)}</div>
-                            ${fixHtml}
-                        </div>
-                    `;
+                    if (test.message && test.message.includes('{count}')) {
+                        const match = test.message.match(/Reported value \((\d+)\)/);
+                        if (match) {
+                            messageText = messageText.replace('{count}', match[1]);
+                        }
+                    }
+                } else {
+                    // Fallback: try key-based translation if test.key exists
+                    if (test.key) {
+                        const keyMsg = `adv.test.${test.key}.message`;
+                        const translated = _t(keyMsg, null);
+                        if (translated !== keyMsg) {
+                            messageText = translated;
+                        }
+                    }
                 }
-                html += `</div>`;
-            } else {
-                html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">${_t('adv.result.noResults', 'No test results available.')}</div>`;
-            }
 
-            if (ai) {
-                let confidenceColor = '#6B7280';
-                if (ai.confidence === 'High') confidenceColor = '#2e7d32';
-                else if (ai.confidence === 'Medium') confidenceColor = '#ed6c02';
-                else if (ai.confidence === 'Low') confidenceColor = '#d32f2f';
+                // ---- Translate fix ----
+                let fixText = test.fix || '';
+                if (fixMap[fixText]) {
+                    fixText = fixMap[fixText];
+                } else {
+                    if (test.key) {
+                        const keyFix = `adv.test.${test.key}.fix`;
+                        const translated = _t(keyFix, null);
+                        if (translated !== keyFix) {
+                            fixText = translated;
+                        }
+                    }
+                }
+
+                let fixHtml = '';
+                if (!test.passed && fixText) {
+                    fixHtml = `<div style="font-size:12px; margin-top:6px; background:#f5f5f5; padding:6px 10px; border-radius:4px; color:#333;">
+                        <strong>🔧 ${_t('adv.result.fix', 'Fix')}:</strong> ${escapeHtml(fixText)}
+                    </div>`;
+                }
 
                 html += `
-                    <div style="margin-top:24px; padding:20px; background:linear-gradient(135deg, #f0f4ff 0%, #e8edf5 100%); border-radius:12px; border:1px solid #c7d2fe; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-                            <span style="font-size:28px;">🧠</span>
-                            <div>
-                                <h3 style="margin:0; color:#1e3a8a; font-size:18px;">${_t('adv.result.conclusion', 'AI Diagnosis')}</h3>
-                                <span style="font-size:12px; color:#6B7280;">${_t('adv.result.rootCause', 'Root cause analysis')}</span>
-                            </div>
-                            <span style="margin-left:auto; font-size:12px; background:${confidenceColor}20; color:${confidenceColor}; padding:2px 12px; border-radius:12px; font-weight:600;">
-                                ${_t('adv.result.confidence', 'Confidence')}: ${escapeHtml(ai.confidence || 'Medium')}
-                            </span>
-                        </div>
-                        <div style="font-size:15px; color:#1e293b; margin-bottom:10px; padding:12px; background:rgba(255,255,255,0.5); border-radius:8px;">
-                            <strong>📋 ${_t('adv.result.summary', 'Conclusion')}:</strong><br>
-                            ${escapeHtml(ai.summary)}
-                        </div>
-                        <div style="margin-top:8px;">
-                            <strong style="color:#1e3a8a;">🔧 ${_t('adv.result.recommendedActions', 'Recommended Actions')}:</strong>
-                            <ul style="margin:6px 0 0 20px; padding:0; color:#334155;">
-                                ${ai.actions.map(a => `<li style="margin-bottom:4px;">${escapeHtml(a)}</li>`).join('')}
-                            </ul>
-                        </div>
-                        ${ai.nextStep ? `
-                        <div style="margin-top:10px; padding:10px; background:#dbeafe; border-radius:6px; border-left:3px solid #3b82f6;">
-                            <strong>📌 ${_t('adv.result.nextStep', 'Next Step')}:</strong> ${escapeHtml(ai.nextStep)}
-                        </div>` : ''}
+                    <div style="background:${bgColor}; border-radius:8px; padding:12px; border-left:4px solid ${cardColor};">
+                        <div style="font-weight:600; font-size:14px;">${iconTest} ${escapeHtml(test.name)}</div>
+                        <div style="font-size:13px; color:#555; margin-top:4px;">${escapeHtml(messageText)}</div>
+                        ${fixHtml}
                     </div>
                 `;
             }
-
-            container.innerHTML = html;
-        } finally {
-            _isRendering = false;
+            html += `</div>`;
+        } else {
+            html += `<div style="padding:12px; background:#fef3c7; border-radius:8px; color:#92400e;">${_t('adv.result.noResults', 'No test results available.')}</div>`;
         }
+
+        // ---- AI Conclusion (keep existing code) ----
+        if (ai) {
+            // Placeholder – replace with your actual AI rendering logic
+            html += `
+                <div style="margin-top:24px; padding:16px; background:#f0f4ff; border-radius:12px; border:1px solid #c7d2fe;">
+                    <h4 style="margin:0 0 8px 0; color:#1e3a8a;">🧠 ${_t('adv.result.conclusion', 'AI Diagnosis')}</h4>
+                    <p>${escapeHtml(ai.summary || '')}</p>
+                    ${ai.actions ? `<ul>${ai.actions.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>` : ''}
+                    ${ai.nextStep ? `<p><strong>📌 ${_t('adv.result.nextStep', 'Next Step')}:</strong> ${escapeHtml(ai.nextStep)}</p>` : ''}
+                    <p style="font-size:12px; color:#6B7280;">${_t('adv.result.confidence', 'Confidence')}: ${escapeHtml(ai.confidence || 'Medium')}</p>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    } finally {
+        _isRendering = false;
     }
+}
 };
 
     // ---- Language change listener (safe, non-looping) ----

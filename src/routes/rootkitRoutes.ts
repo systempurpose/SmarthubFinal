@@ -3,7 +3,26 @@ import { adb } from '../adb';
 
 const router = Router();
 
-// Helper: run ADB command and return trimmed output
+// ---- Translation mapping (simple) ----
+const translations: Record<string, Record<string, string>> = {
+  'en': {
+    'rootkit.detected': 'Potential kernel or process anomalies were detected.',
+    'rootkit.clean': 'No obvious kernel or process anomalies were detected.',
+    'rootkit.unavailable': 'Unable to run rootkit scan: {message}',
+  },
+  'fil': {
+    'rootkit.detected': 'Natukoy ang posibleng kernel o process anomalies.',
+    'rootkit.clean': 'Walang natukoy na kernel o process anomalies.',
+    'rootkit.unavailable': 'Hindi maisagawa ang rootkit scan: {message}',
+  }
+};
+
+function getTranslation(lang: string, key: string, fallback?: string): string {
+  const langMap = translations[lang] || translations['en'];
+  return langMap[key] || fallback || key;
+}
+
+// ---- Helper: ADB shell with trimmed output ----
 async function adbShell(deviceId: string, cmd: string): Promise<string> {
   try {
     const out = await adb('-s', deviceId, 'shell', cmd);
@@ -14,6 +33,7 @@ async function adbShell(deviceId: string, cmd: string): Promise<string> {
   }
 }
 
+// ---- Check device availability ----
 async function checkDeviceAvailability(deviceId: string): Promise<{ connected: boolean; message: string }> {
   try {
     const out = await adb('devices');
@@ -42,14 +62,14 @@ async function checkDeviceAvailability(deviceId: string): Promise<{ connected: b
   }
 }
 
-// Check dmesg for kernel anomalies
+// ---- Check dmesg for kernel anomalies ----
 async function checkDmesg(deviceId: string): Promise<string[]> {
   const dmesg = await adbShell(deviceId, 'dmesg | grep -iE "insmod|module|Oops|Bug|segfault|kernel panic|tainted" | tail -30');
   const lines = dmesg.split('\n').filter(l => l.trim());
   return lines.slice(0, 20);
 }
 
-// List loaded kernel modules and flag unknown ones
+// ---- List loaded kernel modules and flag unknown ones ----
 async function checkModules(deviceId: string): Promise<{ module: string; suspicious: boolean }[]> {
   const modules = await adbShell(deviceId, 'cat /proc/modules | awk \'{print $1}\'');
   if (!modules) return [];
@@ -64,7 +84,7 @@ async function checkModules(deviceId: string): Promise<{ module: string; suspici
   }));
 }
 
-// Compare running processes with /proc entries to detect hidden processes
+// ---- Compare running processes with /proc entries to detect hidden processes ----
 async function checkHiddenProcesses(deviceId: string): Promise<string[]> {
   const psOutput = await adbShell(deviceId, 'ps -A -o PID,NAME | tail -n +2');
   const psPids = new Set<string>();
@@ -81,12 +101,18 @@ async function checkHiddenProcesses(deviceId: string): Promise<string[]> {
   return hidden;
 }
 
+// ---- Main route ----
 router.get('/rootkit-scan', async (req, res) => {
   const deviceId = req.query.deviceId as string;
+  const lang = (req.query.lang as string) || 'en'; // default to English
+
   if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+
   try {
     const availability = await checkDeviceAvailability(deviceId);
     if (!availability.connected) {
+      const message = getTranslation(lang, 'rootkit.unavailable', 'Unable to run rootkit scan: {message}')
+        .replace('{message}', availability.message);
       return res.json({
         ok: false,
         dmesgAnomalies: [],
@@ -94,9 +120,11 @@ router.get('/rootkit-scan', async (req, res) => {
         allModules: [],
         hiddenProcesses: [],
         rootkitIndicators: false,
-        summary: `Unable to run rootkit scan: ${availability.message}`,
+        summary: message,
+        summaryKey: 'rootkit.unavailable',
         error: availability.message,
-        unavailable: true
+        unavailable: true,
+        lang
       });
     }
 
@@ -105,16 +133,21 @@ router.get('/rootkit-scan', async (req, res) => {
       checkModules(deviceId),
       checkHiddenProcesses(deviceId)
     ]);
+
+    const hasIndicators = dmesgAnomalies.length > 0 || modules.some(m => m.suspicious) || hiddenPids.length > 0;
+    const summaryKey = hasIndicators ? 'rootkit.detected' : 'rootkit.clean';
+    const summary = getTranslation(lang, summaryKey);
+
     res.json({
       ok: true,
       dmesgAnomalies,
       suspiciousModules: modules.filter(m => m.suspicious).map(m => m.module),
       allModules: modules,
       hiddenProcesses: hiddenPids,
-      rootkitIndicators: (dmesgAnomalies.length > 0 || modules.some(m => m.suspicious) || hiddenPids.length > 0),
-      summary: dmesgAnomalies.length || modules.some(m => m.suspicious) || hiddenPids.length
-        ? 'Potential kernel or process anomalies were detected.'
-        : 'No obvious kernel or process anomalies were detected.'
+      rootkitIndicators: hasIndicators,
+      summary: summary,
+      summaryKey: summaryKey,
+      lang
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

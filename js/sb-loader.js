@@ -4,7 +4,6 @@ import { getCurrentUserId, getCurrentDeviceId, decryptAndDecompress } from './sb
 
 /**
  * Fetch the latest app scan result for the given user and device.
- * Returns null if none found.
  */
 export async function fetchLatestAppScan(userId, deviceId) {
     const supabase = await getSupabaseClient();
@@ -30,33 +29,6 @@ export async function fetchLatestAppScan(userId, deviceId) {
         summary: data.summary,
         _source: 'supabase'
     };
-}
-
-// ---- Hardware Test Results ----
-export async function fetchLatestHardwareScan(userId, deviceId) {
-    const { fetchLatestHardwareTestResults } = await import('./hardware_sb.js');
-    return fetchLatestHardwareTestResults(userId, deviceId);
-}
-
-export async function fetchLatestConnectionScan(userId, deviceId) {
-    const { fetchLatestConnectionTestResults } = await import('./connection_sb.js');
-    return fetchLatestConnectionTestResults(userId, deviceId);
-}
-
-export async function fetchLatestAdvancedScan(userId, deviceId) {
-    const { fetchLatestAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
-    return fetchLatestAdvancedDiagnosticResults(userId, deviceId);
-}
-
-// ---- Repair Results ----
-export async function fetchLatestRepairScan(userId, deviceId) {
-    const { fetchLatestRepairScan } = await import('./repairs_sb.js');
-    return fetchLatestRepairScan(userId, deviceId);
-}
-
-export async function fetchRepairHistory(userId, deviceId, limit = 20) {
-    const { fetchRepairHistory } = await import('./repairs_sb.js');
-    return fetchRepairHistory(userId, deviceId, limit);
 }
 
 // ---- Storage Scan ----
@@ -86,11 +58,58 @@ export async function fetchLatestStorageScan(userId, deviceId) {
     };
 }
 
+// ---- Hardware ----
+export async function fetchLatestHardwareScan(userId, deviceId) {
+    const { fetchLatestHardwareTestResults } = await import('./hardware_sb.js');
+    return fetchLatestHardwareTestResults(userId, deviceId);
+}
+
+// ---- Connection ----
+export async function fetchLatestConnectionScan(userId, deviceId) {
+    const { fetchLatestConnectionTestResults } = await import('./connection_sb.js');
+    return fetchLatestConnectionTestResults(userId, deviceId);
+}
+
+// ---- Advanced ----
+export async function fetchLatestAdvancedScan(userId, deviceId) {
+    const { fetchLatestAdvancedDiagnosticResults } = await import('./advanceDiagnostic_sb.js');
+    return fetchLatestAdvancedDiagnosticResults(userId, deviceId);
+}
+
+// ---- Repair ----
+export async function fetchLatestRepairScan(userId, deviceId) {
+    const { fetchLatestRepairScan } = await import('./repairs_sb.js');
+    return fetchLatestRepairScan(userId, deviceId);
+}
+
+export async function fetchRepairHistory(userId, deviceId, limit = 20) {
+    const { fetchRepairHistory } = await import('./repairs_sb.js');
+    return fetchRepairHistory(userId, deviceId, limit);
+}
+
 // ---- AI Conclusion ----
 export async function fetchLatestAIConclusion(userId, deviceId) {
     const { fetchLatestAIConclusion } = await import('./aiConclusion_sb.js');
     return fetchLatestAIConclusion(userId, deviceId);
 }
 
-// ---- Also export all scan fetcher as a combined function (optional) ----
-// (You can keep the existing ones above)
+// ---- Combined loader for all scans (used by AI Conclusion) ----
+export async function fetchAllScanResultsFromSupabase() {
+    const userId = getCurrentUserId();
+    const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+    if (!userId || !deviceId) return null;
+
+    const results = {};
+    try {
+        results.app = await fetchLatestAppScan(userId, deviceId);
+        results.storage = await fetchLatestStorageScan(userId, deviceId);
+        results.hardware = await fetchLatestHardwareScan(userId, deviceId);
+        results.connection = await fetchLatestConnectionScan(userId, deviceId);
+        results.advanced = await fetchLatestAdvancedScan(userId, deviceId);
+        results.repair = await fetchLatestRepairScan(userId, deviceId);
+        results.ai = await fetchLatestAIConclusion(userId, deviceId);
+    } catch (e) {
+        console.warn('[fetchAllScanResultsFromSupabase] Error:', e);
+    }
+    return results;
+}
