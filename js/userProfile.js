@@ -120,7 +120,6 @@ async function handleAvatarUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     try {
-        // Compress image to max 150px, quality 0.7
         const compressedDataUrl = await compressImage(file, 150, 150, 0.7);
         document.getElementById('profileAvatarImg').src = compressedDataUrl;
         avatarFile = compressedDataUrl;
@@ -184,7 +183,7 @@ async function saveProfile(userId) {
     }
 
     const updateData = {
-        name: name, // explicitly set
+        name: name,
         email: email,
     };
     if (avatar && avatar.startsWith('data:image')) {
@@ -202,16 +201,32 @@ async function saveProfile(userId) {
         const result = await saveUserProfile(updateData, userId);
         console.log('✅ Save result:', result);
 
-        // Update localStorage with the new data
+        // ---- UPDATE LOCALSTORAGE WITH NEW DATA ----
         const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
-        storedUser.name = result?.name || name;
-        storedUser.avatar_url = result?.avatar_url || updateData.avatar_url;
+        storedUser.name = name;
+        storedUser.avatar_url = avatar;
         localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
 
-        // Update sidebar immediately
-        updateSidebarUser(storedUser);
+        // ---- FORCE SIDEBAR UPDATE IMMEDIATELY ----
+        // Directly update the sidebar DOM elements
+        const avatarEl = document.getElementById('userAvatar');
+        const emailEl = document.getElementById('userEmailDisplay');
+        if (avatarEl) {
+            if (avatar && avatar.startsWith('data:image')) {
+                avatarEl.style.backgroundImage = `url(${avatar})`;
+                avatarEl.style.backgroundSize = 'cover';
+                avatarEl.style.backgroundPosition = 'center';
+                avatarEl.textContent = '';
+            } else {
+                avatarEl.style.background = 'linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%)';
+                avatarEl.textContent = (name || email || 'U')[0].toUpperCase();
+            }
+        }
+        if (emailEl) {
+            emailEl.textContent = name || email || 'User';
+        }
 
-        // Re-fetch and re-render the profile page
+        // Re-fetch and re-render the profile page (to reflect the saved data)
         const freshProfile = await fetchProfileFromDB();
         if (freshProfile) {
             const updatedUser = {
@@ -228,7 +243,7 @@ async function saveProfile(userId) {
                 id: userId,
                 email: email,
                 name: name,
-                avatar_url: updateData.avatar_url || '',
+                avatar_url: avatar,
                 confirmed: storedUser.confirmed || false,
             };
             renderProfileUI(updatedUser);
@@ -259,7 +274,6 @@ function updateSidebarUser(user) {
     }
     if (emailEl) {
         emailEl.textContent = user.name || user.email || 'User';
-        console.log('📧 Sidebar email set to:', emailEl.textContent);
     }
 }
 
