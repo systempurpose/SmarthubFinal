@@ -19,6 +19,8 @@ import WebSocket from 'ws';
 import largeFilesRoutes from './routes/largeFilesRoutes';
 import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
+import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 // In server.ts
 const { getAIKey } = require('./decrypt-ai-key.js');
@@ -719,6 +721,127 @@ app.post('/api/uninstall-package', async (req, res) => {
         res.status(500).json({ error: String(err) });
     }
 });
+
+
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // or use SMTP with host/port
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+// ---- Helper: generate 6-digit code ----
+function generateVerificationCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ---- Endpoint: send verification code ----
+app.post('/api/send-verification', async (req, res) => {
+    const { email } = req.body;
+
+    // Type-safe validation
+    if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Valid email required' });
+    }
+
+    const code = generateVerificationCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_ANON_KEY!
+    );
+
+    const { error } = await supabase
+        .from('user_account')
+        .update({
+            verification_code: code,
+            code_expiry: expiry.toISOString(),
+        })
+        .eq('email', email);
+
+    if (error) {
+        console.error('Failed to store code:', error);
+        return res.status(500).json({ error: 'Failed to generate code' });
+    }
+
+    try {
+        await transporter.sendMail({
+            from: '"SmartHub" <noreply@smarthub.com>',
+            to: email,
+            subject: 'Verify your SmartHub account',
+            html: `
+                <h2>Welcome to SmartHub!</h2>
+                <p>Your verification code is:</p>
+                <h1 style="font-size:32px;letter-spacing:4px;background:#f0f0f0;display:inline-block;padding:10px 20px;">${code}</h1>
+                <p>This code expires in 15 minutes.</p>
+                <p>If you didn't request this, please ignore.</p>
+            `,
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Email send failed:', err);
+        res.status(500).json({ error: 'Failed to send email' });
+    }
+});
+
+// ---- Endpoint: verify email code ----
+app.post('/api/verify-email', async (req, res) => {
+    const { email, code } = req.body;
+
+    if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Email required' });
+    }
+    if (!code || typeof code !== 'string' || code.length !== 6) {
+        return res.status(400).json({ error: 'Valid 6-digit code required' });
+    }
+
+    const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_ANON_KEY!
+    );
+
+    const { data, error } = await supabase
+        .from('user_account')
+        .select('verification_code, code_expiry, confirmed')
+        .eq('email', email)
+        .single();
+
+    if (error || !data) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check expiry
+    const now = new Date();
+    const expiry = new Date(data.code_expiry);
+    if (now > expiry) {
+        return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+
+    if (data.verification_code !== code) {
+        return res.status(400).json({ error: 'Invalid code.' });
+    }
+
+    // Mark as confirmed
+    const { error: updateErr } = await supabase
+        .from('user_account')
+        .update({
+            confirmed: true,
+            verification_code: null,
+            code_expiry: null,
+        })
+        .eq('email', email);
+
+    if (updateErr) {
+        console.error('Failed to confirm:', updateErr);
+        return res.status(500).json({ error: 'Failed to verify' });
+    }
+
+    res.json({ success: true });
+});
+
 
 app.post('/read-only', (req: Request, res: Response) => {
   const next = !!(req.body && (req.body as any).enabled);

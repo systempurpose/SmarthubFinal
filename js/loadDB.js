@@ -1,4 +1,4 @@
-// js/loadDB.js (excerpt – full function)
+// js/loadDB.js
 async function loadSavedScanResults() {
     try {
         const { getCurrentUserId, getCurrentDeviceId } = await import('./sb-utils.js');
@@ -8,11 +8,31 @@ async function loadSavedScanResults() {
             fetchLatestHardwareScan,
             fetchLatestAdvancedScan,
             fetchLatestConnectionScan,
-            fetchLatestRepairScan
+            fetchLatestRepairScan,
+            fetchUserProfile  // ADD THIS
         } = await import('./sb-loader.js');
 
         const userId = getCurrentUserId();
         const deviceId = getCurrentDeviceId() || window.currentDeviceId;
+
+        // ---- Load User Profile (NEW) ----
+        if (userId) {
+            try {
+                const profile = await fetchUserProfile(userId);
+                if (profile) {
+                    // Update sidebar with name/avatar
+                    if (typeof window.updateSidebarUser === 'function') {
+                        window.updateSidebarUser(profile);
+                    }
+                    // Render a profile summary card on dashboard (optional)
+                    if (typeof renderProfileSummary === 'function') {
+                        renderProfileSummary(profile);
+                    }
+                }
+            } catch (e) {
+                console.warn('[loadSavedScanResults] Failed to fetch user profile:', e);
+            }
+        }
 
         // ---- App Scan ----
         let appResults = null;
@@ -98,4 +118,31 @@ async function loadSavedScanResults() {
         console.warn('[loadSavedScanResults] Failed to load from Supabase, using localStorage only:', err);
         // Fallback to localStorage for all modules (already handled above)
     }
+}
+
+// ---- Optional: Render a profile summary card on the dashboard ----
+function renderProfileSummary(profile) {
+    const container = document.getElementById('profileSummary');
+    if (!container) return;
+    if (!profile) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'block';
+    const name = profile.name || profile.email || 'User';
+    const avatar = profile.avatar_url || '';
+    const confirmed = profile.confirmed || false;
+    container.innerHTML = `
+        <div class="card" style="border-left: 4px solid ${confirmed ? '#16a34a' : '#f59e0b'}; margin-bottom: 16px;">
+            <div class="card-title" style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; border-radius:50%; overflow:hidden; background:#e2e8f0; display:flex; align-items:center; justify-content:center;">
+                    ${avatar ? `<img src="${avatar}" style="width:100%; height:100%; object-fit:cover;">` : `<span style="font-size:20px; font-weight:600; color:#64748b;">${name.charAt(0).toUpperCase()}</span>`}
+                </div>
+                <span><strong>${name}</strong> ${confirmed ? '✅' : '⚠️'}</span>
+                <span style="font-size:12px; color:#6b7280; margin-left:auto;">
+                    ${confirmed ? 'Email confirmed' : 'Email not confirmed'}
+                </span>
+            </div>
+        </div>
+    `;
 }

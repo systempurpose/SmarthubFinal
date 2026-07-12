@@ -1221,6 +1221,16 @@
 // Ghost Touch
 'adv.test.ghostTouch.message.none': 'Walang ghost touch',
 'adv.test.ghostTouch.message.possible': 'Posibleng ghost touch',
-'adv.test.ghostTouch.events': 'mga pangyayari',    
+'adv.test.ghostTouch.events': 'mga pangyayari',  
+
+'profile.title': 'Profile ng User',
+'profile.back': 'Bumalik',
+'profile.save': 'I-save ang Profile',
+'profile.email': 'Email',
+'profile.name': 'Buong Pangalan',
+'profile.confirmed': 'Kinumpirma ang Email',
+'profile.notConfirmed': 'Hindi pa nakumpirma ang Email',
+'profile.resend': 'Ipadala muli ang Kumpirmasyon',
+'profile.avatar': 'Avatar',  
 };
 })();

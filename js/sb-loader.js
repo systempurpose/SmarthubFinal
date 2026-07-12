@@ -2,9 +2,30 @@
 import { getSupabaseClient } from './supabase.js';
 import { getCurrentUserId, getCurrentDeviceId, decryptAndDecompress } from './sb-utils.js';
 
-/**
- * Fetch the latest app scan result for the given user and device.
- */
+// ---- User Profile ----
+export async function fetchUserProfile(userId) {
+    // If userId not provided, get current user
+    const finalUserId = userId || getCurrentUserId();
+    if (!finalUserId) {
+        console.warn('No user ID provided for profile fetch.');
+        return null;
+    }
+
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+        .from('user_account')
+        .select('id, email, name, avatar_url, confirmed, created_at, updated_at')
+        .eq('id', finalUserId)
+        .single();
+
+    if (error) {
+        console.warn('Failed to fetch user profile from Supabase:', error);
+        return null;
+    }
+    return data;
+}
+
+// ---- App Scan ----
 export async function fetchLatestAppScan(userId, deviceId) {
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase
@@ -108,6 +129,8 @@ export async function fetchAllScanResultsFromSupabase() {
         results.advanced = await fetchLatestAdvancedScan(userId, deviceId);
         results.repair = await fetchLatestRepairScan(userId, deviceId);
         results.ai = await fetchLatestAIConclusion(userId, deviceId);
+        // Include user profile if needed
+        results.profile = await fetchUserProfile(userId);
     } catch (e) {
         console.warn('[fetchAllScanResultsFromSupabase] Error:', e);
     }

@@ -395,6 +395,7 @@ const BACKEND_URL = (() => {
 })();
 window.BACKEND_URL = BACKEND_URL;   // ← ADD THIS LINE
 
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
     const controller = new AbortController();
     let timedOut = false;
@@ -416,7 +417,22 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
         clearTimeout(timeoutId);
     }
 }
-
+// ---- Global navigation helper ----
+// ---- Global navigation helper ----
+window.navigateTo = function(page) {
+    // Find the nav item and click it to trigger full navigation
+    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navItem) {
+        navItem.click();
+    } else {
+        // Fallback: directly render the page (requires renderPage function)
+        if (typeof window.renderPage === 'function') {
+            window.renderPage(page);
+        } else {
+            console.warn('No navigation target for page:', page);
+        }
+    }
+};
 function showLoading() {
     const overlay = document.getElementById('loadingOverlay');
     if (overlay) {
@@ -1552,7 +1568,95 @@ function saveStorageResults(results) {
         localStorage.removeItem('smartHubStorageResults');
     }
 }
+// ---- Profile page renderer ----
+// ---- Global navigation helper ----
+// ---- Global navigation helper ----
+window.navigateTo = function(page) {
+    if (page === 'profile') {
+        if (typeof window.renderProfilePage === 'function') {
+            window.renderProfilePage();
+        } else {
+            console.error('renderProfilePage not defined');
+            alert('Profile page not available.');
+        }
+        return;
+    }
+    // For other pages...
+    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navItem) {
+        navItem.click();
+    } else {
+        console.warn('No navigation target for page:', page);
+    }
+};
+// ---- Profile page renderer ----
+// ---- Render profile page ----
+// ---- Render profile page ----
+// ---- Render profile page ----
+// ---- Render profile page ----
+async function renderProfilePage() {
+    // 1. Ensure the profile module is loaded
+    if (typeof window.renderProfilePageContent !== 'function') {
+        console.log('[Profile] Module not loaded – importing dynamically...');
+        try {
+            // ✅ Use absolute path to avoid double /js/
+            await import('/js/userProfile.js');
+            if (typeof window.renderProfilePageContent !== 'function') {
+                throw new Error('Profile module did not define renderProfilePageContent');
+            }
+        } catch (err) {
+            console.error('[Profile] Failed to load module:', err);
+            document.getElementById('pageContent').innerHTML = `
+                <div class="card" style="text-align:center;padding:40px;">
+                    <p>❌ Profile module failed to load. Please refresh the app.</p>
+                    <button onclick="location.reload()" class="btn-secondary">Reload</button>
+                </div>
+            `;
+            return;
+        }
+    }
 
+    // 2. Get user
+    let user = null;
+    try {
+        const supabase = await getSupabaseClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) user = session.user;
+    } catch(e) {}
+    if (!user) {
+        const stored = localStorage.getItem('smarthub.user');
+        if (stored) {
+            try { user = JSON.parse(stored); } catch(e) {}
+        }
+    }
+
+    if (!user) {
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card" style="text-align:center;padding:40px;">
+                <p>Please log in to view your profile.</p>
+                <button onclick="document.getElementById('loginBtn').click()" class="btn-primary">Login</button>
+            </div>
+        `;
+        return;
+    }
+
+    // 4. Render the profile
+    if (typeof window.renderProfilePageContent === 'function') {
+        window.renderProfilePageContent(user);
+    } else {
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card" style="text-align:center;padding:40px;">
+                <p>Profile module still not available. Please refresh.</p>
+                <button onclick="location.reload()" class="btn-secondary">Reload</button>
+            </div>
+        `;
+    }
+}
+// Expose globally
+window.renderProfilePage = renderProfilePage;
+
+// Make renderProfilePage globally available
+window.renderProfilePage = renderProfilePage;
 // ---- Hardware Test Results ----
 function saveHardwareResults(summary) {
     // merge with whatever is already stored, so a single-test run
@@ -4099,6 +4203,7 @@ function initNavigation() {
                 else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
                 else if (page === 'settings') await renderSettings();
+                else if (page === 'profile') await renderProfilePage();
                 else await renderDashboard();
 
                 // ---- 🆕 RE-APPLY THEME TO NEWLY RENDERED CONTENT ----

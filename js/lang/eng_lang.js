@@ -1331,5 +1331,15 @@
 'adv.test.ghostTouch.message.none': 'No ghost touch',
 'adv.test.ghostTouch.message.possible': 'Possible ghost touch',
 'adv.test.ghostTouch.events': 'events',
+
+'profile.title': 'User Profile',
+'profile.back': 'Back',
+'profile.save': 'Save Profile',
+'profile.email': 'Email',
+'profile.name': 'Full Name',
+'profile.confirmed': 'Email confirmed',
+'profile.notConfirmed': 'Email not confirmed',
+'profile.resend': 'Resend Confirmation',
+'profile.avatar': 'Avatar',
     };
 })();
