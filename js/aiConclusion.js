@@ -1,5 +1,7 @@
 // js/aiConclusion.js
-// No translation – displays the original conclusion as‑is.
+// Displays AI conclusion with optional on-the-fly translation.
+
+import { translateConclusionLocal, translateTextLocal } from './localTranslator.js';
 
 // ---- Helpers ----
 function escapeHtml(str) {
@@ -45,8 +47,10 @@ function timeAgo(iso) {
     return t('ai.time.daysAgo', '{days} days ago').replace('{days}', days);
 }
 
+// ---- FIXED: handles non‑string inputs to prevent 'text.trim is not a function' ----
 function cleanSummary(text) {
-    if (!text) return '';
+    if (text == null) return '';
+    if (typeof text !== 'string') text = String(text);
     let cleaned = text.trim();
     if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
         try {
@@ -188,6 +192,18 @@ async function renderAIConclusion() {
             }
         } catch (e) {
             console.warn('[AI] Supabase load failed, falling back to localStorage.', e);
+        }
+
+        if (!existingConclusion) {
+            try {
+                const stored = localStorage.getItem('smartHubAIConclusion');
+                if (stored) {
+                    existingConclusion = JSON.parse(stored);
+                    console.log('[AI] Loaded conclusion from localStorage fallback.');
+                }
+            } catch (e) {
+                console.warn('[AI] localStorage fallback failed:', e);
+            }
         }
 
         function addReportFromData(data, id, name, icon, summaryFn, timestampGetter) {
@@ -409,8 +425,19 @@ async function renderAIConclusion() {
 
     container.innerHTML = html;
 
-    // ---- Render conclusion (no translation) ----
-    function renderConclusion(c, userInput, selectedIds) {
+    // ---- Render conclusion WITH translation (async now) ----
+    async function renderConclusion(c, userInput, selectedIds, originalLang = window._activeLang || 'en') {
+        const safeConclusion = c || {};
+        const safeUserInput = userInput || '';
+        const safeSelectedIds = Array.isArray(selectedIds) ? selectedIds : [];
+
+        // Store raw data so a later language switch can re-translate without re-fetching.
+        window._aiRawConclusion = safeConclusion;
+        window._aiRawUserInput = safeUserInput;
+        window._aiRawSelectedIds = safeSelectedIds;
+        window._aiOriginalLang = originalLang;
+        window._aiRenderConclusionFn = renderConclusion;
+
         const resultContainer = document.getElementById('aiResultContainer');
         const resultCard = document.getElementById('aiResultCard');
         const resultContent = document.getElementById('aiResultContent');
@@ -419,18 +446,50 @@ async function renderAIConclusion() {
         const webSearchSection = document.getElementById('aiWebSearchSection');
 
         resultContainer.style.display = 'block';
+
+        let displayConclusion = safeConclusion;
+        let displayUserInput = safeUserInput;
+
+        const targetLang = window._activeLang || 'en';
+        const sourceLang = window._aiOriginalLang || 'en';
+
+        if (targetLang !== sourceLang) {
+            resultContent.innerHTML = `<div style="text-align:center; padding:24px; color:#6B7280;">⏳ ${t('ai.translating', 'Translating...')}</div>`;
+            try {
+                console.log(`[AI] Translating from ${sourceLang} to ${targetLang}...`);
+                const translationPromise = (async () => {
+                    const translatedConclusion = await translateConclusionLocal(safeConclusion, targetLang, sourceLang);
+                    const translatedUserInput = safeUserInput.trim()
+                        ? await translateTextLocal(safeUserInput, targetLang, sourceLang)
+                        : safeUserInput;
+                    return { translatedConclusion, translatedUserInput };
+                })();
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Translation timed out')), 10000)
+                );
+                const result = await Promise.race([translationPromise, timeoutPromise]);
+                displayConclusion = result?.translatedConclusion || safeConclusion;
+                displayUserInput = result?.translatedUserInput || safeUserInput;
+            } catch (e) {
+                console.warn('[AI] Translation failed or timed out, using original:', e?.message || e);
+                displayConclusion = safeConclusion;
+                displayUserInput = safeUserInput;
+            }
+        }
+
+        // ---- Build HTML (identical to your working version, just using displayConclusion/displayUserInput) ----
         let conclusionHtml = '';
 
         let sevColor = '#0d6efd', sevBg = '#eff6ff', sevLabel = null, confPercent = null;
-        if (c.confidence !== undefined && c.confidence !== null) {
-            confPercent = Math.round(c.confidence * 100);
+        if (displayConclusion.confidence !== undefined && displayConclusion.confidence !== null) {
+            confPercent = Math.round(displayConclusion.confidence * 100);
             if (confPercent >= 70) { sevColor = '#16a34a'; sevBg = '#f0fdf4'; sevLabel = t('ai.confidence.high', 'High confidence'); }
             else if (confPercent >= 40) { sevColor = '#d97706'; sevBg = '#fffbeb'; sevLabel = t('ai.confidence.moderate', 'Moderate confidence'); }
             else { sevColor = '#dc2626'; sevBg = '#fef2f2'; sevLabel = t('ai.confidence.low', 'Low confidence'); }
             resultCard.style.borderLeftColor = sevColor;
         }
 
-        const summary = c.humanSummary || c.likelyCause || t('ai.result.noCause', 'No clear cause identified.');
+        const summary = displayConclusion.humanSummary || displayConclusion.likelyCause || t('ai.result.noCause', 'No clear cause identified.');
         conclusionHtml += `
             <div style="margin-bottom: 16px; padding: 16px; background: ${sevBg}; border-radius: 10px; border-left: 4px solid ${sevColor}; display:flex; gap:14px; align-items:center;">
                 ${confPercent !== null ? confidenceRing(confPercent, sevColor) : ''}
@@ -441,13 +500,13 @@ async function renderAIConclusion() {
             </div>
         `;
 
-        // ---- Recommended Actions ----
-        if (c.actions && c.actions.length > 0) {
+        const actions = Array.isArray(displayConclusion.actions) ? displayConclusion.actions : [];
+        if (actions.length > 0) {
             conclusionHtml += `
                 <div style="margin-bottom: 12px;">
                     <div style="font-weight: 600; font-size: 15px; color: #1f2937;">🔧 ${t('ai.result.actionsLabel', 'Recommended Actions')}</div>
                     <ul style="margin: 8px 0 0 0; padding-left: 0; list-style: none; color: #374151;">
-                        ${c.actions.map((a) => `
+                        ${actions.map((a) => `
                             <li style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px;">
                                 <span style="display: inline-block; width: 6px; height: 6px; background: #0d6efd; border-radius: 50%; margin-top: 8px; flex-shrink: 0;"></span>
                                 <span>${renderRichText(a)}</span>
@@ -458,19 +517,17 @@ async function renderAIConclusion() {
             `;
         }
 
-        // ---- Next Step ----
-        if (c.nextStep) {
+        if (displayConclusion.nextStep) {
             conclusionHtml += `
                 <div style="margin-top: 12px; padding: 12px 16px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #22c55e;">
                     <span style="font-weight: 600;">📌 ${t('ai.result.nextStepLabel', 'Next Step')}</span>
-                    <span style="color: #374151;"> ${renderRichText(c.nextStep)}</span>
+                    <span style="color: #374151;"> ${renderRichText(displayConclusion.nextStep)}</span>
                 </div>
             `;
         }
 
-        // ---- Details ----
-        if (c.details && !looksLikeConclusionSchema(c.details)) {
-            const detailsStr = detailsToDisplayString(c.details);
+        if (displayConclusion.details && !looksLikeConclusionSchema(displayConclusion.details)) {
+            const detailsStr = detailsToDisplayString(displayConclusion.details);
             if (detailsStr) {
                 conclusionHtml += `
                     <details style="margin-top: 12px; background: #f1f5f9; border-radius: 8px; padding: 10px 16px;">
@@ -481,28 +538,28 @@ async function renderAIConclusion() {
             }
         }
 
-        // ---- User Input ----
-        if (userInput) {
+        if (displayUserInput) {
             conclusionHtml += `
                 <div style="margin-top: 12px; padding: 12px 16px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
                     <div style="font-weight: 600; font-size: 14px; color: #92400e;">📝 ${t('ai.result.userInputLabel', 'Your Input')}</div>
-                    <div style="margin-top: 4px; color: #78350f; font-size: 13px;">${escapeHtml(userInput)}</div>
+                    <div style="margin-top: 4px; color: #78350f; font-size: 13px;">${escapeHtml(displayUserInput)}</div>
                 </div>
             `;
         }
 
-        // ---- Included reports chips ----
-        if (selectedIds && selectedIds.length) {
-            const includedChips = selectedIds.map(id => {
+        if (safeSelectedIds.length > 0) {
+            const includedChips = safeSelectedIds.map(id => {
                 const found = availableReports.find(r => r.id === id);
                 return found ? `<span style="display:inline-flex; align-items:center; gap:4px; background:#eef2ff; color:#4338ca; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; margin:2px 4px 2px 0;">${found.icon} ${escapeHtml(found.name)}</span>` : '';
-            }).join('');
-            conclusionHtml += `
-                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
-                    <div style="margin-bottom:6px;">${t('ai.result.includedReports', 'Included reports:')}</div>
-                    <div>${includedChips}</div>
-                </div>
-            `;
+            }).filter(Boolean).join('');
+            if (includedChips) {
+                conclusionHtml += `
+                    <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af;">
+                        <div style="margin-bottom:6px;">${t('ai.result.includedReports', 'Included reports:')}</div>
+                        <div>${includedChips}</div>
+                    </div>
+                `;
+            }
         }
 
         resultContent.innerHTML = conclusionHtml;
@@ -525,7 +582,10 @@ async function renderAIConclusion() {
         const c = normalizeConclusion(existingConclusion);
         const userInput = existingConclusion.user_input || '';
         const selectedIds = existingConclusion.selected_reports || [];
-        renderConclusion(c, userInput, selectedIds);
+        const originalLang = existingConclusion.lang || 'en';
+        renderConclusion(c, userInput, selectedIds, originalLang).catch(err =>
+            console.warn('[AI] renderConclusion error:', err)
+        );
     }
 
     // ---- Toggle report card selection ----
@@ -549,20 +609,17 @@ async function renderAIConclusion() {
         const hint = document.getElementById('runAIConclusionHint');
         if (!btn) return;
         const count = document.querySelectorAll('.report-card[aria-checked="true"]').length;
-        const total = availableReports.length;
         if (count === 0) {
             label.textContent = t('ai.analyzeButton.none', 'Select reports');
             btn.style.opacity = '0.5';
             btn.style.pointerEvents = 'none';
             hint.textContent = t('ai.analyzeButton.noneHint', 'Select at least one report');
         } else {
-            const labelText = t('ai.analyzeButton.some', 'Analyze {count} reports')
-                .replace(/\{count\}/g, count);
+            const labelText = t('ai.analyzeButton.some', 'Analyze {count} reports').replace(/\{count\}/g, count);
             label.textContent = labelText;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
-            const hintText = t('ai.analyzeButton.someHint', '{count} reports selected for analysis')
-                .replace(/\{count\}/g, count);
+            const hintText = t('ai.analyzeButton.someHint', '{count} reports selected for analysis').replace(/\{count\}/g, count);
             hint.textContent = hintText;
         }
     }
@@ -663,9 +720,8 @@ async function renderAIConclusion() {
 
                 if (data.ok && data.conclusion) {
                     const c = normalizeConclusion(data.conclusion);
-                    renderConclusion(c, userInput, selectedIds);
+                    await renderConclusion(c, userInput, selectedIds, lang);
 
-                    // ---- Web search ----
                     if (data.searchQuery || (data.searchResults && data.searchResults.length > 0)) {
                         let searchHtml = `
                             <div style="font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 6px;">🔎 Web Search</div>
@@ -698,7 +754,6 @@ async function renderAIConclusion() {
                         if (ws) ws.style.display = 'none';
                     }
 
-                    // ---- Save to Supabase (original language only) ----
                     try {
                         const { saveAIConclusion } = await import('./aiConclusion_sb.js');
                         await saveAIConclusion({
@@ -712,8 +767,9 @@ async function renderAIConclusion() {
                             lang: lang,
                         });
                         console.log('[AI] Conclusion saved to Supabase');
+                        localStorage.setItem('smartHubAIConclusion', JSON.stringify(c));
                     } catch (saveErr) {
-                        console.warn('[AI] Could not save conclusion to Supabase:', saveErr);
+                        console.warn('[AI] Could not save conclusion:', saveErr);
                     }
 
                 } else {
@@ -742,6 +798,33 @@ async function renderAIConclusion() {
                 runBtn.style.opacity = '1';
             }
         });
+    }
+
+    // ---- Re-render on language change ----
+    if (!window._aiLangHookInstalled) {
+        window._aiLangHookInstalled = true;
+        const originalApplyLanguage = window.applyLanguage;
+        window.applyLanguage = function(lang) {
+            if (typeof originalApplyLanguage === 'function') {
+                originalApplyLanguage(lang);
+            }
+            window._activeLang = lang;
+
+            if (document.getElementById('pageContent') &&
+                (document.getElementById('aiResultContainer') || document.querySelector('.report-card'))) {
+                console.log('[AI] Language changed to', lang);
+                if (window._aiRenderConclusionFn && window._aiRawConclusion) {
+                    window._aiRenderConclusionFn(
+                        window._aiRawConclusion,
+                        window._aiRawUserInput,
+                        window._aiRawSelectedIds,
+                        window._aiOriginalLang
+                    ).catch(err => console.warn('[AI] Language switch render error:', err));
+                } else {
+                    renderAIConclusion();
+                }
+            }
+        };
     }
 
     // ---- Auto-select all reports ----

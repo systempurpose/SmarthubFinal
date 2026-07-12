@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import express, { Request, Response } from 'express';
+import express, {Router, Request, Response } from 'express';
 import cors from 'cors';
 import fs from 'node:fs/promises';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -637,48 +637,52 @@ app.post('/ai-adb-conclude', async (req: Request, res: Response) => {
         // 2. Perform web search to enrich the context
         const searchContext = await searchAndEnrich(userInput, selectedReports, reports);
 
-        // 3. Build the final prompt for Mistral, including search context
-        const userPrompt = `Selected reports: ${selectedReports.join(', ')}.\n` +
-                           `User symptoms: ${userInput || 'None provided.'}\n` +
-                           `Scan data: ${JSON.stringify(reports, null, 2).substring(0, 1000)}\n\n` +
-                           (searchContext.context ? `\n${searchContext.context}\n` : '') +
-                           `Based on the above information (including the web search), provide a diagnostic conclusion. Return JSON only.`;
+        // 3. Build the final prompt (improved with summary fallback)
+        let userPrompt = `Selected diagnostic reports: ${selectedReports.join(', ')}.\n`;
+        if (userInput) userPrompt += `User symptoms/notes: ${userInput}\n`;
+        userPrompt += `\nScan data (summarised):\n`;
+        for (const [key, data] of Object.entries(reports)) {
+            if (!data) continue;
+            const summary = (data as any).summary || JSON.stringify(data).substring(0, 500);
+            userPrompt += `Report "${key}": ${summary}\n`;
+        }
+        if (searchContext.context) {
+            userPrompt += `\nWeb search results for similar issues:\n${searchContext.context}\n`;
+        }
+        userPrompt += `\nBased on the above information, provide a diagnostic conclusion. Return JSON only.`;
 
-        // 4. Call Mistral
+        // 4. Call Mistral with the correct parameter name
         const conclusion = await callMistralAI({
             apiKey,
             model: aiModel,
-            userInput: userPrompt,   // override with enriched prompt
-            reports,                 // still pass reports for reference
+            userInput: userPrompt,   // ← THIS IS THE KEY FIX
+            reports,
             selectedReports,
             lang: lang || 'en'
         });
 
-        // 5. (Optional) Save to Supabase
-        // ...
-
-        // 6. Return result
+        // 5. Return result (with safe fallback if conclusion is malformed)
         res.json({
             ok: true,
             conclusion: {
-                humanSummary: conclusion.humanSummary,
-                likelyCause: conclusion.likelyCause,
-                confidence: conclusion.confidence,
-                actions: conclusion.actions,
-                nextStep: conclusion.nextStep,
-                details: conclusion.details
+                humanSummary: conclusion.humanSummary || 'No clear conclusion.',
+                likelyCause: conclusion.likelyCause || '',
+                confidence: conclusion.confidence ?? 0.5,
+                actions: Array.isArray(conclusion.actions) ? conclusion.actions : [],
+                nextStep: conclusion.nextStep || '',
+                details: conclusion.details || ''
             },
-            // Include search query used (for debugging)
             searchQuery: searchContext.query,
             searchResults: searchContext.results
         });
-
     } catch (err) {
-        const errorMsg = getErrorMessage(err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
         console.error('[AI] Error:', errorMsg);
         res.status(500).json({ error: errorMsg });
     }
 });
+
+
 
 app.post('/api/adb-forward', async (req, res) => {
   const { deviceId } = req.body;
