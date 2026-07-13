@@ -131,7 +131,7 @@ async function encryptSecret(plaintext, passphrase) {
  * Encrypt a blob (video file) using AES‑GCM.
  * Returns an encrypted blob.
  */
-export async function encryptBlob(blob, passphrase) {
+async function encryptBlob(blob, passphrase) {
     // Read blob as ArrayBuffer
     const arrayBuffer = await blob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
@@ -147,7 +147,7 @@ export async function encryptBlob(blob, passphrase) {
  * Decrypt a blob (video file) using AES‑GCM.
  * Returns a decrypted blob ready for playback.
  */
-export async function decryptBlob(blob, passphrase) {
+async function decryptBlob(blob, passphrase) {
     const text = await blob.text();
     // Decrypt the string
     const decryptedBase64 = await decryptSecret(text, passphrase);

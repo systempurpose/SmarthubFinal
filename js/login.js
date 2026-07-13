@@ -1,7 +1,7 @@
 // js/login.js
 import { saveAccount, loadAccount } from './account-storage.js';
 import { showVerificationModal, sendVerificationCode } from './emailVerification.js';
-import { getSupabaseClient } from './supabase.js';
+import { getSupabaseClient, decryptSecret, getPassphrase } from './supabase.js';
 import { sha256 } from './auth.js'; // assuming auth.js exports sha256
 
 let register, login, userExists;
@@ -154,9 +154,27 @@ async function getRecaptchaToken() {
     });
 }
 
-// ---- Send Code Handler (step 1) – NO CAPTCHA ----
-// ---- Send Code Handler (step 1) – Creates account + sends code ----
-// ---- Send Code Handler (step 1) – ONLY sends code, NO account creation ----
+// ---- NEW: Verify password against Supabase ----
+async function verifyPasswordWithSupabase(email, plainPassword) {
+    const supabase = await getSupabaseClient();
+    const emailHash = await sha256(email);
+    const { data, error } = await supabase
+        .from('user_account')
+        .select('password')
+        .eq('email_hash', emailHash)
+        .maybeSingle();
+    if (error || !data) {
+        throw new Error('User not found.');
+    }
+    const encrypted = data.password;
+    const passphrase = getPassphrase();
+    const decrypted = await decryptSecret(encrypted, passphrase);
+    if (decrypted !== plainPassword) {
+        throw new Error('Invalid password.');
+    }
+    return true;
+}
+
 // ---- Send Code Handler (step 1) – ONLY sends code ----
 export async function handleSendCode(email, password, confirmPassword) {
     const emailInput = document.getElementById('registerEmail');
@@ -234,8 +252,6 @@ export async function handleSendCode(email, password, confirmPassword) {
     }
 }
 
-// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
-// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
 // ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
 export async function handleRegister(email, password) {
     // Use stored email/password if not provided
@@ -339,18 +355,18 @@ export async function handleRegister(email, password) {
     return true;
 }
 
-// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA ----
-// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA ----
-
-
-// ---- Login Handler (checks confirmation) ----
+// ---- UPDATED Login Handler (checks confirmation AND verifies password against Supabase) ----
 export async function handleLogin(email, password) {
     if (authLoadError) {
         showError('loginError', 'Login system failed to load. Check the console for details.');
         return null;
     }
     try {
+        // 1. Try the auth.js login (it may also do some checks)
         let user = await login(email, password);
+        // 2. Double‑check password with Supabase (this catches wrong passwords)
+        await verifyPasswordWithSupabase(email, password);
+        // 3. Fetch full profile (name, avatar, etc.)
         user = await fetchUserProfile(user);
 
         if (!user.confirmed) {
@@ -540,142 +556,143 @@ export async function initAuthForms() {
 
     // Send Code button
     const sendCodeBtn = document.getElementById('sendCodeBtn');
-if (sendCodeBtn) {
-    sendCodeBtn.addEventListener('click', async (e) => {
+    if (sendCodeBtn) {
+        sendCodeBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('registerConfirmPassword').value;
+            await handleSendCode(email, password, confirmPassword);
+        });
+    }
+
+    // ---- Forgot Password Flow ----
+    let resetEmail = '';
+    let resetCode = '';
+
+    // Open reset modal
+    document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        const email = document.getElementById('registerEmail').value.trim();
-        const password = document.getElementById('registerPassword').value;
-        const confirmPassword = document.getElementById('registerConfirmPassword').value;
-        await handleSendCode(email, password, confirmPassword);
+        closeModal(loginModal);
+        document.getElementById('resetPasswordModal').style.display = 'flex';
+        // Reset UI
+        document.getElementById('resetStep1').style.display = 'block';
+        document.getElementById('resetStep2').style.display = 'none';
+        document.getElementById('resetStep3').style.display = 'none';
+        document.getElementById('resetEmail').value = '';
+        document.getElementById('resetCode').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmNewPassword').value = '';
     });
-}
-// ---- Forgot Password Flow ----
-let resetEmail = '';
-let resetCode = '';
 
-// Open reset modal
-document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    closeModal(loginModal);
-    document.getElementById('resetPasswordModal').style.display = 'flex';
-    // Reset UI
-    document.getElementById('resetStep1').style.display = 'block';
-    document.getElementById('resetStep2').style.display = 'none';
-    document.getElementById('resetStep3').style.display = 'none';
-    document.getElementById('resetEmail').value = '';
-    document.getElementById('resetCode').value = '';
-    document.getElementById('newPassword').value = '';
-    document.getElementById('confirmNewPassword').value = '';
-});
+    // Close reset modal
+    document.getElementById('resetPasswordModalClose')?.addEventListener('click', () => {
+        document.getElementById('resetPasswordModal').style.display = 'none';
+    });
 
-// Close reset modal
-document.getElementById('resetPasswordModalClose')?.addEventListener('click', () => {
-    document.getElementById('resetPasswordModal').style.display = 'none';
-});
-
-// Send Reset Code
-document.getElementById('sendResetCodeBtn')?.addEventListener('click', async () => {
-    const email = document.getElementById('resetEmail').value.trim();
-    const errorEl = document.getElementById('resetEmailError');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        errorEl.textContent = 'Please enter a valid email.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    errorEl.style.display = 'none';
-
-    const btn = document.getElementById('sendResetCodeBtn');
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
-
-    try {
-        const response = await fetch('/api/request-password-reset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email }),
-        });
-        const data = await response.json();
-        if (data.success) {
-            document.getElementById('resetCodeSentMsg').style.display = 'block';
-            resetEmail = email;
-            // Go to step 2
-            document.getElementById('resetStep1').style.display = 'none';
-            document.getElementById('resetStep2').style.display = 'block';
-        } else {
-            document.getElementById('resetSendError').textContent = data.error || 'Failed to send code.';
-            document.getElementById('resetSendError').style.display = 'block';
-        }
-    } catch (err) {
-        document.getElementById('resetSendError').textContent = 'Error: ' + err.message;
-        document.getElementById('resetSendError').style.display = 'block';
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Send Reset Code';
-    }
-});
-
-// Verify Reset Code
-// ---- Step 2 → Step 3: Verify code (frontend-only check) ----
-document.getElementById('verifyResetCodeBtn')?.addEventListener('click', () => {
-    const code = document.getElementById('resetCode').value.trim();
-    const errorEl = document.getElementById('resetCodeError');
-    if (!code || code.length !== 6) {
-        errorEl.textContent = 'Please enter the 6-digit code.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    errorEl.style.display = 'none';
-    // Store the code and move to step 3 (no backend call)
-    resetCode = code;
-    document.getElementById('resetStep2').style.display = 'none';
-    document.getElementById('resetStep3').style.display = 'block';
-});
-
-// Reset Password
-document.getElementById('resetPasswordBtn')?.addEventListener('click', async () => {
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
-    const errorEl = document.getElementById('resetPasswordError');
-
-    if (!newPassword || newPassword.length < 6) {
-        errorEl.textContent = 'Password must be at least 6 characters.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    if (newPassword !== confirmNewPassword) {
-        errorEl.textContent = 'Passwords do not match.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    errorEl.style.display = 'none';
-
-    const btn = document.getElementById('resetPasswordBtn');
-    btn.disabled = true;
-    btn.textContent = 'Resetting...';
-
-    try {
-        const response = await fetch('/api/reset-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: resetEmail, code: resetCode, newPassword }),
-        });
-        const data = await response.json();
-        if (data.success) {
-            toast('✅ Password reset successfully! You can now login.', 'success');
-            document.getElementById('resetPasswordModal').style.display = 'none';
-            openModal(loginModal);
-        } else {
-            errorEl.textContent = data.error || 'Failed to reset password.';
+    // Send Reset Code
+    document.getElementById('sendResetCodeBtn')?.addEventListener('click', async () => {
+        const email = document.getElementById('resetEmail').value.trim();
+        const errorEl = document.getElementById('resetEmailError');
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            errorEl.textContent = 'Please enter a valid email.';
             errorEl.style.display = 'block';
+            return;
         }
-    } catch (err) {
-        errorEl.textContent = 'Error: ' + err.message;
-        errorEl.style.display = 'block';
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Reset Password';
-    }
-});
+        errorEl.style.display = 'none';
+
+        const btn = document.getElementById('sendResetCodeBtn');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        try {
+            const response = await fetch('/api/request-password-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('resetCodeSentMsg').style.display = 'block';
+                resetEmail = email;
+                // Go to step 2
+                document.getElementById('resetStep1').style.display = 'none';
+                document.getElementById('resetStep2').style.display = 'block';
+            } else {
+                document.getElementById('resetSendError').textContent = data.error || 'Failed to send code.';
+                document.getElementById('resetSendError').style.display = 'block';
+            }
+        } catch (err) {
+            document.getElementById('resetSendError').textContent = 'Error: ' + err.message;
+            document.getElementById('resetSendError').style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Send Reset Code';
+        }
+    });
+
+    // Verify Reset Code
+    document.getElementById('verifyResetCodeBtn')?.addEventListener('click', () => {
+        const code = document.getElementById('resetCode').value.trim();
+        const errorEl = document.getElementById('resetCodeError');
+        if (!code || code.length !== 6) {
+            errorEl.textContent = 'Please enter the 6-digit code.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        errorEl.style.display = 'none';
+        // Store the code and move to step 3 (no backend call)
+        resetCode = code;
+        document.getElementById('resetStep2').style.display = 'none';
+        document.getElementById('resetStep3').style.display = 'block';
+    });
+
+    // Reset Password
+    document.getElementById('resetPasswordBtn')?.addEventListener('click', async () => {
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+        const errorEl = document.getElementById('resetPasswordError');
+
+        if (!newPassword || newPassword.length < 6) {
+            errorEl.textContent = 'Password must be at least 6 characters.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        if (newPassword !== confirmNewPassword) {
+            errorEl.textContent = 'Passwords do not match.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        errorEl.style.display = 'none';
+
+        const btn = document.getElementById('resetPasswordBtn');
+        btn.disabled = true;
+        btn.textContent = 'Resetting...';
+
+        try {
+            const response = await fetch('/api/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: resetEmail, code: resetCode, newPassword }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                toast('✅ Password reset successfully! You can now login.', 'success');
+                document.getElementById('resetPasswordModal').style.display = 'none';
+                openModal(loginModal);
+            } else {
+                errorEl.textContent = data.error || 'Failed to reset password.';
+                errorEl.style.display = 'block';
+            }
+        } catch (err) {
+            errorEl.textContent = 'Error: ' + err.message;
+            errorEl.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Reset Password';
+        }
+    });
+
     // Switch between login/register
     const switchToRegister = document.getElementById('switchToRegister');
     if (switchToRegister) {

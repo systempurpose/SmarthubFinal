@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartHub – Home</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/home.css">
+    <link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+    <div id="pageContent"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "./": "./js/"
+            }
+        }
+    </script>
+    <script type="module">
+        import { renderHome } from './js/home.js';
+
+        // Render the homepage when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', renderHome);
+        } else {
+            renderHome();
+        }
+    </script>
+</body>
+</html>

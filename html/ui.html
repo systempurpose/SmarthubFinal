@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartHub – Android Diagnostic Tool</title>
     <link rel="stylesheet" href="../css/ui.css">
-    
+    <link rel="stylesheet" href="../css/home.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -127,6 +128,9 @@
                 <a href="#" class="nav-item active" data-page="dashboard">
                     <i class="fas fa-tachometer-alt"></i> <span data-i18n="nav.dashboard">Dashboard</span>
                 </a>
+                <a href="#" class="nav-item" data-page="home">
+                    <i class="fas fa-home"></i> <span data-i18n="nav.home">Home</span>
+                </a>
                 <a href="#" class="nav-item" data-page="hardware-tests">
                     <i class="fas fa-microscope"></i> <span data-i18n="nav.hardwareTests">Hardware Tests</span>
                 </a>
@@ -148,9 +152,6 @@
                 <a href="#" class="nav-item" data-page="ai-conclusion">
                     <i class="fas fa-robot"></i> <span data-i18n="nav.aiConclusion">AI Conclusion</span>
                 </a>
-                <a href="#" class="nav-item" data-page="repair-shorts">
-    <i class="fas fa-clipboard-list"></i> <span data-i18n="nav.repairShorts">Repair Shorts</span>
-</a>
                 <div style="flex:1;"></div>
                 <a href="#" class="nav-item" data-page="settings">
                     <i class="fas fa-cog"></i> <span data-i18n="nav.settings">Settings</span>
@@ -607,130 +608,56 @@
         });
     </script>
 
-    <!-- ===== FIX: Ensure navigateTo and profile fallback ===== -->
+    
+
+    <!-- ===== Login fallback ===== -->
     <script>
-        (function() {
-            if (typeof window.navigateTo !== 'function') {
-                console.log('[Fix] Defining window.navigateTo');
-                window.navigateTo = function(page) {
-                    if (page === 'profile') {
-                        if (typeof window.renderProfilePage === 'function') {
-                            window.renderProfilePage();
-                        } else {
-                            console.error('[Fix] renderProfilePage not defined');
-                            alert('Profile page not available. Please refresh.');
-                        }
-                        return;
-                    }
-                    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
-                    if (navItem) {
-                        navItem.click();
-                    } else {
-                        console.warn('[Fix] No nav item for page:', page);
-                    }
-                };
-            }
-
-            if (typeof window.renderProfilePage !== 'function') {
-                console.log('[Fix] Defining renderProfilePage fallback');
-                window.renderProfilePage = async function() {
-                    try {
-                        if (typeof window.renderProfilePageContent !== 'function') {
-                            await import('../js/userProfile.js');
-                        }
-                        const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
-                        if (!user) {
-                            document.getElementById('pageContent').innerHTML = `
-                                <div class="card" style="text-align:center;padding:40px;">
-                                    <p>Please log in to view your profile.</p>
-                                    <button onclick="document.getElementById('loginBtn').click()" class="btn-primary">Login</button>
-                                </div>`;
-                            return;
-                        }
-                        if (typeof window.renderProfilePageContent === 'function') {
-                            window.renderProfilePageContent(user);
-                        } else {
-                            throw new Error('renderProfilePageContent not available');
-                        }
-                    } catch (err) {
-                        console.error('[Fix] Profile render failed:', err);
-                        document.getElementById('pageContent').innerHTML = `
-                            <div class="card" style="text-align:center;padding:40px;">
-                                <p>❌ Profile page failed to load. Please refresh.</p>
-                                <button onclick="location.reload()" class="btn-secondary">Reload</button>
-                            </div>`;
-                    }
-                };
-            }
-
-            const userChip = document.getElementById('userInfo');
-            if (userChip) {
-                userChip.addEventListener('click', function(e) {
-                    if (e.target.closest('#logoutBtn')) return;
-                    if (!this.hasAttribute('hidden')) {
-                        console.log('[Fix] User chip clicked via safety listener');
-                        if (typeof window.navigateTo === 'function') {
-                            window.navigateTo('profile');
-                        } else {
-                            alert('Navigation not available.');
-                        }
-                    }
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginBtn = document.getElementById('loginBtn');
+            const loginModal = document.getElementById('loginModal');
+            if (loginBtn && loginModal) {
+                loginBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('[Fallback] Login button clicked');
+                    loginModal.style.display = 'flex';
                 });
-                console.log('[Fix] Safety click listener attached to #userInfo');
-            } else {
-                console.warn('[Fix] #userInfo not found for safety listener');
             }
-        })();
+            // Switch between login/register
+            const switchToRegister = document.getElementById('switchToRegister');
+            if (switchToRegister) {
+                switchToRegister.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const loginModal = document.getElementById('loginModal');
+                    const registerModal = document.getElementById('registerModal');
+                    if (loginModal) loginModal.style.display = 'none';
+                    if (registerModal) registerModal.style.display = 'flex';
+                });
+            }
+            const switchToLogin = document.getElementById('switchToLogin');
+            if (switchToLogin) {
+                switchToLogin.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const loginModal = document.getElementById('loginModal');
+                    const registerModal = document.getElementById('registerModal');
+                    if (registerModal) registerModal.style.display = 'none';
+                    if (loginModal) loginModal.style.display = 'flex';
+                });
+            }
+            // Close modals
+            document.querySelectorAll('.modal .close-button, #loginModalClose, #registerModalClose').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    if (modal) modal.style.display = 'none';
+                });
+            });
+            // Click outside to close
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === this) this.style.display = 'none';
+                });
+            });
+        });
     </script>
-    <script>
-    // ---- Fallback: ensure login button works even if login.js fails ----
-    document.addEventListener('DOMContentLoaded', function() {
-        const loginBtn = document.getElementById('loginBtn');
-        const loginModal = document.getElementById('loginModal');
-        if (loginBtn && loginModal) {
-            loginBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                console.log('[Fallback] Login button clicked');
-                loginModal.style.display = 'flex';
-            });
-        }
-        // Also handle the switch to register link
-        const switchToRegister = document.getElementById('switchToRegister');
-        if (switchToRegister) {
-            switchToRegister.addEventListener('click', function(e) {
-                e.preventDefault();
-                const loginModal = document.getElementById('loginModal');
-                const registerModal = document.getElementById('registerModal');
-                if (loginModal) loginModal.style.display = 'none';
-                if (registerModal) registerModal.style.display = 'flex';
-            });
-        }
-        // Handle register switch to login
-        const switchToLogin = document.getElementById('switchToLogin');
-        if (switchToLogin) {
-            switchToLogin.addEventListener('click', function(e) {
-                e.preventDefault();
-                const loginModal = document.getElementById('loginModal');
-                const registerModal = document.getElementById('registerModal');
-                if (registerModal) registerModal.style.display = 'none';
-                if (loginModal) loginModal.style.display = 'flex';
-            });
-        }
-        // Close modals
-        document.querySelectorAll('.modal .close-button, #loginModalClose, #registerModalClose').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const modal = this.closest('.modal');
-                if (modal) modal.style.display = 'none';
-            });
-        });
-        // Click outside to close
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.addEventListener('click', function(e) {
-                if (e.target === this) this.style.display = 'none';
-            });
-        });
-    });
-</script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>

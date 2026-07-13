@@ -1233,5 +1233,6 @@
 'profile.resend': 'Ipadala muli ang Kumpirmasyon',
 'profile.avatar': 'Avatar',  
 'nav.repairShorts': 'Repair Shorts', // or Filipino translation
+'nav.home': 'Tahanan',
 };
 })();

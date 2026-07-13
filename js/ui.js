@@ -518,18 +518,75 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
 }
 // ---- Global navigation helper ----
 // ---- Global navigation helper ----
+// ---- Global navigation helper ----
 window.navigateTo = function(page) {
-    // Find the nav item and click it to trigger full navigation
+    // If the page is handled by the sidebar nav items, click the nav item
     const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
     if (navItem) {
         navItem.click();
+        return;
+    }
+
+    // Handle pages that are not in the sidebar (bottom nav only)
+    if (page === 'search') {
+        import('./search.js').then(module => {
+            if (module.renderSearch) module.renderSearch();
+        }).catch(err => {
+            console.error('Failed to load search:', err);
+            document.getElementById('pageContent').innerHTML = `
+                <div class="card" style="padding:40px;text-align:center;">
+                    <p>Could not load Search: ${err.message}</p>
+                </div>
+            `;
+        });
+        return;
+    }
+
+    if (page === 'notifications') {
+        import('./alerts.js').then(module => {
+            if (module.renderAlerts) module.renderAlerts();
+        }).catch(err => {
+            console.error('Failed to load notifications:', err);
+            document.getElementById('pageContent').innerHTML = `
+                <div class="card" style="padding:40px;text-align:center;">
+                    <p>Could not load Notifications: ${err.message}</p>
+                </div>
+            `;
+        });
+        return;
+    }
+
+    if (page === 'profile') {
+        // Load the new social profile module
+        import('./profile.js').then(module => {
+            if (module.renderProfile) module.renderProfile();
+        }).catch(err => {
+            console.warn('New profile failed, falling back to old:', err);
+            // Fallback to old profile
+            if (typeof renderProfilePage === 'function') {
+                renderProfilePage();
+            } else {
+                document.getElementById('pageContent').innerHTML = `
+                    <div class="card" style="padding:40px;text-align:center;">
+                        <p>Could not load Profile: ${err.message}</p>
+                    </div>
+                `;
+            }
+        });
+        return;
+    }
+
+    // Fallback: try to render page directly
+    if (typeof window.renderPage === 'function') {
+        window.renderPage(page);
     } else {
-        // Fallback: directly render the page (requires renderPage function)
-        if (typeof window.renderPage === 'function') {
-            window.renderPage(page);
-        } else {
-            console.warn('No navigation target for page:', page);
-        }
+        console.warn('No navigation target for page:', page);
+        // Show a friendly message
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card" style="padding:40px;text-align:center;">
+                <p>Page "${page}" is not available.</p>
+            </div>
+        `;
     }
 };
 function showLoading() {
@@ -1671,21 +1728,21 @@ function saveStorageResults(results) {
 // ---- Global navigation helper ----
 // ---- Global navigation helper ----
 window.navigateTo = function(page) {
-    if (page === 'profile') {
-        if (typeof window.renderProfilePage === 'function') {
-            window.renderProfilePage();
-        } else {
-            console.error('renderProfilePage not defined');
-            alert('Profile page not available.');
-        }
-        return;
-    }
-    // For other pages...
-    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    // For pages that are handled by initNavigation, find the sidebar nav item and click it
+    const navItem = document.querySelector(`.sidebar-nav a[data-page="${page}"]`);
     if (navItem) {
         navItem.click();
     } else {
-        console.warn('No navigation target for page:', page);
+        // Fallback for profile (old) if not found
+        if (page === 'profile') {
+            if (typeof window.renderProfilePage === 'function') {
+                window.renderProfilePage();
+            } else {
+                alert('Profile page not available.');
+            }
+        } else {
+            console.warn('No navigation target for page:', page);
+        }
     }
 };
 // ---- Profile page renderer ----
@@ -4307,12 +4364,87 @@ function initNavigation() {
             try {
                 await new Promise(r => setTimeout(r, 50));
 
-                // Clean up any intervals (e.g., BSOD polling)
+                // Clean up intervals
                 if (window._bsodCleanup) window._bsodCleanup();
                 if (window._crashAnalysisCleanup) window._crashAnalysisCleanup();
 
-                // Render the page
+                // ---- Render pages ----
                 if (page === 'dashboard') await renderDashboard();
+
+                else if (page === 'home') {
+                    if (typeof window.renderHome === 'function') {
+                        window.renderHome();
+                    } else {
+                        try {
+                            const module = await import('./home.js');
+                            if (module.renderHome) {
+                                window.renderHome = module.renderHome;
+                                module.renderHome();
+                            } else {
+                                throw new Error('renderHome not exported');
+                            }
+                        } catch (err) {
+                            document.getElementById('pageContent').innerHTML = `
+                                <div class="card" style="padding:40px;text-align:center;">
+                                    <p>Could not load Home page: ${err.message}</p>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+
+                else if (page === 'search') {
+                    try {
+                        const module = await import('./search.js');
+                        module.renderSearch();
+                    } catch (err) {
+                        document.getElementById('pageContent').innerHTML = `
+                            <div class="card" style="padding:40px;text-align:center;">
+                                <p>Could not load Search page: ${err.message}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                else if (page === 'notifications') {
+                    try {
+                        const module = await import('./alerts.js');
+                        module.renderAlerts();
+                    } catch (err) {
+                        document.getElementById('pageContent').innerHTML = `
+                            <div class="card" style="padding:40px;text-align:center;">
+                                <p>Could not load Notifications: ${err.message}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                else if (page === 'social-profile') {
+                    try {
+                        const module = await import('./profile.js');
+                        module.renderProfile();
+                    } catch (err) {
+                        document.getElementById('pageContent').innerHTML = `
+                            <div class="card" style="padding:40px;text-align:center;">
+                                <p>Could not load Social Profile: ${err.message}</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                else if (page === 'profile') {
+                    // Old profile – keep for compatibility
+                    if (typeof renderProfilePage === 'function') {
+                        renderProfilePage();
+                    } else {
+                        document.getElementById('pageContent').innerHTML = `
+                            <div class="card" style="padding:40px;text-align:center;">
+                                <p>Profile page not available.</p>
+                            </div>
+                        `;
+                    }
+                }
+
                 else if (page === 'device-info') await renderDeviceInfo();
                 else if (page === 'hardware-tests') await renderHardwareTests();
                 else if (page === 'connection-troubleshoot') await renderConnectionTroubleshoot();
@@ -4320,33 +4452,32 @@ function initNavigation() {
                 else if (page === 'repairs') await renderRepairs();
                 else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
-                // Inside initNavigation, in the rendering section:
-else if (page === 'repair-shorts') {
-    if (typeof window.renderRepairShorts === 'function') {
-        window.renderRepairShorts();
-    } else {
-        try {
-            // ✅ Use absolute path from server root
-            const module = await import('/js/repairShorts.js');
-            if (module.renderRepairShorts) {
-                window.renderRepairShorts = module.renderRepairShorts;
-                module.renderRepairShorts();
-            }
-        } catch (err) {
-            document.getElementById('pageContent').innerHTML = `
-                <div class="card" style="padding:40px;text-align:center;">
-                    <p>Could not load Repair Shorts: ${err.message}</p>
-                </div>
-            `;
-        }
-    }
-}
+
+                else if (page === 'repair-shorts') {
+                    if (typeof window.renderRepairShorts === 'function') {
+                        window.renderRepairShorts();
+                    } else {
+                        try {
+                            const module = await import('./repairShorts.js');
+                            if (module.renderRepairShorts) {
+                                window.renderRepairShorts = module.renderRepairShorts;
+                                module.renderRepairShorts();
+                            }
+                        } catch (err) {
+                            document.getElementById('pageContent').innerHTML = `
+                                <div class="card" style="padding:40px;text-align:center;">
+                                    <p>Could not load Repair Shorts: ${err.message}</p>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+
                 else if (page === 'settings') await renderSettings();
-                else if (page === 'profile') await renderProfilePage();
 
                 else await renderDashboard();
 
-                // ---- 🆕 RE-APPLY THEME TO NEWLY RENDERED CONTENT ----
+                // ---- Re-apply theme ----
                 if (window._activeTheme) {
                     applyTheme(window._activeTheme);
                 }

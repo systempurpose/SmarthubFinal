@@ -1,6 +1,6 @@
 // ============================================================
-// auth.js – Registration & Login with Encrypted Email + Password
-// Table: user_account
+// auth.js – Registration & Login (UUID primary key)
+// Table: user_account (id = uuid, email_hash = text)
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
@@ -22,87 +22,54 @@ function getPassphrase() {
 
 /**
  * Register a new user.
- * @param {string} email - Plain email.
- * @param {string} password - Plain password.
- * @param {boolean} confirmed - Whether the account is confirmed (default false).
- * @returns {Promise<Array>} The inserted user data.
+ * Generates a random UUID for the primary key.
  */
 export async function register(email, password, confirmed = false) {
-    console.log('🔐 [register] Started with email:', email);
-
-    let supabase;
-    try {
-        supabase = await getSupabaseClient();
-    } catch (err) {
-        console.error('❌ [register] Failed to get Supabase client:', err);
-        throw new Error(`Supabase not available: ${err.message}`);
-    }
-
+    const supabase = await getSupabaseClient();
     const passphrase = getPassphrase();
     const { encryptSecret } = await import('./supabase.js');
 
     const encryptedEmail = await encryptSecret(email, passphrase);
     const encryptedPassword = await encryptSecret(password, passphrase);
     const emailHash = await sha256(email);
-
-    console.log('📤 [register] emailHash:', emailHash);
-    console.log('📤 [register] encryptedEmail length:', encryptedEmail.length);
+    const userId = crypto.randomUUID();   // <-- generate a UUID
 
     const { data, error } = await supabase
         .from('user_account')
         .insert([{
+            id: userId,
             email: encryptedEmail,
             email_hash: emailHash,
             password: encryptedPassword,
-            confirmed: confirmed,   // <-- use the parameter
+            confirmed,
         }])
         .select();
 
-    console.log('📥 [register] Supabase response:', { data, error });
-
     if (error) {
-        console.error('❌ [register] Supabase error DETAILS:', error);
-        throw new Error(`Registration failed: ${error.message} (${error.details || ''})`);
+        throw new Error(`Registration failed: ${error.message}`);
     }
-
-    console.log('✅ [register] Insert successful, data:', data);
     return data;
 }
 
 export async function login(email, password) {
-    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    const normalizedPassword = typeof password === 'string' ? password : '';
-
-    console.log('🔐 [login] Started with email:', normalizedEmail);
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password;
 
     if (!normalizedEmail || !normalizedPassword) {
         throw new Error('Please enter both email and password.');
     }
 
-    let supabase;
-    try {
-        supabase = await getSupabaseClient();
-    } catch (err) {
-        console.error('❌ [login] Failed to get Supabase client:', err);
-        throw new Error(`Supabase not available: ${err.message}`);
-    }
-
+    const supabase = await getSupabaseClient();
     const emailHash = await sha256(normalizedEmail);
-    console.log('🔍 [login] emailHash:', emailHash);
 
+    // Query by email_hash (fast, indexed)
     const { data, error } = await supabase
         .from('user_account')
         .select('id, email, confirmed, name, avatar_url, created_at')
         .eq('email_hash', emailHash)
         .maybeSingle();
 
-    if (error) {
-        console.error('❌ [login] Supabase error:', error);
-        throw new Error(`Database error: ${error.message}`);
-    }
-
-    if (!data) {
-        console.warn('❌ [login] No user found with email_hash:', emailHash);
+    if (error || !data) {
         throw new Error('Invalid email or password.');
     }
 
@@ -124,14 +91,13 @@ export async function login(email, password) {
         console.warn('⚠️ [login] Could not decrypt stored password, using submitted value.', err);
     }
 
-    if (String(decryptedPassword) !== normalizedPassword) {
-        console.warn('❌ [login] Password mismatch');
+    if (decryptedPassword !== normalizedPassword) {
         throw new Error('Invalid email or password.');
     }
 
     return {
-        id: data.id,
-        email: String(decryptedEmail || normalizedEmail),
+        id: data.id,               // this is the UUID
+        email: decryptedEmail,
         confirmed: data.confirmed ?? false,
         name: data.name || null,
         avatar_url: data.avatar_url || null,
@@ -140,18 +106,8 @@ export async function login(email, password) {
 }
 
 export async function userExists(email) {
-    console.log('🔍 [userExists] Checking email:', email);
-
-    let supabase;
-    try {
-        supabase = await getSupabaseClient();
-    } catch (err) {
-        console.error('❌ [userExists] Failed to get Supabase client:', err);
-        throw new Error(`Supabase not available: ${err.message}`);
-    }
-
+    const supabase = await getSupabaseClient();
     const emailHash = await sha256(email);
-    console.log('🔍 [userExists] emailHash:', emailHash);
 
     const { data, error } = await supabase
         .from('user_account')
