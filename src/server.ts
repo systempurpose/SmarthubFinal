@@ -22,6 +22,7 @@ import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import fetch from 'node-fetch';
+import videoCompressRoutes from './routes/videoCompressRoutes';
 function getSaltHex(): string {
     return process.env.ENCRYPTION_SALT || 'a1b2c3d4e5f67890a1b2c3d4e5f67890';
 }
@@ -1337,6 +1338,8 @@ app.use((req: Request, res: Response, next) => {
   res.status(403).json({ ok: false, error: 'Read-only mode is enabled. This action is disabled.' });
 });
 registerConnectivityFixRoutes(app);
+app.use('/api', videoCompressRoutes);
+app.use('/uploads', express.static('uploads'));
 app.use('/api', fileMonitorRoutes);
 app.use('/api', straceRoutes);
 app.use('/api', rootkitRoutes);
@@ -3067,3 +3070,5 @@ httpServer.on('error', (err: any) => {
 
 
 });
+// At the very bottom of server.ts, after all code:
+export { encryptSecret, decryptSecret, getPassphrase };

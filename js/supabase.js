@@ -125,6 +125,41 @@ async function encryptSecret(plaintext, passphrase) {
     return `${ivBase64}:${ctBase64}`;
 }
 
+// ---- Blob encryption/decryption helpers ----
+
+/**
+ * Encrypt a blob (video file) using AES‑GCM.
+ * Returns an encrypted blob.
+ */
+export async function encryptBlob(blob, passphrase) {
+    // Read blob as ArrayBuffer
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    // Convert to base64 string (so encryptSecret can handle it)
+    const base64 = btoa(String.fromCharCode(...uint8Array));
+    // Encrypt the string
+    const encryptedBase64 = await encryptSecret(base64, passphrase);
+    // Convert back to blob
+    return new Blob([encryptedBase64], { type: 'application/octet-stream' });
+}
+
+/**
+ * Decrypt a blob (video file) using AES‑GCM.
+ * Returns a decrypted blob ready for playback.
+ */
+export async function decryptBlob(blob, passphrase) {
+    const text = await blob.text();
+    // Decrypt the string
+    const decryptedBase64 = await decryptSecret(text, passphrase);
+    // Convert base64 to binary
+    const binaryString = atob(decryptedBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: 'video/mp4' });
+}
+
 // ---- Lazy-load Supabase client ----
 let supabaseClient = null;
 let supabaseError = null;
@@ -209,5 +244,7 @@ export {
     decryptSecret,
     encryptSecret,
     getPassphrase,
-    getSaltHex
+    getSaltHex,
+    encryptBlob,
+    decryptBlob
 };
