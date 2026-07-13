@@ -12,14 +12,14 @@ const repairTips = [
 let likedTips = new Set();
 
 export function renderRepairShorts() {
-    const container = document.getElementById('repairShortsContainer');
+    const container = document.getElementById('pageContent');
     if (!container) {
-        console.warn('repairShortsContainer not found');
+        console.warn('pageContent not found');
         return;
     }
 
     let html = `
-        <div style="display: flex; flex-direction: column; gap: 16px; padding: 16px 12px 80px;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 16px 12px 80px;">
             <h2 style="font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #1e293b;">🔧 Repair Shorts</h2>
             <p style="color: #6B7280; font-size: 14px; margin-top: 0; margin-bottom: 12px;">Quick tips to fix common phone issues</p>
     `;
@@ -33,7 +33,7 @@ export function renderRepairShorts() {
                 padding: 18px 20px 14px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
                 border: 1px solid #f1f3f5;
-                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                margin-bottom: 16px;
             ">
                 <div style="display: flex; align-items: flex-start; gap: 14px;">
                     <div style="
@@ -87,7 +87,7 @@ export function renderRepairShorts() {
     html += `</div>`;
     container.innerHTML = html;
 
-    // ---- Attach event listeners ----
+    // ---- Like button logic ----
     container.querySelectorAll('.like-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -114,6 +114,7 @@ export function renderRepairShorts() {
         });
     });
 
+    // ---- Share button logic ----
     container.querySelectorAll('.share-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = parseInt(btn.dataset.id);
@@ -133,5 +134,5 @@ export function renderRepairShorts() {
     });
 }
 
-// Expose globally so ui.js can call it
+// ---- Expose globally for the sidebar navigation ----
 window.renderRepairShorts = renderRepairShorts;

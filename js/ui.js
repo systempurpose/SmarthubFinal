@@ -4325,15 +4325,19 @@ else if (page === 'repair-shorts') {
     if (typeof window.renderRepairShorts === 'function') {
         window.renderRepairShorts();
     } else {
-        // Fallback: dynamic import
         try {
-            const module = await import('./repairShorts.js');
+            // ✅ Use absolute path from server root
+            const module = await import('/js/repairShorts.js');
             if (module.renderRepairShorts) {
                 window.renderRepairShorts = module.renderRepairShorts;
                 module.renderRepairShorts();
             }
         } catch (err) {
-            document.getElementById('pageContent').innerHTML = `<div class="card">Could not load Repair Shorts: ${err.message}</div>`;
+            document.getElementById('pageContent').innerHTML = `
+                <div class="card" style="padding:40px;text-align:center;">
+                    <p>Could not load Repair Shorts: ${err.message}</p>
+                </div>
+            `;
         }
     }
 }
