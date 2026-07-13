@@ -1,6 +1,7 @@
 // js/userProfile.js
 import { getSupabaseClient } from './supabase.js';
 import { saveUserProfile, fetchUserProfile as fetchProfileFromDB } from './user_profile_sb.js';
+import { sendVerificationCode } from './emailVerification.js';   // <-- new import
 
 let avatarFile = null;
 
@@ -52,7 +53,6 @@ export async function renderProfilePageContent(user) {
 
     // Update sidebar with the loaded data
     updateSidebarUser(displayUser);
-
     renderProfileUI(displayUser);
 }
 
@@ -107,9 +107,35 @@ function renderProfileUI(user) {
         </div>
     `;
 
+    // ---- Event listeners ----
     document.getElementById('avatarUpload')?.addEventListener('change', handleAvatarUpload);
     document.getElementById('profileSaveBtn')?.addEventListener('click', () => saveProfile(user.id));
-    document.getElementById('resendConfirmBtn')?.addEventListener('click', () => alert('Resend confirmation'));
+
+    // ---- 🔥 Real "Resend" button handler ----
+    const resendBtn = document.getElementById('resendConfirmBtn');
+    if (resendBtn) {
+        resendBtn.addEventListener('click', async function() {
+            const emailAddr = user.email;
+            if (!emailAddr) {
+                alert('No email address found.');
+                return;
+            }
+            try {
+                await sendVerificationCode(emailAddr);
+                alert('✅ Verification code resent to your email.');
+                // Optionally re‑fetch the profile to see if confirmed changed
+                const fresh = await fetchProfileFromDB();
+                if (fresh && fresh.confirmed !== user.confirmed) {
+                    user.confirmed = fresh.confirmed;
+                    // Re‑render the UI to update the status
+                    renderProfileUI(user);
+                }
+            } catch (err) {
+                alert('❌ Failed to resend code: ' + err.message);
+            }
+        });
+    }
+
     document.getElementById('profileBackBtn')?.addEventListener('click', () => {
         if (typeof window.navigateTo === 'function') window.navigateTo('dashboard');
         else document.querySelector('.nav-item[data-page="dashboard"]')?.click();
@@ -208,7 +234,6 @@ async function saveProfile(userId) {
         localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
 
         // ---- FORCE SIDEBAR UPDATE IMMEDIATELY ----
-        // Directly update the sidebar DOM elements
         const avatarEl = document.getElementById('userAvatar');
         const emailEl = document.getElementById('userEmailDisplay');
         if (avatarEl) {
@@ -226,7 +251,7 @@ async function saveProfile(userId) {
             emailEl.textContent = name || email || 'User';
         }
 
-        // Re-fetch and re-render the profile page (to reflect the saved data)
+        // Re-fetch and re-render the profile page
         const freshProfile = await fetchProfileFromDB();
         if (freshProfile) {
             const updatedUser = {
@@ -238,7 +263,6 @@ async function saveProfile(userId) {
             };
             renderProfileUI(updatedUser);
         } else {
-            // Use the updated local data
             const updatedUser = {
                 id: userId,
                 email: email,

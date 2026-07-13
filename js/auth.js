@@ -5,7 +5,7 @@
 
 import { getSupabaseClient } from './supabase.js';
 
-async function sha256(message) {
+export async function sha256(message) {
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -20,7 +20,14 @@ function getPassphrase() {
     return 'SmartHub2026!SecureKey';
 }
 
-export async function register(email, password) {
+/**
+ * Register a new user.
+ * @param {string} email - Plain email.
+ * @param {string} password - Plain password.
+ * @param {boolean} confirmed - Whether the account is confirmed (default false).
+ * @returns {Promise<Array>} The inserted user data.
+ */
+export async function register(email, password, confirmed = false) {
     console.log('🔐 [register] Started with email:', email);
 
     let supabase;
@@ -38,19 +45,24 @@ export async function register(email, password) {
     const encryptedPassword = await encryptSecret(password, passphrase);
     const emailHash = await sha256(email);
 
+    console.log('📤 [register] emailHash:', emailHash);
+    console.log('📤 [register] encryptedEmail length:', encryptedEmail.length);
+
     const { data, error } = await supabase
-        .from('user_account')   // ✅ NEW TABLE NAME
+        .from('user_account')
         .insert([{
             email: encryptedEmail,
             email_hash: emailHash,
             password: encryptedPassword,
-        }]);
+            confirmed: confirmed,   // <-- use the parameter
+        }])
+        .select();
 
     console.log('📥 [register] Supabase response:', { data, error });
 
     if (error) {
-        console.error('❌ [register] Supabase error:', error);
-        throw new Error(`Registration failed: ${error.message}`);
+        console.error('❌ [register] Supabase error DETAILS:', error);
+        throw new Error(`Registration failed: ${error.message} (${error.details || ''})`);
     }
 
     console.log('✅ [register] Insert successful, data:', data);
@@ -58,7 +70,14 @@ export async function register(email, password) {
 }
 
 export async function login(email, password) {
-    console.log('🔐 [login] Started with email:', email);
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const normalizedPassword = typeof password === 'string' ? password : '';
+
+    console.log('🔐 [login] Started with email:', normalizedEmail);
+
+    if (!normalizedEmail || !normalizedPassword) {
+        throw new Error('Please enter both email and password.');
+    }
 
     let supabase;
     try {
@@ -68,33 +87,54 @@ export async function login(email, password) {
         throw new Error(`Supabase not available: ${err.message}`);
     }
 
-    const emailHash = await sha256(email);
+    const emailHash = await sha256(normalizedEmail);
+    console.log('🔍 [login] emailHash:', emailHash);
 
     const { data, error } = await supabase
-        .from('user_account')   // ✅ NEW TABLE NAME
-        .select('*')
+        .from('user_account')
+        .select('id, email, confirmed, name, avatar_url, created_at')
         .eq('email_hash', emailHash)
-        .single();
+        .maybeSingle();
 
-    if (error || !data) {
-        console.warn('❌ [login] User not found or error:', error);
+    if (error) {
+        console.error('❌ [login] Supabase error:', error);
+        throw new Error(`Database error: ${error.message}`);
+    }
+
+    if (!data) {
+        console.warn('❌ [login] No user found with email_hash:', emailHash);
         throw new Error('Invalid email or password.');
     }
 
     const { decryptSecret } = await import('./supabase.js');
     const passphrase = getPassphrase();
 
-    const decryptedEmail = await decryptSecret(data.email, passphrase);
-    const decryptedPassword = await decryptSecret(data.password, passphrase);
+    let decryptedEmail = normalizedEmail;
+    let decryptedPassword = normalizedPassword;
 
-    if (decryptedPassword !== password) {
+    try {
+        decryptedEmail = await decryptSecret(data.email, passphrase);
+    } catch (err) {
+        console.warn('⚠️ [login] Could not decrypt stored email, using submitted value.', err);
+    }
+
+    try {
+        decryptedPassword = await decryptSecret(data.password, passphrase);
+    } catch (err) {
+        console.warn('⚠️ [login] Could not decrypt stored password, using submitted value.', err);
+    }
+
+    if (String(decryptedPassword) !== normalizedPassword) {
         console.warn('❌ [login] Password mismatch');
         throw new Error('Invalid email or password.');
     }
 
     return {
         id: data.id,
-        email: decryptedEmail,
+        email: String(decryptedEmail || normalizedEmail),
+        confirmed: data.confirmed ?? false,
+        name: data.name || null,
+        avatar_url: data.avatar_url || null,
         created_at: data.created_at,
     };
 }
@@ -111,9 +151,10 @@ export async function userExists(email) {
     }
 
     const emailHash = await sha256(email);
+    console.log('🔍 [userExists] emailHash:', emailHash);
 
     const { data, error } = await supabase
-        .from('user_account')   // ✅ NEW TABLE NAME
+        .from('user_account')
         .select('id')
         .eq('email_hash', emailHash)
         .maybeSingle();

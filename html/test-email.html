@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Email Configuration – SmartHub</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f1f5f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            max-width: 480px;
+            width: 100%;
+            padding: 32px 28px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+            border: 1px solid #e9edf2;
+        }
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #0f172a;
+            margin: 0 0 6px 0;
+        }
+        p.sub {
+            color: #475569;
+            font-size: 14px;
+            margin: 0 0 24px 0;
+            line-height: 1.5;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            font-size: 13px;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            background: #fafcff;
+        }
+        input:focus {
+            border-color: #0d6efd;
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 4px 12px rgba(13, 110, 253, 0.25);
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(13, 110, 253, 0.35);
+        }
+        button:disabled {
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 14px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+            word-break: break-all;
+        }
+        #result.success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        #result.error {
+            display: block;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .env-info {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
+        .env-info code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📧 Test Email Configuration</h1>
+        <p class="sub">
+            Enter any email address to receive a test message.
+            This verifies that your Gmail App Password and email credentials are working.
+        </p>
+
+        <div class="env-info">
+            <strong>Using credentials from .env:</strong><br>
+            <code>EMAIL_USER</code> = <span id="emailUserDisplay">loading...</span><br>
+            <code>EMAIL_PASS</code> = <span id="emailPassDisplay">••••••••</span>
+        </div>
+
+        <div class="form-group">
+            <label for="testEmail">Your test email address</label>
+            <input type="email" id="testEmail" placeholder="you@example.com" value="marklhemuel50@gmail.com">
+        </div>
+
+        <button id="sendTestBtn">Send Test Email</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function fetchEmailUser() {
+            try {
+                const res = await fetch('/api/email-config');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('emailUserDisplay').textContent = data.emailUser || 'not set';
+                } else {
+                    document.getElementById('emailUserDisplay').textContent = '❌ not available';
+                }
+            } catch {
+                document.getElementById('emailUserDisplay').textContent = '❌ API error';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchEmailUser();
+
+            const btn = document.getElementById('sendTestBtn');
+            const resultDiv = document.getElementById('result');
+
+            btn.addEventListener('click', async () => {
+                const testEmail = document.getElementById('testEmail').value.trim();
+                if (!testEmail || !testEmail.includes('@')) {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = '❌ Please enter a valid email address.';
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Sending...';
+                resultDiv.style.display = 'none';
+
+                try {
+                    const response = await fetch('/api/test-email-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ testEmail }),
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        resultDiv.className = 'success';
+                        resultDiv.textContent = '✅ ' + data.message;
+                    } else {
+                        resultDiv.className = 'error';
+                        resultDiv.textContent = '❌ Failed: ' + (data.error || 'Unknown error');
+                        if (data.details) {
+                            resultDiv.textContent += '\n\n' + data.details;
+                        }
+                    }
+                } catch (err) {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = '❌ Network error: ' + err.message;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = 'Send Test Email';
+                    resultDiv.style.display = 'block';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

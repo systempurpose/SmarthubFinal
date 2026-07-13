@@ -1595,15 +1595,25 @@ window.navigateTo = function(page) {
 // ---- Render profile page ----
 // ---- Render profile page ----
 // ---- Render profile page ----
+// ---- Render profile page ----
+// ---- Render profile page ----
+// ---- Render profile page ----
 async function renderProfilePage() {
+    console.log('[Profile] renderProfilePage called');
+
     // 1. Ensure the profile module is loaded
     if (typeof window.renderProfilePageContent !== 'function') {
         console.log('[Profile] Module not loaded – importing dynamically...');
         try {
-            await import('/js/userProfile.js');
-            if (typeof window.renderProfilePageContent !== 'function') {
-                throw new Error('Profile module did not define renderProfilePageContent');
+            const module = await import('/js/userProfile.js');
+            if (typeof module.renderProfilePageContent === 'function') {
+                window.renderProfilePageContent = module.renderProfilePageContent;
+            } else if (module.default && typeof module.default.renderProfilePageContent === 'function') {
+                window.renderProfilePageContent = module.default.renderProfilePageContent;
+            } else {
+                throw new Error('Profile module did not export renderProfilePageContent');
             }
+            console.log('[Profile] Module loaded and render function assigned.');
         } catch (err) {
             console.error('[Profile] Failed to load module:', err);
             document.getElementById('pageContent').innerHTML = `
@@ -1616,20 +1626,25 @@ async function renderProfilePage() {
         }
     }
 
-    // 2. Get user
+    // 2. Get the current user
     let user = null;
     try {
+        const { getSupabaseClient } = await import('./supabase.js');
         const supabase = await getSupabaseClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) user = session.user;
-    } catch(e) {}
+    } catch (e) {
+        console.warn('[Profile] Could not get user from session, falling back to localStorage:', e);
+    }
+
     if (!user) {
         const stored = localStorage.getItem('smarthub.user');
         if (stored) {
-            try { user = JSON.parse(stored); } catch(e) {}
+            try { user = JSON.parse(stored); } catch (e) {}
         }
     }
 
+    // 3. If no user, show login prompt
     if (!user) {
         document.getElementById('pageContent').innerHTML = `
             <div class="card" style="text-align:center;padding:40px;">
@@ -1655,11 +1670,12 @@ async function renderProfilePage() {
 
 // Expose globally
 window.renderProfilePage = renderProfilePage;
-// Expose globally
-window.renderProfilePage = renderProfilePage;
 
-// Make renderProfilePage globally available
-window.renderProfilePage = renderProfilePage;
+// Expose globally
+
+
+// Expose globally
+
 // ---- Hardware Test Results ----
 function saveHardwareResults(summary) {
     // merge with whatever is already stored, so a single-test run

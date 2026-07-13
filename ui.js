@@ -525,12 +525,12 @@ async function refresh() {
             if (!candidate && lines.length) {
               candidate = lines[0];
             }
-            if (candidate) {
-              const parts = candidate.trim().split(/\s+/);
-              if (parts.length >= 2) {
-                storageText = parts[1];
-              }
-            }
+            if (candidate && typeof candidate === 'string') {
+    const parts = candidate.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        storageText = parts[1];
+    }
+}
           }
 
           function setSpecValue(el, text, fallback = 'Unknown') {
@@ -825,14 +825,14 @@ async function refresh() {
             }
           }
 
-          if (sourceName) {
-            const parts = sourceName.split('.');
-            const last = parts[parts.length - 1] || sourceName;
-            displayName = last.replace(/[_-]+/g, ' ');
-            displayName = displayName.replace(/\b\w/g, function (c) {
-              return c.toUpperCase();
-            });
-          }
+          if (sourceName && typeof sourceName === 'string') {
+    const parts = sourceName.split('.');
+    const last = parts[parts.length - 1] || sourceName;
+    displayName = last.replace(/[_-]+/g, ' ');
+    displayName = displayName.replace(/\b\w/g, function(c) {
+        return c.toUpperCase();
+    });
+}
 
           const scoreText = score ? ` ${score}/100` : '';
           lines.push(index + '. ' + displayName + ' - ' + label + scoreText);

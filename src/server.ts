@@ -21,7 +21,7 @@ import fileRoutes from './routes/fileRoutes';
 import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
-
+import fetch from 'node-fetch';
 // In server.ts
 const { getAIKey } = require('./decrypt-ai-key.js');
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
@@ -115,9 +115,37 @@ import { registerAndroidConnectivityRoutes } from './routes/androidConnectivityR
 import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
+import dotenv from 'dotenv';
+
+dotenv.config();
 const { callMistralAI } = require('./ai-service.js');
+// ---- Helper to safely get error message ----
+const emailUser = process.env.EMAIL_USER;
+const emailPass = process.env.EMAIL_PASS;
+
+if (!emailUser || !emailPass) {
+    console.error('❌ EMAIL_USER or EMAIL_PASS is missing in .env');
+    // But we can still create transporter – the test endpoint will show the error.
+}
 
 
+function getErrorStack(err: unknown): string | undefined {
+    if (err instanceof Error) return err.stack;
+    return undefined;
+}
+// ---- VirusTotal API Response Types ----
+interface VTResponse {
+    data: {
+        attributes: {
+            last_analysis_stats: {
+                malicious: number;
+                suspicious: number;
+                undetected: number;
+            };
+            last_analysis_results: Record<string, any>;
+        };
+    };
+}
 
 // Helper to run PowerShell scripts without quoting issues
 async function runPowerShellScript(script: string, timeoutMs = 6000): Promise<string> {
@@ -737,34 +765,119 @@ function generateVerificationCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+
+// ---- Test email configuration ----
+// ---- Test email configuration ----
+app.post('/api/test-email-config', async (req, res) => {
+    const { testEmail } = req.body;
+
+    if (!testEmail || typeof testEmail !== 'string') {
+        return res.status(400).json({ error: 'Please provide a valid test email address.' });
+    }
+
+    // ---- Check credentials ----
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        return res.status(500).json({
+            success: false,
+            error: 'Missing email credentials. Please check your .env file.',
+            details: 'EMAIL_USER and EMAIL_PASS must be set.',
+        });
+    }
+
+    try {
+        await transporter.sendMail({
+            from: '"SmartHub Test" <noreply@smarthub.com>',
+            to: testEmail,
+            subject: '✅ SmartHub Email Test Successful',
+            html: `<h2>Email Configuration Works!</h2><p>Your email credentials are correct.</p>`,
+        });
+        res.json({ success: true, message: `Test email sent to ${testEmail}` });
+    } catch (err) {
+        console.error('Email test error:', err);
+        const errorMessage = getErrorMessage(err);
+        const errorStack = getErrorStack(err);
+        res.status(500).json({
+            success: false,
+            error: errorMessage,
+            details: errorStack || undefined,
+        });
+    }
+});
+// ---- Serve reCAPTCHA Site Key ----
+app.get('/api/recaptcha-site-key', (req, res) => {
+    const siteKey = process.env.RECAPTCHA_SITE_KEY || '';
+    if (!siteKey) {
+        console.warn('⚠️ RECAPTCHA_SITE_KEY is not set in .env');
+        return res.status(500).json({ error: 'reCAPTCHA site key not configured.' });
+    }
+    res.json({ siteKey });
+});
 // ---- Endpoint: send verification code ----
 app.post('/api/send-verification', async (req, res) => {
     const { email } = req.body;
 
-    // Type-safe validation
     if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Valid email required' });
     }
 
+    // ---- Sanitize Supabase URL ----
+    let supabaseUrl = process.env.SUPABASE_URL || '';
+    // Remove trailing slash
+    supabaseUrl = supabaseUrl.replace(/\/+$/, '');
+    // Ensure it starts with https://
+    if (!supabaseUrl.startsWith('https://')) {
+        supabaseUrl = 'https://' + supabaseUrl;
+    }
+
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        console.error('❌ Missing Supabase credentials in .env');
+        return res.status(500).json({ error: 'Server configuration error: missing Supabase credentials.' });
+    }
+
+    console.log('[send-verification] Supabase URL:', supabaseUrl);
+    console.log('[send-verification] Supabase key present:', !!supabaseAnonKey);
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
     const code = generateVerificationCode();
-    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
 
-    const supabase = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_ANON_KEY!
-    );
+    try {
+        const { error } = await supabase
+            .from('email_verifications')
+            .upsert({
+                email: email.trim().toLowerCase(),
+                code: code,
+                expiry: expiry.toISOString(),
+                used: false,
+            }, { onConflict: 'email' })
+            .select();
 
-    const { error } = await supabase
-        .from('user_account')
-        .update({
-            verification_code: code,
-            code_expiry: expiry.toISOString(),
-        })
-        .eq('email', email);
+        if (error) {
+            console.error('❌ Supabase upsert error:', error);
+            return res.status(500).json({ error: 'Failed to store code: ' + error.message });
+        }
+    } catch (dbErr) {
+        console.error('❌ Database error:', dbErr);
+        const errorMsg = dbErr instanceof Error ? dbErr.message : 'Unknown database error';
+        return res.status(500).json({ error: 'Database error: ' + errorMsg });
+    }
 
-    if (error) {
-        console.error('Failed to store code:', error);
-        return res.status(500).json({ error: 'Failed to generate code' });
+    // Build email HTML
+    let html = '';
+    try {
+        const templatePath = path.join(__dirname, 'email-templates', 'verification.html');
+        const template = await fs.readFile(templatePath, 'utf8');
+        html = template.replace('{{code}}', code);
+    } catch {
+        html = `
+            <h2>Welcome to SmartHub!</h2>
+            <p>Your verification code is:</p>
+            <h1 style="font-size:32px;letter-spacing:4px;background:#f0f0f0;display:inline-block;padding:10px 20px;">${code}</h1>
+            <p>This code expires in 15 minutes.</p>
+        `;
     }
 
     try {
@@ -772,18 +885,13 @@ app.post('/api/send-verification', async (req, res) => {
             from: '"SmartHub" <noreply@smarthub.com>',
             to: email,
             subject: 'Verify your SmartHub account',
-            html: `
-                <h2>Welcome to SmartHub!</h2>
-                <p>Your verification code is:</p>
-                <h1 style="font-size:32px;letter-spacing:4px;background:#f0f0f0;display:inline-block;padding:10px 20px;">${code}</h1>
-                <p>This code expires in 15 minutes.</p>
-                <p>If you didn't request this, please ignore.</p>
-            `,
+            html,
         });
         res.json({ success: true });
     } catch (err) {
-        console.error('Email send failed:', err);
-        res.status(500).json({ error: 'Failed to send email' });
+        console.error('❌ Email send failed:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Unknown email error';
+        res.status(500).json({ error: 'Failed to send email: ' + errorMsg });
     }
 });
 
@@ -804,38 +912,34 @@ app.post('/api/verify-email', async (req, res) => {
     );
 
     const { data, error } = await supabase
-        .from('user_account')
-        .select('verification_code, code_expiry, confirmed')
-        .eq('email', email)
-        .single();
+        .from('email_verifications')
+        .select('*')
+        .eq('email', email.trim().toLowerCase())
+        .eq('used', false)
+        .maybeSingle();
 
     if (error || !data) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ error: 'No pending verification found' });
     }
 
-    // Check expiry
     const now = new Date();
-    const expiry = new Date(data.code_expiry);
+    const expiry = new Date(data.expiry);
     if (now > expiry) {
         return res.status(400).json({ error: 'Code expired. Request a new one.' });
     }
 
-    if (data.verification_code !== code) {
+    if (data.code !== code) {
         return res.status(400).json({ error: 'Invalid code.' });
     }
 
-    // Mark as confirmed
+    // Mark as used
     const { error: updateErr } = await supabase
-        .from('user_account')
-        .update({
-            confirmed: true,
-            verification_code: null,
-            code_expiry: null,
-        })
-        .eq('email', email);
+        .from('email_verifications')
+        .update({ used: true })
+        .eq('id', data.id);
 
     if (updateErr) {
-        console.error('Failed to confirm:', updateErr);
+        console.error('Failed to mark code as used:', updateErr);
         return res.status(500).json({ error: 'Failed to verify' });
     }
 
@@ -1883,6 +1987,33 @@ app.get('/suspicious-apps/:id', async (req: Request, res: Response) => {
     await endMobileDiagnostic(id);
   }
 });
+
+// ---- Verify reCAPTCHA token ----
+app.post('/api/verify-recaptcha', async (req, res) => {
+    const { token } = req.body;
+    if (!token) {
+        return res.status(400).json({ success: false, error: 'Missing token' });
+    }
+
+    try {
+        const secret = process.env.RECAPTCHA_SECRET_KEY;
+        const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${secret}&response=${token}`,
+        });
+        const data = await response.json() as { success: boolean; 'error-codes'?: string[] };
+        if (data.success) {
+            res.json({ success: true });
+        } else {
+            res.json({ success: false, error: data['error-codes']?.join(', ') || 'CAPTCHA failed' });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Server error verifying CAPTCHA' });
+    }
+});
+
+
 // ---- APK SCAN WITH VIRUSTOTAL ----
 app.post('/api/scan-apk', async (req, res) => {
   const { deviceId, packageName } = req.body;
@@ -1941,6 +2072,7 @@ app.post('/api/scan-apk', async (req, res) => {
     }
 
     // ---- VIRUSTOTAL INTEGRATION (automatic) ----
+        // ---- VIRUSTOTAL INTEGRATION (automatic) ----
     const vtApiKey = process.env.VIRUSTOTAL_API_KEY;
     let vtResult: any = null;
     if (vtApiKey) {
@@ -1950,8 +2082,8 @@ app.post('/api/scan-apk', async (req, res) => {
           headers: { 'x-apikey': vtApiKey }
         });
         if (vtResp.ok) {
-          const vtData = await vtResp.json();
-          const stats = vtData.data?.attributes?.last_analysis_stats || {};
+          const vtData = await vtResp.json() as VTResponse;
+          const stats = vtData.data?.attributes?.last_analysis_stats || { malicious: 0, suspicious: 0, undetected: 0 };
           vtResult = {
             malicious: stats.malicious || 0,
             suspicious: stats.suspicious || 0,

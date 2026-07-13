@@ -1,6 +1,8 @@
 // js/login.js
-
 import { saveAccount, loadAccount } from './account-storage.js';
+import { showVerificationModal, sendVerificationCode } from './emailVerification.js';
+import { getSupabaseClient } from './supabase.js';
+import { sha256 } from './auth.js'; // assuming auth.js exports sha256
 
 let register, login, userExists;
 let authLoadError = null;
@@ -22,7 +24,6 @@ try {
 let loginModal, registerModal, loginBtn, logoutBtn, userInfo, userEmailDisplay, userAvatar;
 let initialized = false;
 
-// ---- Initialize all DOM references ----
 function initDOM() {
     loginModal = document.getElementById('loginModal');
     registerModal = document.getElementById('registerModal');
@@ -33,7 +34,7 @@ function initDOM() {
     userAvatar = document.getElementById('userAvatar');
 }
 
-// ---- Tiny toast helper ----
+// ---- Toast helper ----
 function toast(message, tone = 'info') {
     let holder = document.getElementById('authToastHolder');
     if (!holder) {
@@ -62,47 +63,315 @@ function toast(message, tone = 'info') {
     }, 2800);
 }
 
-// ---- Registration Handler ----
-export async function handleRegister(email, password) {
-    if (authLoadError) {
-        showError('registerError', 'Login system failed to load. Check the console for details.');
+// ---- Fetch user profile from Supabase (using user_account) ----
+async function fetchUserProfile(user) {
+    if (!user || !user.id) return user;
+    try {
+        const { getSupabaseClient } = await import('./supabase.js');
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('user_account')
+            .select('name, avatar_url, confirmed')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (error) {
+            console.warn('Failed to fetch profile:', error);
+            return user;
+        }
+        if (data) {
+            return {
+                ...user,
+                name: data.name || user.name || user.email,
+                avatar_url: data.avatar_url || user.avatar_url || null,
+                confirmed: data.confirmed ?? false,
+            };
+        }
+        return user;
+    } catch (err) {
+        console.warn('[Auth] Profile fetch error:', err);
+        return user;
+    }
+}
+
+// ---- reCAPTCHA v2 Checkbox helper ----
+// This uses data-callback on the widget and a promise to wait for the user to check the box.
+let recaptchaResolve = null;
+let recaptchaReject = null;
+let recaptchaTimer = null;
+
+// This function is called by the reCAPTCHA widget when the user successfully completes the challenge.
+window.onRecaptchaSuccess = function(token) {
+    console.log('✅ reCAPTCHA solved:', token);
+    if (recaptchaResolve) {
+        recaptchaResolve(token);
+        recaptchaResolve = null;
+        recaptchaReject = null;
+        if (recaptchaTimer) {
+            clearTimeout(recaptchaTimer);
+            recaptchaTimer = null;
+        }
+    }
+};
+
+// This function is called if the challenge expires.
+window.onRecaptchaExpired = function() {
+    console.warn('⚠️ reCAPTCHA expired');
+    if (recaptchaReject) {
+        recaptchaReject(new Error('reCAPTCHA challenge expired. Please try again.'));
+        recaptchaResolve = null;
+        recaptchaReject = null;
+        if (recaptchaTimer) {
+            clearTimeout(recaptchaTimer);
+            recaptchaTimer = null;
+        }
+    }
+};
+
+async function getRecaptchaToken() {
+    return new Promise((resolve, reject) => {
+        if (typeof grecaptcha === 'undefined') {
+            reject(new Error('reCAPTCHA not loaded. Please refresh.'));
+            return;
+        }
+        // Check if already solved
+        const existingToken = grecaptcha.getResponse();
+        if (existingToken) {
+            resolve(existingToken);
+            return;
+        }
+        // Wait for the user to solve it via the callback
+        recaptchaResolve = resolve;
+        recaptchaReject = reject;
+        // Timeout after 30 seconds
+        recaptchaTimer = setTimeout(() => {
+            if (recaptchaReject) {
+                recaptchaReject(new Error('reCAPTCHA challenge not completed within the time limit.'));
+                recaptchaResolve = null;
+                recaptchaReject = null;
+                recaptchaTimer = null;
+            }
+        }, 30000);
+    });
+}
+
+// ---- Send Code Handler (step 1) – NO CAPTCHA ----
+// ---- Send Code Handler (step 1) – Creates account + sends code ----
+// ---- Send Code Handler (step 1) – ONLY sends code, NO account creation ----
+// ---- Send Code Handler (step 1) – ONLY sends code ----
+export async function handleSendCode(email, password, confirmPassword) {
+    const emailInput = document.getElementById('registerEmail');
+    const emailError = document.getElementById('emailError');
+    let hasError = false;
+
+    // ---- Email validation ----
+    if (!email || !email.trim()) {
+        emailError.textContent = 'Email is required.';
+        emailError.style.display = 'block';
+        emailInput.style.borderColor = '#dc2626';
+        hasError = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        emailError.textContent = 'Please enter a valid email address.';
+        emailError.style.display = 'block';
+        emailInput.style.borderColor = '#dc2626';
+        hasError = true;
+    } else {
+        emailError.style.display = 'none';
+        emailInput.style.borderColor = '#16a34a';
+    }
+
+    if (hasError) {
+        showError('registerError', 'Please fix the errors above.');
         return false;
     }
+
+    // ---- Password validation ----
+    if (!password || password.length < 6) {
+        showError('registerError', 'Password must be at least 6 characters.');
+        return false;
+    }
+    if (password !== confirmPassword) {
+        showError('registerError', 'Passwords do not match.');
+        return false;
+    }
+
+    // ---- Check if email already exists ----
     try {
         if (await userExists(email)) {
             showError('registerError', 'Email already registered.');
             return false;
         }
+    } catch (err) {
+        showError('registerError', 'Error checking email: ' + err.message);
+        return false;
+    }
 
-        await register(email, password);
-        toast('✅ Registration successful! Please login.', 'success');
-        closeModal(registerModal);
-        openModal(loginModal);
+    // ---- Store email and password temporarily ----
+    window._tempRegistration = { email, password };
+
+    // ---- Send verification code ----
+    const sendBtn = document.getElementById('sendCodeBtn');
+    const originalText = sendBtn?.textContent || 'Send Code';
+    try {
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+        }
+        await sendVerificationCode(email);
+        document.getElementById('codeSentMsg').style.display = 'block';
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sent';
+        }
+        toast('✅ Verification code sent to your email.', 'success');
         return true;
     } catch (err) {
-        showError('registerError', err.message);
+        showError('registerError', 'Failed to send code: ' + err.message);
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = originalText;
+        }
         return false;
     }
 }
 
-// ---- Login Handler (saves to AppData + loads settings) ----
+// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
+// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
+// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA, THEN CREATES ACCOUNT ----
+export async function handleRegister(email, password) {
+    // Use stored email/password if not provided
+    if (!email || !password) {
+        const temp = window._tempRegistration || {};
+        email = temp.email || document.getElementById('registerEmail').value.trim();
+        password = temp.password || document.getElementById('registerPassword').value;
+    }
+
+    // Get verification code
+    const code = document.getElementById('registerVerificationCode').value.trim();
+    if (!code || code.length !== 6) {
+        showError('registerError', 'Please enter the 6-digit verification code.');
+        return false;
+    }
+
+    // ---- 1. Verify reCAPTCHA ----
+    let token;
+    try {
+        token = await getRecaptchaToken();
+        if (!token) {
+            showError('registerError', 'reCAPTCHA token missing. Please check the box.');
+            return false;
+        }
+    } catch (err) {
+        showError('registerError', 'reCAPTCHA not available: ' + err.message);
+        return false;
+    }
+
+    try {
+        const response = await fetch('/api/verify-recaptcha', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+        });
+        const result = await response.json();
+        if (!result.success) {
+            showError('registerError', 'CAPTCHA verification failed. Please try again.');
+            return false;
+        }
+    } catch (err) {
+        showError('registerError', 'Failed to verify CAPTCHA. Please try again.');
+        return false;
+    }
+
+    // ---- 2. Verify the code ----
+    try {
+        const response = await fetch('/api/verify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, code }),
+        });
+        const result = await response.json();
+        if (!result.success) {
+            const errorMsg = result.error || 'Invalid code. Please try again.';
+            showError('registerError', errorMsg);
+            return false;
+        }
+    } catch (err) {
+        showError('registerError', 'Failed to verify code: ' + err.message);
+        return false;
+    }
+
+    // ---- 3. Create the account with confirmed: true ----
+    try {
+        // We need a version of register that creates confirmed = true
+        // Option A: modify auth.js register to accept a param
+        // Option B: use the existing register and then update
+        // For simplicity, we'll use a direct insert or call register and then update.
+        // Let's call register (which creates with confirmed: false) and then update.
+        const result = await register(email, password);
+        console.log('✅ Account created (unconfirmed), result:', result);
+
+        if (!result || result.length === 0) {
+            throw new Error('Account creation failed – no data returned.');
+        }
+
+        // Now update confirmed to true
+        const supabase = await getSupabaseClient();
+        const emailHash = await sha256(email);
+        const { error: updateError } = await supabase
+            .from('user_account')
+            .update({ confirmed: true })
+            .eq('email_hash', emailHash);
+        if (updateError) {
+            console.error('Failed to confirm account:', updateError);
+            showError('registerError', 'Account created but could not confirm. Please contact support.');
+            return false;
+        }
+        console.log('✅ Account confirmed successfully.');
+    } catch (err) {
+        console.error('❌ Failed to create account:', err);
+        showError('registerError', 'Failed to create account: ' + err.message);
+        return false;
+    }
+
+    // ---- All good ----
+    toast('✅ Registration successful! You can now login.', 'success');
+    closeModal(registerModal);
+    openModal(loginModal);
+    return true;
+}
+
+// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA ----
+// ---- Register Handler (step 2) – VERIFIES CODE + CAPTCHA ----
+
+
+// ---- Login Handler (checks confirmation) ----
 export async function handleLogin(email, password) {
     if (authLoadError) {
         showError('loginError', 'Login system failed to load. Check the console for details.');
         return null;
     }
     try {
-        const user = await login(email, password);
-        console.log('Logged in as:', user.email);
+        let user = await login(email, password);
+        user = await fetchUserProfile(user);
 
+        if (!user.confirmed) {
+            showError('loginError', 'Please verify your email first. A verification code has been sent.');
+            try {
+                await sendVerificationCode(email);
+                showVerificationModal(email);
+            } catch (err) {
+                toast('Failed to resend code. Please try again later.', 'error');
+            }
+            return null;
+        }
+
+        console.log('Logged in as:', user.email);
         localStorage.setItem('smarthub.user', JSON.stringify(user));
         await saveAccount(user);
 
         updateUIAfterLogin(user);
         closeModal(loginModal);
-        toast('👋 Welcome, ' + user.email + '!', 'success');
+        toast('👋 Welcome, ' + (user.name || user.email) + '!', 'success');
 
-        // 👇 NEW: Load settings from Supabase and apply theme/language
         if (typeof window.loadAndApplySettings === 'function') {
             await window.loadAndApplySettings();
         }
@@ -120,13 +389,24 @@ function updateUIAfterLogin(user) {
         userInfo.hidden = false;
     }
     if (userEmailDisplay) {
-        userEmailDisplay.textContent = user.email;
+        userEmailDisplay.textContent = user.name || user.email;
     }
     if (userAvatar) {
-        userAvatar.textContent = (user.email || '?').trim().charAt(0);
+        if (user.avatar_url && user.avatar_url.startsWith('data:image')) {
+            userAvatar.style.backgroundImage = `url(${user.avatar_url})`;
+            userAvatar.style.backgroundSize = 'cover';
+            userAvatar.style.backgroundPosition = 'center';
+            userAvatar.textContent = '';
+        } else {
+            userAvatar.style.backgroundImage = '';
+            userAvatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
+        }
     }
     if (loginBtn) {
         loginBtn.hidden = true;
+    }
+    if (typeof window.updateHeaderUser === 'function') {
+        window.updateHeaderUser(user);
     }
 }
 
@@ -140,6 +420,9 @@ function updateUIAfterLogout() {
     }
     localStorage.removeItem('smarthub.user');
     sessionStorage.removeItem('smarthub.session');
+    if (typeof window.updateHeaderUser === 'function') {
+        window.updateHeaderUser(null);
+    }
 }
 
 // ---- Logout Handler ----
@@ -156,69 +439,49 @@ function openModal(modal) {
         errorEls.forEach(el => { el.style.display = 'none'; el.textContent = ''; });
     }
 }
-
-function closeModal(modal) {
-    if (modal) modal.style.display = 'none';
-}
-
+function closeModal(modal) { if (modal) modal.style.display = 'none'; }
 function showError(errorId, message) {
     const el = document.getElementById(errorId);
-    if (el) {
-        el.textContent = message;
-        el.style.display = 'block';
-    } else {
-        toast(message, 'error');
-    }
+    if (el) { el.textContent = message; el.style.display = 'block'; }
+    else { toast(message, 'error'); }
 }
 
-// ---- Show Login Modal ----
-export function showLoginModal() {
-    openModal(loginModal);
-}
+export function showLoginModal() { openModal(loginModal); }
+export function showRegisterModal() { openModal(registerModal); }
 
-// ---- Show Register Modal ----
-export function showRegisterModal() {
-    openModal(registerModal);
-}
-
-// ---- Auto-login (loads from AppData first, then localStorage) ----
+// ---- Auto-login ----
 export async function autoLogin() {
     console.log('[autoLogin] Checking for stored user...');
-
-    // 1. Try AppData
     let user = null;
     try {
         user = await loadAccount();
         if (user) {
             localStorage.setItem('smarthub.user', JSON.stringify(user));
+            user = await fetchUserProfile(user);
+            localStorage.setItem('smarthub.user', JSON.stringify(user));
             updateUIAfterLogin(user);
             console.log('✅ Auto-logged in from AppData as:', user.email);
-
-            // 👇 NEW: Load settings from Supabase
             if (typeof window.loadAndApplySettings === 'function') {
                 await window.loadAndApplySettings();
             }
-
             return user;
         }
     } catch (err) {
         console.warn('[autoLogin] Failed to load from AppData:', err);
     }
 
-    // 2. Fallback to localStorage
     const storedUser = localStorage.getItem('smarthub.user');
     if (storedUser) {
         try {
             user = JSON.parse(storedUser);
+            user = await fetchUserProfile(user);
+            localStorage.setItem('smarthub.user', JSON.stringify(user));
             updateUIAfterLogin(user);
             await saveAccount(user);
             console.log('✅ Auto-logged in from localStorage as:', user.email);
-
-            // 👇 NEW: Load settings from Supabase
             if (typeof window.loadAndApplySettings === 'function') {
                 await window.loadAndApplySettings();
             }
-
             return user;
         } catch (e) {
             localStorage.removeItem('smarthub.user');
@@ -230,7 +493,7 @@ export async function autoLogin() {
     return null;
 }
 
-// ---- initAuthForms (async) ----
+// ---- initAuthForms ----
 export async function initAuthForms() {
     if (initialized) return;
     initialized = true;
@@ -249,17 +512,10 @@ export async function initAuthForms() {
     }
 
     if (loginBtn) {
-        loginBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            showLoginModal();
-        });
+        loginBtn.addEventListener('click', (e) => { e.preventDefault(); showLoginModal(); });
     }
-
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            handleLogout();
-        });
+        logoutBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); });
     }
 
     const loginForm = document.getElementById('loginForm');
@@ -278,20 +534,23 @@ export async function initAuthForms() {
             e.preventDefault();
             const email = document.getElementById('registerEmail').value.trim();
             const password = document.getElementById('registerPassword').value;
-            const confirmPassword = document.getElementById('registerConfirmPassword').value;
-
-            if (password !== confirmPassword) {
-                showError('registerError', 'Passwords do not match.');
-                return;
-            }
-            if (password.length < 6) {
-                showError('registerError', 'Password must be at least 6 characters.');
-                return;
-            }
             await handleRegister(email, password);
         });
     }
 
+    // Send Code button
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+if (sendCodeBtn) {
+    sendCodeBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('registerEmail').value.trim();
+        const password = document.getElementById('registerPassword').value;
+        const confirmPassword = document.getElementById('registerConfirmPassword').value;
+        await handleSendCode(email, password, confirmPassword);
+    });
+}
+
+    // Switch between login/register
     const switchToRegister = document.getElementById('switchToRegister');
     if (switchToRegister) {
         switchToRegister.addEventListener('click', (e) => {
@@ -300,7 +559,6 @@ export async function initAuthForms() {
             openModal(registerModal);
         });
     }
-
     const switchToLogin = document.getElementById('switchToLogin');
     if (switchToLogin) {
         switchToLogin.addEventListener('click', (e) => {
@@ -310,40 +568,27 @@ export async function initAuthForms() {
         });
     }
 
+    // Close buttons
     const loginClose = document.getElementById('loginModalClose');
-    if (loginClose) {
-        loginClose.addEventListener('click', () => closeModal(loginModal));
-    }
-
+    if (loginClose) loginClose.addEventListener('click', () => closeModal(loginModal));
     const registerClose = document.getElementById('registerModalClose');
-    if (registerClose) {
-        registerClose.addEventListener('click', () => closeModal(registerModal));
-    }
+    if (registerClose) registerClose.addEventListener('click', () => closeModal(registerModal));
 
-    if (loginModal) {
-        loginModal.addEventListener('click', (e) => {
-            if (e.target === loginModal) closeModal(loginModal);
-        });
-    }
-    if (registerModal) {
-        registerModal.addEventListener('click', (e) => {
-            if (e.target === registerModal) closeModal(registerModal);
-        });
-    }
+    // Click outside to close
+    if (loginModal) loginModal.addEventListener('click', (e) => { if (e.target === loginModal) closeModal(loginModal); });
+    if (registerModal) registerModal.addEventListener('click', (e) => { if (e.target === registerModal) closeModal(registerModal); });
 
     await autoLogin();
 }
 
-// ---- Expose modal functions globally ----
+// ---- Expose globally ----
 window.showLoginModal = showLoginModal;
 window.showRegisterModal = showRegisterModal;
 window.handleLogout = handleLogout;
 
-// ---- Initialize exactly once ----
+// ---- Initialize ----
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        initAuthForms();
-    });
+    document.addEventListener('DOMContentLoaded', initAuthForms);
 } else {
     initAuthForms();
 }

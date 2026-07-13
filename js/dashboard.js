@@ -22,18 +22,24 @@ async function renderDashboard() {
 
     // ---- If ADB is available, render full dashboard ----
     if (currentDeviceId) {
+        // Show device sections
+        toggleDeviceSections(true);
+
         await renderAdbDashboard(container);
         if (typeof updateDeviceInfo === 'function') {
             await updateDeviceInfo().catch(err => console.warn('[Dashboard] updateDeviceInfo failed:', err));
         }
-        // 👇 Load saved scan results from Supabase (or localStorage fallback)
+        // Load saved scan results from Supabase (or localStorage fallback)
         if (typeof loadSavedScanResults === 'function') {
             await loadSavedScanResults();
         }
         return;
     }
 
-    // ---- No ADB – check USB state ----
+    // ---- No ADB – hide device sections ----
+    toggleDeviceSections(false);
+
+    // ---- Check USB state ----
     try {
         const resp = await fetch(`${BACKEND_URL}/api/device-state`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -174,5 +180,4 @@ async function renderDashboard() {
         </div>
     `;
     document.getElementById('openWizardFromDashboard')?.addEventListener('click', openWizard);
-    
 }

@@ -63,24 +63,46 @@ async function deriveKey(passphrase, salt) {
 
 // ---- Decrypt ----
 async function decryptSecret(encryptedData, passphrase) {
-    const saltHex = getSaltHex();
-    const salt = hexToUint8(saltHex);
-    const parts = encryptedData.split(':');
-    if (parts.length !== 2) throw new Error('Invalid encrypted data format.');
-    const ivBase64 = parts[0];
-    const ciphertextBase64 = parts[1];
+    if (encryptedData == null) {
+        throw new Error('Stored credential is missing.');
+    }
 
-    const iv = base64Decode(ivBase64);
-    const ciphertext = base64Decode(ciphertextBase64);
+    if (typeof encryptedData !== 'string') {
+        return String(encryptedData);
+    }
 
-    const key = await deriveKey(passphrase, salt);
-    const decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: iv },
-        key,
-        ciphertext
-    );
-    const decoder = new TextDecoder();
-    return decoder.decode(decrypted);
+    const value = encryptedData.trim();
+    if (!value) {
+        throw new Error('Stored credential is empty.');
+    }
+
+    try {
+        const saltHex = getSaltHex();
+        const salt = hexToUint8(saltHex);
+        const parts = value.split(':');
+        if (parts.length !== 2) {
+            console.warn('[decryptSecret] Treating stored value as plain text because it is not in encrypted format.');
+            return value;
+        }
+
+        const ivBase64 = parts[0];
+        const ciphertextBase64 = parts[1];
+
+        const iv = base64Decode(ivBase64);
+        const ciphertext = base64Decode(ciphertextBase64);
+
+        const key = await deriveKey(passphrase, salt);
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: iv },
+            key,
+            ciphertext
+        );
+        const decoder = new TextDecoder();
+        return decoder.decode(decrypted);
+    } catch (err) {
+        console.warn('[decryptSecret] Unable to decrypt stored value; falling back to plaintext.', err);
+        return value;
+    }
 }
 
 // ---- Encrypt ----

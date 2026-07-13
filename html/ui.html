@@ -5,24 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SmartHub – Android Diagnostic Tool</title>
     <link rel="stylesheet" href="../css/ui.css">
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <!-- Tesseract.js for offline OCR -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <!-- Supabase library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- bcrypt for password hashing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
-    <!-- CryptoJS for SHA‑256 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <!-- Transformers.js -->
     <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.11.0/dist/transformers.min.js"></script>
-
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
-        #authStatus {
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        #authStatus.auth-card {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 10px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
         }
         .auth-login-btn {
             width: 100%;
@@ -50,27 +47,33 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 12px;
             padding: 8px 10px;
             cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .auth-user-chip:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: rgba(255, 255, 255, 0.16);
         }
         .auth-avatar {
             flex-shrink: 0;
-            width: 34px;
-            height: 34px;
+            width: 38px;
+            height: 38px;
             border-radius: 50%;
             background: linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 14px;
+            font-size: 15px;
             color: #fff;
             text-transform: uppercase;
             background-size: cover;
             background-position: center;
+            border: 2px solid rgba(255, 255, 255, 0.18);
         }
         .auth-user-meta {
             flex: 1;
@@ -80,8 +83,8 @@
         .auth-email {
             display: block;
             font-size: 12.5px;
-            font-weight: 500;
-            color: #e2e8f0;
+            font-weight: 600;
+            color: #f1f5f9;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -114,7 +117,6 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <i class="fas fa-microchip"></i>
@@ -145,27 +147,28 @@
                 <a href="#" class="nav-item" data-page="ai-conclusion">
                     <i class="fas fa-robot"></i> <span data-i18n="nav.aiConclusion">AI Conclusion</span>
                 </a>
-
                 <div style="flex:1;"></div>
                 <a href="#" class="nav-item" data-page="settings">
                     <i class="fas fa-cog"></i> <span data-i18n="nav.settings">Settings</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
-                <div class="connection-status" id="connectionStatus">
+                <!-- Connection status first -->
+                <div id="connectionStatus">
                     <i class="fas fa-plug"></i> <span data-i18n="connection.disconnected">Disconnected</span>
                 </div>
-                <div id="authStatus">
+                <!-- Auth card below -->
+                <div id="authStatus" class="auth-card">
                     <button id="loginBtn" class="auth-login-btn" type="button">
                         <i class="fas fa-sign-in-alt"></i> <span data-i18n="auth.login">Login</span>
                     </button>
-                    <div id="userInfo" class="auth-user-chip" hidden>
+                    <div id="userInfo" class="auth-user-chip" hidden title="View profile">
                         <div class="auth-avatar" id="userAvatar">U</div>
                         <div class="auth-user-meta">
                             <span id="userEmailDisplay" class="auth-email"></span>
                             <span class="auth-role" data-i18n="auth.signedIn">Signed in</span>
                         </div>
-                        <button id="logoutBtn" class="auth-logout-btn" type="button" title="Logout" data-i18n-title="auth.logout">
+                        <button id="logoutBtn" class="auth-logout-btn" type="button" title="Logout">
                             <i class="fas fa-sign-out-alt"></i>
                         </button>
                     </div>
@@ -173,7 +176,6 @@
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
             <!-- Device Info Card -->
             <div id="device-info-card" class="card" style="display: none; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;">
@@ -192,7 +194,7 @@
                 </div>
             </div>
 
-            <!-- Hardware test modal -->
+            <!-- Hardware Test Modal -->
             <div id="hwTestModal" class="modal" style="display: none;">
                 <div class="modal-content" style="max-width: 500px; width: 90%;">
                     <div class="modal-header">
@@ -226,9 +228,8 @@
                 </div>
             </div>
 
-            <!-- Dynamic Page Content -->
+            <!-- Page Content -->
             <div id="pageContent" class="page-content">
-                <!-- Dashboard -->
                 <div id="page-dashboard" class="page">
                     <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                         <h2 data-i18n="dashboard.title">Dashboard</h2>
@@ -269,7 +270,6 @@
                     </div>
                 </div>
 
-                <!-- Hardware Tests -->
                 <div id="page-hardware-tests" class="page" style="display: none;">
                     <h2 data-i18n="hw.page.title">Hardware Tests</h2>
                     <div class="tests-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;">
@@ -279,13 +279,10 @@
                             <button class="test-btn btn btn-secondary" style="margin-top: 0.5rem;" data-i18n="hw.btn.start">Start Test</button>
                             <div class="test-result" style="margin-top: 0.5rem; font-weight: 500;"></div>
                         </div>
-                        <!-- ... rest of hardware tests ... -->
                     </div>
                 </div>
 
-                <!-- Profile Page -->
                 <div id="page-profile" class="page" style="display: none;">
-                    <!-- This div is replaced by userProfile.js rendering -->
                     <div id="profileContent" style="max-width: 500px;"></div>
                 </div>
             </div>
@@ -293,9 +290,10 @@
     </div>
 
     <!-- ============ MODALS ============ -->
-    <!-- (Keep all modal HTML unchanged – ADB Required, BSOD Warning, etc.) -->
+
     <!-- ADB Required Modal -->
     <div id="adbRequiredModal" class="modal" style="display: none; z-index: 99998; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <!-- (content unchanged) -->
         <div class="modal-content acrylic" style="max-width: 500px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
             <div style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
                 <div style="display: flex; align-items: center; gap: 14px;">
@@ -329,8 +327,9 @@
         </div>
     </div>
 
-    <!-- BSOD Diagnostic Warning Modal -->
+    <!-- BSOD Warning Modal -->
     <div id="bsodWarningModal" class="modal" style="display: none; z-index: 99999; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+        <!-- (content unchanged) -->
         <div class="modal-content acrylic" style="max-width: 560px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden;">
             <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px 28px 16px 28px; border-bottom: 1px solid rgba(0,0,0,0.05);">
                 <div style="display: flex; align-items: center; gap: 14px;">
@@ -449,7 +448,7 @@
         </div>
     </div>
 
-    <!-- Register Modal -->
+    <!-- Register Modal – WITH VERIFICATION CODE -->
     <div id="registerModal" class="modal" style="display: none; z-index: 100000; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
         <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
             <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 20px 24px 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
@@ -464,19 +463,34 @@
             </div>
             <div style="padding: 24px 28px 28px 28px;">
                 <form id="registerForm" autocomplete="off">
+                    <!-- Email -->
                     <div style="margin-bottom: 16px;">
-                        <label for="registerEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
-                        <input type="email" id="registerEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
-                    </div>
+    <label for="registerEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
+    <input type="email" id="registerEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+    <div id="emailError" style="color: #dc2626; font-size: 12px; margin-top: 4px; display: none;"></div>
+    </div>
+                    <!-- Password -->
                     <div style="margin-bottom: 16px;">
                         <label for="registerPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.password">Password</label>
                         <input type="password" id="registerPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
                     </div>
-                    <div style="margin-bottom: 20px;">
+                    <!-- Confirm Password -->
+                    <div style="margin-bottom: 16px;">
                         <label for="registerConfirmPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.confirmPassword">Confirm Password</label>
                         <input type="password" id="registerConfirmPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #16a34a; border: none; color: white; cursor: pointer;">
+                    <!-- ✨ Verification Code + Send Code -->
+                    <div style="margin-bottom: 16px;">
+                        <label for="registerVerificationCode" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;">Verification Code</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="registerVerificationCode" placeholder="Enter 6-digit code" maxlength="6" style="flex: 1; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                            <button type="button" id="sendCodeBtn" class="btn-secondary" style="padding: 10px 16px; border-radius: 10px; font-weight: 500;">Send Code</button>
+                        </div>
+                        <div id="codeSentMsg" style="font-size: 12px; color: #16a34a; margin-top: 4px; display: none;">✅ Code sent to your email.</div>
+                        <div id="sendCodeError" style="font-size: 12px; color: #dc2626; margin-top: 4px; display: none;"></div>
+                    </div>
+                    <!-- ✨ reCAPTCHA -->
+<div class="g-recaptcha" data-sitekey="6LcwulAtAAAAAJQS7Mo5jEI6pdGU2JiT4ghFQYUO" data-callback="onRecaptchaSuccess" data-expired-callback="onRecaptchaExpired" style="margin-bottom: 12px;"></div>                    <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #16a34a; border: none; color: white; cursor: pointer;">
                         <span data-i18n="auth.register.btn">Register</span>
                     </button>
                 </form>
@@ -502,22 +516,13 @@
 
     <!-- ============ SCRIPTS ============ -->
 
-    <!-- 1. Language files (from js/ folder, relative to html/) -->
     <script src="../js/lang/eng_lang.js"></script>
     <script src="../js/lang/fil_lang.js"></script>
-
-    <!-- 2. Central i18n loader -->
     <script src="../js/i18n.js"></script>
-
-    <!-- 3. Supabase & authentication (from js/ folder) -->
     <script type="module" src="../js/supabase.js"></script>
     <script type="module" src="../js/auth.js"></script>
     <script type="module" src="../js/login.js"></script>
-
-    <!-- 4. User profile module (from js/ folder) -->
     <script type="module" src="../js/userProfile.js"></script>
-
-    <!-- 5. Other scripts (from js/ folder) -->
     <script src="../js/ui.js"></script>
     <script src="../js/storageAnalysis.js"></script>
     <script src="../js/advanceDiagnostic.js"></script>
@@ -538,7 +543,6 @@
     <script type="module" src="../js/tokenTracker.js"></script>
     <script type="module" src="../js/aiConclusion.js"></script>
 
-    <!-- 6. Final initialization -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const settings = JSON.parse(localStorage.getItem('smartHubSettings') || '{"language":"en","themeColor":"#0d6efd","bgColor":"#ffffff","textColor":"#1f2937"}');
@@ -547,10 +551,9 @@
         });
     </script>
 
-    <!-- ===== FIX: Ensure navigateTo exists and profile page works ===== -->
+    <!-- ===== FIX: Ensure navigateTo and profile fallback ===== -->
     <script>
         (function() {
-            // Ensure navigateTo exists
             if (typeof window.navigateTo !== 'function') {
                 console.log('[Fix] Defining window.navigateTo');
                 window.navigateTo = function(page) {
@@ -572,25 +575,20 @@
                 };
             }
 
-            // Ensure renderProfilePage is defined (fallback if ui.js failed)
             if (typeof window.renderProfilePage !== 'function') {
                 console.log('[Fix] Defining renderProfilePage fallback');
-                // Try to import userProfile.js dynamically
                 window.renderProfilePage = async function() {
                     try {
-                        // Load userProfile.js if not already loaded
                         if (typeof window.renderProfilePageContent !== 'function') {
                             await import('../js/userProfile.js');
                         }
-                        // Get user and render
                         const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
                         if (!user) {
                             document.getElementById('pageContent').innerHTML = `
                                 <div class="card" style="text-align:center;padding:40px;">
                                     <p>Please log in to view your profile.</p>
                                     <button onclick="document.getElementById('loginBtn').click()" class="btn-primary">Login</button>
-                                </div>
-                            `;
+                                </div>`;
                             return;
                         }
                         if (typeof window.renderProfilePageContent === 'function') {
@@ -604,13 +602,11 @@
                             <div class="card" style="text-align:center;padding:40px;">
                                 <p>❌ Profile page failed to load. Please refresh.</p>
                                 <button onclick="location.reload()" class="btn-secondary">Reload</button>
-                            </div>
-                        `;
+                            </div>`;
                     }
                 };
             }
 
-            // Safety click listener for user chip
             const userChip = document.getElementById('userInfo');
             if (userChip) {
                 userChip.addEventListener('click', function(e) {
@@ -630,8 +626,58 @@
             }
         })();
     </script>
+    <script>
+    // ---- Fallback: ensure login button works even if login.js fails ----
+    document.addEventListener('DOMContentLoaded', function() {
+        const loginBtn = document.getElementById('loginBtn');
+        const loginModal = document.getElementById('loginModal');
+        if (loginBtn && loginModal) {
+            loginBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[Fallback] Login button clicked');
+                loginModal.style.display = 'flex';
+            });
+        }
+        // Also handle the switch to register link
+        const switchToRegister = document.getElementById('switchToRegister');
+        if (switchToRegister) {
+            switchToRegister.addEventListener('click', function(e) {
+                e.preventDefault();
+                const loginModal = document.getElementById('loginModal');
+                const registerModal = document.getElementById('registerModal');
+                if (loginModal) loginModal.style.display = 'none';
+                if (registerModal) registerModal.style.display = 'flex';
+            });
+        }
+        // Handle register switch to login
+        const switchToLogin = document.getElementById('switchToLogin');
+        if (switchToLogin) {
+            switchToLogin.addEventListener('click', function(e) {
+                e.preventDefault();
+                const loginModal = document.getElementById('loginModal');
+                const registerModal = document.getElementById('registerModal');
+                if (registerModal) registerModal.style.display = 'none';
+                if (loginModal) loginModal.style.display = 'flex';
+            });
+        }
+        // Close modals
+        document.querySelectorAll('.modal .close-button, #loginModalClose, #registerModalClose').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const modal = this.closest('.modal');
+                if (modal) modal.style.display = 'none';
+            });
+        });
+        // Click outside to close
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) this.style.display = 'none';
+            });
+        });
+    });
+</script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+
 </body>
 </html>

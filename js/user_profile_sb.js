@@ -2,7 +2,7 @@
 import { getSupabaseClient } from './supabase.js';
 
 /**
- * Compute SHA-256 hash of an email
+ * Compute SHA-256 hash of an email (normalized, lowercase)
  */
 async function hashEmail(email) {
     const normalized = email.trim().toLowerCase();
@@ -15,6 +15,8 @@ async function hashEmail(email) {
 
 /**
  * Save user profile – plaintext (no encryption).
+ * Only updates fields that are provided.
+ * Does NOT overwrite 'confirmed' unless explicitly passed.
  */
 export async function saveUserProfile(profileData, userId) {
     console.log('🔍 saveUserProfile called with:', { profileData, userId });
@@ -52,13 +54,20 @@ export async function saveUserProfile(profileData, userId) {
         throw new Error(`Lookup failed: ${findError.message}`);
     }
 
-    // Build record – ensure values are passed correctly
+    // ---- Build record – only include provided fields ----
     const record = {
-        name: profileData.name !== undefined ? profileData.name : null,
-        avatar_url: profileData.avatar_url !== undefined ? profileData.avatar_url : null,
-        confirmed: profileData.confirmed !== undefined ? profileData.confirmed : false,
         updated_at: new Date().toISOString(),
     };
+    if (profileData.name !== undefined) {
+        record.name = profileData.name;
+    }
+    if (profileData.avatar_url !== undefined) {
+        record.avatar_url = profileData.avatar_url;
+    }
+    // Only include confirmed if explicitly passed
+    if (profileData.confirmed !== undefined) {
+        record.confirmed = profileData.confirmed;
+    }
 
     console.log('📤 Final update record:', record);
 
@@ -100,10 +109,10 @@ export async function saveUserProfile(profileData, userId) {
                     id: userId,
                     email: email,
                     email_hash: emailHash,
-                    password: emailHash,
-                    name: record.name,
-                    avatar_url: record.avatar_url,
-                    confirmed: record.confirmed,
+                    password: emailHash, // placeholder
+                    name: record.name || null,
+                    avatar_url: record.avatar_url || null,
+                    confirmed: record.confirmed !== undefined ? record.confirmed : false,
                     created_at: new Date().toISOString(),
                     updated_at: record.updated_at,
                 };
@@ -130,9 +139,9 @@ export async function saveUserProfile(profileData, userId) {
             email: email,
             email_hash: emailHash,
             password: emailHash,
-            name: record.name,
-            avatar_url: record.avatar_url,
-            confirmed: record.confirmed,
+            name: record.name || null,
+            avatar_url: record.avatar_url || null,
+            confirmed: record.confirmed !== undefined ? record.confirmed : false,
             created_at: new Date().toISOString(),
             updated_at: record.updated_at,
         };
@@ -159,7 +168,7 @@ export async function saveUserProfile(profileData, userId) {
 }
 
 /**
- * Fetch user profile – plaintext.
+ * Fetch user profile – includes all fields, including 'confirmed'.
  */
 export async function fetchUserProfile() {
     let userId = null;
@@ -192,6 +201,10 @@ export async function fetchUserProfile() {
         return null;
     }
 
+    if (typeof data.confirmed !== 'boolean') {
+        data.confirmed = false;
+    }
+
     let plainEmail = null;
     if (stored) {
         try {
@@ -203,11 +216,12 @@ export async function fetchUserProfile() {
     return {
         ...data,
         plainEmail: plainEmail || data.email,
+        confirmed: data.confirmed,
     };
 }
 
 /**
- * Update avatar only.
+ * Update only the avatar URL.
  */
 export async function updateUserAvatar(avatarUrl) {
     let userId = null;
@@ -238,7 +252,7 @@ export async function updateUserAvatar(avatarUrl) {
 }
 
 /**
- * Update confirmation status.
+ * Update confirmation status only.
  */
 export async function updateUserConfirmed(confirmed) {
     let userId = null;
