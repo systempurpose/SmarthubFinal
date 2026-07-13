@@ -1,28 +1,27 @@
 // ============================================================
-// home-loader.js – Load posts from Supabase and render feed
+// home-loader.js – Load and render posts with delete
 // ============================================================
 
-import { fetchPosts, toggleLike, addComment, subscribeToPosts } from './home-sb.js';
+import { fetchPosts, toggleLike, addComment, subscribeToPosts, deletePost } from './home-sb.js';
 import { getSupabaseClient } from './supabase.js';
 
 let currentOffset = 0;
 const PAGE_SIZE = 20;
 let allPosts = [];
 let isLoading = false;
-let hasMore = true;
 
-// ---- Load the feed ----
 export async function loadHomeFeed(containerId = 'homeFeed', append = false) {
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container) {
+        console.warn('[loadHomeFeed] Container not found:', containerId);
+        return;
+    }
 
     if (isLoading) return;
     isLoading = true;
 
     try {
         const posts = await fetchPosts(PAGE_SIZE, currentOffset);
-        if (posts.length < PAGE_SIZE) hasMore = false;
-
         if (!append) {
             allPosts = posts;
             container.innerHTML = '';
@@ -31,16 +30,18 @@ export async function loadHomeFeed(containerId = 'homeFeed', append = false) {
         }
         currentOffset += posts.length;
 
-        renderPosts(container, posts, append);
+        const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+        const currentUserId = currentUser?.id || null;
+        renderPosts(container, posts, append, currentUserId);
     } catch (err) {
+        console.error('[loadHomeFeed] Error:', err);
         container.innerHTML = `<div class="error">❌ Failed to load feed: ${err.message}</div>`;
     } finally {
         isLoading = false;
     }
 }
 
-// ---- Render posts (reuses the existing renderPosts logic from home.js) ----
-function renderPosts(container, posts, append) {
+function renderPosts(container, posts, append, currentUserId) {
     if (!posts || posts.length === 0) {
         if (!append) {
             container.innerHTML = `
@@ -59,10 +60,23 @@ function renderPosts(container, posts, append) {
         const user = post.profiles || {};
         const avatar = user.avatar_url || post.user_id?.[0] || '?';
         const displayName = user.display_name || 'User';
-        const username = user.username ? `@${user.username}` : '@user';
+        const username = user.username ? `@${user.username}` : '';
         const time = new Date(post.created_at).toLocaleDateString();
         const likes = post.likes_count?.[0]?.count || 0;
         const comments = post.comments_count?.[0]?.count || 0;
+        const isOwner = currentUserId && post.user_id === currentUserId;
+
+        let mediaHtml = '';
+        if (post.media_url) {
+            if (post.media_type === 'video') {
+                mediaHtml = `<video controls style="max-width:100%;border-radius:12px;margin-top:8px;max-height:400px;">
+                                <source src="${post.media_url}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>`;
+            } else if (post.media_type === 'image') {
+                mediaHtml = `<img src="${post.media_url}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+            }
+        }
 
         html += `
             <div class="post-card" data-id="${post.id}">
@@ -71,12 +85,13 @@ function renderPosts(container, posts, append) {
                         ${avatar.startsWith('http') ? `<img src="${avatar}" alt="${displayName}">` : displayName[0].toUpperCase()}
                     </div>
                     <span class="post-user">${escapeHtml(displayName)}</span>
-                    <span class="post-username">${escapeHtml(username)}</span>
+                    ${username ? `<span class="post-username">${escapeHtml(username)}</span>` : ''}
                     <span class="post-time">${time}</span>
+                    ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" style="margin-left:auto;background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
                 </div>
                 <div class="post-content">
                     <p>${escapeHtml(post.decryptedContent || '')}</p>
-                    ${post.media_url ? `<div class="post-media"><img src="${post.media_url}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;"></div>` : ''}
+                    ${mediaHtml}
                 </div>
                 <div class="post-actions">
                     <button class="like-btn" data-id="${post.id}">
@@ -92,13 +107,14 @@ function renderPosts(container, posts, append) {
             </div>
         `;
     }
+
     if (append) {
         container.insertAdjacentHTML('beforeend', html);
     } else {
         container.innerHTML = html;
     }
 
-    // Attach event listeners for likes, comments, share
+    // Attach event listeners
     container.querySelectorAll('.like-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const postId = btn.dataset.id;
@@ -109,7 +125,7 @@ function renderPosts(container, posts, append) {
                 countSpan.textContent = result.action === 'liked' ? current + 1 : current - 1;
                 btn.classList.toggle('liked', result.action === 'liked');
             } catch (err) {
-                alert('Failed to like: ' + err.message);
+                toast('Failed to like: ' + err.message, 'error');
             }
         });
     });
@@ -130,8 +146,24 @@ function renderPosts(container, posts, append) {
         btn.addEventListener('click', () => {
             const postId = btn.dataset.id;
             navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
-                .then(() => alert('Link copied!'))
+                .then(() => toast('Link copied!', 'info'))
                 .catch(() => {});
+        });
+    });
+
+    container.querySelectorAll('.delete-post-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const postId = btn.dataset.id;
+            if (!confirm('Delete this post?')) return;
+            try {
+                await deletePost(postId);
+                toast('Post deleted', 'success');
+                currentOffset = 0;
+                await loadHomeFeed('homeFeed', false);
+            } catch (err) {
+                toast('Failed to delete: ' + err.message, 'error');
+            }
         });
     });
 }
@@ -142,28 +174,31 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ---- Real-time subscription (with fallback) ----
+function toast(message, tone = 'info') {
+    if (typeof window.toast === 'function') {
+        window.toast(message, tone);
+    } else {
+        alert(message);
+    }
+}
+
+// ---- Real-time subscription ----
 export function initRealtimeFeed() {
     try {
         const supabase = getSupabaseClient();
-        // Check if the client supports realtime
         if (!supabase || typeof supabase.channel !== 'function') {
-            console.warn('Realtime not available: supabase.channel is not a function');
+            console.warn('Realtime not available');
             return null;
         }
-
         const subscription = supabase
             .channel('public:posts')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, (payload) => {
-                if (payload.eventType === 'INSERT') {
-                    // Reload feed when a new post is inserted
-                    loadHomeFeed('homeFeed', false);
-                }
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
+                loadHomeFeed('homeFeed', false);
             })
             .subscribe();
         return subscription;
     } catch (err) {
-        console.warn('Failed to initialize realtime feed:', err);
+        console.warn('Failed to init realtime:', err);
         return null;
     }
 }

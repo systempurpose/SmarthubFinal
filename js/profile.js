@@ -1,27 +1,28 @@
 // ============================================================
-// profile.js – Social Profile (uses localStorage user)
+// profile.js – Social Profile (with media attach & delete)
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
-import { createPost, toggleLike } from './home-sb.js';
+import { createPost, toggleLike, deletePost } from './home-sb.js';
 import { uploadProfileImage, updateProfile } from './profile-sb.js';
+import { uploadVideo } from './videoUpload.js';
+import { getPublicVideoUrl } from './videoUtils.js';
+import { renderVideoPlayer } from './videoPlayer.js';
 
 let currentProfileUser = null;
+let currentUser = null;
 
 export async function renderProfile(container) {
     if (!container) {
-        container = document.getElementById('pageContent');
+        container = document.getElementById('homeContent') || document.getElementById('pageContent');
         if (!container) return;
     }
 
-    // ---- Get user from localStorage (set by login.js) ----
-    let currentUser = null;
+    // ---- Get user from localStorage ----
     try {
         const stored = localStorage.getItem('smarthub.user');
         if (stored) currentUser = JSON.parse(stored);
-    } catch (e) {
-        console.warn('Failed to parse stored user:', e);
-    }
+    } catch (e) {}
 
     if (!currentUser || !currentUser.id) {
         container.innerHTML = `
@@ -35,7 +36,7 @@ export async function renderProfile(container) {
 
     const supabase = await getSupabaseClient();
 
-    // ---- Try to fetch profile ----
+    // ---- Fetch profile ----
     let { data: profile, error } = await supabase
         .from('social_profiles')
         .select('*')
@@ -47,7 +48,7 @@ export async function renderProfile(container) {
         return;
     }
 
-    // ---- If no profile, create one ----
+    // ---- Create profile if missing ----
     if (!profile) {
         const defaultDisplay = currentUser.name || currentUser.email?.split('@')[0] || 'User';
         const defaultUsername = currentUser.email?.split('@')[0] || 'user';
@@ -65,20 +66,18 @@ export async function renderProfile(container) {
             .maybeSingle();
 
         if (insertError) {
-            // If duplicate key (code 23505), refetch
             if (insertError.code === '23505') {
-                const { data: refetched, error: refetchError } = await supabase
+                const { data: refetched } = await supabase
                     .from('social_profiles')
                     .select('*')
                     .eq('user_id', currentUser.id)
                     .maybeSingle();
-                if (!refetchError) profile = refetched;
+                if (refetched) profile = refetched;
             }
             if (!profile) {
                 container.innerHTML = `
                     <div style="padding:40px;text-align:center;color:red;">
                         Failed to create profile: ${insertError.message}
-                        <br><br>
                         <button onclick="window.renderHome()" class="btn-primary">Go Home</button>
                     </div>
                 `;
@@ -87,15 +86,12 @@ export async function renderProfile(container) {
         } else {
             profile = newProfile;
         }
-
-        // Update localStorage user with the new display name
         currentUser.name = defaultDisplay;
         localStorage.setItem('smarthub.user', JSON.stringify(currentUser));
     }
 
     currentProfileUser = profile;
 
-    // ---- Render the profile HTML ----
     const displayName = profile.display_name || 'User';
     const username = profile.username || 'user';
     const bio = profile.bio || 'No bio yet.';
@@ -103,8 +99,9 @@ export async function renderProfile(container) {
     const coverUrl = profile.cover_url || '';
     const joinDate = new Date(profile.created_at || Date.now()).toLocaleDateString();
 
-    let html = `
-        <div class="profile-container" style="padding:20px 0;">
+    // ---- Build profile HTML ----
+    const html = `
+        <div class="profile-container" style="display:flex; flex-direction:column; height:100%; padding:20px 0;">
             <!-- Cover -->
             <div class="profile-cover" style="position:relative;height:200px;background:#e2e8f0;overflow:hidden;border-radius:16px 16px 0 0;">
                 ${coverUrl ? `<img src="${coverUrl}" alt="Cover" style="width:100%;height:100%;object-fit:cover;">` : ''}
@@ -138,18 +135,31 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- Post Input -->
+            <!-- Post Input with media attach -->
             <div style="padding:0 20px 16px;">
                 <div class="composer-card" style="border:1px solid #e2e8f0;border-radius:16px;padding:12px;">
                     <textarea id="profileComposer" rows="2" placeholder="What's on your mind?" style="width:100%;border:none;outline:none;resize:none;font-size:15px;font-family:inherit;"></textarea>
-                    <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+                        <div class="composer-tools" style="display:flex;gap:6px;">
+                            <button id="profileVideoBtn" title="Attach video" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;">
+                                <i class="fas fa-video"></i>
+                            </button>
+                            <button id="profileImageBtn" title="Attach image" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;">
+                                <i class="fas fa-image"></i>
+                            </button>
+                            <button id="profileGifBtn" title="Add GIF" style="background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;">
+                                <i class="fas fa-grin"></i>
+                            </button>
+                        </div>
                         <button id="profilePostBtn" class="composer-submit" style="background:#0d9488;border:none;color:#fff;padding:6px 18px;border-radius:20px;font-weight:600;cursor:pointer;">Post</button>
                     </div>
+                    <input type="file" id="profileMediaInput" accept="video/*,image/*" style="display:none;">
+                    <div id="profileUploadProgress" style="display:none;margin-top:8px;font-size:13px;color:#0d9488;"></div>
                 </div>
             </div>
 
             <!-- User's Posts -->
-            <div style="padding:0 20px 20px;">
+            <div style="flex:1;padding:0 20px 20px;overflow-y:auto;">
                 <h3 style="font-size:16px;font-weight:600;margin:0 0 12px;">Posts</h3>
                 <div id="profileFeed"></div>
             </div>
@@ -161,7 +171,7 @@ export async function renderProfile(container) {
     // ---- Load user's posts ----
     await loadUserPosts(currentUser.id);
 
-    // ---- Event listeners ----
+    // ---- Profile update events ----
     document.querySelector('.change-avatar-btn')?.addEventListener('click', () => {
         document.getElementById('avatarInput').click();
     });
@@ -205,27 +215,91 @@ export async function renderProfile(container) {
         }
     });
 
-    document.getElementById('profilePostBtn')?.addEventListener('click', async () => {
-        const text = document.getElementById('profileComposer').value.trim();
-        if (!text) return;
-        const btn = document.getElementById('profilePostBtn');
-        btn.disabled = true;
-        btn.textContent = 'Posting...';
+    // ---- Composer with media ----
+    const composer = document.getElementById('profileComposer');
+    const postBtn = document.getElementById('profilePostBtn');
+    const videoBtn = document.getElementById('profileVideoBtn');
+    const imageBtn = document.getElementById('profileImageBtn');
+    const gifBtn = document.getElementById('profileGifBtn');
+    const mediaInput = document.getElementById('profileMediaInput');
+    const progress = document.getElementById('profileUploadProgress');
+
+    let pendingMedia = null;
+
+    videoBtn.addEventListener('click', () => {
+        mediaInput.accept = 'video/*';
+        mediaInput.click();
+    });
+
+    imageBtn.addEventListener('click', () => {
+        mediaInput.accept = 'image/*';
+        mediaInput.click();
+    });
+
+    gifBtn.addEventListener('click', () => {
+        toast('GIF support coming soon!', 'info');
+    });
+
+    mediaInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
         try {
-            await createPost(text, null, null);
-            document.getElementById('profileComposer').value = '';
+            progress.style.display = 'block';
+            progress.textContent = 'Uploading media...';
+            if (file.type.startsWith('video/')) {
+                const result = await uploadVideo(file);
+                pendingMedia = { url: result.url || result.storagePath, type: 'video' };
+                progress.textContent = '✅ Video attached!';
+            } else {
+                const reader = new FileReader();
+                const dataUrl = await new Promise((resolve) => {
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.readAsDataURL(file);
+                });
+                pendingMedia = { url: dataUrl, type: 'image' };
+                progress.textContent = '✅ Image attached!';
+            }
+            setTimeout(() => { progress.style.display = 'none'; }, 3000);
+        } catch (err) {
+            progress.style.color = '#dc2626';
+            progress.textContent = '❌ ' + err.message;
+        } finally {
+            mediaInput.value = '';
+        }
+    });
+
+    postBtn.addEventListener('click', async () => {
+        const text = composer.value.trim();
+        if (!text && !pendingMedia) {
+            toast('Please write something or attach media.', 'info');
+            return;
+        }
+
+        let mediaUrl = null;
+        let mediaType = null;
+        if (pendingMedia) {
+            mediaUrl = pendingMedia.url;
+            mediaType = pendingMedia.type;
+            pendingMedia = null;
+        }
+
+        postBtn.disabled = true;
+        postBtn.textContent = 'Posting...';
+        try {
+            await createPost(text || '📎', mediaUrl, mediaType);
+            composer.value = '';
             toast('Post published!', 'success');
             await loadUserPosts(currentUser.id);
         } catch (err) {
             toast('Failed to post: ' + err.message, 'error');
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Post';
+            postBtn.disabled = false;
+            postBtn.textContent = 'Post';
         }
     });
 }
 
-// ---- loadUserPosts ----
+// ---- Load user posts with media and delete ----
 async function loadUserPosts(userId) {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
@@ -254,6 +328,18 @@ async function loadUserPosts(userId) {
         let html = '';
         for (const post of posts) {
             const time = new Date(post.created_at).toLocaleDateString();
+            const isOwner = currentUser && post.user_id === currentUser.id;
+            const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
+            const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
+
+            let mediaHtml = '';
+            if (videoUrl) {
+                // Placeholder container for video player
+                mediaHtml = `<div class="video-player-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
+            } else if (imageUrl) {
+                mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+            }
+
             html += `
                 <div class="post-card" data-id="${post.id}">
                     <div class="post-header">
@@ -262,10 +348,11 @@ async function loadUserPosts(userId) {
                         </div>
                         <span class="post-user">${currentProfileUser?.display_name || 'User'}</span>
                         <span class="post-time">${time}</span>
+                        ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" style="margin-left:auto;background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
                     </div>
                     <div class="post-content">
                         <p>${escapeHtml(post.decryptedContent)}</p>
-                        ${post.media_url ? `<div class="post-media"><img src="${post.media_url}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;"></div>` : ''}
+                        ${mediaHtml}
                     </div>
                     <div class="post-actions">
                         <button class="like-btn" data-id="${post.id}">
@@ -283,7 +370,23 @@ async function loadUserPosts(userId) {
         }
         feed.innerHTML = html;
 
+        // ---- Render video players ----
+        const videoContainers = feed.querySelectorAll('.video-player-container');
+        for (const container of videoContainers) {
+            const videoUrl = container.dataset.videoUrl;
+            if (videoUrl) {
+                try {
+                    await renderVideoPlayer(container, videoUrl, { controls: true });
+                } catch (err) {
+                    container.innerHTML = `<div style="color:red;padding:8px;">Failed to load video</div>`;
+                    console.warn('Video render error:', err);
+                }
+            }
+        }
+
+        // ---- Attach event listeners ----
         const { toggleLike } = await import('./home-sb.js');
+
         feed.querySelectorAll('.like-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const postId = btn.dataset.id;
@@ -305,6 +408,21 @@ async function loadUserPosts(userId) {
                 navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
                     .then(() => toast('Link copied!', 'info'))
                     .catch(() => {});
+            });
+        });
+
+        feed.querySelectorAll('.delete-post-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const postId = btn.dataset.id;
+                if (!confirm('Delete this post?')) return;
+                try {
+                    await deletePost(postId);
+                    toast('Post deleted', 'success');
+                    await loadUserPosts(currentUser.id);
+                } catch (err) {
+                    toast('Failed to delete: ' + err.message, 'error');
+                }
             });
         });
 

@@ -29,8 +29,19 @@ function hexToUint8(hex) {
     return bytes;
 }
 
+// ---- Helper: Uint8Array to base64 (safe for large arrays) ----
+function uint8ArrayToBase64(uint8) {
+    let binary = '';
+    const chunkSize = 8192; // process in chunks to avoid stack overflow
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+        const chunk = uint8.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+}
+
 function base64Encode(uint8) {
-    return btoa(String.fromCharCode(...uint8));
+    return uint8ArrayToBase64(uint8);
 }
 
 function base64Decode(str) {
@@ -132,11 +143,10 @@ async function encryptSecret(plaintext, passphrase) {
  * Returns an encrypted blob.
  */
 async function encryptBlob(blob, passphrase) {
-    // Read blob as ArrayBuffer
     const arrayBuffer = await blob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    // Convert to base64 string (so encryptSecret can handle it)
-    const base64 = btoa(String.fromCharCode(...uint8Array));
+    // Convert to base64 string (now safe for large data)
+    const base64 = uint8ArrayToBase64(uint8Array);
     // Encrypt the string
     const encryptedBase64 = await encryptSecret(base64, passphrase);
     // Convert back to blob

@@ -1,5 +1,5 @@
 // ============================================================
-// alerts.js – Notifications (renders into container)
+// alerts.js – Notifications (with manual profile fetch)
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
@@ -7,11 +7,14 @@ import { getSupabaseClient } from './supabase.js';
 export async function renderAlerts(container) {
     if (!container) {
         container = document.getElementById('pageContent');
-        if (!container) return;
+        if (!container) {
+            console.warn('[alerts] container not found');
+            return;
+        }
     }
 
     container.innerHTML = `
-        <div class="alerts-container" style="padding:20px 0;">
+        <div class="alerts-container" style="padding:20px 0; min-height: calc(100vh - 200px);">
             <h2><i class="fas fa-bell"></i> Notifications</h2>
             <div id="alertsList"></div>
         </div>
@@ -26,10 +29,12 @@ export async function renderAlerts(container) {
     }
 
     try {
-        const { data: posts } = await supabase
+        // Get user's posts
+        const { data: posts, error: postsError } = await supabase
             .from('posts')
             .select('id')
             .eq('user_id', user.id);
+        if (postsError) throw postsError;
 
         const postIds = posts.map(p => p.id);
         if (!postIds.length) {
@@ -37,35 +42,57 @@ export async function renderAlerts(container) {
             return;
         }
 
+        // Fetch likes (without join)
         const { data: likes, error: likeErr } = await supabase
             .from('likes')
-            .select('post_id, user_id, created_at, social_profiles(display_name)')
+            .select('post_id, user_id, created_at')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
             .limit(20);
+        if (likeErr) throw likeErr;
 
+        // Fetch comments (without join)
         const { data: comments, error: commentErr } = await supabase
             .from('comments')
-            .select('post_id, user_id, content, created_at, social_profiles(display_name)')
+            .select('post_id, user_id, content, created_at')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
             .limit(20);
+        if (commentErr) throw commentErr;
 
-        if (likeErr || commentErr) throw likeErr || commentErr;
+        // Collect all user_ids from likes and comments
+        const userIds = new Set();
+        for (const l of likes) userIds.add(l.user_id);
+        for (const c of comments) userIds.add(c.user_id);
 
+        // Fetch profiles for those user_ids
+        let profileMap = {};
+        if (userIds.size) {
+            const { data: profiles, error: profileErr } = await supabase
+                .from('social_profiles')
+                .select('user_id, display_name')
+                .in('user_id', Array.from(userIds));
+            if (!profileErr && profiles) {
+                profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
+            }
+        }
+
+        // Build notifications
         const notifications = [];
         for (const l of likes) {
+            const displayName = profileMap[l.user_id]?.display_name || 'Someone';
             notifications.push({
                 type: 'like',
-                user: l.social_profiles?.display_name || 'Someone',
+                user: displayName,
                 postId: l.post_id,
                 time: l.created_at
             });
         }
         for (const c of comments) {
+            const displayName = profileMap[c.user_id]?.display_name || 'Someone';
             notifications.push({
                 type: 'comment',
-                user: c.social_profiles?.display_name || 'Someone',
+                user: displayName,
                 postId: c.post_id,
                 content: c.content,
                 time: c.created_at
@@ -100,6 +127,7 @@ export async function renderAlerts(container) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;

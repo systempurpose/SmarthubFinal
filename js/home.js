@@ -1,5 +1,5 @@
 // ============================================================
-// home.js – Threads-style Homepage with content container
+// home.js – with dynamic content area
 // ============================================================
 
 import { loadVideoFeed } from './videoLoader.js';
@@ -13,26 +13,21 @@ let currentPage = 'home';
 
 export function renderHome() {
     const container = document.getElementById('pageContent');
-    if (!container) {
-        console.warn('[home] pageContent not found');
-        return;
-    }
+    if (!container) return;
 
     let currentUser = null;
     try {
         const stored = localStorage.getItem('smarthub.user');
         if (stored) currentUser = JSON.parse(stored);
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
-    // Build the home layout with a content container
-    let html = `
-        <div class="home-container">
-            <main class="home-main">
-
-                <!-- Feed Header (visible only on home page) -->
-                <div id="homeHeader" class="feed-header" style="display:${currentPage === 'home' ? 'block' : 'none'};">
+    // Layout with a dynamic content area (#homeContent)
+    const html = `
+        <div class="home-container" style="display:flex; flex-direction:column; height:100%;">
+            <main class="home-main" style="flex:1; display:flex; flex-direction:column; padding:0 16px 20px;">
+                <div id="homeHeader" class="feed-header" style="flex-shrink:0; padding:12px 0 8px;">
                     <h2>Home</h2>
                     <div class="feed-tabs">
                         <button class="active" data-feed="for-you">For You</button>
@@ -40,60 +35,42 @@ export function renderHome() {
                     </div>
                 </div>
 
-                <!-- Composer (visible only on home page) -->
-                <div id="homeComposer" class="composer-card" style="display:${currentPage === 'home' ? 'block' : 'none'};">
+                <div id="homeComposer" class="composer-card" style="flex-shrink:0; margin:12px 0 16px;">
                     <div class="composer-input">
                         <div class="composer-avatar">
-                            ${currentUser?.avatar_url
-                                ? `<img src="${currentUser.avatar_url}" alt="Avatar">`
-                                : avatarInitial.toUpperCase()
-                            }
+                            ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}">` : avatarInitial.toUpperCase()}
                         </div>
                         <div class="composer-body">
                             <textarea id="composerText" rows="2" placeholder="What's on your mind? Share a repair tip..."></textarea>
                             <div class="composer-actions">
                                 <div class="composer-tools">
-                                    <button id="composerVideoBtn" title="Attach video"><i class="fas fa-video"></i></button>
-                                    <button id="composerImageBtn" title="Attach image"><i class="fas fa-image"></i></button>
-                                    <button id="composerGifBtn" title="Add GIF"><i class="fas fa-grin"></i></button>
+                                    <button id="composerVideoBtn"><i class="fas fa-video"></i></button>
+                                    <button id="composerImageBtn"><i class="fas fa-image"></i></button>
+                                    <button id="composerGifBtn"><i class="fas fa-grin"></i></button>
                                 </div>
                                 <button class="composer-submit" id="composerSubmit" disabled>Post</button>
                             </div>
                             <input type="file" id="composerFileInput" accept="video/*,image/*" style="display:none;">
-                            <div id="composerUploadProgress" class="composer-upload-progress" style="display:none;"></div>
+                            <div id="composerUploadProgress" style="display:none;"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Dynamic Content Area -->
-                <div id="homeContent"></div>
+                <!-- Dynamic content: replaced on navigation -->
+                <div id="homeContent" style="flex:1; overflow-y:auto; margin-bottom:16px;"></div>
 
-                <!-- Video Feed (only on home) -->
-                <div id="videoFeedContainer" class="video-section" style="display:${currentPage === 'home' ? 'block' : 'none'};">
-                    <h3 class="video-section__title">
-                        <i class="fas fa-video"></i> Repair Videos
-                    </h3>
+                <!-- Video feed (only on home) -->
+                <div id="videoFeedContainer" class="video-section" style="flex-shrink:0; margin-top:16px; border-top:1px solid #e1e8ed; padding-top:16px;">
+                    <h3><i class="fas fa-video"></i> Repair Videos</h3>
                     <div id="videoFeed"></div>
                 </div>
 
-                <!-- Bottom Navigation -->
-                <nav class="home-bottom-nav">
-                    <a href="#" class="bottom-nav-item ${currentPage === 'home' ? 'active' : ''}" data-page="home">
-                        <i class="fas fa-home"></i>
-                        <span>Home</span>
-                    </a>
-                    <a href="#" class="bottom-nav-item ${currentPage === 'search' ? 'active' : ''}" data-page="search">
-                        <i class="fas fa-search"></i>
-                        <span>Search</span>
-                    </a>
-                    <a href="#" class="bottom-nav-item ${currentPage === 'notifications' ? 'active' : ''}" data-page="notifications">
-                        <i class="fas fa-bell"></i>
-                        <span>Alerts</span>
-                    </a>
-                    <a href="#" class="bottom-nav-item ${currentPage === 'profile' ? 'active' : ''}" data-page="profile">
-                        <i class="fas fa-user"></i>
-                        <span>Social Profile</span>
-                    </a>
+                <!-- Bottom navigation -->
+                <nav class="home-bottom-nav" style="flex-shrink:0; margin-top:8px;">
+                    <a href="#" class="bottom-nav-item active" data-page="home"><i class="fas fa-home"></i><span>Home</span></a>
+                    <a href="#" class="bottom-nav-item" data-page="search"><i class="fas fa-search"></i><span>Search</span></a>
+                    <a href="#" class="bottom-nav-item" data-page="notifications"><i class="fas fa-bell"></i><span>Alerts</span></a>
+                    <a href="#" class="bottom-nav-item" data-page="profile"><i class="fas fa-user"></i><span>Social Profile</span></a>
                 </nav>
             </main>
         </div>
@@ -102,124 +79,137 @@ export function renderHome() {
     container.innerHTML = html;
 
     // ---- Load home content ----
-    if (currentPage === 'home') {
-        loadHomeFeed('homeFeed');
-        loadVideoFeed('videoFeed');
-        initRealtimeFeed();
-        setupComposer();
-    } else {
-        // Navigate to the current page (if not home)
-        navigateHomePage(currentPage);
+    loadHomeFeed('homeFeed');
+    loadVideoFeed('videoFeed');
+    if (realtimeSubscription) {
+        realtimeSubscription.unsubscribe();
+        realtimeSubscription = null;
     }
+    realtimeSubscription = initRealtimeFeed();
 
-    // ---- Bottom navigation ----
+    // ---- Feed tabs ----
+    document.querySelectorAll('.feed-tabs button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.feed-tabs button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const feedType = btn.dataset.feed;
+            if (feedType === 'for-you') {
+                currentOffset = 0;
+                loadHomeFeed('homeFeed');
+                toast('Showing For You', 'info');
+            } else if (feedType === 'following') {
+                toast('Following feed coming soon!', 'info');
+            }
+        });
+    });
+
+    // ---- Composer ----
+    setupComposer();
+
+    // ---- Bottom nav ----
     document.querySelectorAll('.bottom-nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const page = item.dataset.page;
+            document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));
+            item.classList.add('active');
             navigateHomePage(page);
         });
     });
 
-    // ---- Toast fallback ----
     if (typeof window.toast !== 'function') {
-        window.toast = function(message) { alert(message); };
+        window.toast = (msg) => alert(msg);
     }
 }
 
-// ---- Setup composer (only called on home) ----
+let currentOffset = 0;
+
 function setupComposer() {
-    const composerText = document.getElementById('composerText');
-    const composerSubmit = document.getElementById('composerSubmit');
-    const composerVideoBtn = document.getElementById('composerVideoBtn');
-    const composerImageBtn = document.getElementById('composerImageBtn');
-    const composerFileInput = document.getElementById('composerFileInput');
-    const composerUploadProgress = document.getElementById('composerUploadProgress');
+    const text = document.getElementById('composerText');
+    if (!text) return;
+    const submit = document.getElementById('composerSubmit');
+    const videoBtn = document.getElementById('composerVideoBtn');
+    const imageBtn = document.getElementById('composerImageBtn');
+    const fileInput = document.getElementById('composerFileInput');
+    const progress = document.getElementById('composerUploadProgress');
 
-    if (!composerText) return;
-
-    composerText.addEventListener('input', () => {
-        composerSubmit.disabled = composerText.value.trim().length === 0;
+    text.addEventListener('input', () => {
+        submit.disabled = text.value.trim().length === 0;
     });
 
-    composerVideoBtn.addEventListener('click', () => {
-        composerFileInput.accept = 'video/*';
-        composerFileInput.click();
+    videoBtn.addEventListener('click', () => {
+        fileInput.accept = 'video/*';
+        fileInput.click();
+    });
+    imageBtn.addEventListener('click', () => {
+        fileInput.accept = 'image/*';
+        fileInput.click();
     });
 
-    composerImageBtn.addEventListener('click', () => {
-        composerFileInput.accept = 'image/*';
-        composerFileInput.click();
-    });
-
-    composerFileInput.addEventListener('change', async (e) => {
+    fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         try {
-            composerUploadProgress.classList.remove('is-error');
-            composerUploadProgress.style.display = 'flex';
-            composerUploadProgress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            progress.classList.remove('is-error');
+            progress.style.display = 'flex';
+            progress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
             if (file.type.startsWith('video/')) {
                 const result = await uploadVideo(file);
                 pendingMedia = { url: result.url, type: 'video' };
-                composerUploadProgress.innerHTML = '<i class="fas fa-circle-check"></i> Video attached!';
+                progress.innerHTML = '<i class="fas fa-circle-check"></i> Video attached!';
             } else {
-                pendingMedia = { file: file, type: 'image' };
-                composerUploadProgress.innerHTML = '<i class="fas fa-circle-check"></i> Image attached!';
+                pendingMedia = { file, type: 'image' };
+                progress.innerHTML = '<i class="fas fa-circle-check"></i> Image attached!';
             }
-            setTimeout(() => {
-                composerUploadProgress.style.display = 'none';
-            }, 3000);
+            setTimeout(() => { progress.style.display = 'none'; }, 3000);
         } catch (err) {
-            composerUploadProgress.classList.add('is-error');
-            composerUploadProgress.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + err.message;
+            progress.classList.add('is-error');
+            progress.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + err.message;
         } finally {
-            composerFileInput.value = '';
+            fileInput.value = '';
         }
     });
 
-    composerSubmit.addEventListener('click', async () => {
-        const text = composerText.value.trim();
-        if (!text) return;
+    submit.addEventListener('click', async () => {
+        const content = text.value.trim();
+        if (!content) return;
 
-        let mediaUrl = null;
-        let mediaType = null;
+        let mediaUrl = null, mediaType = null;
         if (pendingMedia) {
             if (pendingMedia.type === 'video' && pendingMedia.url) {
                 mediaUrl = pendingMedia.url;
                 mediaType = 'video';
             } else if (pendingMedia.type === 'image' && pendingMedia.file) {
                 const reader = new FileReader();
-                const imageData = await new Promise((resolve) => {
+                const data = await new Promise((resolve) => {
                     reader.onload = (e) => resolve(e.target.result);
                     reader.readAsDataURL(pendingMedia.file);
                 });
-                mediaUrl = imageData;
+                mediaUrl = data;
                 mediaType = 'image';
             }
             pendingMedia = null;
         }
 
-        composerSubmit.disabled = true;
-        composerSubmit.textContent = 'Posting...';
-
+        submit.disabled = true;
+        submit.textContent = 'Posting...';
         try {
-            await createPost(text, mediaUrl, mediaType);
+            await createPost(content, mediaUrl, mediaType);
             toast('Post published', 'success');
-            composerText.value = '';
-            composerSubmit.disabled = true;
-            composerUploadProgress.style.display = 'none';
+            text.value = '';
+            submit.disabled = true;
+            progress.style.display = 'none';
+            currentOffset = 0;
             await loadHomeFeed('homeFeed');
         } catch (err) {
             toast('Failed to post: ' + err.message, 'error');
         } finally {
-            composerSubmit.disabled = false;
-            composerSubmit.textContent = 'Post';
+            submit.disabled = false;
+            submit.textContent = 'Post';
         }
     });
 }
 
-// ---- Navigation (self-contained) ----
 async function navigateHomePage(page) {
     if (page === currentPage) return;
     currentPage = page;
@@ -227,59 +217,50 @@ async function navigateHomePage(page) {
     const content = document.getElementById('homeContent');
     if (!content) return;
 
-    // Show/hide header and composer
+    // Show/hide home elements
     const header = document.getElementById('homeHeader');
     const composer = document.getElementById('homeComposer');
     const videoSection = document.getElementById('videoFeedContainer');
-    if (header) header.style.display = page === 'home' ? 'block' : 'none';
-    if (composer) composer.style.display = page === 'home' ? 'block' : 'none';
-    if (videoSection) videoSection.style.display = page === 'home' ? 'block' : 'none';
 
-    // Update bottom nav active state
-    document.querySelectorAll('.bottom-nav-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.page === page);
-    });
+    if (page === 'home') {
+        if (header) header.style.display = 'block';
+        if (composer) composer.style.display = 'block';
+        if (videoSection) videoSection.style.display = 'block';
+        content.innerHTML = '';
+        loadHomeFeed('homeFeed');
+        loadVideoFeed('videoFeed');
+        return;
+    } else {
+        if (header) header.style.display = 'none';
+        if (composer) composer.style.display = 'none';
+        if (videoSection) videoSection.style.display = 'none';
+    }
 
-    // Clear content
     content.innerHTML = '<div class="spinner" style="margin:40px auto;"></div>';
 
     try {
-        if (page === 'home') {
-            // Reload home
-            renderHome();
-            return;
-        }
-
         if (page === 'search') {
             const module = await import('./search.js');
             module.renderSearch(content);
-            return;
-        }
-
-        if (page === 'notifications') {
+        } else if (page === 'notifications') {
             const module = await import('./alerts.js');
             module.renderAlerts(content);
-            return;
-        }
-
-        if (page === 'profile') {
+        } else if (page === 'profile') {
             const module = await import('./profile.js');
             module.renderProfile(content);
-            return;
+        } else {
+            content.innerHTML = `<div class="card" style="padding:40px;text-align:center;">Page not found</div>`;
         }
-
-        content.innerHTML = `<div class="card" style="padding:40px;text-align:center;">Page "${page}" not found.</div>`;
     } catch (err) {
         content.innerHTML = `
             <div class="card" style="padding:40px;text-align:center;color:#dc2626;">
-                <p>Failed to load page: ${err.message}</p>
+                <p>Failed to load: ${err.message}</p>
                 <button onclick="window.renderHome()" class="btn-primary">Go Home</button>
             </div>
         `;
     }
 }
 
-// ---- Cleanup ----
 export function cleanupHome() {
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();

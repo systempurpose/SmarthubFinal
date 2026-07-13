@@ -1,5 +1,5 @@
 // ============================================================
-// home-sb.js – Supabase helpers for posts (manual joins)
+// home-sb.js – Supabase helpers for posts (with delete)
 // ============================================================
 
 import { getSupabaseClient, encryptSecret, decryptSecret, getPassphrase } from './supabase.js';
@@ -7,7 +7,6 @@ import { sha256 } from './auth.js';
 
 const LZString = window.LZString;
 
-// ---- Compress + encrypt text ----
 export async function compressAndEncrypt(plainText) {
     if (!LZString) {
         console.warn('LZString not loaded, skipping compression');
@@ -19,7 +18,6 @@ export async function compressAndEncrypt(plainText) {
     return await encryptSecret(compressed, passphrase);
 }
 
-// ---- Decrypt + decompress text ----
 export async function decryptAndDecompress(encrypted) {
     const passphrase = getPassphrase();
     const decrypted = await decryptSecret(encrypted, passphrase);
@@ -28,7 +26,6 @@ export async function decryptAndDecompress(encrypted) {
     return decompressed || decrypted;
 }
 
-// ---- Create a new post ----
 export async function createPost(content, mediaUrl = null, mediaType = null) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -47,11 +44,9 @@ export async function createPost(content, mediaUrl = null, mediaType = null) {
     return data[0];
 }
 
-// ---- Fetch posts with manual joins ----
 export async function fetchPosts(limit = 20, offset = 0) {
     const supabase = await getSupabaseClient();
 
-    // 1. Fetch posts
     const { data: posts, error } = await supabase
         .from('posts')
         .select('*')
@@ -61,30 +56,26 @@ export async function fetchPosts(limit = 20, offset = 0) {
 
     if (!posts || posts.length === 0) return [];
 
-    // 2. Get unique user IDs
     const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
     const postIds = posts.map(p => p.id);
 
-    // 3. Fetch social_profiles for these users (UPDATED)
     let profiles = [];
     if (userIds.length) {
         const { data: profileData, error: profileError } = await supabase
-            .from('social_profiles')   // ← changed from 'profiles'
+            .from('social_profiles')
             .select('user_id, display_name, avatar_url, username')
             .in('user_id', userIds);
-        if (profileError) console.warn('Failed to fetch social_profiles:', profileError);
-        else profiles = profileData || [];
+        if (!profileError) profiles = profileData || [];
     }
     const profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
 
-    // 4. Fetch likes & comments counts (unchanged)
     let likesMap = {};
     if (postIds.length) {
-        const { data: likes, error: likesError } = await supabase
+        const { data: likes } = await supabase
             .from('likes')
             .select('post_id')
             .in('post_id', postIds);
-        if (!likesError && likes) {
+        if (likes) {
             likesMap = likes.reduce((acc, l) => {
                 acc[l.post_id] = (acc[l.post_id] || 0) + 1;
                 return acc;
@@ -94,11 +85,11 @@ export async function fetchPosts(limit = 20, offset = 0) {
 
     let commentsMap = {};
     if (postIds.length) {
-        const { data: comments, error: commentsError } = await supabase
+        const { data: comments } = await supabase
             .from('comments')
             .select('post_id')
             .in('post_id', postIds);
-        if (!commentsError && comments) {
+        if (comments) {
             commentsMap = comments.reduce((acc, c) => {
                 acc[c.post_id] = (acc[c.post_id] || 0) + 1;
                 return acc;
@@ -106,18 +97,19 @@ export async function fetchPosts(limit = 20, offset = 0) {
         }
     }
 
-    // 5. Decrypt and attach data
     for (const post of posts) {
-        post.decryptedContent = await decryptAndDecompress(post.content);
+        try {
+            post.decryptedContent = await decryptAndDecompress(post.content);
+        } catch (e) {
+            post.decryptedContent = '[Unable to decrypt]';
+        }
         post.profiles = profileMap[post.user_id] || {};
         post.likes_count = [{ count: likesMap[post.id] || 0 }];
         post.comments_count = [{ count: commentsMap[post.id] || 0 }];
     }
-
     return posts;
 }
 
-// ---- Like / unlike ----
 export async function toggleLike(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -141,7 +133,6 @@ export async function toggleLike(postId) {
     }
 }
 
-// ---- Add a comment ----
 export async function addComment(postId, content) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -156,7 +147,73 @@ export async function addComment(postId, content) {
     return data[0];
 }
 
-// ---- Real-time subscription (fallback) ----
+// ---- Helper: Extract storage path from media_url ----
+function extractStoragePath(mediaUrl) {
+    if (!mediaUrl) return null;
+    // If it's a public URL: https://.../storage/v1/object/public/videos/videos/user-xxx/file
+    // We need the part after 'videos/'
+    const match = mediaUrl.match(/\/videos\/(videos\/user-[^\/]+\/[^?]+)/);
+    if (match) return match[1];
+    // If it's already a relative path: videos/user-xxx/file
+    if (mediaUrl.startsWith('videos/')) return mediaUrl;
+    return null;
+}
+
+// ---- Delete a post (owner only) with storage cleanup ----
+export async function deletePost(postId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('Not logged in');
+
+    // 1. Fetch the post to get media info
+    const { data: post, error: fetchError } = await supabase
+        .from('posts')
+        .select('user_id, media_url, media_type')
+        .eq('id', postId)
+        .single();
+    if (fetchError) throw fetchError;
+    if (post.user_id !== user.id) throw new Error('You can only delete your own posts');
+
+    // 2. If media exists, delete from storage
+    if (post.media_url && post.media_type === 'video') {
+        const storagePath = extractStoragePath(post.media_url);
+        if (storagePath) {
+            try {
+                const { error: storageError } = await supabase.storage
+                    .from('videos')
+                    .remove([storagePath]);
+                if (storageError) {
+                    console.warn('[deletePost] Failed to delete video from storage:', storageError);
+                } else {
+                    console.log('[deletePost] Video deleted from storage:', storagePath);
+                }
+            } catch (err) {
+                console.warn('[deletePost] Error deleting video:', err);
+            }
+
+            // Also delete from videos table (if metadata exists)
+            try {
+                const { error: metaError } = await supabase
+                    .from('videos')
+                    .delete()
+                    .eq('storage_path', storagePath);
+                if (metaError) {
+                    console.warn('[deletePost] Failed to delete video metadata:', metaError);
+                } else {
+                    console.log('[deletePost] Video metadata deleted');
+                }
+            } catch (err) {
+                console.warn('[deletePost] Error deleting video metadata:', err);
+            }
+        }
+    }
+
+    // 3. Delete the post (cascades to likes/comments)
+    const { error } = await supabase.from('posts').delete().eq('id', postId);
+    if (error) throw error;
+    return { success: true };
+}
+
 export function subscribeToPosts(callback) {
     try {
         const supabase = getSupabaseClient();
