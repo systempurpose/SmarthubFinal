@@ -1341,5 +1341,6 @@
 'profile.notConfirmed': 'Email not confirmed',
 'profile.resend': 'Resend Confirmation',
 'profile.avatar': 'Avatar',
+'nav.repairShorts': 'Repair Shorts',
     };
 })();

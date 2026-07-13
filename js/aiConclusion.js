@@ -832,3 +832,4 @@ async function renderAIConclusion() {
 }
 
 window.renderAIConclusion = renderAIConclusion;
+window.renderRepairShorts = renderRepairShorts;

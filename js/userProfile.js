@@ -1,9 +1,18 @@
 // js/userProfile.js
 import { getSupabaseClient } from './supabase.js';
 import { saveUserProfile, fetchUserProfile as fetchProfileFromDB } from './user_profile_sb.js';
-import { sendVerificationCode } from './emailVerification.js';   // <-- new import
+import { sendVerificationCode } from './emailVerification.js';
 
 let avatarFile = null;
+
+// ---- Helper: show custom modal with tone support ----
+async function showSafeAlert(title, message, tone = 'info') {
+    if (typeof window.showAlert === 'function') {
+        await window.showAlert(title, message, tone);
+    } else {
+        alert(`${title}: ${message}`);
+    }
+}
 
 async function getCurrentUser() {
     try {
@@ -21,7 +30,7 @@ async function getCurrentUser() {
 export async function showProfilePage() {
     const user = await getCurrentUser();
     if (!user) {
-        alert('Please log in first.');
+        await showSafeAlert('Error', 'Please log in first.', 'error');
         return;
     }
     if (typeof window.navigateTo === 'function') {
@@ -51,12 +60,11 @@ export async function renderProfilePageContent(user) {
         confirmed: profile?.confirmed ?? user.confirmed ?? false,
     };
 
-    // Update sidebar with the loaded data
     updateSidebarUser(displayUser);
     renderProfileUI(displayUser);
 }
 
-// Injects the profile page's styles once per document.
+// ---- Injects profile page styles ----
 function ensureProfileStyles() {
     if (document.getElementById('profilePageStyles')) return;
     const style = document.createElement('style');
@@ -335,7 +343,7 @@ function renderProfileUI(user) {
         resendBtn.addEventListener('click', async function() {
             const emailAddr = user.email;
             if (!emailAddr) {
-                alert('No email address found.');
+                await showSafeAlert('Error', 'No email address found.', 'error');
                 return;
             }
             const originalLabel = resendBtn.textContent;
@@ -343,17 +351,15 @@ function renderProfileUI(user) {
             resendBtn.textContent = 'Sending…';
             try {
                 await sendVerificationCode(emailAddr);
-                alert('✅ Verification code resent to your email.');
-                // Optionally re‑fetch the profile to see if confirmed changed
+                await showSafeAlert('Success', '✅ Verification code resent to your email.', 'success');
+                // Re‑fetch to update confirmation status
                 const fresh = await fetchProfileFromDB();
                 if (fresh && fresh.confirmed !== user.confirmed) {
                     user.confirmed = fresh.confirmed;
-                    // Re‑render the UI to update the status
                     renderProfileUI(user);
-                    return;
                 }
             } catch (err) {
-                alert('❌ Failed to resend code: ' + err.message);
+                await showSafeAlert('Error', '❌ Failed to resend code: ' + err.message, 'error');
             } finally {
                 resendBtn.disabled = false;
                 resendBtn.textContent = originalLabel;
@@ -376,7 +382,7 @@ async function handleAvatarUpload(e) {
         avatarFile = compressedDataUrl;
     } catch (err) {
         console.error('Image compression failed:', err);
-        alert('Failed to process image. Please try a smaller file.');
+        await showSafeAlert('Error', 'Failed to process image. Please try a smaller file.', 'error');
     }
 }
 
@@ -416,7 +422,7 @@ function compressImage(file, maxWidth = 200, maxHeight = 200, quality = 0.7) {
 
 async function saveProfile(userId) {
     if (!userId) {
-        alert('Missing user id — please log out and back in.');
+        await showSafeAlert('Error', 'Missing user id — please log out and back in.', 'error');
         console.error('saveProfile called with no userId');
         return;
     }
@@ -442,23 +448,23 @@ async function saveProfile(userId) {
     }
 
     if (!email) {
-        alert('Email not found – please log in again.');
+        await showSafeAlert('Error', 'Email not found – please log in again.', 'error');
         return;
     }
 
-    if (typeof showLoading === 'function') showLoading();
+    if (typeof window.showLoading === 'function') window.showLoading();
 
     try {
         const result = await saveUserProfile(updateData, userId);
         console.log('✅ Save result:', result);
 
-        // ---- UPDATE LOCALSTORAGE WITH NEW DATA ----
+        // ---- Update localStorage ----
         const storedUser = JSON.parse(localStorage.getItem('smarthub.user') || '{}');
         storedUser.name = name;
         storedUser.avatar_url = avatar;
         localStorage.setItem('smarthub.user', JSON.stringify(storedUser));
 
-        // ---- FORCE SIDEBAR UPDATE IMMEDIATELY ----
+        // ---- Update sidebar ----
         const avatarEl = document.getElementById('userAvatar');
         const emailEl = document.getElementById('userEmailDisplay');
         if (avatarEl) {
@@ -476,7 +482,7 @@ async function saveProfile(userId) {
             emailEl.textContent = name || email || 'User';
         }
 
-        // Re-fetch and re-render the profile page
+        // ---- Re-fetch and re-render ----
         const freshProfile = await fetchProfileFromDB();
         if (freshProfile) {
             const updatedUser = {
@@ -498,11 +504,13 @@ async function saveProfile(userId) {
             renderProfileUI(updatedUser);
         }
 
-        alert('Profile updated!');
+        // ---- ✅ Success modal with 'success' tone ----
+        await showSafeAlert('Success', 'Profile updated successfully!', 'success');
     } catch (err) {
-        alert('Failed: ' + err.message);
+        console.error('Save error:', err);
+        await showSafeAlert('Error', 'Failed: ' + err.message, 'error');
     } finally {
-        if (typeof hideLoading === 'function') hideLoading();
+        if (typeof window.hideLoading === 'function') window.hideLoading();
     }
 }
 

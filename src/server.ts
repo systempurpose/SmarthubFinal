@@ -85,6 +85,38 @@ async function encryptSecret(plaintext: string, passphrase: string): Promise<str
 
     return `${ivBase64}:${ctBase64}`;
 }
+
+async function decryptSecret(encrypted: string, passphrase: string): Promise<string> {
+    const saltHex = getSaltHex();
+    const salt = hexToUint8(saltHex);
+    const key = await deriveKey(passphrase, salt);
+
+    const parts = encrypted.split(':');
+    if (parts.length !== 2) {
+        throw new Error('Invalid encrypted data format.');
+    }
+
+    const ivBase64 = parts[0];
+    const ciphertextBase64 = parts[1];
+
+    const iv = Buffer.from(ivBase64, 'base64');
+    const combined = Buffer.from(ciphertextBase64, 'base64');
+
+    // Auth tag is the last 16 bytes
+    const authTag = combined.subarray(combined.length - 16);
+    const ciphertext = combined.subarray(0, combined.length - 16);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+
+    const decrypted = Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final()
+    ]);
+
+    return decrypted.toString('utf8');
+}
+
 // In server.ts
 const { getAIKey } = require('./decrypt-ai-key.js');
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
@@ -879,7 +911,6 @@ app.get('/api/recaptcha-site-key', (req, res) => {
 app.post('/api/reset-password', async (req, res) => {
     const { email, code, newPassword } = req.body;
 
-    // ---- 1. Validate input ----
     if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Valid email required' });
     }
@@ -891,8 +922,9 @@ app.post('/api/reset-password', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const emailHash = sha256(normalizedEmail);
+    const passphrase = getPassphrase();
 
-    // ---- 2. Verify the code (ignore 'used' flag at first) ----
     const supabase = createClient(
         process.env.SUPABASE_URL!,
         process.env.SUPABASE_ANON_KEY!
@@ -901,40 +933,42 @@ app.post('/api/reset-password', async (req, res) => {
     const { data: verification, error: verifyError } = await supabase
         .from('email_verifications')
         .select('*')
-        .eq('email', normalizedEmail)
-        .eq('code', code)
+        .eq('email_hash', emailHash)
+        .eq('used', false)
         .maybeSingle();
 
     if (verifyError || !verification) {
-        console.warn('[reset-password] Invalid or missing verification record:', verifyError);
         return res.status(400).json({ error: 'Invalid or expired code.' });
     }
 
-    // Check expiry
+    // Decrypt code
+    let decryptedCode;
+    try {
+        decryptedCode = await decryptSecret(verification.code, passphrase);
+    } catch {
+        return res.status(400).json({ error: 'Invalid code.' });
+    }
+
+    if (decryptedCode !== code) {
+        return res.status(400).json({ error: 'Invalid code.' });
+    }
+
     const now = new Date();
     const expiry = new Date(verification.expiry);
     if (now > expiry) {
         return res.status(400).json({ error: 'Code expired. Request a new one.' });
     }
 
-    // If the code was already used, reject
-    if (verification.used) {
-        return res.status(400).json({ error: 'Code already used. Request a new one.' });
-    }
-
-    // ---- 3. Encrypt the new password ----
-    const passphrase = getPassphrase();
+    // ---- Encrypt new password ----
     let encryptedPassword;
     try {
         encryptedPassword = await encryptSecret(newPassword, passphrase);
     } catch (encErr) {
-        console.error('[reset-password] Encryption failed:', encErr);
+        console.error('Encryption failed:', encErr);
         return res.status(500).json({ error: 'Internal server error.' });
     }
 
-    const emailHash = sha256(normalizedEmail);
-
-    // ---- 4. Update password in user_account ----
+    // ---- Update password in user_account ----
     const { error: updateError } = await supabase
         .from('user_account')
         .update({
@@ -944,22 +978,20 @@ app.post('/api/reset-password', async (req, res) => {
         .eq('email_hash', emailHash);
 
     if (updateError) {
-        console.error('[reset-password] Update failed:', updateError);
+        console.error('Update failed:', updateError);
         return res.status(500).json({ error: 'Failed to reset password.' });
     }
 
-    // ---- 5. Mark code as used ----
-    const { error: markError } = await supabase
+    // ---- Mark code as used and clear encrypted fields ----
+    await supabase
         .from('email_verifications')
-        .update({ used: true })
+        .update({
+            used: true,
+            email: null,
+            code: null,
+        })
         .eq('id', verification.id);
 
-    if (markError) {
-        console.warn('[reset-password] Failed to mark code as used:', markError);
-        // Not critical – still return success
-    }
-
-    // ---- 6. Return success ----
     res.json({ success: true, message: 'Password reset successfully.' });
 });
 
@@ -975,8 +1007,10 @@ app.post('/api/request-password-reset', async (req, res) => {
         process.env.SUPABASE_ANON_KEY!
     );
 
-    // ---- 1. Check if email exists ----
-    const emailHash = sha256(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailHash = sha256(normalizedEmail);
+
+    // Check if user exists
     const { data: user, error: userError } = await supabase
         .from('user_account')
         .select('id')
@@ -984,42 +1018,49 @@ app.post('/api/request-password-reset', async (req, res) => {
         .maybeSingle();
 
     if (userError || !user) {
-        // Security: don't reveal if email exists
+        // For security, don't reveal if email exists
         return res.json({ success: true, message: 'If that email is registered, a reset code has been sent.' });
     }
 
-    // ---- 2. Generate and store code ----
     const code = generateVerificationCode();
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    const passphrase = getPassphrase();
+
+    let encryptedEmail, encryptedCode;
+    try {
+        encryptedEmail = await encryptSecret(normalizedEmail, passphrase);
+        encryptedCode = await encryptSecret(code, passphrase);
+    } catch (encErr) {
+        console.error('Encryption failed:', encErr);
+        return res.status(500).json({ error: 'Failed to secure reset data.' });
+    }
 
     const { error } = await supabase
         .from('email_verifications')
         .upsert({
-            email: email.trim().toLowerCase(),
-            code: code,
+            email_hash: emailHash,
+            email: encryptedEmail,
+            code: encryptedCode,
             expiry: expiry.toISOString(),
             used: false,
-        }, { onConflict: 'email' });
+        }, { onConflict: 'email_hash' });
 
     if (error) {
         console.error('Failed to store reset code:', error);
         return res.status(500).json({ error: 'Failed to generate code' });
     }
 
-    // ---- 3. Build email HTML ----
+    // ---- Send email ----
     let html = '';
     try {
-        // ✅ Correct path: go up one level from 'dist/'
         const templatePath = path.join(__dirname, '..', 'email-templates', 'password-reset.html');
         console.log('[email] Loading template from:', templatePath);
         const template = await fs.readFile(templatePath, 'utf8');
         html = template.replace('{{code}}', code);
-        console.log('[email] Template loaded successfully.');
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.warn('[email] Template not found, using fallback:', errorMessage);
-
-        // ✅ Styled fallback with inline CSS
         html = `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
                 <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 30px 24px; text-align: center;">
@@ -1040,7 +1081,6 @@ app.post('/api/request-password-reset', async (req, res) => {
         `;
     }
 
-    // ---- 4. Send email ----
     try {
         await transporter.sendMail({
             from: '"SmartHub" <noreply@smarthub.com>',
@@ -1063,7 +1103,7 @@ app.post('/api/send-verification', async (req, res) => {
         return res.status(400).json({ error: 'Valid email required' });
     }
 
-    // ---- Sanitize Supabase URL ----
+    // ---- Sanitize Supabase ----
     let supabaseUrl = process.env.SUPABASE_URL || '';
     supabaseUrl = supabaseUrl.replace(/\/+$/, '');
     if (!supabaseUrl.startsWith('https://')) {
@@ -1077,23 +1117,34 @@ app.post('/api/send-verification', async (req, res) => {
         return res.status(500).json({ error: 'Server configuration error: missing Supabase credentials.' });
     }
 
-    console.log('[send-verification] Supabase URL:', supabaseUrl);
-    console.log('[send-verification] Supabase key present:', !!supabaseAnonKey);
-
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailHash = sha256(normalizedEmail);
     const code = generateVerificationCode();
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    const passphrase = getPassphrase();
+
+    let encryptedEmail, encryptedCode;
+    try {
+        encryptedEmail = await encryptSecret(normalizedEmail, passphrase);
+        encryptedCode = await encryptSecret(code, passphrase);
+    } catch (encErr) {
+        console.error('Encryption failed:', encErr);
+        return res.status(500).json({ error: 'Failed to secure verification data.' });
+    }
 
     try {
         const { error } = await supabase
             .from('email_verifications')
             .upsert({
-                email: email.trim().toLowerCase(),
-                code: code,
+                email_hash: emailHash,
+                email: encryptedEmail,
+                code: encryptedCode,
                 expiry: expiry.toISOString(),
                 used: false,
-            }, { onConflict: 'email' })
+            }, { onConflict: 'email_hash' })
             .select();
 
         if (error) {
@@ -1109,18 +1160,14 @@ app.post('/api/send-verification', async (req, res) => {
     // ---- Build email HTML ----
     let html = '';
     try {
-        // ✅ Correct path: go up one level from 'dist/' to project root
         const templatePath = path.join(__dirname, '..', 'email-templates', 'verification.html');
         console.log('[email] Loading template from:', templatePath);
         const template = await fs.readFile(templatePath, 'utf8');
         html = template.replace('{{code}}', code);
         console.log('[email] Template loaded successfully.');
     } catch (err) {
-        // ✅ Safe handling: `err` is unknown, convert to string
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.warn('[email] Template not found, using fallback:', errorMessage);
-
-        // ✅ Styled fallback with inline CSS
         html = `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
                 <div style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); padding: 30px 24px; text-align: center;">
@@ -1172,15 +1219,32 @@ app.post('/api/verify-email', async (req, res) => {
         process.env.SUPABASE_ANON_KEY!
     );
 
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailHash = sha256(normalizedEmail);
+    const passphrase = getPassphrase();
+
     const { data, error } = await supabase
         .from('email_verifications')
         .select('*')
-        .eq('email', email.trim().toLowerCase())
+        .eq('email_hash', emailHash)
         .eq('used', false)
         .maybeSingle();
 
     if (error || !data) {
         return res.status(404).json({ error: 'No pending verification found' });
+    }
+
+    // Decrypt stored code
+    let decryptedCode;
+    try {
+        decryptedCode = await decryptSecret(data.code, passphrase);
+    } catch (decErr) {
+        console.error('Decryption failed:', decErr);
+        return res.status(400).json({ error: 'Invalid code.' });
+    }
+
+    if (decryptedCode !== code) {
+        return res.status(400).json({ error: 'Invalid code.' });
     }
 
     const now = new Date();
@@ -1189,19 +1253,19 @@ app.post('/api/verify-email', async (req, res) => {
         return res.status(400).json({ error: 'Code expired. Request a new one.' });
     }
 
-    if (data.code !== code) {
-        return res.status(400).json({ error: 'Invalid code.' });
-    }
-
-    // Mark as used
+    // ---- Mark as used and clear encrypted fields ----
     const { error: updateErr } = await supabase
         .from('email_verifications')
-        .update({ used: true })
+        .update({
+            used: true,
+            email: null,
+            code: null,
+        })
         .eq('id', data.id);
 
     if (updateErr) {
         console.error('Failed to mark code as used:', updateErr);
-        return res.status(500).json({ error: 'Failed to verify' });
+        // Still return success as verification is complete
     }
 
     res.json({ success: true });

@@ -245,25 +245,68 @@ const PAGE_REQUIRES_ADB = {
 };
 // ==================== CUSTOM ALERT & CONFIRM ====================
 // ==================== CUSTOM ALERT & CONFIRM ====================
-function showAlert(title, message) {
+// ---- Show custom alert with modern design ----
+function showAlert(title, message, tone = 'info') {
     return new Promise((resolve) => {
         let modal = document.getElementById('alertModal');
         if (!modal) {
             const modalHtml = `
-                <div id="alertModal" class="modal" style="display: none; z-index: 99999;">
-                    <div class="modal-content" style="max-width: 420px; width: 90%; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                        <div class="modal-header" style="padding: 16px 24px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; display: flex; justify-content: space-between; align-items: center;">
-                            <h3 id="alertModalTitle" style="margin: 0; font-size: 17px; font-weight: 600; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-                                <span id="alertModalIcon" style="font-size: 20px;">${title.includes('Success') ? '✅' : '⚠️'}</span>
-                                <span>${title}</span>
-                            </h3>
-                            <span class="close-button" id="alertModalClose" style="cursor: pointer; font-size: 24px; color: #9ca3af; line-height: 1; padding: 0 4px;">&times;</span>
+                <div id="alertModal" class="modal" style="display: none; z-index: 99999; align-items: center; justify-content: center;">
+                    <div class="modal-content" style="
+                        max-width: 420px;
+                        width: 90%;
+                        border-radius: 20px;
+                        overflow: hidden;
+                        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+                        background: #ffffff;
+                        transform: scale(0.95);
+                        transition: transform 0.2s ease;
+                    ">
+                        <!-- Header -->
+                        <div id="alertModalHeader" style="
+                            padding: 20px 24px 16px 24px;
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            border-bottom: 1px solid rgba(0,0,0,0.06);
+                        ">
+                            <span id="alertModalIcon" style="font-size: 28px; line-height: 1;">✅</span>
+                            <h3 id="alertModalTitle" style="
+                                margin: 0;
+                                font-size: 18px;
+                                font-weight: 700;
+                                color: #0f172a;
+                            ">Success</h3>
                         </div>
-                        <div class="modal-body" style="padding: 20px 24px; background: #ffffff;">
-                            <p id="alertModalMessage" style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151; white-space: pre-wrap; word-break: break-all;">${message}</p>
+                        <!-- Body -->
+                        <div style="padding: 24px 28px 20px 28px;">
+                            <p id="alertModalMessage" style="
+                                margin: 0;
+                                font-size: 15px;
+                                line-height: 1.6;
+                                color: #334155;
+                                white-space: pre-wrap;
+                                word-break: break-word;
+                            "></p>
                         </div>
-                        <div class="modal-footer" style="padding: 12px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end;">
-                            <button id="alertModalOkBtn" class="btn-primary" style="padding: 8px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; background: #0d6efd; border: none; color: white;">OK</button>
+                        <!-- Footer -->
+                        <div style="padding: 12px 28px 24px 28px; display: flex; justify-content: flex-end;">
+                            <button id="alertModalOkBtn" class="btn-primary" style="
+                                padding: 10px 28px;
+                                border-radius: 10px;
+                                font-weight: 600;
+                                font-size: 14px;
+                                cursor: pointer;
+                                background: #0d6efd;
+                                border: none;
+                                color: white;
+                                transition: background 0.15s ease, transform 0.1s ease;
+                            "
+                            onmouseover="this.style.background='#0b5ed7'"
+                            onmouseout="this.style.background='#0d6efd'"
+                            onmousedown="this.style.transform='scale(0.97)'"
+                            onmouseup="this.style.transform='scale(1)'"
+                            >OK</button>
                         </div>
                     </div>
                 </div>
@@ -271,30 +314,86 @@ function showAlert(title, message) {
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             modal = document.getElementById('alertModal');
         }
-        // Update icon based on title
+
+        // ---- Set content and styling based on tone ----
         const icon = document.getElementById('alertModalIcon');
-        if (icon) {
-            icon.textContent = title.toLowerCase().includes('success') ? '✅' : title.toLowerCase().includes('error') ? '❌' : '⚠️';
+        const titleEl = document.getElementById('alertModalTitle');
+        const msgEl = document.getElementById('alertModalMessage');
+        const header = document.getElementById('alertModalHeader');
+
+        // Determine colors and icon
+        let headerBg = '#f8fafc';
+        let iconChar = 'ℹ️';
+        let titleText = title || 'Info';
+        let borderColor = '#e2e8f0';
+        let btnColor = '#0d6efd';
+
+        if (tone === 'success' || title.toLowerCase().includes('success')) {
+            headerBg = '#f0fdf4';
+            iconChar = '✅';
+            borderColor = '#86efac';
+            btnColor = '#16a34a';
+        } else if (tone === 'error' || title.toLowerCase().includes('error') || title.toLowerCase().includes('failed')) {
+            headerBg = '#fef2f2';
+            iconChar = '❌';
+            borderColor = '#fca5a5';
+            btnColor = '#dc2626';
+        } else {
+            headerBg = '#eff6ff';
+            iconChar = 'ℹ️';
+            borderColor = '#93c5fd';
+            btnColor = '#0d6efd';
         }
-        document.getElementById('alertModalTitle').textContent = title;
-        document.getElementById('alertModalMessage').textContent = message;
+
+        // Apply styles
+        header.style.background = headerBg;
+        header.style.borderBottomColor = borderColor;
+        icon.textContent = iconChar;
+        titleEl.textContent = title || 'Info';
+        msgEl.textContent = message || '';
+
+        // Update button color
+        const okBtn = document.getElementById('alertModalOkBtn');
+        okBtn.style.background = btnColor;
+        okBtn.onmouseover = () => { okBtn.style.background = adjustColor(btnColor, -15); };
+        okBtn.onmouseout = () => { okBtn.style.background = btnColor; };
+
+        // Show modal with animation
         modal.style.display = 'flex';
+        const content = modal.querySelector('.modal-content');
+        content.style.transform = 'scale(1)';
+
+        // ---- Close handler ----
         const closeModal = () => {
             modal.style.display = 'none';
             resolve();
         };
-        const okBtn = document.getElementById('alertModalOkBtn');
-        const closeBtn = document.getElementById('alertModalClose');
+
+        // Replace button to avoid multiple listeners
         const newOk = okBtn.cloneNode(true);
-        const newClose = closeBtn.cloneNode(true);
         okBtn.parentNode.replaceChild(newOk, okBtn);
-        closeBtn.parentNode.replaceChild(newClose, closeBtn);
         newOk.addEventListener('click', closeModal);
-        newClose.addEventListener('click', closeModal);
+
+        // Click outside to close (optional – can be disabled)
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
         }, { once: true });
     });
+}
+
+// Helper to darken a hex color (used for button hover)
+function adjustColor(hex, percent) {
+    let r, g, b;
+    if (hex.startsWith('#')) {
+        const full = hex.length === 7 ? hex : `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+        r = parseInt(full.slice(1,3), 16);
+        g = parseInt(full.slice(3,5), 16);
+        b = parseInt(full.slice(5,7), 16);
+    } else {
+        return '#0b5ed7';
+    }
+    const darken = (val) => Math.max(0, Math.min(255, val + percent));
+    return `#${darken(r).toString(16).padStart(2,'0')}${darken(g).toString(16).padStart(2,'0')}${darken(b).toString(16).padStart(2,'0')}`;
 }
 
 function showConfirm(title, message, options = {}) {
@@ -4221,8 +4320,26 @@ function initNavigation() {
                 else if (page === 'repairs') await renderRepairs();
                 else if (page === 'bsod') await renderBsodDiagnosis();
                 else if (page === 'advanced') await renderAdvancedDiagnostic();
+                // Inside initNavigation, in the rendering section:
+else if (page === 'repair-shorts') {
+    if (typeof window.renderRepairShorts === 'function') {
+        window.renderRepairShorts();
+    } else {
+        // Fallback: dynamic import
+        try {
+            const module = await import('./repairShorts.js');
+            if (module.renderRepairShorts) {
+                window.renderRepairShorts = module.renderRepairShorts;
+                module.renderRepairShorts();
+            }
+        } catch (err) {
+            document.getElementById('pageContent').innerHTML = `<div class="card">Could not load Repair Shorts: ${err.message}</div>`;
+        }
+    }
+}
                 else if (page === 'settings') await renderSettings();
                 else if (page === 'profile') await renderProfilePage();
+
                 else await renderDashboard();
 
                 // ---- 🆕 RE-APPLY THEME TO NEWLY RENDERED CONTENT ----
