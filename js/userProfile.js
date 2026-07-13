@@ -56,52 +56,270 @@ export async function renderProfilePageContent(user) {
     renderProfileUI(displayUser);
 }
 
+// Injects the profile page's styles once per document.
+function ensureProfileStyles() {
+    if (document.getElementById('profilePageStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'profilePageStyles';
+    style.textContent = `
+        .profile-page {
+            --pp-ink: #0f172a;
+            --pp-muted: #64748b;
+            --pp-canvas: #f8fafc;
+            --pp-border: #e2e8f0;
+            --pp-accent: #0d9488;
+            --pp-accent-hover: #0f766e;
+            --pp-accent-tint: #ccfbf1;
+            --pp-success-bg: #dcfce7;
+            --pp-success-fg: #15803d;
+            --pp-warn-bg: #fef3c7;
+            --pp-warn-fg: #b45309;
+            max-width: 520px;
+            margin: 0 auto;
+            color: var(--pp-ink);
+        }
+        .profile-page * { box-sizing: border-box; }
+        .profile-page__header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 1.75rem;
+        }
+        .profile-page__back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--pp-muted);
+            background: #fff;
+            border: 1px solid var(--pp-border);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: border-color .15s ease, color .15s ease, background .15s ease;
+        }
+        .profile-page__back:hover {
+            color: var(--pp-ink);
+            border-color: #cbd5e1;
+            background: var(--pp-canvas);
+        }
+        .profile-page__title {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+        .profile-card {
+            background: #fff;
+            border: 1px solid var(--pp-border);
+            border-radius: 16px;
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.08);
+        }
+        .profile-identity {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .profile-avatar {
+            position: relative;
+            width: 84px;
+            height: 84px;
+            flex-shrink: 0;
+        }
+        .profile-avatar__ring {
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid var(--pp-accent-tint);
+            transition: border-color .2s ease;
+        }
+        .profile-avatar:hover .profile-avatar__ring {
+            border-color: var(--pp-accent);
+        }
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #e2e8f0;
+            display: block;
+        }
+        .profile-avatar__edit {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--pp-accent);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            border: 2px solid #fff;
+            transition: background .15s ease, transform .15s ease;
+        }
+        .profile-avatar__edit:hover {
+            background: var(--pp-accent-hover);
+            transform: scale(1.06);
+        }
+        .profile-identity__name {
+            font-weight: 700;
+            font-size: 19px;
+            line-height: 1.3;
+        }
+        .profile-identity__email {
+            font-size: 13.5px;
+            color: var(--pp-muted);
+            margin-top: 2px;
+        }
+        .profile-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .profile-field label {
+            font-weight: 600;
+            font-size: 12.5px;
+            color: var(--pp-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .profile-field input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid var(--pp-border);
+            border-radius: 10px;
+            font-size: 14.5px;
+            color: var(--pp-ink);
+            background: #fff;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .profile-field input:focus {
+            outline: none;
+            border-color: var(--pp-accent);
+            box-shadow: 0 0 0 3px var(--pp-accent-tint);
+        }
+        .profile-field input[readonly] {
+            background: var(--pp-canvas);
+            color: var(--pp-muted);
+            cursor: not-allowed;
+        }
+        .profile-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 16px;
+            border-radius: 10px;
+            font-size: 13.5px;
+            font-weight: 500;
+        }
+        .profile-status--ok {
+            background: var(--pp-success-bg);
+            color: var(--pp-success-fg);
+        }
+        .profile-status--warn {
+            background: var(--pp-warn-bg);
+            color: var(--pp-warn-fg);
+        }
+        .profile-status i.status-icon { font-size: 15px; }
+        .profile-status__resend {
+            margin-left: auto;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            font-weight: 600;
+            border-radius: 999px;
+            border: 1px solid currentColor;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            transition: background .15s ease, opacity .15s ease;
+        }
+        .profile-status__resend:hover { background: rgba(180, 83, 9, 0.1); }
+        .profile-status__resend:disabled { opacity: 0.6; cursor: not-allowed; }
+        .profile-save {
+            padding: 13px;
+            font-weight: 700;
+            font-size: 14.5px;
+            width: 100%;
+            background: var(--pp-accent);
+            border: none;
+            color: #fff;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background .15s ease, transform .1s ease;
+        }
+        .profile-save:hover { background: var(--pp-accent-hover); }
+        .profile-save:active { transform: translateY(1px); }
+        @media (max-width: 480px) {
+            .profile-card { padding: 20px; border-radius: 12px; }
+            .profile-identity { gap: 14px; }
+            .profile-avatar { width: 68px; height: 68px; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 function renderProfileUI(user) {
+    ensureProfileStyles();
     const container = document.getElementById('pageContent');
     const email = user.email || '';
     const name = user.name || '';
     const avatar = user.avatar_url || '';
     const confirmed = user.confirmed || false;
 
+    const fallbackAvatar = `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84"%3E%3Crect width="84" height="84" fill="%230d9488"/%3E%3Ctext x="42" y="51" font-size="32" text-anchor="middle" fill="white" font-family="sans-serif"%3E${email.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E`;
+
     container.innerHTML = `
-        <div style="max-width:500px;margin:0 auto;">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
-                <button id="profileBackBtn" class="btn-secondary" style="padding:6px 14px;">
+        <div class="profile-page">
+            <div class="profile-page__header">
+                <button id="profileBackBtn" class="profile-page__back" type="button">
                     <i class="fas fa-arrow-left"></i> Back
                 </button>
-                <h2 style="margin:0;">User Profile</h2>
+                <h2 class="profile-page__title">User Profile</h2>
             </div>
-            <div style="display:flex;flex-direction:column;gap:20px;background:white;padding:24px;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-                <div style="display:flex;align-items:center;gap:24px;">
-                    <div style="position:relative;width:80px;height:80px;border-radius:50%;overflow:hidden;background:#e2e8f0;border:2px solid #e2e8f0;flex-shrink:0;">
-                        <img id="profileAvatarImg" src="${avatar || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"%3E%3Crect width="80" height="80" fill="%2364748b"/%3E%3Ctext x="40" y="48" font-size="32" text-anchor="middle" fill="white" font-family="sans-serif"%3E${email.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" style="width:100%;height:100%;object-fit:cover;" alt="Avatar">
-                        <label for="avatarUpload" style="position:absolute;bottom:0;right:0;background:#0d6efd;color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;border:2px solid white;">
+
+            <div class="profile-card">
+                <div class="profile-identity">
+                    <div class="profile-avatar">
+                        <div class="profile-avatar__ring"></div>
+                        <img id="profileAvatarImg" src="${avatar || fallbackAvatar}" alt="Avatar">
+                        <label for="avatarUpload" class="profile-avatar__edit">
                             <i class="fas fa-camera"></i>
                             <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
                         </label>
                     </div>
                     <div>
-                        <div style="font-weight:600;font-size:20px;">${name || email}</div>
-                        <div style="font-size:14px;color:#64748b;">${email}</div>
+                        <div class="profile-identity__name">${name || email}</div>
+                        <div class="profile-identity__email">${email}</div>
                     </div>
                 </div>
-                <div>
-                    <label style="font-weight:500;font-size:14px;color:#1e293b;">Email</label>
-                    <input type="email" value="${email}" readonly style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#f1f5f9;color:#475569;font-size:14px;">
+
+                <div class="profile-field">
+                    <label>Email</label>
+                    <input type="email" value="${email}" readonly>
                 </div>
-                <div>
-                    <label for="profileName" style="font-weight:500;font-size:14px;color:#1e293b;">Full Name</label>
-                    <input type="text" id="profileName" value="${name}" placeholder="Your full name" style="width:100%;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+
+                <div class="profile-field">
+                    <label for="profileName">Full name</label>
+                    <input type="text" id="profileName" value="${name}" placeholder="Your full name">
                 </div>
-                <div style="display:flex;align-items:center;gap:12px;background:${confirmed ? '#dcfce7' : '#fef3c7'};padding:12px 16px;border-radius:8px;">
-                    <span style="font-size:20px;">${confirmed ? '✅' : '⚠️'}</span>
-                    <span style="font-size:14px;color:${confirmed ? '#166534' : '#92400e'};">
-                        ${confirmed ? 'Email confirmed' : 'Email not confirmed'}
-                    </span>
-                    ${!confirmed ? `<button id="resendConfirmBtn" class="btn-secondary" style="margin-left:auto;padding:4px 14px;font-size:12px;border-radius:6px;">Resend</button>` : ''}
+
+                <div class="profile-status ${confirmed ? 'profile-status--ok' : 'profile-status--warn'}">
+                    <i class="status-icon fas ${confirmed ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i>
+                    <span>${confirmed ? 'Email confirmed' : 'Email not confirmed'}</span>
+                    ${!confirmed ? `<button id="resendConfirmBtn" class="profile-status__resend" type="button">Resend</button>` : ''}
                 </div>
-                <button id="profileSaveBtn" class="btn-primary" style="padding:12px;font-weight:600;width:100%;background:#0d6efd;border:none;color:white;border-radius:10px;">
-                    Save Profile
+
+                <button id="profileSaveBtn" class="profile-save" type="button">
+                    Save profile
                 </button>
             </div>
         </div>
@@ -111,7 +329,7 @@ function renderProfileUI(user) {
     document.getElementById('avatarUpload')?.addEventListener('change', handleAvatarUpload);
     document.getElementById('profileSaveBtn')?.addEventListener('click', () => saveProfile(user.id));
 
-    // ---- 🔥 Real "Resend" button handler ----
+    // ---- Real "Resend" button handler ----
     const resendBtn = document.getElementById('resendConfirmBtn');
     if (resendBtn) {
         resendBtn.addEventListener('click', async function() {
@@ -120,6 +338,9 @@ function renderProfileUI(user) {
                 alert('No email address found.');
                 return;
             }
+            const originalLabel = resendBtn.textContent;
+            resendBtn.disabled = true;
+            resendBtn.textContent = 'Sending…';
             try {
                 await sendVerificationCode(emailAddr);
                 alert('✅ Verification code resent to your email.');
@@ -129,9 +350,13 @@ function renderProfileUI(user) {
                     user.confirmed = fresh.confirmed;
                     // Re‑render the UI to update the status
                     renderProfileUI(user);
+                    return;
                 }
             } catch (err) {
                 alert('❌ Failed to resend code: ' + err.message);
+            } finally {
+                resendBtn.disabled = false;
+                resendBtn.textContent = originalLabel;
             }
         });
     }
@@ -243,7 +468,7 @@ async function saveProfile(userId) {
                 avatarEl.style.backgroundPosition = 'center';
                 avatarEl.textContent = '';
             } else {
-                avatarEl.style.background = 'linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%)';
+                avatarEl.style.background = 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)';
                 avatarEl.textContent = (name || email || 'U')[0].toUpperCase();
             }
         }
@@ -292,7 +517,7 @@ function updateSidebarUser(user) {
             avatarEl.style.backgroundPosition = 'center';
             avatarEl.textContent = '';
         } else {
-            avatarEl.style.background = 'linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%)';
+            avatarEl.style.background = 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)';
             avatarEl.textContent = (user.name || user.email || 'U')[0].toUpperCase();
         }
     }

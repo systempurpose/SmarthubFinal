@@ -414,39 +414,42 @@
 
     <!-- Login Modal -->
     <div id="loginModal" class="modal" style="display: none; z-index: 100000; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-        <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
-            <div style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); padding: 20px 24px 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 28px;">🔐</span>
-                    <div>
-                        <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: white;" data-i18n="auth.login.title">Login</h3>
-                        <p style="margin: 2px 0 0 0; font-size: 13px; color: #b0d4ff;" data-i18n="auth.login.subtitle">Sign in to your SmartHub account</p>
-                    </div>
-                    <button id="loginModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: white; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
+    <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
+        <div style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); padding: 20px 24px 16px 24px; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 28px;">🔐</span>
+                <div>
+                    <h3 style="margin: 0; font-size: 20px; font-weight: 700; color: white;" data-i18n="auth.login.title">Login</h3>
+                    <p style="margin: 2px 0 0 0; font-size: 13px; color: #b0d4ff;" data-i18n="auth.login.subtitle">Sign in to your SmartHub account</p>
                 </div>
-            </div>
-            <div style="padding: 24px 28px 28px 28px;">
-                <form id="loginForm" autocomplete="off">
-                    <div style="margin-bottom: 16px;">
-                        <label for="loginEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
-                        <input type="email" id="loginEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
-                    </div>
-                    <div style="margin-bottom: 20px;">
-                        <label for="loginPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.password">Password</label>
-                        <input type="password" id="loginPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #0d6efd; border: none; color: white; cursor: pointer;">
-                        <span data-i18n="auth.login.btn">Login</span>
-                    </button>
-                </form>
-                <p style="margin-top: 16px; text-align: center; font-size: 14px; color: #64748b;">
-                    <span data-i18n="auth.login.noAccount">Don't have an account?</span>
-                    <a href="#" id="switchToRegister" style="color: #0d6efd; font-weight: 600; text-decoration: none;">Register</a>
-                </p>
-                <div id="loginError" style="color: #dc2626; font-size: 13px; margin-top: 12px; text-align: center; display: none;"></div>
+                <button id="loginModalClose" style="margin-left: auto; background: transparent; border: none; font-size: 28px; color: white; cursor: pointer; opacity: 0.8; transition: opacity 0.2s; padding: 0 8px;">&times;</button>
             </div>
         </div>
+        <div style="padding: 24px 28px 28px 28px;">
+            <form id="loginForm" autocomplete="off">
+                <div style="margin-bottom: 16px;">
+                    <label for="loginEmail" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.email">Email</label>
+                    <input type="email" id="loginEmail" placeholder="you@example.com" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label for="loginPassword" style="display: block; font-weight: 500; font-size: 14px; color: #1e293b; margin-bottom: 4px;" data-i18n="auth.password">Password</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required style="width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 14px; transition: border 0.2s; background: #fafcff;">
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; border-radius: 10px; font-weight: 600; font-size: 15px; background: #0d6efd; border: none; color: white; cursor: pointer;">
+                    <span data-i18n="auth.login.btn">Login</span>
+                </button>
+            </form>
+            <div style="margin-top: 12px; text-align: center; border-top: 1px solid #e9edf2; padding-top: 12px;">
+                <a href="#" id="forgotPasswordLink" style="color: #0d6efd; font-size: 13px; text-decoration: none;">🔑 Forgot Password?</a>
+            </div>
+            <p style="margin-top: 12px; text-align: center; font-size: 14px; color: #64748b;">
+                <span data-i18n="auth.login.noAccount">Don't have an account?</span>
+                <a href="#" id="switchToRegister" style="color: #0d6efd; font-weight: 600; text-decoration: none;">Register</a>
+            </p>
+            <div id="loginError" style="color: #dc2626; font-size: 13px; margin-top: 12px; text-align: center; display: none;"></div>
+        </div>
     </div>
+</div>
 
     <!-- Register Modal – WITH VERIFICATION CODE -->
     <div id="registerModal" class="modal" style="display: none; z-index: 100000; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
@@ -503,6 +506,53 @@
         </div>
     </div>
 
+    <!-- Reset Password Modal -->
+<div id="resetPasswordModal" class="modal" style="display: none; z-index: 100010; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+    <div class="modal-content acrylic" style="max-width: 400px; padding: 0; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.4); overflow: hidden; background: white;">
+        <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.05);">
+            <h3 style="margin:0; color:white; font-size:18px;">🔑 Reset Password</h3>
+            <button id="resetPasswordModalClose" style="background:transparent; border:none; font-size:28px; color:white; cursor:pointer;">&times;</button>
+        </div>
+        <div style="padding: 24px 28px 28px 28px;">
+            <!-- Step 1: Enter email -->
+            <div id="resetStep1" style="display: block;">
+                <p style="font-size:14px; color:#64748b; margin-bottom:16px;">Enter your email address and we'll send you a verification code.</p>
+                <div style="margin-bottom:16px;">
+                    <label for="resetEmail" style="display:block; font-weight:500; font-size:14px; color:#1e293b; margin-bottom:4px;">Email</label>
+                    <input type="email" id="resetEmail" placeholder="you@example.com" required style="width:100%; padding:10px 14px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:14px;">
+                    <div id="resetEmailError" style="color:#dc2626; font-size:12px; margin-top:4px; display:none;"></div>
+                </div>
+                <button id="sendResetCodeBtn" class="btn-primary" style="width:100%; padding:12px; border-radius:10px; font-weight:600; font-size:15px; background:#0d6efd; border:none; color:white; cursor:pointer;">Send Reset Code</button>
+                <div id="resetCodeSentMsg" style="font-size:12px; color:#16a34a; margin-top:8px; display:none;">✅ Code sent to your email.</div>
+                <div id="resetSendError" style="color:#dc2626; font-size:12px; margin-top:8px; display:none;"></div>
+            </div>
+            <!-- Step 2: Verify code -->
+            <div id="resetStep2" style="display: none;">
+                <p style="font-size:14px; color:#64748b; margin-bottom:16px;">Enter the 6-digit code sent to your email.</p>
+                <div style="margin-bottom:16px;">
+                    <label for="resetCode" style="display:block; font-weight:500; font-size:14px; color:#1e293b; margin-bottom:4px;">Verification Code</label>
+                    <input type="text" id="resetCode" placeholder="Enter code" maxlength="6" style="width:100%; padding:10px 14px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:14px; text-align:center; letter-spacing:4px;">
+                    <div id="resetCodeError" style="color:#dc2626; font-size:12px; margin-top:4px; display:none;"></div>
+                </div>
+                <button id="verifyResetCodeBtn" class="btn-primary" style="width:100%; padding:12px; border-radius:10px; font-weight:600; font-size:15px; background:#0d6efd; border:none; color:white; cursor:pointer;">Verify Code</button>
+            </div>
+            <!-- Step 3: Set new password -->
+            <div id="resetStep3" style="display: none;">
+                <p style="font-size:14px; color:#64748b; margin-bottom:16px;">Enter your new password.</p>
+                <div style="margin-bottom:16px;">
+                    <label for="newPassword" style="display:block; font-weight:500; font-size:14px; color:#1e293b; margin-bottom:4px;">New Password</label>
+                    <input type="password" id="newPassword" placeholder="••••••••" style="width:100%; padding:10px 14px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:14px;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label for="confirmNewPassword" style="display:block; font-weight:500; font-size:14px; color:#1e293b; margin-bottom:4px;">Confirm New Password</label>
+                    <input type="password" id="confirmNewPassword" placeholder="••••••••" style="width:100%; padding:10px 14px; border:1.5px solid #e2e8f0; border-radius:10px; font-size:14px;">
+                </div>
+                <div id="resetPasswordError" style="color:#dc2626; font-size:12px; margin-top:4px; display:none;"></div>
+                <button id="resetPasswordBtn" class="btn-primary" style="width:100%; padding:12px; border-radius:10px; font-weight:600; font-size:15px; background:#16a34a; border:none; color:white; cursor:pointer;">Reset Password</button>
+            </div>
+        </div>
+    </div>
+</div>
     <!-- Loading Overlay -->
     <div id="loadingOverlay">
         <div class="loading-spinner">

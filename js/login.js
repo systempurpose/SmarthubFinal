@@ -549,7 +549,133 @@ if (sendCodeBtn) {
         await handleSendCode(email, password, confirmPassword);
     });
 }
+// ---- Forgot Password Flow ----
+let resetEmail = '';
+let resetCode = '';
 
+// Open reset modal
+document.getElementById('forgotPasswordLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeModal(loginModal);
+    document.getElementById('resetPasswordModal').style.display = 'flex';
+    // Reset UI
+    document.getElementById('resetStep1').style.display = 'block';
+    document.getElementById('resetStep2').style.display = 'none';
+    document.getElementById('resetStep3').style.display = 'none';
+    document.getElementById('resetEmail').value = '';
+    document.getElementById('resetCode').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('confirmNewPassword').value = '';
+});
+
+// Close reset modal
+document.getElementById('resetPasswordModalClose')?.addEventListener('click', () => {
+    document.getElementById('resetPasswordModal').style.display = 'none';
+});
+
+// Send Reset Code
+document.getElementById('sendResetCodeBtn')?.addEventListener('click', async () => {
+    const email = document.getElementById('resetEmail').value.trim();
+    const errorEl = document.getElementById('resetEmailError');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errorEl.textContent = 'Please enter a valid email.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    errorEl.style.display = 'none';
+
+    const btn = document.getElementById('sendResetCodeBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+        const response = await fetch('/api/request-password-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await response.json();
+        if (data.success) {
+            document.getElementById('resetCodeSentMsg').style.display = 'block';
+            resetEmail = email;
+            // Go to step 2
+            document.getElementById('resetStep1').style.display = 'none';
+            document.getElementById('resetStep2').style.display = 'block';
+        } else {
+            document.getElementById('resetSendError').textContent = data.error || 'Failed to send code.';
+            document.getElementById('resetSendError').style.display = 'block';
+        }
+    } catch (err) {
+        document.getElementById('resetSendError').textContent = 'Error: ' + err.message;
+        document.getElementById('resetSendError').style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Reset Code';
+    }
+});
+
+// Verify Reset Code
+// ---- Step 2 → Step 3: Verify code (frontend-only check) ----
+document.getElementById('verifyResetCodeBtn')?.addEventListener('click', () => {
+    const code = document.getElementById('resetCode').value.trim();
+    const errorEl = document.getElementById('resetCodeError');
+    if (!code || code.length !== 6) {
+        errorEl.textContent = 'Please enter the 6-digit code.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    errorEl.style.display = 'none';
+    // Store the code and move to step 3 (no backend call)
+    resetCode = code;
+    document.getElementById('resetStep2').style.display = 'none';
+    document.getElementById('resetStep3').style.display = 'block';
+});
+
+// Reset Password
+document.getElementById('resetPasswordBtn')?.addEventListener('click', async () => {
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+    const errorEl = document.getElementById('resetPasswordError');
+
+    if (!newPassword || newPassword.length < 6) {
+        errorEl.textContent = 'Password must be at least 6 characters.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    if (newPassword !== confirmNewPassword) {
+        errorEl.textContent = 'Passwords do not match.';
+        errorEl.style.display = 'block';
+        return;
+    }
+    errorEl.style.display = 'none';
+
+    const btn = document.getElementById('resetPasswordBtn');
+    btn.disabled = true;
+    btn.textContent = 'Resetting...';
+
+    try {
+        const response = await fetch('/api/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: resetEmail, code: resetCode, newPassword }),
+        });
+        const data = await response.json();
+        if (data.success) {
+            toast('✅ Password reset successfully! You can now login.', 'success');
+            document.getElementById('resetPasswordModal').style.display = 'none';
+            openModal(loginModal);
+        } else {
+            errorEl.textContent = data.error || 'Failed to reset password.';
+            errorEl.style.display = 'block';
+        }
+    } catch (err) {
+        errorEl.textContent = 'Error: ' + err.message;
+        errorEl.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Reset Password';
+    }
+});
     // Switch between login/register
     const switchToRegister = document.getElementById('switchToRegister');
     if (switchToRegister) {

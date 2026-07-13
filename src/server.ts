@@ -22,6 +22,69 @@ import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import fetch from 'node-fetch';
+function getSaltHex(): string {
+    return process.env.ENCRYPTION_SALT || 'a1b2c3d4e5f67890a1b2c3d4e5f67890';
+}
+
+function hexToUint8(hex: string): Uint8Array {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
+}
+
+function base64Encode(uint8: Uint8Array): string {
+    return Buffer.from(uint8).toString('base64');
+}
+
+async function deriveKey(passphrase: string, salt: Uint8Array): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+        crypto.pbkdf2(passphrase, Buffer.from(salt), 100000, 32, 'sha256', (err, derivedKey) => {
+            if (err) reject(err);
+            else resolve(derivedKey);
+        });
+    });
+}
+// ---- SHA-256 hash (matches frontend) ----
+function sha256(message: string): string {
+    return crypto.createHash('sha256').update(message).digest('hex');
+}
+
+// ---- Get passphrase (use environment or default) ----
+function getPassphrase(): string {
+    return process.env.ENCRYPTION_PASSPHRASE || 'SmartHub2026!SecureKey';
+}
+
+// ---- Helper to safely get error message ----
+
+/**
+ * Encrypt a plaintext string using AES‑GCM (matches frontend encryptSecret).
+ * Returns: ivBase64:ciphertextBase64
+ */
+async function encryptSecret(plaintext: string, passphrase: string): Promise<string> {
+    const saltHex = getSaltHex();
+    const salt = hexToUint8(saltHex);
+    const key = await deriveKey(passphrase, salt);
+
+    const iv = crypto.randomBytes(12); // 12 bytes IV for GCM
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+    const encrypted = Buffer.concat([
+        cipher.update(plaintext, 'utf8'),
+        cipher.final()
+    ]);
+
+    const authTag = cipher.getAuthTag(); // 16 bytes
+
+    // Combine ciphertext and auth tag (frontend does this automatically)
+    const combined = Buffer.concat([encrypted, authTag]);
+
+    const ivBase64 = iv.toString('base64');
+    const ctBase64 = combined.toString('base64');
+
+    return `${ivBase64}:${ctBase64}`;
+}
 // In server.ts
 const { getAIKey } = require('./decrypt-ai-key.js');
 import { registerConnectivityFixRoutes } from './routes/connectivityFixRoutes';
@@ -812,6 +875,186 @@ app.get('/api/recaptcha-site-key', (req, res) => {
     }
     res.json({ siteKey });
 });
+
+app.post('/api/reset-password', async (req, res) => {
+    const { email, code, newPassword } = req.body;
+
+    // ---- 1. Validate input ----
+    if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Valid email required' });
+    }
+    if (!code || typeof code !== 'string' || code.length !== 6) {
+        return res.status(400).json({ error: 'Valid 6-digit code required' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // ---- 2. Verify the code (ignore 'used' flag at first) ----
+    const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_ANON_KEY!
+    );
+
+    const { data: verification, error: verifyError } = await supabase
+        .from('email_verifications')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .eq('code', code)
+        .maybeSingle();
+
+    if (verifyError || !verification) {
+        console.warn('[reset-password] Invalid or missing verification record:', verifyError);
+        return res.status(400).json({ error: 'Invalid or expired code.' });
+    }
+
+    // Check expiry
+    const now = new Date();
+    const expiry = new Date(verification.expiry);
+    if (now > expiry) {
+        return res.status(400).json({ error: 'Code expired. Request a new one.' });
+    }
+
+    // If the code was already used, reject
+    if (verification.used) {
+        return res.status(400).json({ error: 'Code already used. Request a new one.' });
+    }
+
+    // ---- 3. Encrypt the new password ----
+    const passphrase = getPassphrase();
+    let encryptedPassword;
+    try {
+        encryptedPassword = await encryptSecret(newPassword, passphrase);
+    } catch (encErr) {
+        console.error('[reset-password] Encryption failed:', encErr);
+        return res.status(500).json({ error: 'Internal server error.' });
+    }
+
+    const emailHash = sha256(normalizedEmail);
+
+    // ---- 4. Update password in user_account ----
+    const { error: updateError } = await supabase
+        .from('user_account')
+        .update({
+            password: encryptedPassword,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('email_hash', emailHash);
+
+    if (updateError) {
+        console.error('[reset-password] Update failed:', updateError);
+        return res.status(500).json({ error: 'Failed to reset password.' });
+    }
+
+    // ---- 5. Mark code as used ----
+    const { error: markError } = await supabase
+        .from('email_verifications')
+        .update({ used: true })
+        .eq('id', verification.id);
+
+    if (markError) {
+        console.warn('[reset-password] Failed to mark code as used:', markError);
+        // Not critical – still return success
+    }
+
+    // ---- 6. Return success ----
+    res.json({ success: true, message: 'Password reset successfully.' });
+});
+
+app.post('/api/request-password-reset', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+        return res.status(400).json({ error: 'Valid email required' });
+    }
+
+    const supabase = createClient(
+        process.env.SUPABASE_URL!,
+        process.env.SUPABASE_ANON_KEY!
+    );
+
+    // ---- 1. Check if email exists ----
+    const emailHash = sha256(email);
+    const { data: user, error: userError } = await supabase
+        .from('user_account')
+        .select('id')
+        .eq('email_hash', emailHash)
+        .maybeSingle();
+
+    if (userError || !user) {
+        // Security: don't reveal if email exists
+        return res.json({ success: true, message: 'If that email is registered, a reset code has been sent.' });
+    }
+
+    // ---- 2. Generate and store code ----
+    const code = generateVerificationCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    const { error } = await supabase
+        .from('email_verifications')
+        .upsert({
+            email: email.trim().toLowerCase(),
+            code: code,
+            expiry: expiry.toISOString(),
+            used: false,
+        }, { onConflict: 'email' });
+
+    if (error) {
+        console.error('Failed to store reset code:', error);
+        return res.status(500).json({ error: 'Failed to generate code' });
+    }
+
+    // ---- 3. Build email HTML ----
+    let html = '';
+    try {
+        // ✅ Correct path: go up one level from 'dist/'
+        const templatePath = path.join(__dirname, '..', 'email-templates', 'password-reset.html');
+        console.log('[email] Loading template from:', templatePath);
+        const template = await fs.readFile(templatePath, 'utf8');
+        html = template.replace('{{code}}', code);
+        console.log('[email] Template loaded successfully.');
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.warn('[email] Template not found, using fallback:', errorMessage);
+
+        // ✅ Styled fallback with inline CSS
+        html = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 30px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">🔐 SmartHub</h1>
+                    <p style="color: #fecaca; font-size: 14px; margin: 4px 0 0;">Password Reset</p>
+                </div>
+                <div style="padding: 32px 28px; color: #1e293b;">
+                    <h2 style="font-size: 20px; font-weight: 600; margin: 0 0 8px;">Reset Your Password</h2>
+                    <p style="font-size: 16px; line-height: 1.6; margin: 0 0 16px;">Your password reset code is:</p>
+                    <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                        <span style="font-size: 36px; font-weight: 700; letter-spacing: 6px; color: #dc2626; font-family: 'Courier New', monospace; background: #ffffff; display: inline-block; padding: 8px 24px; border-radius: 8px; border: 1px solid #e2e8f0;">${code}</span>
+                        <div style="font-size: 14px; color: #64748b; margin-top: 8px;">⏱️ This code expires in 15 minutes.</div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.6; margin: 0 0 8px;">If you didn't request this, please ignore.</p>
+                </div>
+                <div style="border-top: 1px solid #e9edf2; padding: 20px 28px; text-align: center; font-size: 13px; color: #94a3b8;">&copy; 2026 SmartHub. All rights reserved.</div>
+            </div>
+        `;
+    }
+
+    // ---- 4. Send email ----
+    try {
+        await transporter.sendMail({
+            from: '"SmartHub" <noreply@smarthub.com>',
+            to: email,
+            subject: 'Password Reset Request',
+            html,
+        });
+        res.json({ success: true, message: 'Reset code sent.' });
+    } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('Email send failed:', errorMsg);
+        res.status(500).json({ error: 'Failed to send email: ' + errorMsg });
+    }
+});
 // ---- Endpoint: send verification code ----
 app.post('/api/send-verification', async (req, res) => {
     const { email } = req.body;
@@ -822,9 +1065,7 @@ app.post('/api/send-verification', async (req, res) => {
 
     // ---- Sanitize Supabase URL ----
     let supabaseUrl = process.env.SUPABASE_URL || '';
-    // Remove trailing slash
     supabaseUrl = supabaseUrl.replace(/\/+$/, '');
-    // Ensure it starts with https://
     if (!supabaseUrl.startsWith('https://')) {
         supabaseUrl = 'https://' + supabaseUrl;
     }
@@ -865,18 +1106,38 @@ app.post('/api/send-verification', async (req, res) => {
         return res.status(500).json({ error: 'Database error: ' + errorMsg });
     }
 
-    // Build email HTML
+    // ---- Build email HTML ----
     let html = '';
     try {
-        const templatePath = path.join(__dirname, 'email-templates', 'verification.html');
+        // ✅ Correct path: go up one level from 'dist/' to project root
+        const templatePath = path.join(__dirname, '..', 'email-templates', 'verification.html');
+        console.log('[email] Loading template from:', templatePath);
         const template = await fs.readFile(templatePath, 'utf8');
         html = template.replace('{{code}}', code);
-    } catch {
+        console.log('[email] Template loaded successfully.');
+    } catch (err) {
+        // ✅ Safe handling: `err` is unknown, convert to string
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.warn('[email] Template not found, using fallback:', errorMessage);
+
+        // ✅ Styled fallback with inline CSS
         html = `
-            <h2>Welcome to SmartHub!</h2>
-            <p>Your verification code is:</p>
-            <h1 style="font-size:32px;letter-spacing:4px;background:#f0f0f0;display:inline-block;padding:10px 20px;">${code}</h1>
-            <p>This code expires in 15 minutes.</p>
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); padding: 30px 24px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">🔐 SmartHub</h1>
+                    <p style="color: #b0d4ff; font-size: 14px; margin: 4px 0 0;">Verify Your Account</p>
+                </div>
+                <div style="padding: 32px 28px; color: #1e293b;">
+                    <h2 style="font-size: 20px; font-weight: 600; margin: 0 0 8px;">Welcome to SmartHub!</h2>
+                    <p style="font-size: 16px; line-height: 1.6; margin: 0 0 16px;">Your verification code is:</p>
+                    <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                        <span style="font-size: 36px; font-weight: 700; letter-spacing: 6px; color: #0d6efd; font-family: 'Courier New', monospace; background: #ffffff; display: inline-block; padding: 8px 24px; border-radius: 8px; border: 1px solid #e2e8f0;">${code}</span>
+                        <div style="font-size: 14px; color: #64748b; margin-top: 8px;">⏱️ This code expires in 15 minutes.</div>
+                    </div>
+                    <p style="font-size: 15px; line-height: 1.6; margin: 0 0 8px;">If you didn't request this, please ignore.</p>
+                </div>
+                <div style="border-top: 1px solid #e9edf2; padding: 20px 28px; text-align: center; font-size: 13px; color: #94a3b8;">&copy; 2026 SmartHub. All rights reserved.</div>
+            </div>
         `;
     }
 
