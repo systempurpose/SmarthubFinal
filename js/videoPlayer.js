@@ -5,9 +5,10 @@ import { decryptBlob, getPassphrase } from './supabase.js';
 // ---- Thumbnail cache ----
 const thumbnailCache = new Map();
 
-async function generateVideoThumbnail(videoUrl, time = 0.1) {
-    if (thumbnailCache.has(videoUrl)) {
-        return thumbnailCache.get(videoUrl);
+async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
+    const cacheKey = videoUrl;
+    if (thumbnailCache.has(cacheKey)) {
+        return thumbnailCache.get(cacheKey);
     }
 
     return new Promise((resolve, reject) => {
@@ -21,34 +22,114 @@ async function generateVideoThumbnail(videoUrl, time = 0.1) {
         source.src = videoUrl;
         video.appendChild(source);
 
-        video.addEventListener('loadeddata', () => {
-            const seekTime = Math.min(time, video.duration * 0.1);
-            video.currentTime = seekTime;
-        });
+        let settled = false;
 
-        video.addEventListener('seeked', () => {
-            const canvas = document.createElement('canvas');
-            const ratio = video.videoWidth / video.videoHeight;
-            const maxWidth = 640;
-            const width = Math.min(maxWidth, video.videoWidth);
-            const height = width / ratio;
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            thumbnailCache.set(videoUrl, dataUrl);
-            resolve(dataUrl);
+        const cleanup = () => {
+            clearTimeout(watchdog);
             video.remove();
-        });
+            source.remove();
+        };
 
-        video.addEventListener('error', () => {
-            reject(new Error('Failed to load video for thumbnail'));
-        });
+        const settleResolve = (val) => {
+            if (settled) return;
+            settled = true;
+            resolve(val);
+            cleanup();
+        };
+
+        // Used for both explicit failures and the watchdog — funnels
+        // through the retry count exactly like the old onError path did.
+        const retry = (reason) => {
+            if (settled) return;
+            settled = true;
+            if (retries > 0) {
+                console.warn('[Thumbnail] Retrying...', retries, reason);
+                generateVideoThumbnail(videoUrl, time, retries - 1)
+                    .then(resolve)
+                    .catch(reject);
+            } else {
+                reject(reason instanceof Error ? reason : new Error(String(reason)));
+            }
+            cleanup();
+        };
+
+        const onLoaded = () => {
+            const dur = video.duration;
+            const safeDur = (isFinite(dur) && dur > 0) ? dur : 1;
+            const seekTime = Math.min(time, safeDur * 0.1);
+            // If the target time matches where the video already is, the
+            // browser treats the seek as a no-op and never fires 'seeked'
+            // — which previously hung the whole pipeline forever. Nudge
+            // it slightly so a real seek always happens.
+            if (Math.abs(video.currentTime - seekTime) < 0.001) {
+                video.currentTime = seekTime + 0.001;
+            } else {
+                video.currentTime = seekTime;
+            }
+        };
+
+        const onSeeked = () => {
+            if (video.videoWidth === 0) {
+                retry(new Error('Video dimensions zero'));
+                return;
+            }
+
+            const draw = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ratio = video.videoWidth / video.videoHeight;
+                    const maxWidth = 640;
+                    const width = Math.min(maxWidth, video.videoWidth);
+                    const height = width / ratio;
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, width, height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    thumbnailCache.set(cacheKey, dataUrl);
+                    settleResolve(dataUrl);
+                } catch (drawErr) {
+                    retry(drawErr);
+                }
+            };
+
+            // 'seeked' fires once the seek is logically complete, but the
+            // decoded frame isn't always painted yet for a blob-sourced
+            // video that's never played — drawing immediately can capture
+            // a black buffer. Wait for the real frame via
+            // requestVideoFrameCallback, falling back to a double rAF.
+            if (video.requestVideoFrameCallback) {
+                video.requestVideoFrameCallback(() => draw());
+            } else {
+                requestAnimationFrame(() => requestAnimationFrame(draw));
+            }
+        };
+
+        const onError = (err) => retry(err);
+
+        video.addEventListener('loadedmetadata', onLoaded);
+        video.addEventListener('seeked', onSeeked);
+        video.addEventListener('error', onError);
+
+        // Watchdog: the whole pipeline (metadata → seek → paint → draw)
+        // must settle within a bounded window, no matter which stage it's
+        // stuck at. The old timeout only guarded metadata loading and
+        // stopped protecting anything once 'loadedmetadata' fired, so a
+        // silently-skipped 'seeked' event (no-op seek) left the promise
+        // — and the UI's "Loading thumbnail..." state — hanging forever.
+        const watchdog = setTimeout(() => {
+            retry(new Error('Thumbnail generation timed out'));
+        }, 6000);
+
+        // Video element must be attached to the DOM (off-screen) for some
+        // browsers to reliably decode a seeked frame for canvas capture.
+        video.style.cssText = 'position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; top:-9999px; left:-9999px;';
+        document.body.appendChild(video);
 
         video.load();
     });
 }
+
 
 export async function renderVideoPlayer(container, videoUrl, options = {}) {
     const el = typeof container === 'string' ? document.querySelector(container) : container;
@@ -73,7 +154,7 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         width: 100%;
         border-radius: 12px;
         overflow: hidden;
-        aspect-ratio: auto;
+        aspect-ratio: 16 / 9;
         user-select: none;
     `;
     el.appendChild(wrapper);
@@ -107,21 +188,36 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         video.className = options.className || 'video-player';
         video.controls = false; // Native controls disabled
         video.autoplay = options.autoplay || false;
-        video.poster = options.poster || '';
+        video.preload = 'metadata';
         video.style.cssText = `
-            max-width: 100%;
-            max-height: 70vh;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
             background: #000;
             cursor: pointer;
             display: block;
-            width: 100%;
         `;
 
         const source = document.createElement('source');
         source.src = blobUrl;
         source.type = 'video/mp4';
         video.appendChild(source);
+
+        // Explicitly kick off the load — appending a <source> after element
+        // creation doesn't reliably auto-trigger loading in every browser,
+        // which left the "Loading video..." state stuck forever since
+        // 'loadeddata' (which hides it below) would never fire.
+        video.load();
+
+        // ---- Generate a real frame as the poster so the player never shows
+        // a plain black rectangle before playback starts ----
+        if (options.poster) {
+            video.poster = options.poster;
+        } else {
+            generateVideoThumbnail(blobUrl)
+                .then((dataUrl) => { video.poster = dataUrl; })
+                .catch((err) => console.warn('[renderVideoPlayer] Poster generation failed:', err));
+        }
 
         // ---- Center play/pause overlay ----
         const overlay = document.createElement('div');
@@ -381,7 +477,7 @@ export async function renderVideoThumbnail(container, videoUrl) {
 
     const publicUrl = await getPublicVideoUrl(videoUrl);
     if (!publicUrl) {
-        el.innerHTML = `<div style="color:#999;padding:16px;text-align:center;font-size:14px;">Video not available</div>`;
+        el.innerHTML = `<div style="color:#999;padding:16px;text-align:center;font-size:14px;background:#111;border-radius:12px;">Video not available</div>`;
         return;
     }
 
@@ -410,7 +506,14 @@ export async function renderVideoThumbnail(container, videoUrl) {
         const decryptedBlob = await decryptBlob(encryptedBlob, passphrase);
         const blobUrl = URL.createObjectURL(decryptedBlob);
 
-        const thumbnailDataUrl = await generateVideoThumbnail(blobUrl);
+        let thumbnailDataUrl;
+        try {
+            thumbnailDataUrl = await generateVideoThumbnail(blobUrl);
+        } catch (err) {
+            console.warn('[renderVideoThumbnail] Thumbnail generation failed:', err);
+            // Fallback: use a default placeholder
+            thumbnailDataUrl = null;
+        }
         URL.revokeObjectURL(blobUrl);
 
         el.innerHTML = '';
@@ -419,7 +522,7 @@ export async function renderVideoThumbnail(container, videoUrl) {
         const wrapper = document.createElement('div');
         wrapper.style.cssText = `
             position: relative;
-            background: #000;
+            background: #111;
             border-radius: 12px;
             overflow: hidden;
             cursor: pointer;
@@ -431,20 +534,38 @@ export async function renderVideoThumbnail(container, videoUrl) {
         `;
         wrapper.dataset.videoUrl = videoUrl;
 
-        // Thumbnail image – preserves aspect ratio
-        const img = document.createElement('img');
-        img.src = thumbnailDataUrl;
-        img.style.cssText = `
-            display: block;
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-        `;
-        wrapper.appendChild(img);
+        if (thumbnailDataUrl) {
+            // Thumbnail image – preserves aspect ratio
+            const img = document.createElement('img');
+            img.src = thumbnailDataUrl;
+            img.style.cssText = `
+                display: block;
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+            `;
+            wrapper.appendChild(img);
+        } else {
+            // Fallback: show a play icon on dark background
+            const fallback = document.createElement('div');
+            fallback.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 100%;
+                min-height: 80px;
+                color: #fff;
+                font-size: 14px;
+                background: #1a1a1a;
+            `;
+            fallback.innerHTML = '<i class="fas fa-play-circle" style="font-size:32px;color:rgba(255,255,255,0.3);"></i>';
+            wrapper.appendChild(fallback);
+        }
 
-        // Play icon (centered, smaller)
+        // Play icon overlay
         const icon = document.createElement('i');
         icon.className = 'fas fa-play-circle';
         icon.style.cssText = `

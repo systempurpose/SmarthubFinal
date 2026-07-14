@@ -5,7 +5,7 @@
 import { uploadVideo } from './videoUpload.js';
 import { loadHomeFeed, initRealtimeFeed } from './home-loader.js';
 import { createPost } from './home-sb.js';
-
+import { openPostModal } from './postModal.js';
 let realtimeSubscription = null;
 let pendingMedia = null;
 let currentPage = 'home';
@@ -22,12 +22,13 @@ export function renderHome() {
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
-    // Layout – tight spacing
+    // Layout – edge-to-edge, all spacing lives in home.css so nothing
+    // reintroduces a left/right gutter via inline styles.
     const html = `
-        <div class="home-container" style="display:flex; flex-direction:column; min-height:100%;">
-            <main class="home-main" style="flex:1; padding:0 16px 0;">
+        <div class="home-container">
+            <main class="home-main">
 
-                <div id="homeHeader" class="feed-header" style="padding:0 0 8px 0;">
+                <div id="homeHeader" class="feed-header">
                     <h2>Home</h2>
                     <div class="feed-tabs">
                         <button class="active" data-feed="for-you">For You</button>
@@ -35,32 +36,33 @@ export function renderHome() {
                     </div>
                 </div>
 
-                <div id="homeComposer" class="composer-card" style="margin:12px 0 16px;">
+                <div id="homeComposer" class="composer-card">
                     <div class="composer-input">
                         <div class="composer-avatar">
-                            ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}">` : avatarInitial.toUpperCase()}
+                            ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}" alt="">` : avatarInitial.toUpperCase()}
                         </div>
                         <div class="composer-body">
                             <textarea id="composerText" rows="2" placeholder="What's on your mind? Share a repair tip..."></textarea>
+                            <div id="composerMediaPreview"></div>
                             <div class="composer-actions">
                                 <div class="composer-tools">
-                                    <button id="composerVideoBtn"><i class="fas fa-video"></i></button>
-                                    <button id="composerImageBtn"><i class="fas fa-image"></i></button>
-                                    <button id="composerGifBtn"><i class="fas fa-grin"></i></button>
+                                    <button id="composerVideoBtn" type="button" title="Add video" aria-label="Add video"><i class="fas fa-video"></i></button>
+                                    <button id="composerImageBtn" type="button" title="Add image" aria-label="Add image"><i class="fas fa-image"></i></button>
+                                    <button id="composerGifBtn" type="button" title="Add GIF" aria-label="Add GIF"><i class="fas fa-grin"></i></button>
                                 </div>
                                 <button class="composer-submit" id="composerSubmit" disabled>Post</button>
                             </div>
                             <input type="file" id="composerFileInput" accept="video/*,image/*" style="display:none;">
-                            <div id="composerUploadProgress" style="display:none;"></div>
+                            <div id="composerUploadProgress" class="composer-upload-progress" style="display:none;"></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Unified content container -->
-                <div id="homeContent" style="padding-bottom:16px;"></div>
+                <div id="homeContent"></div>
 
                 <!-- Bottom navigation – brand + centered items + decorative accent -->
-                <nav class="home-bottom-nav" style="flex-shrink:0; margin-top:0; position:sticky; bottom:0;">
+                <nav class="home-bottom-nav">
                     <div class="nav-brand" aria-hidden="true">
                         <i class="fas fa-toolbox"></i>
                         <span>SmartHub</span>
@@ -102,10 +104,8 @@ export function renderHome() {
             if (feedType === 'for-you') {
                 currentOffset = 0;
                 loadHomeFeed('homeContent');
-                toast('Showing For You', 'info');
-            } else if (feedType === 'following') {
-                toast('Following feed coming soon!', 'info');
             }
+            // 'following' just toggles the tab – no action yet
         });
     });
 
@@ -138,10 +138,36 @@ function setupComposer() {
     const imageBtn = document.getElementById('composerImageBtn');
     const fileInput = document.getElementById('composerFileInput');
     const progress = document.getElementById('composerUploadProgress');
+    const mediaPreview = document.getElementById('composerMediaPreview');
 
-    text.addEventListener('input', () => {
-        submit.disabled = text.value.trim().length === 0;
-    });
+    const refreshSubmitState = () => {
+        const hasText = text.value.trim().length > 0;
+        submit.disabled = !hasText && !pendingMedia;
+    };
+
+    const renderMediaPreview = () => {
+        if (!pendingMedia) {
+            mediaPreview.innerHTML = '';
+            return;
+        }
+        const src = pendingMedia.type === 'video' ? pendingMedia.url : pendingMedia.previewUrl;
+        const isVideo = pendingMedia.type === 'video';
+        mediaPreview.innerHTML = `
+            <div class="media-preview">
+                ${isVideo
+                    ? `<video src="${src}" muted></video><span class="video-badge"><i class="fas fa-video"></i> Video</span>`
+                    : `<img src="${src}" alt="Attached image">`}
+                <button type="button" class="media-remove-btn" id="composerMediaRemove" aria-label="Remove attachment"><i class="fas fa-xmark"></i></button>
+            </div>
+        `;
+        document.getElementById('composerMediaRemove')?.addEventListener('click', () => {
+            pendingMedia = null;
+            renderMediaPreview();
+            refreshSubmitState();
+        });
+    };
+
+    text.addEventListener('input', refreshSubmitState);
 
     videoBtn.addEventListener('click', () => {
         fileInput.accept = 'video/*';
@@ -162,12 +188,15 @@ function setupComposer() {
             if (file.type.startsWith('video/')) {
                 const result = await uploadVideo(file);
                 pendingMedia = { url: result.url, type: 'video' };
-                progress.innerHTML = '<i class="fas fa-circle-check"></i> Video attached!';
+                progress.innerHTML = '<i class="fas fa-circle-check"></i> Video attached';
             } else {
-                pendingMedia = { file, type: 'image' };
-                progress.innerHTML = '<i class="fas fa-circle-check"></i> Image attached!';
+                const previewUrl = URL.createObjectURL(file);
+                pendingMedia = { file, type: 'image', previewUrl };
+                progress.innerHTML = '<i class="fas fa-circle-check"></i> Image attached';
             }
-            setTimeout(() => { progress.style.display = 'none'; }, 3000);
+            renderMediaPreview();
+            refreshSubmitState();
+            setTimeout(() => { progress.style.display = 'none'; }, 2500);
         } catch (err) {
             progress.classList.add('is-error');
             progress.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + err.message;
@@ -195,6 +224,7 @@ function setupComposer() {
                 mediaType = 'image';
             }
             pendingMedia = null;
+            renderMediaPreview();
         }
 
         submit.disabled = true;
@@ -212,6 +242,7 @@ function setupComposer() {
         } finally {
             submit.disabled = false;
             submit.textContent = 'Post';
+            refreshSubmitState();
         }
     });
 }
@@ -251,11 +282,11 @@ async function navigateHomePage(page) {
             const module = await import('./profile.js');
             module.renderProfile(content);
         } else {
-            content.innerHTML = `<div class="card" style="padding:40px;text-align:center;">Page not found</div>`;
+            content.innerHTML = `<div class="empty-state"><i class="fas fa-compass"></i><h3>Page not found</h3><p>That section doesn't exist.</p></div>`;
         }
     } catch (err) {
         content.innerHTML = `
-            <div class="card" style="padding:40px;text-align:center;color:#dc2626;">
+            <div class="page-error">
                 <p>Failed to load: ${err.message}</p>
                 <button onclick="window.renderHome()" class="btn-primary">Go Home</button>
             </div>

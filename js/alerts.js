@@ -3,8 +3,75 @@
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
+import { decryptAndDecompress } from './home-sb.js';
+
+// ---- Inject styles once ----
+function ensureStyles() {
+    if (document.getElementById('al-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'al-styles';
+    style.textContent = `
+        .al-header {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0; padding-bottom: 4px;
+        }
+        .al-header h2 { display: flex; align-items: center; gap: 8px; margin: 0; }
+        .al-header h2 i { color: #0d9488; }
+        .al-count {
+            background: #ccfbf1; color: #0d9488; font-size: 12px; font-weight: 700;
+            padding: 2px 9px; border-radius: 999px; min-width: 22px; text-align: center;
+        }
+
+        .al-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; margin-top: 8px; }
+
+        .al-item {
+            display: flex; align-items: flex-start; gap: 12px; padding: 12px 8px;
+            border-radius: 12px; cursor: pointer; transition: background 0.15s ease;
+        }
+        .al-item:hover { background: #f8fafc; }
+        .al-item + .al-item { margin-top: 2px; }
+
+        .al-avatar-wrap { position: relative; flex-shrink: 0; }
+        .al-avatar {
+            width: 42px; height: 42px; border-radius: 50%; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 15px;
+            background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+        }
+        .al-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .al-badge {
+            position: absolute; bottom: -3px; right: -3px; width: 20px; height: 20px;
+            border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center;
+            justify-content: center; font-size: 10px; color: #fff;
+        }
+        .al-badge.like { background: #e0245e; }
+        .al-badge.comment { background: #0d9488; }
+
+        .al-body { flex: 1; min-width: 0; }
+        .al-line { font-size: 14px; color: #1e293b; line-height: 1.4; }
+        .al-line strong { font-weight: 700; }
+        .al-time { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+        .al-quote {
+            margin-top: 6px; color: #334155; background: #f8fafc; border-left: 3px solid #0d9488;
+            padding: 6px 10px; border-radius: 6px; font-size: 13.5px; line-height: 1.5;
+        }
+
+        .al-center {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; color: #94a3b8; gap: 10px; text-align: center; padding: 20px;
+        }
+        .al-center i { font-size: 30px; color: #cbd5e1; }
+        .al-center.al-error i { color: #f87171; }
+        .al-center.al-error { color: #dc2626; }
+        .al-spin { animation: al-spin 0.8s linear infinite; }
+        @keyframes al-spin { to { transform: rotate(360deg); } }
+    `;
+    document.head.appendChild(style);
+}
 
 export async function renderAlerts(container) {
+    ensureStyles();
+
     if (!container) {
         container = document.getElementById('homeContent') || document.getElementById('pageContent');
         if (!container) return;
@@ -12,16 +79,33 @@ export async function renderAlerts(container) {
 
     container.innerHTML = `
         <div class="alerts-container" style="display:flex; flex-direction:column; height:100%; padding:20px 0;">
-            <h2 style="flex-shrink:0;"><i class="fas fa-bell"></i> Notifications</h2>
-            <div id="alertsList" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; margin-top:12px;"></div>
+            <div class="al-header">
+                <h2><i class="fas fa-bell"></i> Notifications</h2>
+                <span class="al-count" id="alertsCount" style="display:none;">0</span>
+            </div>
+            <div id="alertsList" class="al-list"></div>
         </div>
     `;
 
     const list = document.getElementById('alertsList');
+    const countBadge = document.getElementById('alertsCount');
+
+    list.innerHTML = `
+        <div class="al-center">
+            <i class="fas fa-circle-notch al-spin"></i>
+            <span>Loading notifications...</span>
+        </div>
+    `;
+
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) {
-        list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">Please log in to see notifications.</div>';
+        list.innerHTML = `
+            <div class="al-center">
+                <i class="fas fa-user-lock"></i>
+                <span>Please log in to see notifications.</span>
+            </div>
+        `;
         return;
     }
 
@@ -34,7 +118,7 @@ export async function renderAlerts(container) {
 
         const postIds = posts.map(p => p.id);
         if (!postIds.length) {
-            list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">No notifications yet.</div>';
+            list.innerHTML = emptyState();
             return;
         }
 
@@ -62,7 +146,7 @@ export async function renderAlerts(container) {
         if (userIds.size) {
             const { data: profiles, error: profileErr } = await supabase
                 .from('social_profiles')
-                .select('user_id, display_name')
+                .select('user_id, display_name, avatar_url')
                 .in('user_id', Array.from(userIds));
             if (!profileErr && profiles) {
                 profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
@@ -71,52 +155,113 @@ export async function renderAlerts(container) {
 
         const notifications = [];
         for (const l of likes) {
-            const displayName = profileMap[l.user_id]?.display_name || 'Someone';
+            const profile = profileMap[l.user_id];
             notifications.push({
                 type: 'like',
-                user: displayName,
+                user: profile?.display_name || 'Someone',
+                avatar: profile?.avatar_url || '',
                 postId: l.post_id,
                 time: l.created_at
             });
         }
         for (const c of comments) {
-            const displayName = profileMap[c.user_id]?.display_name || 'Someone';
+            const profile = profileMap[c.user_id];
+            let decryptedContent = '';
+            try {
+                decryptedContent = await decryptAndDecompress(c.content);
+            } catch (e) {
+                decryptedContent = '[Unable to decrypt]';
+            }
             notifications.push({
                 type: 'comment',
-                user: displayName,
+                user: profile?.display_name || 'Someone',
+                avatar: profile?.avatar_url || '',
                 postId: c.post_id,
-                content: c.content,
+                content: decryptedContent,
                 time: c.created_at
             });
         }
         notifications.sort((a, b) => new Date(b.time) - new Date(a.time));
 
         if (!notifications.length) {
-            list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">No notifications yet.</div>';
+            list.innerHTML = emptyState();
             return;
         }
 
+        countBadge.textContent = notifications.length;
+        countBadge.style.display = 'inline-block';
+
         let html = '';
         for (const n of notifications) {
-            const time = new Date(n.time).toLocaleDateString() + ' ' + new Date(n.time).toLocaleTimeString();
+            const initial = (n.user[0] || 'U').toUpperCase();
+            const actionText = n.type === 'like' ? 'liked your post' : 'commented on your post';
+            const badgeIcon = n.type === 'like' ? 'fa-heart' : 'fa-comment';
             html += `
-                <div style="padding:12px 0;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;">
-                    <div style="font-size:20px;">${n.type === 'like' ? '❤️' : '💬'}</div>
-                    <div>
-                        <strong>${escapeHtml(n.user)}</strong> ${n.type === 'like' ? 'liked your post' : 'commented on your post'}
-                        <div style="font-size:13px;color:#64748b;">${time}</div>
-                        ${n.content ? `<div style="margin-top:4px;color:#1e293b;background:#f8fafc;padding:4px 8px;border-radius:6px;">${escapeHtml(n.content)}</div>` : ''}
+                <div class="al-item" data-post-id="${n.postId}">
+                    <div class="al-avatar-wrap">
+                        <div class="al-avatar">
+                            ${n.avatar ? `<img src="${n.avatar}" alt="">` : initial}
+                        </div>
+                        <div class="al-badge ${n.type}"><i class="fas ${badgeIcon}"></i></div>
+                    </div>
+                    <div class="al-body">
+                        <div class="al-line"><strong>${escapeHtml(n.user)}</strong> ${actionText}</div>
+                        <div class="al-time">${relativeTime(n.time)}</div>
+                        ${n.content ? `<div class="al-quote">${escapeHtml(n.content)}</div>` : ''}
                     </div>
                 </div>
             `;
         }
         list.innerHTML = html;
-        list.style.display = 'block'; // override flex if needed
+
+        // ---- Click a notification to open the related post ----
+        list.querySelectorAll('.al-item').forEach(item => {
+            item.addEventListener('click', async () => {
+                const postId = item.dataset.postId;
+                if (!postId) return;
+                try {
+                    const { openPostView } = await import('./postView.js');
+                    openPostView(postId);
+                } catch (err) {
+                    console.warn('[alerts] Could not open post view:', err);
+                }
+            });
+        });
 
     } catch (err) {
-        list.innerHTML = `<p style="color:red;">Error loading notifications: ${err.message}</p>`;
-        list.style.display = 'block';
+        list.innerHTML = `
+            <div class="al-center al-error">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Error loading notifications: ${escapeHtml(err.message)}</span>
+            </div>
+        `;
     }
+}
+
+function emptyState() {
+    return `
+        <div class="al-center">
+            <i class="fas fa-bell-slash"></i>
+            <span>No notifications yet.</span>
+        </div>
+    `;
+}
+
+// ---- Twitter/Instagram-style relative time (falls back to a short date) ----
+function relativeTime(iso) {
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function escapeHtml(text) {
