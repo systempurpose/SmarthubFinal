@@ -12,6 +12,47 @@ let isLoading = false;
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
+// ---- Ensure spinner styles exist (only once) ----
+function ensureSpinnerStyles() {
+    if (document.getElementById('home-loader-spinner-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'home-loader-spinner-styles';
+    style.textContent = `
+        @keyframes homeSpin {
+            to { transform: rotate(360deg); }
+        }
+        .home-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #0d9488;
+            border-radius: 50%;
+            animation: homeSpin 0.7s linear infinite;
+        }
+        .feed-loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 60px 0;
+        }
+        .feed-loading-more {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 20px 0;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// ---- Loading spinner HTML ----
+function renderLoadingSpinner() {
+    return `<div class="feed-loading"><div class="home-spinner"></div></div>`;
+}
+
 // ---- Emoji reaction picker ----
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
@@ -69,8 +110,27 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     }
     if (isLoading) return;
     isLoading = true;
+
+    ensureSpinnerStyles();
+
+    if (!append) {
+        container.innerHTML = renderLoadingSpinner();
+    } else {
+        const loadingMore = document.createElement('div');
+        loadingMore.id = 'feed-loading-more';
+        loadingMore.className = 'feed-loading-more';
+        loadingMore.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading more…';
+        container.appendChild(loadingMore);
+    }
+
     try {
         const posts = await fetchPosts(PAGE_SIZE, currentOffset);
+
+        if (append) {
+            const loadingMore = document.getElementById('feed-loading-more');
+            if (loadingMore) loadingMore.remove();
+        }
+
         if (!append) {
             allPosts = posts;
             container.innerHTML = '';
@@ -81,7 +141,6 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
         const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
         const currentUserId = currentUser?.id || null;
 
-        // ---- Fetch reaction summaries for all posts ----
         let summaryMap = {};
         if (posts.length) {
             const postIds = posts.map(p => p.id);
@@ -103,6 +162,10 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
 
         await renderPosts(container, posts, append, currentUserId, summaryMap);
     } catch (err) {
+        if (append) {
+            const loadingMore = document.getElementById('feed-loading-more');
+            if (loadingMore) loadingMore.remove();
+        }
         console.error('[loadHomeFeed] Error:', err);
         container.innerHTML = `<div class="error">❌ Failed to load feed: ${err.message}</div>`;
     } finally {
@@ -348,8 +411,8 @@ async function updateReactionSummary(postId) {
     }
 }
 
-// ---- 🆕 Update the like button on a home feed post ----
-export async function updateFeedLikeButton(postId, liked, reaction, count) {
+// ---- Update the like button on a home feed post (no export here) ----
+async function updateFeedLikeButton(postId, liked, reaction, count) {
     const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .like-btn`);
     if (!btn) return;
     const countSpan = btn.querySelector('.like-count');
@@ -438,4 +501,5 @@ export async function initRealtimeFeed() {
     }
 }
 
-export { updateReactionSummary };
+// ---- Single export of both helpers ----
+export { updateReactionSummary, updateFeedLikeButton };
