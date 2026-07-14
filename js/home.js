@@ -1,8 +1,7 @@
 // ============================================================
-// home.js – with dynamic content area
+// home.js – full scrollable (header + composer + feed)
 // ============================================================
 
-import { loadVideoFeed } from './videoLoader.js';
 import { uploadVideo } from './videoUpload.js';
 import { loadHomeFeed, initRealtimeFeed } from './home-loader.js';
 import { createPost } from './home-sb.js';
@@ -23,11 +22,12 @@ export function renderHome() {
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
-    // Layout with a dynamic content area (#homeContent)
+    // Layout – tight spacing
     const html = `
-        <div class="home-container" style="display:flex; flex-direction:column; height:100%;">
-            <main class="home-main" style="flex:1; display:flex; flex-direction:column; padding:0 16px 20px;">
-                <div id="homeHeader" class="feed-header" style="flex-shrink:0; padding:12px 0 8px;">
+        <div class="home-container" style="display:flex; flex-direction:column; min-height:100%;">
+            <main class="home-main" style="flex:1; padding:0 16px 0;">
+
+                <div id="homeHeader" class="feed-header" style="padding:0 0 8px 0;">
                     <h2>Home</h2>
                     <div class="feed-tabs">
                         <button class="active" data-feed="for-you">For You</button>
@@ -35,7 +35,7 @@ export function renderHome() {
                     </div>
                 </div>
 
-                <div id="homeComposer" class="composer-card" style="flex-shrink:0; margin:12px 0 16px;">
+                <div id="homeComposer" class="composer-card" style="margin:12px 0 16px;">
                     <div class="composer-input">
                         <div class="composer-avatar">
                             ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}">` : avatarInitial.toUpperCase()}
@@ -56,21 +56,26 @@ export function renderHome() {
                     </div>
                 </div>
 
-                <!-- Dynamic content: replaced on navigation -->
-                <div id="homeContent" style="flex:1; overflow-y:auto; margin-bottom:16px;"></div>
+                <!-- Unified content container -->
+                <div id="homeContent" style="padding-bottom:16px;"></div>
 
-                <!-- Video feed (only on home) -->
-                <div id="videoFeedContainer" class="video-section" style="flex-shrink:0; margin-top:16px; border-top:1px solid #e1e8ed; padding-top:16px;">
-                    <h3><i class="fas fa-video"></i> Repair Videos</h3>
-                    <div id="videoFeed"></div>
-                </div>
-
-                <!-- Bottom navigation -->
-                <nav class="home-bottom-nav" style="flex-shrink:0; margin-top:8px;">
-                    <a href="#" class="bottom-nav-item active" data-page="home"><i class="fas fa-home"></i><span>Home</span></a>
-                    <a href="#" class="bottom-nav-item" data-page="search"><i class="fas fa-search"></i><span>Search</span></a>
-                    <a href="#" class="bottom-nav-item" data-page="notifications"><i class="fas fa-bell"></i><span>Alerts</span></a>
-                    <a href="#" class="bottom-nav-item" data-page="profile"><i class="fas fa-user"></i><span>Social Profile</span></a>
+                <!-- Bottom navigation – brand + centered items + decorative accent -->
+                <nav class="home-bottom-nav" style="flex-shrink:0; margin-top:0; position:sticky; bottom:0;">
+                    <div class="nav-brand" aria-hidden="true">
+                        <i class="fas fa-toolbox"></i>
+                        <span>SmartHub</span>
+                    </div>
+                    <div class="nav-items">
+                        <a href="#" class="bottom-nav-item active" data-page="home"><i class="fas fa-home"></i><span>Home</span></a>
+                        <a href="#" class="bottom-nav-item" data-page="search"><i class="fas fa-search"></i><span>Search</span></a>
+                        <a href="#" class="bottom-nav-item" data-page="notifications"><i class="fas fa-bell"></i><span>Alerts</span></a>
+                        <a href="#" class="bottom-nav-item" data-page="profile"><i class="fas fa-user"></i><span>Social Profile</span></a>
+                    </div>
+                    <div class="nav-decor" aria-hidden="true">
+                        <i class="fas fa-circle-dot"></i>
+                        <i class="fas fa-circle-dot"></i>
+                        <i class="fas fa-circle-dot"></i>
+                    </div>
                 </nav>
             </main>
         </div>
@@ -78,9 +83,10 @@ export function renderHome() {
 
     container.innerHTML = html;
 
-    // ---- Load home content ----
-    loadHomeFeed('homeFeed');
-    loadVideoFeed('videoFeed');
+    // ---- Load home feed into homeContent ----
+    loadHomeFeed('homeContent');
+
+    // ---- Real-time subscription ----
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
         realtimeSubscription = null;
@@ -95,7 +101,7 @@ export function renderHome() {
             const feedType = btn.dataset.feed;
             if (feedType === 'for-you') {
                 currentOffset = 0;
-                loadHomeFeed('homeFeed');
+                loadHomeFeed('homeContent');
                 toast('Showing For You', 'info');
             } else if (feedType === 'following') {
                 toast('Following feed coming soon!', 'info');
@@ -200,7 +206,7 @@ function setupComposer() {
             submit.disabled = true;
             progress.style.display = 'none';
             currentOffset = 0;
-            await loadHomeFeed('homeFeed');
+            await loadHomeFeed('homeContent');
         } catch (err) {
             toast('Failed to post: ' + err.message, 'error');
         } finally {
@@ -217,23 +223,19 @@ async function navigateHomePage(page) {
     const content = document.getElementById('homeContent');
     if (!content) return;
 
-    // Show/hide home elements
+    // Show/hide header and composer
     const header = document.getElementById('homeHeader');
     const composer = document.getElementById('homeComposer');
-    const videoSection = document.getElementById('videoFeedContainer');
 
     if (page === 'home') {
         if (header) header.style.display = 'block';
         if (composer) composer.style.display = 'block';
-        if (videoSection) videoSection.style.display = 'block';
         content.innerHTML = '';
-        loadHomeFeed('homeFeed');
-        loadVideoFeed('videoFeed');
+        loadHomeFeed('homeContent');
         return;
     } else {
         if (header) header.style.display = 'none';
         if (composer) composer.style.display = 'none';
-        if (videoSection) videoSection.style.display = 'none';
     }
 
     content.innerHTML = '<div class="spinner" style="margin:40px auto;"></div>';

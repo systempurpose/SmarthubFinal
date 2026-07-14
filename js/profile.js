@@ -1,13 +1,12 @@
 // ============================================================
-// profile.js – Social Profile (with media attach & delete)
+// profile.js – Social Profile (full‑page scrollable)
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
 import { createPost, toggleLike, deletePost } from './home-sb.js';
 import { uploadProfileImage, updateProfile } from './profile-sb.js';
 import { uploadVideo } from './videoUpload.js';
-import { getPublicVideoUrl } from './videoUtils.js';
-import { renderVideoPlayer } from './videoPlayer.js';
+import { renderVideoThumbnail } from './videoPlayer.js';
 
 let currentProfileUser = null;
 let currentUser = null;
@@ -99,9 +98,9 @@ export async function renderProfile(container) {
     const coverUrl = profile.cover_url || '';
     const joinDate = new Date(profile.created_at || Date.now()).toLocaleDateString();
 
-    // ---- Build profile HTML ----
+    // ---- Build profile HTML – full scrollable (no flex height) ----
     const html = `
-        <div class="profile-container" style="display:flex; flex-direction:column; height:100%; padding:20px 0;">
+        <div class="profile-container" style="padding:20px 0;">
             <!-- Cover -->
             <div class="profile-cover" style="position:relative;height:200px;background:#e2e8f0;overflow:hidden;border-radius:16px 16px 0 0;">
                 ${coverUrl ? `<img src="${coverUrl}" alt="Cover" style="width:100%;height:100%;object-fit:cover;">` : ''}
@@ -158,8 +157,8 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- User's Posts -->
-            <div style="flex:1;padding:0 20px 20px;overflow-y:auto;">
+            <!-- User's Posts (no internal scroll, just flows) -->
+            <div style="padding:0 20px 20px;">
                 <h3 style="font-size:16px;font-weight:600;margin:0 0 12px;">Posts</h3>
                 <div id="profileFeed"></div>
             </div>
@@ -299,7 +298,7 @@ export async function renderProfile(container) {
     });
 }
 
-// ---- Load user posts with media and delete ----
+// ---- Load user posts (no internal scroll) ----
 async function loadUserPosts(userId) {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
@@ -334,8 +333,7 @@ async function loadUserPosts(userId) {
 
             let mediaHtml = '';
             if (videoUrl) {
-                // Placeholder container for video player
-                mediaHtml = `<div class="video-player-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
+                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
             } else if (imageUrl) {
                 mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
             }
@@ -370,17 +368,12 @@ async function loadUserPosts(userId) {
         }
         feed.innerHTML = html;
 
-        // ---- Render video players ----
-        const videoContainers = feed.querySelectorAll('.video-player-container');
-        for (const container of videoContainers) {
-            const videoUrl = container.dataset.videoUrl;
+        // ---- Render video thumbnails (instead of full players) ----
+        const thumbContainers = feed.querySelectorAll('.video-thumbnail-container');
+        for (const el of thumbContainers) {
+            const videoUrl = el.dataset.videoUrl;
             if (videoUrl) {
-                try {
-                    await renderVideoPlayer(container, videoUrl, { controls: true });
-                } catch (err) {
-                    container.innerHTML = `<div style="color:red;padding:8px;">Failed to load video</div>`;
-                    console.warn('Video render error:', err);
-                }
+                renderVideoThumbnail(el, videoUrl);
             }
         }
 
@@ -398,6 +391,19 @@ async function loadUserPosts(userId) {
                     btn.classList.toggle('liked', result.action === 'liked');
                 } catch (err) {
                     toast('Failed to like: ' + err.message, 'error');
+                }
+            });
+        });
+
+        feed.querySelectorAll('.comment-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const postId = btn.dataset.id;
+                // Use the shared modal from home-loader
+                if (typeof openPostModal === 'function') {
+                    openPostModal(postId, true);
+                } else {
+                    toast('Modal not available', 'error');
                 }
             });
         });
@@ -422,6 +428,18 @@ async function loadUserPosts(userId) {
                     await loadUserPosts(currentUser.id);
                 } catch (err) {
                     toast('Failed to delete: ' + err.message, 'error');
+                }
+            });
+        });
+
+        // Make posts clickable to open modal
+        feed.querySelectorAll('.post-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Don't trigger if clicking on a button inside
+                if (e.target.closest('button')) return;
+                const postId = card.dataset.id;
+                if (typeof openPostModal === 'function') {
+                    openPostModal(postId);
                 }
             });
         });

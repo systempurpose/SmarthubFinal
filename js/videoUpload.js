@@ -2,6 +2,7 @@
 import { getSupabaseClient, getPassphrase, encryptBlob } from './supabase.js';
 import { getCurrentUserId } from './sb-utils.js';
 import { saveVideoMetadata } from './video_sb.js';
+import { uploadAndCompressVideo } from './videoCompressor.js';
 
 export async function uploadVideo(file, onProgress) {
     const userId = getCurrentUserId();
@@ -12,31 +13,19 @@ export async function uploadVideo(file, onProgress) {
     let compressedSize = file.size;
     let compressionUsed = false;
 
-    // Try compression (fallback if fails)
+    // ---- Try compression using the helper ----
     try {
-        const formData = new FormData();
-        formData.append('video', file);
-        formData.append('targetSize', '1');
-
-        const response = await fetch('/api/compress-video', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            const compressedUrl = result.path;
-            const fileResp = await fetch(compressedUrl);
-            if (fileResp.ok) {
-                blobToEncrypt = await fileResp.blob();
-                compressedSize = blobToEncrypt.size;
-                compressionUsed = true;
-            } else {
-                throw new Error('Failed to fetch compressed file');
-            }
+        const result = await uploadAndCompressVideo(file, 1); // target ~1MB
+        // result contains: { path: '/uploads/compressed/filename.mp4' }
+        const compressedUrl = result.path;
+        const fileResp = await fetch(compressedUrl);
+        if (fileResp.ok) {
+            blobToEncrypt = await fileResp.blob();
+            compressedSize = blobToEncrypt.size;
+            compressionUsed = true;
+            console.log(`[uploadVideo] Compression OK: ${(originalSize/1024).toFixed(0)}KB → ${(compressedSize/1024).toFixed(0)}KB`);
         } else {
-            const err = await response.json();
-            throw new Error(err.error || 'Compression service error');
+            throw new Error('Failed to fetch compressed file');
         }
     } catch (err) {
         console.warn('[uploadVideo] Compression failed, using original:', err.message);
@@ -45,11 +34,11 @@ export async function uploadVideo(file, onProgress) {
         compressionUsed = false;
     }
 
-    // Encrypt
+    // ---- Encrypt ----
     const passphrase = getPassphrase();
     const encryptedBlob = await encryptBlob(blobToEncrypt, passphrase);
 
-    // Upload to Supabase Storage
+    // ---- Upload to Supabase Storage ----
     const supabase = await getSupabaseClient();
     const fileExt = file.name.split('.').pop() || 'mp4';
     const fileName = `${Date.now()}.${fileExt}`;
@@ -64,11 +53,11 @@ export async function uploadVideo(file, onProgress) {
         });
     if (uploadError) throw uploadError;
 
-    // Get public URL
+    // ---- Get public URL ----
     const { data: urlData } = supabase.storage.from('videos').getPublicUrl(storagePath);
     const publicUrl = urlData.publicUrl;
 
-    // Save metadata (optional, don't fail if it errors)
+    // ---- Save metadata (optional) ----
     try {
         const videoData = {
             deviceId: null,
@@ -92,7 +81,7 @@ export async function uploadVideo(file, onProgress) {
         console.warn('[uploadVideo] Metadata save failed:', err);
     }
 
-    // Return public URL
+    // ---- Return public URL ----
     return {
         url: publicUrl,
         publicUrl: publicUrl,

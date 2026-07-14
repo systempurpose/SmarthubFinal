@@ -16,12 +16,11 @@ export async function loadVideoFeed(containerId = 'videoFeed') {
 
         if (error) throw error;
 
-        // Format for video container
         const formatted = (videos || []).map(v => ({
             id: v.id,
             title: v.originalName || 'Video',
             url: v.storagePath,
-            user: 'User', // You can join with user_account if needed
+            user: 'User', // you can join with user_account if needed
             createdAt: v.uploaded_at || v.created_at,
             thumbnail: null,
         }));

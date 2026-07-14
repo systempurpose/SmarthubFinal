@@ -1,22 +1,19 @@
 // ============================================================
-// alerts.js – Notifications (with manual profile fetch)
+// alerts.js – Notifications (full height, centered empty state)
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
 
 export async function renderAlerts(container) {
     if (!container) {
-        container = document.getElementById('pageContent');
-        if (!container) {
-            console.warn('[alerts] container not found');
-            return;
-        }
+        container = document.getElementById('homeContent') || document.getElementById('pageContent');
+        if (!container) return;
     }
 
     container.innerHTML = `
-        <div class="alerts-container" style="padding:20px 0; min-height: calc(100vh - 200px);">
-            <h2><i class="fas fa-bell"></i> Notifications</h2>
-            <div id="alertsList"></div>
+        <div class="alerts-container" style="display:flex; flex-direction:column; height:100%; padding:20px 0;">
+            <h2 style="flex-shrink:0;"><i class="fas fa-bell"></i> Notifications</h2>
+            <div id="alertsList" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; margin-top:12px;"></div>
         </div>
     `;
 
@@ -24,12 +21,11 @@ export async function renderAlerts(container) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) {
-        list.innerHTML = '<p>Please log in to see notifications.</p>';
+        list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">Please log in to see notifications.</div>';
         return;
     }
 
     try {
-        // Get user's posts
         const { data: posts, error: postsError } = await supabase
             .from('posts')
             .select('id')
@@ -38,11 +34,10 @@ export async function renderAlerts(container) {
 
         const postIds = posts.map(p => p.id);
         if (!postIds.length) {
-            list.innerHTML = '<p style="color:#64748b;">No notifications yet.</p>';
+            list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">No notifications yet.</div>';
             return;
         }
 
-        // Fetch likes (without join)
         const { data: likes, error: likeErr } = await supabase
             .from('likes')
             .select('post_id, user_id, created_at')
@@ -51,7 +46,6 @@ export async function renderAlerts(container) {
             .limit(20);
         if (likeErr) throw likeErr;
 
-        // Fetch comments (without join)
         const { data: comments, error: commentErr } = await supabase
             .from('comments')
             .select('post_id, user_id, content, created_at')
@@ -60,12 +54,10 @@ export async function renderAlerts(container) {
             .limit(20);
         if (commentErr) throw commentErr;
 
-        // Collect all user_ids from likes and comments
         const userIds = new Set();
         for (const l of likes) userIds.add(l.user_id);
         for (const c of comments) userIds.add(c.user_id);
 
-        // Fetch profiles for those user_ids
         let profileMap = {};
         if (userIds.size) {
             const { data: profiles, error: profileErr } = await supabase
@@ -77,7 +69,6 @@ export async function renderAlerts(container) {
             }
         }
 
-        // Build notifications
         const notifications = [];
         for (const l of likes) {
             const displayName = profileMap[l.user_id]?.display_name || 'Someone';
@@ -101,7 +92,7 @@ export async function renderAlerts(container) {
         notifications.sort((a, b) => new Date(b.time) - new Date(a.time));
 
         if (!notifications.length) {
-            list.innerHTML = '<p style="color:#64748b;">No notifications yet.</p>';
+            list.innerHTML = '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:#999;">No notifications yet.</div>';
             return;
         }
 
@@ -120,9 +111,11 @@ export async function renderAlerts(container) {
             `;
         }
         list.innerHTML = html;
+        list.style.display = 'block'; // override flex if needed
 
     } catch (err) {
         list.innerHTML = `<p style="color:red;">Error loading notifications: ${err.message}</p>`;
+        list.style.display = 'block';
     }
 }
 

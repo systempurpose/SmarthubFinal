@@ -1,9 +1,8 @@
 // ============================================================
-// home-sb.js – Supabase helpers for posts (with delete)
+// home-sb.js – Supabase helpers (with saved posts, manual joins)
 // ============================================================
 
 import { getSupabaseClient, encryptSecret, decryptSecret, getPassphrase } from './supabase.js';
-import { sha256 } from './auth.js';
 
 const LZString = window.LZString;
 
@@ -61,11 +60,11 @@ export async function fetchPosts(limit = 20, offset = 0) {
 
     let profiles = [];
     if (userIds.length) {
-        const { data: profileData, error: profileError } = await supabase
+        const { data: profileData } = await supabase
             .from('social_profiles')
             .select('user_id, display_name, avatar_url, username')
             .in('user_id', userIds);
-        if (!profileError) profiles = profileData || [];
+        if (profileData) profiles = profileData;
     }
     const profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
 
@@ -110,6 +109,73 @@ export async function fetchPosts(limit = 20, offset = 0) {
     return posts;
 }
 
+// ---- Fetch single post with manual join ----
+export async function fetchPostById(postId) {
+    const supabase = await getSupabaseClient();
+    // 1. Fetch post
+    const { data: post, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', postId)
+        .single();
+    if (error) throw error;
+    if (!post) return null;
+    post.decryptedContent = await decryptAndDecompress(post.content);
+    // 2. Fetch profile
+    const { data: profile } = await supabase
+        .from('social_profiles')
+        .select('display_name, avatar_url, username')
+        .eq('user_id', post.user_id)
+        .maybeSingle();
+    post.profiles = profile || {};
+    // 3. Like count
+    const { count: likes } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId);
+    post.likes_count = likes || 0;
+    // 4. Check if user liked
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (user) {
+        const { count: userLiked } = await supabase
+            .from('likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId)
+            .eq('user_id', user.id);
+        post.userLiked = userLiked > 0;
+    }
+    return post;
+}
+
+// ---- Fetch comments with manual join ----
+export async function fetchComments(postId) {
+    const supabase = await getSupabaseClient();
+    const { data: comments, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+    if (error) throw error;
+    const userIds = [...new Set(comments.map(c => c.user_id).filter(Boolean))];
+    let profileMap = {};
+    if (userIds.length) {
+        const { data: profiles } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, avatar_url')
+            .in('user_id', userIds);
+        if (profiles) {
+            profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
+        }
+    }
+    for (const comment of comments) {
+        comment.decryptedContent = await decryptAndDecompress(comment.content);
+        comment.user_name = profileMap[comment.user_id]?.display_name || 'User';
+        comment.profiles = profileMap[comment.user_id] || {};
+    }
+    return comments;
+}
+
+// ---- Like toggle ----
 export async function toggleLike(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -133,6 +199,7 @@ export async function toggleLike(postId) {
     }
 }
 
+// ---- Add comment ----
 export async function addComment(postId, content) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -147,25 +214,108 @@ export async function addComment(postId, content) {
     return data[0];
 }
 
-// ---- Helper: Extract storage path from media_url ----
+// ---- Saved Posts ----
+export async function savePost(postId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('Not logged in');
+
+    // Fetch current saved list
+    const { data: saved } = await supabase
+        .from('saved_posts')
+        .select('post_ids')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    let ids = [];
+    if (saved) {
+        try {
+            const decompressed = LZString.decompressFromUTF16(saved.post_ids);
+            ids = decompressed ? JSON.parse(decompressed) : [];
+        } catch (e) {
+            ids = [];
+        }
+    }
+    if (ids.includes(postId)) return { action: 'already_saved' };
+    ids.push(postId);
+    const compressed = LZString.compressToUTF16(JSON.stringify(ids));
+    const { error } = await supabase
+        .from('saved_posts')
+        .upsert({
+            user_id: user.id,
+            post_ids: compressed,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+    if (error) throw error;
+    return { action: 'saved' };
+}
+
+export async function unsavePost(postId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('Not logged in');
+
+    const { data: saved } = await supabase
+        .from('saved_posts')
+        .select('post_ids')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    if (!saved) return { action: 'not_saved' };
+    let ids = [];
+    try {
+        const decompressed = LZString.decompressFromUTF16(saved.post_ids);
+        ids = decompressed ? JSON.parse(decompressed) : [];
+    } catch (e) {
+        ids = [];
+    }
+    if (!ids.includes(postId)) return { action: 'not_saved' };
+    ids = ids.filter(id => id !== postId);
+    const compressed = LZString.compressToUTF16(JSON.stringify(ids));
+    const { error } = await supabase
+        .from('saved_posts')
+        .upsert({
+            user_id: user.id,
+            post_ids: compressed,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+    if (error) throw error;
+    return { action: 'unsaved' };
+}
+
+export async function isPostSaved(postId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) return false;
+    const { data: saved } = await supabase
+        .from('saved_posts')
+        .select('post_ids')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    if (!saved) return false;
+    try {
+        const decompressed = LZString.decompressFromUTF16(saved.post_ids);
+        const ids = decompressed ? JSON.parse(decompressed) : [];
+        return ids.includes(postId);
+    } catch (e) {
+        return false;
+    }
+}
+
+// ---- Delete post with storage cleanup ----
 function extractStoragePath(mediaUrl) {
     if (!mediaUrl) return null;
-    // If it's a public URL: https://.../storage/v1/object/public/videos/videos/user-xxx/file
-    // We need the part after 'videos/'
     const match = mediaUrl.match(/\/videos\/(videos\/user-[^\/]+\/[^?]+)/);
     if (match) return match[1];
-    // If it's already a relative path: videos/user-xxx/file
     if (mediaUrl.startsWith('videos/')) return mediaUrl;
     return null;
 }
 
-// ---- Delete a post (owner only) with storage cleanup ----
 export async function deletePost(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) throw new Error('Not logged in');
 
-    // 1. Fetch the post to get media info
     const { data: post, error: fetchError } = await supabase
         .from('posts')
         .select('user_id, media_url, media_type')
@@ -174,46 +324,26 @@ export async function deletePost(postId) {
     if (fetchError) throw fetchError;
     if (post.user_id !== user.id) throw new Error('You can only delete your own posts');
 
-    // 2. If media exists, delete from storage
     if (post.media_url && post.media_type === 'video') {
         const storagePath = extractStoragePath(post.media_url);
         if (storagePath) {
             try {
-                const { error: storageError } = await supabase.storage
-                    .from('videos')
-                    .remove([storagePath]);
-                if (storageError) {
-                    console.warn('[deletePost] Failed to delete video from storage:', storageError);
-                } else {
-                    console.log('[deletePost] Video deleted from storage:', storagePath);
-                }
+                await supabase.storage.from('videos').remove([storagePath]);
             } catch (err) {
-                console.warn('[deletePost] Error deleting video:', err);
+                console.warn('[deletePost] Storage delete error:', err);
             }
-
-            // Also delete from videos table (if metadata exists)
             try {
-                const { error: metaError } = await supabase
-                    .from('videos')
-                    .delete()
-                    .eq('storage_path', storagePath);
-                if (metaError) {
-                    console.warn('[deletePost] Failed to delete video metadata:', metaError);
-                } else {
-                    console.log('[deletePost] Video metadata deleted');
-                }
+                await supabase.from('videos').delete().eq('storage_path', storagePath);
             } catch (err) {
-                console.warn('[deletePost] Error deleting video metadata:', err);
+                console.warn('[deletePost] Metadata delete error:', err);
             }
         }
     }
-
-    // 3. Delete the post (cascades to likes/comments)
-    const { error } = await supabase.from('posts').delete().eq('id', postId);
-    if (error) throw error;
+    await supabase.from('posts').delete().eq('id', postId);
     return { success: true };
 }
 
+// ---- Realtime ----
 export function subscribeToPosts(callback) {
     try {
         const supabase = getSupabaseClient();
