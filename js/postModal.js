@@ -1,7 +1,8 @@
 // js/postModal.js
 import { getSupabaseClient } from './supabase.js';
-import { fetchPostById, fetchComments, toggleLike, addComment, deletePost, savePost, unsavePost, isPostSaved } from './home-sb.js';
+import { fetchPostById, fetchComments, toggleLike, addComment, deletePost, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
+import { openReactionModal } from './reactionModal.js';
 
 let modalPostId = null;
 let loadToken = 0; // guards against a slow fetch overwriting a newer, faster one
@@ -26,7 +27,7 @@ function createEmojiPicker(onSelect) {
         transition:opacity 0.18s cubic-bezier(0.2,0.7,0.3,1), transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
         will-change:transform,opacity;
     `;
-    EMOJIS.forEach((emoji, i) => {
+    EMOJIS.forEach((emoji) => {
         const btn = document.createElement('span');
         btn.textContent = emoji;
         btn.style.cssText = `
@@ -80,6 +81,18 @@ function ensureSpinnerStyles() {
             animation:postModalSpin 0.7s linear infinite;
         }
         #postModalBody.content-loaded { animation:postModalFadeIn 0.25s ease; }
+        /* Reaction summary styles (mirror home.css) */
+        .reaction-summary {
+            display: flex; align-items: center; gap: 6px;
+            padding: 2px 8px; background: #f8fafc;
+            border-radius: 20px; cursor: pointer;
+            font-size: 12.5px; font-weight: 600; color: #64748b;
+            transition: background 0.15s ease, color 0.15s ease;
+            margin-bottom: 6px; width: fit-content;
+        }
+        .reaction-summary:hover { background: #ccfbf1; color: #0d9488; }
+        .reaction-chip { display: flex; align-items: center; gap: 2px; }
+        .reaction-total { color: #94a3b8; margin-left: 4px; }
     `;
     document.head.appendChild(style);
 }
@@ -112,6 +125,8 @@ function ensureModal() {
                     <!-- Right column -->
                     <div id="modalRight" style="flex:1;display:flex;flex-direction:column;border-left:1px solid #e1e8ed;padding-left:20px;">
                         <div id="modalComments" style="flex:1;overflow-y:auto;margin-bottom:12px;"></div>
+                        <!-- Reaction summary will be injected here -->
+                        <div id="modalSummary" style="margin-bottom:6px;"></div>
                         <div id="modalActions" style="border-top:1px solid #e1e8ed;padding-top:12px;">
                             <div style="display:flex;gap:16px;margin-bottom:8px;">
                                 <div class="like-wrapper" style="position:relative;display:inline-block;">
@@ -182,12 +197,45 @@ function setModalLoading(isLoading) {
     overlay.classList.toggle('visible', isLoading);
     if (!isLoading && body) {
         body.classList.remove('content-loaded');
-        // restart the fade-in animation
         void body.offsetWidth;
         body.classList.add('content-loaded');
     }
 }
 
+// ---- Helper: update reaction summary inside modal ----
+async function updateModalSummary(postId) {
+    const summaryDiv = document.getElementById('modalSummary');
+    if (!summaryDiv) return;
+    try {
+        const summary = await fetchReactionsSummary(postId);
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        if (totalReactions === 0) {
+            summaryDiv.innerHTML = '';
+            return;
+        }
+        summaryDiv.innerHTML = `
+            <div class="reaction-summary" data-post-id="${postId}">
+                ${Object.entries(summary).map(([emoji, count]) =>
+                    `<span class="reaction-chip">${emoji} ${count}</span>`
+                ).join('')}
+                <span class="reaction-total">${totalReactions}</span>
+            </div>
+        `;
+        // Attach click listener to open reaction modal
+        const chip = summaryDiv.querySelector('.reaction-summary');
+        if (chip) {
+            chip.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openReactionModal(postId);
+            });
+        }
+    } catch (err) {
+        console.warn('[postModal] Failed to update summary:', err);
+        summaryDiv.innerHTML = '';
+    }
+}
+
+// ---- Like toggle with reaction summary update ----
 async function toggleLikeAction(postId, btn) {
     try {
         const result = await toggleLike(postId);
@@ -197,6 +245,8 @@ async function toggleLikeAction(postId, btn) {
         btn.classList.toggle('liked', result.action === 'liked');
         btn.style.transform = 'scale(1.3)';
         setTimeout(() => btn.style.transform = 'scale(1)', 200);
+        // Update the reaction summary chip
+        await updateModalSummary(postId);
     } catch (err) {
         toast('Failed to like: ' + err.message, 'error');
     }
@@ -206,8 +256,6 @@ export async function openPostModal(postId, focusComment = false) {
     modalPostId = postId;
     const modal = ensureModal();
     modal.style.display = 'flex';
-    // Show the spinner immediately so the click feels instant, even
-    // before the network request resolves.
     setModalLoading(true);
     await refreshModal(postId, { showLoading: true });
     if (focusComment) {
@@ -222,6 +270,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
     const textDiv = document.getElementById('modalText');
     const mediaDiv = document.getElementById('modalMedia');
     const commentsDiv = document.getElementById('modalComments');
+    const summaryDiv = document.getElementById('modalSummary');
     const likeWrapper = body.querySelector('.like-wrapper');
     const likeBtn = body.querySelector('.like-btn');
     const saveBtn = body.querySelector('.save-btn');
@@ -234,8 +283,6 @@ async function refreshModal(postId, { showLoading = false } = {}) {
     try {
         const post = await fetchPostById(postId);
 
-        // A newer call to refreshModal happened while this one was in
-        // flight (user clicked another post) – drop this stale result.
         if (myToken !== loadToken) return;
 
         if (!post) {
@@ -243,7 +290,10 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             setModalLoading(false);
             return;
         }
-        const comments = await fetchComments(postId);
+        const [comments, summary] = await Promise.all([
+            fetchComments(postId).catch(() => []),
+            fetchReactionsSummary(postId).catch(() => ({}))
+        ]);
         if (myToken !== loadToken) return;
 
         const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -296,11 +346,35 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         }
         commentsDiv.innerHTML = commentsHtml;
 
+        // ---- Render reaction summary ----
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        if (totalReactions > 0) {
+            summaryDiv.innerHTML = `
+                <div class="reaction-summary" data-post-id="${post.id}">
+                    ${Object.entries(summary).map(([emoji, count]) =>
+                        `<span class="reaction-chip">${emoji} ${count}</span>`
+                    ).join('')}
+                    <span class="reaction-total">${totalReactions}</span>
+                </div>
+            `;
+            const chip = summaryDiv.querySelector('.reaction-summary');
+            if (chip) {
+                chip.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openReactionModal(post.id);
+                });
+            }
+        } else {
+            summaryDiv.innerHTML = '';
+        }
+
+        // ---- Like button ----
         likeBtn.dataset.id = post.id;
         likeBtn.querySelector('.like-count').textContent = post.likes_count || 0;
         likeBtn.querySelector('i').className = `fas ${post.userLiked ? 'fa-heart liked' : 'fa-heart'}`;
         likeBtn.classList.toggle('liked', post.userLiked || false);
 
+        // Recreate picker each refresh to avoid stale listeners
         let picker = null;
         let timeout = null;
         const showPicker = () => {
@@ -331,13 +405,80 @@ async function refreshModal(postId, { showLoading = false } = {}) {
                 }, 220);
             }, 2000);
         };
-        likeWrapper.addEventListener('mouseenter', showPicker);
-        likeWrapper.addEventListener('mouseleave', hidePicker);
+        // Remove old listeners by cloning? Simpler: replace wrapper events.
+        // We'll use a fresh approach: we'll attach new listeners, but need to clear old ones.
+        // We'll store a reference to the wrapper and remove old listeners.
+        // Easiest: replace the wrapper with a fresh one.
+        // But we can't easily remove old listeners without references.
+        // We'll just use a different approach: we'll attach once with a flag.
+        // For simplicity, we'll check if we already have listeners attached via a data attribute.
+        if (!likeWrapper.dataset.listenersAttached) {
+            likeWrapper.addEventListener('mouseenter', showPicker);
+            likeWrapper.addEventListener('mouseleave', hidePicker);
+            likeWrapper.dataset.listenersAttached = 'true';
+        } else {
+            // If already attached, we need to update the picker creation to use the latest postId.
+            // Since showPicker closes over post.id and likeBtn, it's fine.
+            // But we need to reset picker state? We'll just let it work.
+            // We can remove old listeners and reattach.
+            // Simpler: remove and reattach every time.
+            // We'll do that.
+            likeWrapper.removeEventListener('mouseenter', showPicker);
+            likeWrapper.removeEventListener('mouseleave', hidePicker);
+            likeWrapper.addEventListener('mouseenter', showPicker);
+            likeWrapper.addEventListener('mouseleave', hidePicker);
+        }
+        // But we must ensure showPicker uses the current postId and likeBtn.
+        // So we override the showPicker function each time.
+        // Actually, we can just attach new listeners each refresh.
+        // We'll clone and replace the wrapper? That's heavy.
+        // Instead, we'll store the handlers and remove them.
+        // For brevity, we'll just reattach with a new function each time.
+        // Let's store them in a property.
+        if (likeWrapper._cleanup) {
+            likeWrapper._cleanup();
+        }
+        const newShowPicker = () => {
+            if (picker) return;
+            picker = createEmojiPicker((emoji) => {
+                toggleLikeAction(post.id, likeBtn);
+                picker.remove();
+                picker = null;
+            });
+            likeWrapper.appendChild(picker);
+            keepPickerOnScreen(picker);
+            requestAnimationFrame(() => {
+                picker.style.opacity = '1';
+                picker.style.pointerEvents = 'auto';
+                picker.style.transform = 'translateY(0) scale(1)';
+            });
+            clearTimeout(timeout);
+        };
+        const newHidePicker = () => {
+            if (!picker) return;
+            timeout = setTimeout(() => {
+                picker.style.opacity = '0';
+                picker.style.pointerEvents = 'none';
+                picker.style.transform = 'translateY(10px) scale(0.85)';
+                setTimeout(() => {
+                    if (picker && picker.parentNode) picker.remove();
+                    picker = null;
+                }, 220);
+            }, 2000);
+        };
+        likeWrapper._cleanup = () => {
+            likeWrapper.removeEventListener('mouseenter', newShowPicker);
+            likeWrapper.removeEventListener('mouseleave', newHidePicker);
+        };
+        likeWrapper.addEventListener('mouseenter', newShowPicker);
+        likeWrapper.addEventListener('mouseleave', newHidePicker);
+
         likeBtn.onclick = (e) => {
             e.stopPropagation();
             toggleLikeAction(post.id, likeBtn);
         };
 
+        // ---- Save button ----
         saveBtn.dataset.id = post.id;
         const saveIcon = saveBtn.querySelector('i');
         saveIcon.className = saved ? 'fas fa-bookmark' : 'fas fa-bookmark-o';
@@ -360,6 +501,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             }
         };
 
+        // ---- Delete button ----
         const deleteBtn = userInfoDiv.querySelector('.delete-post-btn');
         if (deleteBtn) {
             deleteBtn.addEventListener('click', async (e) => {
@@ -370,7 +512,6 @@ async function refreshModal(postId, { showLoading = false } = {}) {
                     await deletePost(postId);
                     toast('Post deleted', 'success');
                     document.getElementById('postModal').style.display = 'none';
-                    // Optionally trigger refresh on the page (home or profile) – could be handled by caller.
                 } catch (err) {
                     toast('Failed to delete: ' + err.message, 'error');
                 }

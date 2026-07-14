@@ -42,10 +42,11 @@ function ensureStyles() {
         .al-badge {
             position: absolute; bottom: -3px; right: -3px; width: 20px; height: 20px;
             border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center;
-            justify-content: center; font-size: 10px; color: #fff;
+            justify-content: center; font-size: 11px; color: #fff;
+            background: #e0245e; /* fallback for likes */
         }
-        .al-badge.like { background: #e0245e; }
         .al-badge.comment { background: #0d9488; }
+        .al-badge .al-reaction-emoji { font-size: 11px; line-height: 1; }
 
         .al-body { flex: 1; min-width: 0; }
         .al-line { font-size: 14px; color: #1e293b; line-height: 1.4; }
@@ -122,14 +123,16 @@ export async function renderAlerts(container) {
             return;
         }
 
+        // ---- Fetch likes with reaction ----
         const { data: likes, error: likeErr } = await supabase
             .from('likes')
-            .select('post_id, user_id, created_at')
+            .select('post_id, user_id, created_at, reaction')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
             .limit(20);
         if (likeErr) throw likeErr;
 
+        // ---- Fetch comments ----
         const { data: comments, error: commentErr } = await supabase
             .from('comments')
             .select('post_id, user_id, content, created_at')
@@ -138,10 +141,12 @@ export async function renderAlerts(container) {
             .limit(20);
         if (commentErr) throw commentErr;
 
+        // ---- Collect all user IDs ----
         const userIds = new Set();
         for (const l of likes) userIds.add(l.user_id);
         for (const c of comments) userIds.add(c.user_id);
 
+        // ---- Fetch profiles ----
         let profileMap = {};
         if (userIds.size) {
             const { data: profiles, error: profileErr } = await supabase
@@ -153,6 +158,7 @@ export async function renderAlerts(container) {
             }
         }
 
+        // ---- Build notifications ----
         const notifications = [];
         for (const l of likes) {
             const profile = profileMap[l.user_id];
@@ -161,6 +167,7 @@ export async function renderAlerts(container) {
                 user: profile?.display_name || 'Someone',
                 avatar: profile?.avatar_url || '',
                 postId: l.post_id,
+                reaction: l.reaction || '❤️',
                 time: l.created_at
             });
         }
@@ -194,15 +201,28 @@ export async function renderAlerts(container) {
         let html = '';
         for (const n of notifications) {
             const initial = (n.user[0] || 'U').toUpperCase();
-            const actionText = n.type === 'like' ? 'liked your post' : 'commented on your post';
-            const badgeIcon = n.type === 'like' ? 'fa-heart' : 'fa-comment';
+
+            let actionText;
+            let badgeContent;
+            if (n.type === 'like') {
+                const reactionEmoji = n.reaction || '❤️';
+                actionText = `${reactionEmoji} reacted to your post`;
+                // Show the reaction emoji in the badge instead of a generic heart
+                badgeContent = `<span class="al-reaction-emoji">${reactionEmoji}</span>`;
+            } else {
+                actionText = 'commented on your post';
+                badgeContent = `<i class="fas fa-comment"></i>`;
+            }
+
+            const badgeClass = n.type === 'like' ? 'al-badge like' : 'al-badge comment';
+
             html += `
                 <div class="al-item" data-post-id="${n.postId}">
                     <div class="al-avatar-wrap">
                         <div class="al-avatar">
                             ${n.avatar ? `<img src="${n.avatar}" alt="">` : initial}
                         </div>
-                        <div class="al-badge ${n.type}"><i class="fas ${badgeIcon}"></i></div>
+                        <div class="${badgeClass}">${badgeContent}</div>
                     </div>
                     <div class="al-body">
                         <div class="al-line"><strong>${escapeHtml(n.user)}</strong> ${actionText}</div>
@@ -247,7 +267,7 @@ function emptyState() {
     `;
 }
 
-// ---- Twitter/Instagram-style relative time (falls back to a short date) ----
+// ---- Twitter/Instagram-style relative time ----
 function relativeTime(iso) {
     const date = new Date(iso);
     const now = new Date();

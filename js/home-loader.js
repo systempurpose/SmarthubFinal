@@ -1,8 +1,9 @@
 // js/home-loader.js
-import { fetchPosts, toggleLike, subscribeToPosts, deletePost, savePost, unsavePost, isPostSaved } from './home-sb.js';
+import { fetchPosts, toggleLike, subscribeToPosts, deletePost, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { getSupabaseClient } from './supabase.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
 import { openPostView } from './postView.js';
+import { openReactionModal } from './reactionModal.js';
 
 let currentOffset = 0;
 const PAGE_SIZE = 20;
@@ -12,9 +13,6 @@ let isLoading = false;
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
 // ---- Emoji reaction picker ----
-// Anchored to the LEFT edge of its wrapper (not centered) so it grows
-// rightward from the like button instead of straddling it and clipping
-// off the left side of the screen/card.
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
     picker.className = 'emoji-picker';
@@ -29,7 +27,7 @@ function createEmojiPicker(onSelect) {
         transition:opacity 0.18s cubic-bezier(0.2,0.7,0.3,1), transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
         will-change:transform,opacity;
     `;
-    EMOJIS.forEach((emoji, i) => {
+    EMOJIS.forEach((emoji) => {
         const btn = document.createElement('span');
         btn.textContent = emoji;
         btn.style.cssText = `
@@ -53,8 +51,6 @@ function createEmojiPicker(onSelect) {
 }
 
 function keepPickerOnScreen(picker, wrapper) {
-    // If the wrapper is close enough to the right edge that the picker
-    // would overflow, flip the anchor to the right instead.
     requestAnimationFrame(() => {
         const rect = picker.getBoundingClientRect();
         if (rect.right > window.innerWidth - 8) {
@@ -84,7 +80,28 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
         currentOffset += posts.length;
         const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
         const currentUserId = currentUser?.id || null;
-        await renderPosts(container, posts, append, currentUserId);
+
+        // ---- Fetch reaction summaries for all posts ----
+        let summaryMap = {};
+        if (posts.length) {
+            const postIds = posts.map(p => p.id);
+            const supabase = await getSupabaseClient();
+            const { data: likes } = await supabase
+                .from('likes')
+                .select('post_id, reaction')
+                .in('post_id', postIds);
+            if (likes) {
+                const grouped = {};
+                likes.forEach(l => {
+                    if (!grouped[l.post_id]) grouped[l.post_id] = {};
+                    const r = l.reaction || '❤️';
+                    grouped[l.post_id][r] = (grouped[l.post_id][r] || 0) + 1;
+                });
+                summaryMap = grouped;
+            }
+        }
+
+        await renderPosts(container, posts, append, currentUserId, summaryMap);
     } catch (err) {
         console.error('[loadHomeFeed] Error:', err);
         container.innerHTML = `<div class="error">❌ Failed to load feed: ${err.message}</div>`;
@@ -93,7 +110,7 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     }
 }
 
-async function renderPosts(container, posts, append, currentUserId) {
+async function renderPosts(container, posts, append, currentUserId, summaryMap) {
     if (!posts || posts.length === 0) {
         if (!append) {
             container.innerHTML = `
@@ -118,6 +135,21 @@ async function renderPosts(container, posts, append, currentUserId) {
         const comments = post.comments_count?.[0]?.count || 0;
         const isOwner = currentUserId && post.user_id === currentUserId;
         const saved = await isPostSaved(post.id);
+
+        const summary = summaryMap[post.id] || {};
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        const summaryHtml = totalReactions > 0
+            ? `<div class="reaction-summary" data-post-id="${post.id}">
+                ${Object.entries(summary).map(([emoji, count]) =>
+                    `<span class="reaction-chip">${emoji} ${count}</span>`
+                ).join('')}
+                <span class="reaction-total">${totalReactions}</span>
+               </div>`
+            : '';
+
+        const userReaction = post.userReaction || null;
+        const displayEmoji = userReaction || '❤️';
+        const isLiked = !!userReaction;
 
         const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
         const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
@@ -146,10 +178,12 @@ async function renderPosts(container, posts, append, currentUserId) {
                         ${mediaHtml}
                     </div>
                 </div>
+                ${summaryHtml}
                 <div class="post-actions">
                     <div class="like-wrapper" style="position:relative;display:inline-block;">
-                        <button class="like-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;transition:transform 0.2s;">
-                            <i class="fas fa-heart"></i> <span class="like-count">${likes}</span>
+                        <button class="like-btn ${isLiked ? 'liked' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${isLiked ? '#e0245e' : '#555'};cursor:pointer;transition:transform 0.2s;">
+                            <span class="reaction-emoji">${displayEmoji}</span>
+                            <span class="like-count">${likes}</span>
                         </button>
                     </div>
                     <button class="comment-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
@@ -178,6 +212,15 @@ async function renderPosts(container, posts, append, currentUserId) {
         }
     }
 
+    // ---- Reaction summary click -> open modal ----
+    container.querySelectorAll('.reaction-summary').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const postId = el.dataset.postId;
+            openReactionModal(postId);
+        });
+    });
+
     // ---- Like with emoji picker ----
     container.querySelectorAll('.like-wrapper').forEach(wrapper => {
         const btn = wrapper.querySelector('.like-btn');
@@ -188,7 +231,7 @@ async function renderPosts(container, posts, append, currentUserId) {
         const showPicker = () => {
             if (picker) return;
             picker = createEmojiPicker((emoji) => {
-                toggleLikeAction(postId, btn);
+                toggleLikeAction(postId, btn, emoji);
                 picker.remove();
                 picker = null;
             });
@@ -227,7 +270,7 @@ async function renderPosts(container, posts, append, currentUserId) {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const postId = btn.dataset.id;
-            openPostView(postId); // NEW – opens the new modal
+            openPostView(postId);
         });
     });
 
@@ -278,15 +321,83 @@ async function renderPosts(container, posts, append, currentUserId) {
     });
 }
 
-async function toggleLikeAction(postId, btn) {
+// ============================================================
+// 🆕 LIVE UPDATE: Reaction summary chip
+// Called after every like/unlike/reaction change
+// ============================================================
+async function updateReactionSummary(postId) {
+    const chip = document.querySelector(`.reaction-summary[data-post-id="${postId}"]`);
+    if (!chip) return;
     try {
-        const result = await toggleLike(postId);
+        const summary = await fetchReactionsSummary(postId);
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+
+        if (totalReactions === 0) {
+            chip.remove();
+            return;
+        }
+
+        chip.innerHTML = `
+            ${Object.entries(summary).map(([emoji, count]) =>
+                `<span class="reaction-chip">${emoji} ${count}</span>`
+            ).join('')}
+            <span class="reaction-total">${totalReactions}</span>
+        `;
+    } catch (err) {
+        console.warn('Failed to update reaction summary:', err);
+    }
+}
+
+// ---- 🆕 Update the like button on a home feed post ----
+export async function updateFeedLikeButton(postId, liked, reaction, count) {
+    const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .like-btn`);
+    if (!btn) return;
+    const countSpan = btn.querySelector('.like-count');
+    const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
+    if (!btn.querySelector('.reaction-emoji')) {
+        emojiSpan.className = 'reaction-emoji';
+        btn.prepend(emojiSpan);
+    }
+    if (count !== undefined) {
+        countSpan.textContent = count;
+    }
+    emojiSpan.textContent = liked ? (reaction || '❤️') : '❤️';
+    btn.classList.toggle('liked', liked);
+    btn.style.color = liked ? '#e0245e' : '#555';
+}
+
+// ---- Toggle like with live summary update ----
+async function toggleLikeAction(postId, btn, reaction) {
+    try {
+        const result = await toggleLike(postId, reaction);
         const countSpan = btn.querySelector('.like-count');
-        const current = parseInt(countSpan.textContent);
-        countSpan.textContent = result.action === 'liked' ? current + 1 : current - 1;
-        btn.classList.toggle('liked', result.action === 'liked');
+        const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
+        if (!btn.querySelector('.reaction-emoji')) {
+            emojiSpan.className = 'reaction-emoji';
+            btn.prepend(emojiSpan);
+        }
+        const current = parseInt(countSpan.textContent) || 0;
+
+        let newCount = current;
+        let liked = false;
+        if (result.action === 'liked') {
+            newCount = current + 1;
+            liked = true;
+        } else if (result.action === 'unliked') {
+            newCount = Math.max(0, current - 1);
+            liked = false;
+        } else if (result.action === 'updated') {
+            liked = true;
+        }
+        countSpan.textContent = newCount;
+        btn.classList.toggle('liked', liked);
+        const emoji = liked ? (result.reaction || reaction || '❤️') : '❤️';
+        emojiSpan.textContent = emoji;
+        btn.style.color = liked ? '#e0245e' : '#555';
         btn.style.transform = 'scale(1.3)';
         setTimeout(() => btn.style.transform = 'scale(1)', 200);
+
+        await updateReactionSummary(postId);
     } catch (err) {
         toast('Failed to like: ' + err.message, 'error');
     }
@@ -306,10 +417,10 @@ function toast(message, tone = 'info') {
     }
 }
 
-// ---- Export ----
-export function initRealtimeFeed() {
+// ---- Realtime ----
+export async function initRealtimeFeed() {
     try {
-        const supabase = getSupabaseClient();
+        const supabase = await getSupabaseClient();
         if (!supabase || typeof supabase.channel !== 'function') {
             console.warn('Realtime not available');
             return null;
@@ -326,3 +437,5 @@ export function initRealtimeFeed() {
         return null;
     }
 }
+
+export { updateReactionSummary };

@@ -1,7 +1,11 @@
 // js/postView.js
 import { getSupabaseClient } from './supabase.js';
-import { toggleLike, addComment, deletePost, fetchPostById, fetchComments } from './home-sb.js';
+import { toggleLike, addComment, deletePost, fetchPostById, fetchComments, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
+import { openReactionModal } from './reactionModal.js';
+// 🔽 Import feed updaters (both summary and button)
+import { updateReactionSummary, updateFeedLikeButton } from './home-loader.js';
+import { updateProfileSummary, updateProfileLikeButton } from './profile.js';
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
@@ -71,7 +75,6 @@ function ensureStyles() {
         }
         .pv-content-in { animation: pv-content-in 0.22s ease; }
 
-        /* ---- Loading state (shown the instant the modal opens) ---- */
         .pv-loading-body { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 320px; }
         .pv-spinner {
             width: 40px; height: 40px; border-radius: 50%;
@@ -125,6 +128,14 @@ function ensureStyles() {
         }
         .pv-empty i { font-size: 26px; color: #cbd5e1; }
 
+        /* ---- Reaction summary inside modal ---- */
+        .pv-summary-wrapper {
+            padding: 0 18px 6px;
+        }
+        .pv-summary-wrapper .reaction-summary {
+            margin-left: 0;
+        }
+
         .pv-actions { flex-shrink: 0; border-top: 1px solid #e2e8f0; padding: 12px 18px 16px; background: #fff; }
         .pv-action-row { display: flex; gap: 6px; margin-bottom: 10px; }
         .pv-action-btn {
@@ -136,10 +147,11 @@ function ensureStyles() {
         .pv-action-btn:active { transform: scale(0.94); }
         .pv-action-btn.liked { color: #e0245e; }
         .pv-action-btn.liked:hover { background: #fce8ee; color: #e0245e; }
-        .pv-action-btn i { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        .pv-action-btn.liked i { transform: scale(1.15); }
+        .pv-action-btn .reaction-emoji { font-size: 18px; line-height: 1; margin-right: 2px; }
+        .pv-action-btn.saved { color: #0d9488; }
+        .pv-action-btn.saved i { color: #0d9488; }
+        .pv-action-btn.saved:hover { background: #ccfbf1; color: #0d9488; }
 
-        /* ---- Reaction picker (hover the like button) ---- */
         .pv-like-wrapper { position: relative; display: inline-block; }
         .pv-emoji-picker {
             position: absolute; bottom: calc(100% + 10px); left: 0;
@@ -185,9 +197,7 @@ function ensureStyles() {
     document.head.appendChild(style);
 }
 
-// ---- Reaction picker (shared look with the rest of the app) ----
-// Anchored to the LEFT edge of its wrapper so it grows rightward from
-// the like button instead of straddling it and clipping off-screen.
+// ---- Reaction picker ----
 function createReactionPicker(onSelect) {
     const picker = document.createElement('div');
     picker.className = 'pv-emoji-picker';
@@ -244,17 +254,57 @@ function attachReactionPicker(wrapper, btn, onReact) {
     wrapper.addEventListener('mouseleave', () => hide(false));
 }
 
-/**
- * Open a modal showing a single post with comments and reactions.
- * Shows a loading state immediately, then swaps in the real content
- * once the post/comments/like-status have been fetched.
- * @param {string} postId - The post ID to view.
- */
+// ---- Helper: live update reaction summary chip (creates if missing) ----
+async function updatePostViewSummary(postId) {
+    const rightColumn = document.querySelector('.pv-right');
+    if (!rightColumn) return;
+    let wrapper = rightColumn.querySelector('.pv-summary-wrapper');
+    
+    try {
+        const summary = await fetchReactionsSummary(postId);
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        
+        if (totalReactions === 0) {
+            if (wrapper) wrapper.remove();
+            return;
+        }
+        
+        const summaryHtml = `
+            <div class="reaction-summary" data-post-id="${postId}">
+                ${Object.entries(summary).map(([emoji, count]) =>
+                    `<span class="reaction-chip">${emoji} ${count}</span>`
+                ).join('')}
+                <span class="reaction-total">${totalReactions}</span>
+            </div>
+        `;
+        
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'pv-summary-wrapper';
+            const actions = rightColumn.querySelector('.pv-actions');
+            if (actions) {
+                rightColumn.insertBefore(wrapper, actions);
+            } else {
+                rightColumn.appendChild(wrapper);
+            }
+        }
+        wrapper.innerHTML = summaryHtml;
+        
+        const chip = wrapper.querySelector('.reaction-summary');
+        if (chip) {
+            chip.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openReactionModal(postId);
+            });
+        }
+    } catch (err) {
+        console.warn('Failed to update summary:', err);
+    }
+}
+
+// ---- Main export ----
 export async function openPostView(postId) {
     ensureStyles();
-
-    // Prevent stacking multiple viewers if the user clicks another post
-    // while one is still opening.
     document.querySelectorAll('.pv-overlay').forEach(el => el.remove());
 
     const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -263,7 +313,6 @@ export async function openPostView(postId) {
         return;
     }
 
-    // ---- 1. Build the modal shell immediately with a loading state ----
     const modal = document.createElement('div');
     modal.className = 'pv-overlay';
     modal.innerHTML = `
@@ -285,7 +334,6 @@ export async function openPostView(postId) {
             </div>
         </div>
     `;
-
     document.body.appendChild(modal);
     const prevBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -310,18 +358,25 @@ export async function openPostView(postId) {
     };
     document.addEventListener('keydown', escHandler);
 
-    // ---- 2. Fetch post, comments, and like status in parallel ----
-    let post, comments = [], userLiked = false;
+    let post, comments = [], userLike = null, summary = {}, isSaved = false;
     try {
         const supabase = await getSupabaseClient();
-        const [postResult, commentsResult, likeResult] = await Promise.all([
+        const [postResult, commentsResult, likeResult, summaryResult, savedResult] = await Promise.all([
             fetchPostById(postId),
             fetchComments(postId).catch(() => []),
-            supabase.from('likes').select('id').eq('post_id', postId).eq('user_id', currentUser.id).maybeSingle()
+            supabase.from('likes')
+                .select('id, reaction')
+                .eq('post_id', postId)
+                .eq('user_id', currentUser.id)
+                .maybeSingle(),
+            fetchReactionsSummary(postId).catch(() => ({})),
+            isPostSaved(postId).catch(() => false)
         ]);
         post = postResult;
         comments = commentsResult;
-        userLiked = !!likeResult?.data;
+        userLike = likeResult?.data || null;
+        summary = summaryResult || {};
+        isSaved = savedResult;
     } catch (err) {
         console.error('Failed to fetch post:', err);
         if (closed) return;
@@ -329,17 +384,15 @@ export async function openPostView(postId) {
         return;
     }
 
-    if (closed) return; // user closed the modal while data was loading
-
+    if (closed) return;
     if (!post) {
         renderErrorState(modal, 'This post could not be found.');
         return;
     }
 
-    renderPostContent(modal, post, comments, userLiked, currentUser, closeModal);
+    renderPostContent(modal, post, comments, userLike, summary, isSaved, currentUser, closeModal);
 }
 
-// ---- Swap the loading skeleton for an error message ----
 function renderErrorState(modal, message) {
     const body = modal.querySelector('.pv-body');
     if (!body) return;
@@ -351,14 +404,27 @@ function renderErrorState(modal, message) {
     `;
 }
 
-// ---- Swap the loading skeleton for the real post content ----
-function renderPostContent(modal, post, comments, userLiked, currentUser, closeModal) {
+function renderPostContent(modal, post, comments, userLike, summary, isSaved, currentUser, closeModal) {
     const user = post.profiles || {};
     const displayName = user.display_name || 'User';
     const username = user.username || '';
     const avatarUrl = user.avatar_url || '';
     const decryptedContent = post.decryptedContent || '';
     const isOwner = currentUser && post.user_id === currentUser.id;
+
+    const userLiked = !!userLike;
+    const userReaction = userLike?.reaction || '❤️';
+
+    // Build reaction summary HTML
+    const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+    const summaryHtml = totalReactions > 0
+        ? `<div class="reaction-summary" data-post-id="${post.id}">
+            ${Object.entries(summary).map(([emoji, count]) =>
+                `<span class="reaction-chip">${emoji} ${count}</span>`
+            ).join('')}
+            <span class="reaction-total">${totalReactions}</span>
+           </div>`
+        : '';
 
     // Header
     modal.querySelector('.pv-user').innerHTML = `
@@ -422,16 +488,18 @@ function renderPostContent(modal, post, comments, userLiked, currentUser, closeM
         <div class="pv-right pv-content-in">
             <div class="pv-comments-head"><i class="fas fa-comment-dots"></i> Comments</div>
             <div class="pv-comments-list" id="commentsContainer">${renderCommentsHtml(comments)}</div>
-
+            ${summaryHtml ? `<div class="pv-summary-wrapper">${summaryHtml}</div>` : ''}
             <div class="pv-actions">
                 <div class="pv-action-row">
                     <div class="pv-like-wrapper">
                         <button id="likeBtn" class="pv-action-btn ${userLiked ? 'liked' : ''}" data-post-id="${post.id}">
-                            <i class="fas fa-heart"></i> <span id="likeCount">${post.likes_count || 0}</span>
+                            <span class="reaction-emoji">${userLiked ? userReaction : '❤️'}</span>
+                            <span id="likeCount">${post.likes_count || 0}</span>
                         </button>
                     </div>
-                    <button id="shareBtn" class="pv-action-btn">
-                        <i class="fas fa-share-alt"></i> Share
+                    <button id="saveBtn" class="pv-action-btn ${isSaved ? 'saved' : ''}" data-post-id="${post.id}">
+                        <i class="fas ${isSaved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
+                        <span>${isSaved ? 'Saved' : 'Save'}</span>
                     </button>
                 </div>
                 <div class="pv-comment-form">
@@ -453,37 +521,116 @@ function renderPostContent(modal, post, comments, userLiked, currentUser, closeM
         }
     }
 
-    // ---- Like button + reaction picker ----
+    // ---- Click on summary to open reaction modal ----
+    const summaryEl = modal.querySelector('.reaction-summary');
+    if (summaryEl) {
+        summaryEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const postId = summaryEl.dataset.postId;
+            openReactionModal(postId);
+        });
+    }
+
+    // ---- Like button: toggle (like/unlike) ----
     const likeWrapper = modal.querySelector('.pv-like-wrapper');
     const likeBtn = modal.querySelector('#likeBtn');
     const likeCount = modal.querySelector('#likeCount');
+    const emojiSpan = likeBtn.querySelector('.reaction-emoji');
 
-    const doLike = async () => {
+    const updateLikeUI = (liked, reaction = '❤️') => {
+        likeBtn.classList.toggle('liked', liked);
+        emojiSpan.textContent = liked ? reaction : '❤️';
+        const current = parseInt(likeCount.textContent) || 0;
+        likeCount.textContent = liked ? current + 1 : Math.max(0, current - 1);
+    };
+
+    const toggleLikeAction = async () => {
         likeBtn.disabled = true;
         try {
             const result = await toggleLike(post.id);
             const isLiked = result.action === 'liked';
-            likeBtn.classList.toggle('liked', isLiked);
             const current = parseInt(likeCount.textContent) || 0;
-            likeCount.textContent = isLiked ? current + 1 : Math.max(0, current - 1);
+            const newCount = isLiked ? current + 1 : Math.max(0, current - 1);
+            updateLikeUI(isLiked);
+            // ---- Live update ALL summaries and buttons ----
+            await updatePostViewSummary(post.id);
+            await updateReactionSummary(post.id);
+            await updateProfileSummary(post.id);
+            // Update the like button on the feeds (count, emoji, state)
+            updateFeedLikeButton(post.id, isLiked, result.reaction || '❤️', newCount);
+            updateProfileLikeButton(post.id, isLiked, result.reaction || '❤️', newCount);
         } catch (err) {
             alert('Failed to like: ' + err.message);
         } finally {
             likeBtn.disabled = false;
         }
     };
-    likeBtn.addEventListener('click', doLike);
-    attachReactionPicker(likeWrapper, likeBtn, () => doLike());
 
-    // ---- Share button ----
-    modal.querySelector('#shareBtn').addEventListener('click', () => {
-        const url = window.location.href + '?post=' + post.id;
-        if (navigator.share) {
-            navigator.share({ title: 'Check out this post', text: decryptedContent, url });
-        } else {
-            navigator.clipboard.writeText(url).then(() => toast('Link copied!', 'success'));
+    likeBtn.addEventListener('click', toggleLikeAction);
+
+    // ---- Reaction picker: set/update reaction ----
+    const setReaction = async (reaction) => {
+        likeBtn.disabled = true;
+        try {
+            const result = await toggleLike(post.id, reaction);
+            const isLiked = result.action === 'liked' || result.action === 'updated';
+            const current = parseInt(likeCount.textContent) || 0;
+            let newCount = current;
+            if (result.action === 'liked') {
+                newCount = current + 1;
+            } else if (result.action === 'unliked') {
+                newCount = Math.max(0, current - 1);
+            }
+            // If 'updated', count stays same
+            likeCount.textContent = newCount;
+            likeBtn.classList.toggle('liked', isLiked);
+            emojiSpan.textContent = isLiked ? reaction : '❤️';
+            // ---- Live update ALL summaries and buttons ----
+            await updatePostViewSummary(post.id);
+            await updateReactionSummary(post.id);
+            await updateProfileSummary(post.id);
+            updateFeedLikeButton(post.id, isLiked, reaction, newCount);
+            updateProfileLikeButton(post.id, isLiked, reaction, newCount);
+        } catch (err) {
+            alert('Failed to set reaction: ' + err.message);
+        } finally {
+            likeBtn.disabled = false;
         }
-    });
+    };
+
+    attachReactionPicker(likeWrapper, likeBtn, setReaction);
+
+    // ---- Save button ----
+    const saveBtn = modal.querySelector('#saveBtn');
+    const saveIcon = saveBtn.querySelector('i');
+    const saveText = saveBtn.querySelector('span');
+
+    const toggleSave = async () => {
+        saveBtn.disabled = true;
+        try {
+            if (isSaved) {
+                await unsavePost(post.id);
+                isSaved = false;
+                saveIcon.className = 'fas fa-bookmark-o';
+                saveText.textContent = 'Save';
+                saveBtn.classList.remove('saved');
+                toast('Post unsaved', 'info');
+            } else {
+                await savePost(post.id);
+                isSaved = true;
+                saveIcon.className = 'fas fa-bookmark';
+                saveText.textContent = 'Saved';
+                saveBtn.classList.add('saved');
+                toast('Post saved!', 'success');
+            }
+        } catch (err) {
+            alert('Failed to save: ' + err.message);
+        } finally {
+            saveBtn.disabled = false;
+        }
+    };
+
+    saveBtn.addEventListener('click', toggleSave);
 
     // ---- Comment submit ----
     const commentInput = modal.querySelector('#commentInput');
@@ -517,7 +664,7 @@ function toast(message, tone = 'info') {
     }
 }
 
-// ---- Comments renderer (shared by initial render + refresh) ----
+// ---- Comments renderer ----
 function renderCommentsHtml(commentsData) {
     if (!commentsData || commentsData.length === 0) {
         return `<div class="pv-empty"><i class="fas fa-comment-slash"></i>No comments yet. Be the first!</div>`;

@@ -1,16 +1,14 @@
-// ============================================================
-// home.js – full scrollable (header + composer + feed)
-// ============================================================
-
+// js/home.js
 import { uploadVideo } from './videoUpload.js';
 import { loadHomeFeed, initRealtimeFeed } from './home-loader.js';
 import { createPost } from './home-sb.js';
-import { openPostModal } from './postModal.js';
+import { openPostView } from './postView.js';
+
 let realtimeSubscription = null;
 let pendingMedia = null;
 let currentPage = 'home';
 
-export function renderHome() {
+export async function renderHome() {
     const container = document.getElementById('pageContent');
     if (!container) return;
 
@@ -22,8 +20,6 @@ export function renderHome() {
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
-    // Layout – edge-to-edge, all spacing lives in home.css so nothing
-    // reintroduces a left/right gutter via inline styles.
     const html = `
         <div class="home-container">
             <main class="home-main">
@@ -58,10 +54,8 @@ export function renderHome() {
                     </div>
                 </div>
 
-                <!-- Unified content container -->
                 <div id="homeContent"></div>
 
-                <!-- Bottom navigation – brand + centered items + decorative accent -->
                 <nav class="home-bottom-nav">
                     <div class="nav-brand" aria-hidden="true">
                         <i class="fas fa-toolbox"></i>
@@ -85,15 +79,15 @@ export function renderHome() {
 
     container.innerHTML = html;
 
-    // ---- Load home feed into homeContent ----
-    loadHomeFeed('homeContent');
+    // ---- Load home feed ----
+    await loadHomeFeed('homeContent');
 
     // ---- Real-time subscription ----
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
         realtimeSubscription = null;
     }
-    realtimeSubscription = initRealtimeFeed();
+    realtimeSubscription = await initRealtimeFeed();
 
     // ---- Feed tabs ----
     document.querySelectorAll('.feed-tabs button').forEach(btn => {
@@ -105,14 +99,11 @@ export function renderHome() {
                 currentOffset = 0;
                 loadHomeFeed('homeContent');
             }
-            // 'following' just toggles the tab – no action yet
         });
     });
 
-    // ---- Composer ----
     setupComposer();
 
-    // ---- Bottom nav ----
     document.querySelectorAll('.bottom-nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -254,7 +245,6 @@ async function navigateHomePage(page) {
     const content = document.getElementById('homeContent');
     if (!content) return;
 
-    // Show/hide header and composer
     const header = document.getElementById('homeHeader');
     const composer = document.getElementById('homeComposer');
 
@@ -262,7 +252,7 @@ async function navigateHomePage(page) {
         if (header) header.style.display = 'block';
         if (composer) composer.style.display = 'block';
         content.innerHTML = '';
-        loadHomeFeed('homeContent');
+        await loadHomeFeed('homeContent');
         return;
     } else {
         if (header) header.style.display = 'none';

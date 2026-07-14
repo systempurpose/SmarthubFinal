@@ -43,8 +43,10 @@ export async function createPost(content, mediaUrl = null, mediaType = null) {
     return data[0];
 }
 
+// Fetch posts with profile, like count, comment count, and current user's reaction
 export async function fetchPosts(limit = 20, offset = 0) {
     const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
 
     const { data: posts, error } = await supabase
         .from('posts')
@@ -58,6 +60,7 @@ export async function fetchPosts(limit = 20, offset = 0) {
     const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
     const postIds = posts.map(p => p.id);
 
+    // Profiles
     let profiles = [];
     if (userIds.length) {
         const { data: profileData } = await supabase
@@ -68,20 +71,30 @@ export async function fetchPosts(limit = 20, offset = 0) {
     }
     const profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
 
+    // Like counts and current user's reactions (if logged in)
     let likesMap = {};
+    let userReactionsMap = {};
     if (postIds.length) {
         const { data: likes } = await supabase
             .from('likes')
-            .select('post_id')
+            .select('post_id, reaction, user_id')
             .in('post_id', postIds);
         if (likes) {
             likesMap = likes.reduce((acc, l) => {
                 acc[l.post_id] = (acc[l.post_id] || 0) + 1;
                 return acc;
             }, {});
+            if (user) {
+                for (const l of likes) {
+                    if (l.user_id === user.id) {
+                        userReactionsMap[l.post_id] = l.reaction || '❤️';
+                    }
+                }
+            }
         }
     }
 
+    // Comment counts
     let commentsMap = {};
     if (postIds.length) {
         const { data: comments } = await supabase
@@ -105,6 +118,7 @@ export async function fetchPosts(limit = 20, offset = 0) {
         post.profiles = profileMap[post.user_id] || {};
         post.likes_count = [{ count: likesMap[post.id] || 0 }];
         post.comments_count = [{ count: commentsMap[post.id] || 0 }];
+        post.userReaction = userReactionsMap[post.id] || null;
     }
     return posts;
 }
@@ -112,7 +126,8 @@ export async function fetchPosts(limit = 20, offset = 0) {
 // ---- Fetch single post with manual join ----
 export async function fetchPostById(postId) {
     const supabase = await getSupabaseClient();
-    // 1. Fetch post
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+
     const { data: post, error } = await supabase
         .from('posts')
         .select('*')
@@ -120,30 +135,34 @@ export async function fetchPostById(postId) {
         .single();
     if (error) throw error;
     if (!post) return null;
+
     post.decryptedContent = await decryptAndDecompress(post.content);
-    // 2. Fetch profile
+
     const { data: profile } = await supabase
         .from('social_profiles')
         .select('display_name, avatar_url, username')
         .eq('user_id', post.user_id)
         .maybeSingle();
     post.profiles = profile || {};
-    // 3. Like count
+
     const { count: likes } = await supabase
         .from('likes')
         .select('*', { count: 'exact', head: true })
         .eq('post_id', postId);
     post.likes_count = likes || 0;
-    // 4. Check if user liked
-    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+
     if (user) {
-        const { count: userLiked } = await supabase
+        const { data: userLike } = await supabase
             .from('likes')
-            .select('*', { count: 'exact', head: true })
+            .select('reaction')
             .eq('post_id', postId)
-            .eq('user_id', user.id);
-        post.userLiked = userLiked > 0;
+            .eq('user_id', user.id)
+            .maybeSingle();
+        post.userReaction = userLike?.reaction || null;
+    } else {
+        post.userReaction = null;
     }
+
     return post;
 }
 
@@ -175,27 +194,48 @@ export async function fetchComments(postId) {
     return comments;
 }
 
-// ---- Like toggle ----
-export async function toggleLike(postId) {
+// ---- Like toggle with reaction support ----
+export async function toggleLike(postId, reaction) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) throw new Error('Not logged in');
 
-    const { data: existing } = await supabase
+    const { data: existing, error: fetchError } = await supabase
         .from('likes')
-        .select('id')
+        .select('id, reaction')
         .eq('post_id', postId)
         .eq('user_id', user.id)
         .maybeSingle();
 
+    if (fetchError) throw fetchError;
+
+    if (reaction === undefined) {
+        if (existing) {
+            const { error } = await supabase.from('likes').delete().eq('id', existing.id);
+            if (error) throw error;
+            return { action: 'unliked' };
+        } else {
+            const { error } = await supabase
+                .from('likes')
+                .insert({ post_id: postId, user_id: user.id, reaction: '❤️' });
+            if (error) throw error;
+            return { action: 'liked', reaction: '❤️' };
+        }
+    }
+
     if (existing) {
-        const { error } = await supabase.from('likes').delete().eq('id', existing.id);
+        const { error } = await supabase
+            .from('likes')
+            .update({ reaction })
+            .eq('id', existing.id);
         if (error) throw error;
-        return { action: 'unliked' };
+        return { action: 'updated', reaction };
     } else {
-        const { error } = await supabase.from('likes').insert({ post_id: postId, user_id: user.id });
+        const { error } = await supabase
+            .from('likes')
+            .insert({ post_id: postId, user_id: user.id, reaction });
         if (error) throw error;
-        return { action: 'liked' };
+        return { action: 'liked', reaction };
     }
 }
 
@@ -220,7 +260,6 @@ export async function savePost(postId) {
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) throw new Error('Not logged in');
 
-    // Fetch current saved list
     const { data: saved } = await supabase
         .from('saved_posts')
         .select('post_ids')
@@ -283,22 +322,44 @@ export async function unsavePost(postId) {
     return { action: 'unsaved' };
 }
 
+// ---- isPostSaved with internal error handling ----
 export async function isPostSaved(postId) {
-    const supabase = await getSupabaseClient();
-    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
-    if (!user) return false;
-    const { data: saved } = await supabase
-        .from('saved_posts')
-        .select('post_ids')
-        .eq('user_id', user.id)
-        .maybeSingle();
-    if (!saved) return false;
     try {
+        const supabase = await getSupabaseClient();
+        const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+        if (!user) return false;
+        const { data: saved } = await supabase
+            .from('saved_posts')
+            .select('post_ids')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (!saved) return false;
         const decompressed = LZString.decompressFromUTF16(saved.post_ids);
         const ids = decompressed ? JSON.parse(decompressed) : [];
         return ids.includes(postId);
     } catch (e) {
-        return false;
+        console.warn('[isPostSaved] Error:', e);
+        return false; // fallback: treat as not saved
+    }
+}
+
+// ---- Fetch all saved post IDs for the current user ----
+export async function fetchSavedPostIds() {
+    try {
+        const supabase = await getSupabaseClient();
+        const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+        if (!user) return [];
+        const { data: saved } = await supabase
+            .from('saved_posts')
+            .select('post_ids')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (!saved) return [];
+        const decompressed = LZString.decompressFromUTF16(saved.post_ids);
+        return decompressed ? JSON.parse(decompressed) : [];
+    } catch (e) {
+        console.warn('[fetchSavedPostIds] Error:', e);
+        return [];
     }
 }
 
@@ -341,6 +402,117 @@ export async function deletePost(postId) {
     }
     await supabase.from('posts').delete().eq('id', postId);
     return { success: true };
+}
+
+// ============================================================
+// 🆕 Reaction summary & follow/unfollow helpers
+// ============================================================
+
+// ---- fetchReactionsSummary with internal error handling ----
+export async function fetchReactionsSummary(postId) {
+    try {
+        const supabase = await getSupabaseClient();
+        const { data, error } = await supabase
+            .from('likes')
+            .select('reaction')
+            .eq('post_id', postId);
+        if (error) throw error;
+        const summary = {};
+        data.forEach(row => {
+            const r = row.reaction || '❤️';
+            summary[r] = (summary[r] || 0) + 1;
+        });
+        return summary;
+    } catch (e) {
+        console.warn('[fetchReactionsSummary] Error:', e);
+        return {}; // fallback: empty summary
+    }
+}
+
+export async function fetchReactedUsers(postId) {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+        .from('likes')
+        .select('user_id, reaction, created_at')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    if (!data.length) return [];
+
+    const userIds = [...new Set(data.map(d => d.user_id))];
+    let profiles = {};
+    if (userIds.length) {
+        const { data: profs } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, avatar_url, username')
+            .in('user_id', userIds);
+        if (profs) {
+            profiles = Object.fromEntries(profs.map(p => [p.user_id, p]));
+        }
+    }
+
+    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    let followingMap = {};
+    if (currentUser) {
+        const { data: follows } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', currentUser.id);
+        if (follows) {
+            followingMap = Object.fromEntries(follows.map(f => [f.following_id, true]));
+        }
+    }
+
+    return data.map(row => {
+        const profile = profiles[row.user_id] || { display_name: 'Unknown', avatar_url: '', username: '' };
+        return {
+            user_id: row.user_id,
+            reaction: row.reaction || '❤️',
+            display_name: profile.display_name || 'User',
+            username: profile.username || '',
+            avatar_url: profile.avatar_url || '',
+            is_following: !!followingMap[row.user_id],
+        };
+    });
+}
+
+export async function followUser(targetUserId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('Not logged in');
+    if (targetUserId === user.id) throw new Error('Cannot follow yourself');
+    const { error } = await supabase
+        .from('follows')
+        .insert({ follower_id: user.id, following_id: targetUserId });
+    if (error) throw error;
+    return { success: true };
+}
+
+export async function unfollowUser(targetUserId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('Not logged in');
+    const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId);
+    if (error) throw error;
+    return { success: true };
+}
+
+export async function isFollowing(targetUserId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) return false;
+    const { data, error } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId)
+        .maybeSingle();
+    if (error) return false;
+    return !!data;
 }
 
 // ---- Realtime ----

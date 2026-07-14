@@ -6,19 +6,19 @@
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
-import { createPost, toggleLike, deletePost } from './home-sb.js';
+import { createPost, toggleLike, deletePost, fetchReactionsSummary, fetchSavedPostIds } from './home-sb.js';
 import { uploadProfileImage, updateProfile } from './profile-sb.js';
 import { uploadVideo } from './videoUpload.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
 import { openPostView } from './postView.js';
+import { openReactionModal } from './reactionModal.js';
 
 let currentProfileUser = null;
 let currentUser = null;
+let currentFeedType = 'user'; // 'user' or 'saved'
+let savedCount = 0;
 
-// ---- Emoji picker (matches home-loader.js / postModal.js / postView.js) ----
-// Anchored to the LEFT edge of its wrapper (not centered) so it grows
-// rightward from the like button instead of straddling it and clipping
-// off the left side of the card.
+// ---- Emoji picker ----
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
 function createEmojiPicker(onSelect) {
@@ -69,15 +69,81 @@ function keepPickerOnScreen(picker) {
     });
 }
 
-async function toggleLikeAction(postId, btn) {
+// ---- 🆕 Helper: Live update reaction summary chip ----
+export async function updateProfileSummary(postId) {
+    const chip = document.querySelector(`.profile-feed-section .reaction-summary[data-post-id="${postId}"]`);
+    if (!chip) return;
     try {
-        const result = await toggleLike(postId);
+        const summary = await fetchReactionsSummary(postId);
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        if (totalReactions === 0) {
+            chip.remove();
+            return;
+        }
+        chip.innerHTML = `
+            ${Object.entries(summary).map(([emoji, count]) =>
+                `<span class="reaction-chip">${emoji} ${count}</span>`
+            ).join('')}
+            <span class="reaction-total">${totalReactions}</span>
+        `;
+    } catch (err) {
+        console.warn('Failed to update profile summary:', err);
+    }
+}
+
+// ---- 🆕 Helper: Live update the like button on the profile feed ----
+export async function updateProfileLikeButton(postId, liked, reaction, count) {
+    const btn = document.querySelector(`.profile-feed-section .post-card[data-id="${postId}"] .like-btn`);
+    if (!btn) return;
+    const countSpan = btn.querySelector('.like-count');
+    const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
+    if (!btn.querySelector('.reaction-emoji')) {
+        emojiSpan.className = 'reaction-emoji';
+        btn.prepend(emojiSpan);
+    }
+    if (count !== undefined) {
+        countSpan.textContent = count;
+    }
+    emojiSpan.textContent = liked ? (reaction || '❤️') : '❤️';
+    btn.classList.toggle('liked', liked);
+    btn.style.color = liked ? '#e0245e' : '#555';
+}
+
+// ---- Toggle like with live summary update ----
+async function toggleLikeAction(postId, btn, reaction) {
+    try {
+        const result = await toggleLike(postId, reaction);
         const countSpan = btn.querySelector('.like-count');
         const current = parseInt(countSpan.textContent) || 0;
-        countSpan.textContent = result.action === 'liked' ? current + 1 : current - 1;
-        btn.classList.toggle('liked', result.action === 'liked');
+        let newCount = current;
+        let liked = false;
+        if (result.action === 'liked') {
+            newCount = current + 1;
+            liked = true;
+        } else if (result.action === 'unliked') {
+            newCount = Math.max(0, current - 1);
+            liked = false;
+        } else if (result.action === 'updated') {
+            liked = true;
+        }
+        countSpan.textContent = newCount;
+        btn.classList.toggle('liked', liked);
+        const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
+        emojiSpan.className = 'reaction-emoji';
+        if (liked) {
+            const emoji = result.reaction || (reaction || '❤️');
+            emojiSpan.textContent = emoji;
+        } else {
+            emojiSpan.textContent = '❤️';
+        }
+        if (!btn.querySelector('.reaction-emoji')) {
+            btn.prepend(emojiSpan);
+        }
         btn.style.transform = 'scale(1.25)';
         setTimeout(() => btn.style.transform = 'scale(1)', 180);
+
+        // ---- 🚀 Live update the reaction summary chip ----
+        await updateProfileSummary(postId);
     } catch (err) {
         toast('Failed to like: ' + err.message, 'error');
     }
@@ -89,7 +155,6 @@ export async function renderProfile(container) {
         if (!container) return;
     }
 
-    // ---- Get user from localStorage ----
     try {
         const stored = localStorage.getItem('smarthub.user');
         if (stored) currentUser = JSON.parse(stored);
@@ -110,7 +175,6 @@ export async function renderProfile(container) {
 
     const supabase = await getSupabaseClient();
 
-    // ---- Fetch profile ----
     let { data: profile, error } = await supabase
         .from('social_profiles')
         .select('*')
@@ -122,7 +186,6 @@ export async function renderProfile(container) {
         return;
     }
 
-    // ---- Create profile if missing ----
     if (!profile) {
         const defaultDisplay = currentUser.name || currentUser.email?.split('@')[0] || 'User';
         const defaultUsername = currentUser.email?.split('@')[0] || 'user';
@@ -168,6 +231,17 @@ export async function renderProfile(container) {
 
     currentProfileUser = profile;
 
+    // ---- Follower / following counts ----
+    const { count: followers } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', currentUser.id);
+
+    const { count: following } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', currentUser.id);
+
     const displayName = profile.display_name || 'User';
     const username = profile.username || 'user';
     const bio = profile.bio || '';
@@ -175,7 +249,11 @@ export async function renderProfile(container) {
     const coverUrl = profile.cover_url || '';
     const joinDate = new Date(profile.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 
-    // ---- Build profile HTML ----
+    // ---- Fetch saved count for badge ----
+    const savedIds = await fetchSavedPostIds();
+    savedCount = savedIds.length;
+
+    // ---- Build profile HTML with improved tabs ----
     const html = `
         <div class="profile-page">
             <!-- Cover -->
@@ -201,6 +279,10 @@ export async function renderProfile(container) {
                 <div class="profile-identity">
                     <h2 class="profile-display-name">${escapeHtml(displayName)}</h2>
                     <p class="profile-username">@${escapeHtml(username)}</p>
+                    <p class="profile-stats">
+                        <span><strong>${followers || 0}</strong> followers</span>
+                        <span><strong>${following || 0}</strong> following</span>
+                    </p>
                     <p class="profile-joined">Joined ${joinDate}</p>
                 </div>
             </div>
@@ -243,18 +325,46 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- User's Posts -->
+            <!-- User's Posts with redesigned tabs -->
             <div class="profile-feed-section">
-                <h3 class="profile-section-title">Posts</h3>
-                <div id="profileFeed"></div>
+                <div class="profile-feed-tabs feed-tabs" style="margin:0 var(--hc-gutter) 12px;">
+                    <button class="feed-tab active" data-feed="user">
+                        <i class="fas fa-pen"></i> Posts
+                    </button>
+                    <button class="feed-tab" data-feed="saved">
+                        <i class="fas fa-bookmark"></i> Saved
+                        <span class="saved-count-badge" id="savedCountBadge">${savedCount}</span>
+                    </button>
+                </div>
+                <div id="profileFeed" style="transition: opacity 0.2s ease;"></div>
             </div>
         </div>
     `;
 
     container.innerHTML = html;
 
-    // ---- Load user's posts ----
+    // ---- Load posts (default: user's own) ----
+    currentFeedType = 'user';
     await loadUserPosts(currentUser.id);
+
+    // ---- Tab switching with animation ----
+    document.querySelectorAll('.feed-tab').forEach(tab => {
+        tab.addEventListener('click', async () => {
+            document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const feed = tab.dataset.feed;
+            const feedEl = document.getElementById('profileFeed');
+            feedEl.style.opacity = '0.4';
+            if (feed === 'user') {
+                currentFeedType = 'user';
+                await loadUserPosts(currentUser.id);
+            } else if (feed === 'saved') {
+                currentFeedType = 'saved';
+                await loadSavedPosts();
+            }
+            feedEl.style.opacity = '1';
+        });
+    });
 
     // ---- Cover / avatar update ----
     document.querySelector('.profile-change-avatar-btn')?.addEventListener('click', () => {
@@ -409,7 +519,11 @@ export async function renderProfile(container) {
             composer.value = '';
             clearMediaPreview();
             toast('Post published!', 'success');
-            await loadUserPosts(currentUser.id);
+            if (currentFeedType === 'user') {
+                await loadUserPosts(currentUser.id);
+            } else {
+                await loadSavedPosts();
+            }
         } catch (err) {
             toast('Failed to post: ' + err.message, 'error');
         } finally {
@@ -433,11 +547,10 @@ function skeletonFeedHtml(count = 3) {
     return html;
 }
 
-// ---- Load user posts ----
+// ---- Load user's own posts ----
 async function loadUserPosts(userId) {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
-
     feed.innerHTML = skeletonFeedHtml();
 
     try {
@@ -467,151 +580,300 @@ async function loadUserPosts(userId) {
             post.decryptedContent = await decryptAndDecompress(post.content);
         }
 
-        let html = '';
-        for (const post of posts) {
-            const time = new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            const isOwner = currentUser && post.user_id === currentUser.id;
-            const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
-            const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
-
-            let mediaHtml = '';
-            if (videoUrl) {
-                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
-            } else if (imageUrl) {
-                mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media">`;
-            }
-
-            const avatarHtml = currentProfileUser?.avatar_url
-                ? `<img src="${escapeHtml(currentProfileUser.avatar_url)}" alt="">`
-                : escapeHtml((currentProfileUser?.display_name?.[0] || 'U').toUpperCase());
-
-            html += `
-                <div class="post-card" data-id="${post.id}" style="cursor:pointer;">
-                    <div class="post-header">
-                        <div class="post-avatar">${avatarHtml}</div>
-                        <span class="post-user">${escapeHtml(currentProfileUser?.display_name || 'User')}</span>
-                        <span class="post-username">@${escapeHtml(currentProfileUser?.username || 'user')}</span>
-                        <span class="post-time">${time}</span>
-                        ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" type="button" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
-                    </div>
-                    <div class="post-content">
-                        <p>${escapeHtml(post.decryptedContent)}</p>
-                        ${mediaHtml}
-                    </div>
-                    <div class="post-actions">
-                        <div class="like-wrapper">
-                            <button class="like-btn" data-id="${post.id}">
-                                <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                            </button>
-                        </div>
-                        <button class="comment-btn" data-id="${post.id}">
-                            <i class="fas fa-comment"></i> <span>0</span>
-                        </button>
-                        <button class="share-btn" data-id="${post.id}">
-                            <i class="fas fa-share"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-        feed.innerHTML = html;
-
-        // ---- Render video thumbnails ----
-        feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
-            const videoUrl = el.dataset.videoUrl;
-            if (videoUrl) renderVideoThumbnail(el, videoUrl);
-        });
-
-        // ---- Like with emoji picker ----
-        feed.querySelectorAll('.like-wrapper').forEach(wrapper => {
-            const btn = wrapper.querySelector('.like-btn');
-            const postId = btn.dataset.id;
-            let picker = null;
-            let timeout = null;
-
-            const showPicker = () => {
-                if (picker) return;
-                picker = createEmojiPicker((emoji) => {
-                    toggleLikeAction(postId, btn);
-                    picker.remove();
-                    picker = null;
-                });
-                wrapper.appendChild(picker);
-                keepPickerOnScreen(picker);
-                requestAnimationFrame(() => {
-                    picker.style.opacity = '1';
-                    picker.style.pointerEvents = 'auto';
-                    picker.style.transform = 'translateY(0) scale(1)';
-                });
-                clearTimeout(timeout);
-            };
-            const hidePicker = () => {
-                if (!picker) return;
-                timeout = setTimeout(() => {
-                    picker.style.opacity = '0';
-                    picker.style.pointerEvents = 'none';
-                    picker.style.transform = 'translateY(10px) scale(0.85)';
-                    setTimeout(() => {
-                        if (picker && picker.parentNode) picker.remove();
-                        picker = null;
-                    }, 220);
-                }, 2000);
-            };
-
-            wrapper.addEventListener('mouseenter', showPicker);
-            wrapper.addEventListener('mouseleave', hidePicker);
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleLikeAction(postId, btn);
-            });
-        });
-
-        // ---- Comment, Share, Delete ----
-        feed.querySelectorAll('.comment-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const postId = btn.dataset.id;
-                openPostView(postId);
-            });
-        });
-
-        feed.querySelectorAll('.share-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const postId = btn.dataset.id;
-                navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
-                    .then(() => toast('Link copied!', 'info'))
-                    .catch(() => {});
-            });
-        });
-
-        feed.querySelectorAll('.delete-post-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const postId = btn.dataset.id;
-                if (!confirm('Delete this post?')) return;
-                try {
-                    await deletePost(postId);
-                    toast('Post deleted', 'success');
-                    await loadUserPosts(currentUser.id);
-                } catch (err) {
-                    toast('Failed to delete: ' + err.message, 'error');
+        const postIds = posts.map(p => p.id);
+        let likesMap = {}, userReactionsMap = {}, summaryMap = {};
+        if (postIds.length && currentUser) {
+            const { data: likes } = await supabase
+                .from('likes')
+                .select('post_id, reaction, user_id')
+                .in('post_id', postIds);
+            if (likes) {
+                likesMap = likes.reduce((acc, l) => {
+                    acc[l.post_id] = (acc[l.post_id] || 0) + 1;
+                    return acc;
+                }, {});
+                for (const l of likes) {
+                    if (l.user_id === currentUser.id) {
+                        userReactionsMap[l.post_id] = l.reaction || '❤️';
+                    }
                 }
-            });
-        });
+                const grouped = {};
+                likes.forEach(l => {
+                    if (!grouped[l.post_id]) grouped[l.post_id] = {};
+                    const r = l.reaction || '❤️';
+                    grouped[l.post_id][r] = (grouped[l.post_id][r] || 0) + 1;
+                });
+                summaryMap = grouped;
+            }
+        }
 
-        // ---- Click on post card – open modal ----
-        feed.querySelectorAll('.post-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                if (e.target.closest('button')) return;
-                const postId = card.dataset.id;
-                openPostView(postId);
-            });
-        });
-
+        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap);
+        attachPostEventListeners(feed);
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load posts: ${escapeHtml(err.message)}</div>`;
     }
+}
+
+// ---- Load saved posts ----
+async function loadSavedPosts() {
+    const feed = document.getElementById('profileFeed');
+    if (!feed) return;
+    feed.innerHTML = skeletonFeedHtml();
+
+    try {
+        const supabase = await getSupabaseClient();
+        const savedIds = await fetchSavedPostIds();
+        savedCount = savedIds.length;
+
+        // Update badge
+        const badge = document.getElementById('savedCountBadge');
+        if (badge) badge.textContent = savedCount;
+
+        if (!savedIds.length) {
+            feed.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-bookmark"></i>
+                    <h3>No saved posts</h3>
+                    <p>Save posts you find interesting to see them here.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const { data: posts, error } = await supabase
+            .from('posts')
+            .select('*')
+            .in('id', savedIds)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        if (!posts || posts.length === 0) {
+            feed.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-bookmark"></i>
+                    <h3>No saved posts</h3>
+                    <p>Save posts you find interesting to see them here.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const { decryptAndDecompress } = await import('./home-sb.js');
+        for (const post of posts) {
+            post.decryptedContent = await decryptAndDecompress(post.content);
+        }
+
+        const postIds = posts.map(p => p.id);
+        let likesMap = {}, userReactionsMap = {}, summaryMap = {};
+        if (postIds.length && currentUser) {
+            const { data: likes } = await supabase
+                .from('likes')
+                .select('post_id, reaction, user_id')
+                .in('post_id', postIds);
+            if (likes) {
+                likesMap = likes.reduce((acc, l) => {
+                    acc[l.post_id] = (acc[l.post_id] || 0) + 1;
+                    return acc;
+                }, {});
+                for (const l of likes) {
+                    if (l.user_id === currentUser.id) {
+                        userReactionsMap[l.post_id] = l.reaction || '❤️';
+                    }
+                }
+                const grouped = {};
+                likes.forEach(l => {
+                    if (!grouped[l.post_id]) grouped[l.post_id] = {};
+                    const r = l.reaction || '❤️';
+                    grouped[l.post_id][r] = (grouped[l.post_id][r] || 0) + 1;
+                });
+                summaryMap = grouped;
+            }
+        }
+
+        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap);
+        attachPostEventListeners(feed);
+    } catch (err) {
+        feed.innerHTML = `<div class="page-error">Couldn't load saved posts: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+// ---- Shared: render post cards ----
+function renderPostCards(posts, likesMap, userReactionsMap, summaryMap) {
+    let html = '';
+    for (const post of posts) {
+        const time = new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        const isOwner = currentUser && post.user_id === currentUser.id;
+        const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
+        const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
+
+        let mediaHtml = '';
+        if (videoUrl) {
+            mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
+        } else if (imageUrl) {
+            mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media">`;
+        }
+
+        const avatarHtml = currentProfileUser?.avatar_url
+            ? `<img src="${escapeHtml(currentProfileUser.avatar_url)}" alt="">`
+            : escapeHtml((currentProfileUser?.display_name?.[0] || 'U').toUpperCase());
+
+        const likeCount = likesMap[post.id] || 0;
+        const userReaction = userReactionsMap[post.id] || null;
+        const isLiked = !!userReaction;
+        const displayEmoji = isLiked ? userReaction : '❤️';
+
+        const summary = summaryMap[post.id] || {};
+        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
+        const summaryHtml = totalReactions > 0
+            ? `<div class="reaction-summary" data-post-id="${post.id}">
+                ${Object.entries(summary).map(([emoji, count]) =>
+                    `<span class="reaction-chip">${emoji} ${count}</span>`
+                ).join('')}
+                <span class="reaction-total">${totalReactions}</span>
+               </div>`
+            : '';
+
+        html += `
+            <div class="post-card" data-id="${post.id}" style="cursor:pointer;">
+                <div class="post-header">
+                    <div class="post-avatar">${avatarHtml}</div>
+                    <span class="post-user">${escapeHtml(currentProfileUser?.display_name || 'User')}</span>
+                    <span class="post-username">@${escapeHtml(currentProfileUser?.username || 'user')}</span>
+                    <span class="post-time">${time}</span>
+                    ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" type="button" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
+                </div>
+                <div class="post-content">
+                    <p>${escapeHtml(post.decryptedContent)}</p>
+                    ${mediaHtml}
+                </div>
+                ${summaryHtml}
+                <div class="post-actions">
+                    <div class="like-wrapper">
+                        <button class="like-btn ${isLiked ? 'liked' : ''}" data-id="${post.id}">
+                            <span class="reaction-emoji">${displayEmoji}</span>
+                            <span class="like-count">${likeCount}</span>
+                        </button>
+                    </div>
+                    <button class="comment-btn" data-id="${post.id}">
+                        <i class="fas fa-comment"></i> <span>0</span>
+                    </button>
+                    <button class="share-btn" data-id="${post.id}">
+                        <i class="fas fa-share"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    return html;
+}
+
+// ---- Shared: attach event listeners to posts ----
+function attachPostEventListeners(feed) {
+    // Render video thumbnails
+    feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
+        const videoUrl = el.dataset.videoUrl;
+        if (videoUrl) renderVideoThumbnail(el, videoUrl);
+    });
+
+    // Reaction summary click
+    feed.querySelectorAll('.reaction-summary').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const postId = el.dataset.postId;
+            openReactionModal(postId);
+        });
+    });
+
+    // Like with emoji picker
+    feed.querySelectorAll('.like-wrapper').forEach(wrapper => {
+        const btn = wrapper.querySelector('.like-btn');
+        const postId = btn.dataset.id;
+        let picker = null;
+        let timeout = null;
+
+        const showPicker = () => {
+            if (picker) return;
+            picker = createEmojiPicker((emoji) => {
+                toggleLikeAction(postId, btn, emoji);
+                picker.remove();
+                picker = null;
+            });
+            wrapper.appendChild(picker);
+            keepPickerOnScreen(picker);
+            requestAnimationFrame(() => {
+                picker.style.opacity = '1';
+                picker.style.pointerEvents = 'auto';
+                picker.style.transform = 'translateY(0) scale(1)';
+            });
+            clearTimeout(timeout);
+        };
+        const hidePicker = () => {
+            if (!picker) return;
+            timeout = setTimeout(() => {
+                picker.style.opacity = '0';
+                picker.style.pointerEvents = 'none';
+                picker.style.transform = 'translateY(10px) scale(0.85)';
+                setTimeout(() => {
+                    if (picker && picker.parentNode) picker.remove();
+                    picker = null;
+                }, 220);
+            }, 2000);
+        };
+
+        wrapper.addEventListener('mouseenter', showPicker);
+        wrapper.addEventListener('mouseleave', hidePicker);
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleLikeAction(postId, btn);
+        });
+    });
+
+    // Comment, Share, Delete
+    feed.querySelectorAll('.comment-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const postId = btn.dataset.id;
+            openPostView(postId);
+        });
+    });
+
+    feed.querySelectorAll('.share-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const postId = btn.dataset.id;
+            navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
+                .then(() => toast('Link copied!', 'info'))
+                .catch(() => {});
+        });
+    });
+
+    feed.querySelectorAll('.delete-post-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const postId = btn.dataset.id;
+            if (!confirm('Delete this post?')) return;
+            try {
+                await deletePost(postId);
+                toast('Post deleted', 'success');
+                if (currentFeedType === 'user') {
+                    await loadUserPosts(currentUser.id);
+                } else {
+                    await loadSavedPosts();
+                }
+            } catch (err) {
+                toast('Failed to delete: ' + err.message, 'error');
+            }
+        });
+    });
+
+    // Click on post card – open modal
+    feed.querySelectorAll('.post-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            const postId = card.dataset.id;
+            openPostView(postId);
+        });
+    });
 }
 
 function escapeHtml(text) {
