@@ -5,14 +5,13 @@ import { renderVideoPlayer } from './videoPlayer.js';
 import { openReactionModal } from './reactionModal.js';
 
 let modalPostId = null;
-let loadToken = 0; // guards against a slow fetch overwriting a newer, faster one
+let loadToken = 0;
+let mediaItems = [];
+let mediaIndex = 0;
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
 // ---- Emoji reaction picker ----
-// Anchored to the LEFT edge of its wrapper (not centered) so it grows
-// rightward from the like button instead of straddling it and clipping
-// off the left side of the card.
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
     picker.className = 'emoji-picker';
@@ -61,7 +60,7 @@ function keepPickerOnScreen(picker) {
     });
 }
 
-// ---- One-time spinner keyframes, shared by the modal's loading state ----
+// ---- Spinner and modal styles ----
 function ensureSpinnerStyles() {
     if (document.getElementById('postModalSpinnerStyles')) return;
     const style = document.createElement('style');
@@ -81,7 +80,6 @@ function ensureSpinnerStyles() {
             animation:postModalSpin 0.7s linear infinite;
         }
         #postModalBody.content-loaded { animation:postModalFadeIn 0.25s ease; }
-        /* Reaction summary styles (mirror home.css) */
         .reaction-summary {
             display: flex; align-items: center; gap: 6px;
             padding: 2px 8px; background: #f8fafc;
@@ -93,6 +91,69 @@ function ensureSpinnerStyles() {
         .reaction-summary:hover { background: #ccfbf1; color: #0d9488; }
         .reaction-chip { display: flex; align-items: center; gap: 2px; }
         .reaction-total { color: #94a3b8; margin-left: 4px; }
+
+        /* Media gallery navigation */
+        .media-gallery {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .media-gallery img,
+        .media-gallery video {
+            max-width: 100%;
+            max-height: 60vh;
+            object-fit: contain;
+            display: block;
+        }
+        .media-gallery .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+            z-index: 2;
+        }
+        .media-gallery .nav-btn:hover { background: rgba(0,0,0,0.8); }
+        .media-gallery .nav-btn.prev { left: 8px; }
+        .media-gallery .nav-btn.next { right: 8px; }
+        .media-gallery .media-counter {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 12px;
+        }
+        .media-gallery .media-badge {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -112,7 +173,6 @@ function ensureModal() {
                     <button id="closePostModal" style="background:none;border:none;font-size:28px;cursor:pointer;color:#999;">&times;</button>
                 </div>
                 <div id="postModalBody" style="position:relative;flex:1;overflow-y:auto;display:flex;flex-direction:row;padding:16px 20px;min-height:240px;">
-                    <!-- Loading overlay – shown immediately on open, faded out once content is ready -->
                     <div id="postModalLoading">
                         <div class="spinner-ring"></div>
                     </div>
@@ -125,7 +185,6 @@ function ensureModal() {
                     <!-- Right column -->
                     <div id="modalRight" style="flex:1;display:flex;flex-direction:column;border-left:1px solid #e1e8ed;padding-left:20px;">
                         <div id="modalComments" style="flex:1;overflow-y:auto;margin-bottom:12px;"></div>
-                        <!-- Reaction summary will be injected here -->
                         <div id="modalSummary" style="margin-bottom:6px;"></div>
                         <div id="modalActions" style="border-top:1px solid #e1e8ed;padding-top:12px;">
                             <div style="display:flex;gap:16px;margin-bottom:8px;">
@@ -221,7 +280,6 @@ async function updateModalSummary(postId) {
                 <span class="reaction-total">${totalReactions}</span>
             </div>
         `;
-        // Attach click listener to open reaction modal
         const chip = summaryDiv.querySelector('.reaction-summary');
         if (chip) {
             chip.addEventListener('click', (e) => {
@@ -245,11 +303,70 @@ async function toggleLikeAction(postId, btn) {
         btn.classList.toggle('liked', result.action === 'liked');
         btn.style.transform = 'scale(1.3)';
         setTimeout(() => btn.style.transform = 'scale(1)', 200);
-        // Update the reaction summary chip
         await updateModalSummary(postId);
     } catch (err) {
         toast('Failed to like: ' + err.message, 'error');
     }
+}
+
+// ---- Render media gallery with navigation ----
+function renderMediaGallery(mediaDiv, items, index) {
+    if (!items || !items.length) {
+        mediaDiv.innerHTML = '';
+        return;
+    }
+    const item = items[index];
+    const isVideo = item.type === 'video';
+    const total = items.length;
+
+    let html = `<div class="media-gallery" data-index="${index}">`;
+    if (isVideo) {
+        // We'll render a container for the video player
+        html += `<div id="galleryVideoContainer" data-video-url="${escapeHtml(item.url)}" style="width:100%;"></div>`;
+    } else {
+        html += `<img src="${escapeHtml(item.url)}" alt="Media">`;
+    }
+    if (total > 1) {
+        html += `
+            <button class="nav-btn prev" data-dir="-1">&lsaquo;</button>
+            <button class="nav-btn next" data-dir="1">&rsaquo;</button>
+            <span class="media-counter">${index+1} / ${total}</span>
+        `;
+    }
+    html += `<span class="media-badge"><i class="fas ${isVideo ? 'fa-video' : 'fa-image'}"></i> ${isVideo ? 'Video' : 'Image'}</span>`;
+    html += '</div>';
+    mediaDiv.innerHTML = html;
+
+    // If video, initialize video player
+    if (isVideo) {
+        const vidContainer = document.getElementById('galleryVideoContainer');
+        if (vidContainer) {
+            const videoUrl = vidContainer.dataset.videoUrl;
+            if (videoUrl) {
+                renderVideoPlayer(vidContainer, videoUrl, { controls: true, autoplay: true }).catch(err => {
+                    console.warn('Failed to render video player:', err);
+                    vidContainer.innerHTML = `<div style="color:#dc2626;padding:16px;text-align:center;">Video playback not available</div>`;
+                });
+            }
+        }
+    }
+
+    // Attach navigation events
+    const navBtns = mediaDiv.querySelectorAll('.nav-btn');
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dir = parseInt(btn.dataset.dir);
+            let newIndex = index + dir;
+            if (newIndex < 0) newIndex = items.length - 1;
+            if (newIndex >= items.length) newIndex = 0;
+            mediaIndex = newIndex;
+            // Stop any playing video
+            const video = mediaDiv.querySelector('video');
+            if (video) { video.pause(); video.currentTime = 0; }
+            renderMediaGallery(mediaDiv, items, newIndex);
+        });
+    });
 }
 
 export async function openPostModal(postId, focusComment = false) {
@@ -282,14 +399,13 @@ async function refreshModal(postId, { showLoading = false } = {}) {
 
     try {
         const post = await fetchPostById(postId);
-
         if (myToken !== loadToken) return;
-
         if (!post) {
             body.innerHTML = '<div style="padding:20px;color:red;">Post not found.</div>';
             setModalLoading(false);
             return;
         }
+
         const [comments, summary] = await Promise.all([
             fetchComments(postId).catch(() => []),
             fetchReactionsSummary(postId).catch(() => ({}))
@@ -300,6 +416,17 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         const isOwner = currentUser && post.user_id === currentUser.id;
         const saved = await isPostSaved(postId);
 
+        // ---- Build media array ----
+        let mediaArr = [];
+        if (post.media && Array.isArray(post.media) && post.media.length) {
+            mediaArr = post.media;
+        } else if (post.media_url) {
+            mediaArr = [{ url: post.media_url, type: post.media_type || 'image' }];
+        }
+        mediaItems = mediaArr;
+        mediaIndex = 0;
+
+        // ---- Render user info ----
         userInfoDiv.innerHTML = `
             <div class="post-avatar" style="width:36px;height:36px;border-radius:50%;background:#c4c9d4;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">
                 ${post.profiles?.avatar_url ? `<img src="${post.profiles.avatar_url}" style="width:100%;height:100%;border-radius:50%;">` : (post.profiles?.display_name?.[0] || 'U').toUpperCase()}
@@ -310,26 +437,18 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             </div>
             ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" style="margin-left:auto;background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;"><i class="fas fa-trash"></i></button>` : ''}
         `;
+
+        // ---- Render text ----
         textDiv.innerHTML = `<p style="margin:0;">${escapeHtml(post.decryptedContent || '')}</p>`;
 
-        let mediaHtml = '';
-        if (post.media_url) {
-            if (post.media_type === 'video') {
-                mediaHtml = `<div id="modalVideoContainer" data-video-url="${escapeHtml(post.media_url)}" style="margin:8px 0;"></div>`;
-            } else if (post.media_type === 'image') {
-                mediaHtml = `<img src="${escapeHtml(post.media_url)}" alt="Media" style="max-width:100%;border-radius:12px;margin:8px 0;">`;
-            }
-        }
-        mediaDiv.innerHTML = mediaHtml;
-
-        const videoContainer = document.getElementById('modalVideoContainer');
-        if (videoContainer) {
-            const videoUrl = videoContainer.dataset.videoUrl;
-            if (videoUrl) {
-                await renderVideoPlayer(videoContainer, videoUrl, { controls: true, autoplay: true });
-            }
+        // ---- Render media gallery ----
+        if (mediaArr.length) {
+            renderMediaGallery(mediaDiv, mediaArr, 0);
+        } else {
+            mediaDiv.innerHTML = '';
         }
 
+        // ---- Render comments ----
         let commentsHtml = '';
         if (comments.length === 0) {
             commentsHtml = '<p style="color:#999;font-size:14px;">No comments yet.</p>';
@@ -346,7 +465,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         }
         commentsDiv.innerHTML = commentsHtml;
 
-        // ---- Render reaction summary ----
+        // ---- Reaction summary ----
         const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
         if (totalReactions > 0) {
             summaryDiv.innerHTML = `
@@ -374,70 +493,10 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         likeBtn.querySelector('i').className = `fas ${post.userLiked ? 'fa-heart liked' : 'fa-heart'}`;
         likeBtn.classList.toggle('liked', post.userLiked || false);
 
-        // Recreate picker each refresh to avoid stale listeners
+        // ---- Emoji picker cleanup and reattach ----
+        if (likeWrapper._cleanup) likeWrapper._cleanup();
         let picker = null;
         let timeout = null;
-        const showPicker = () => {
-            if (picker) return;
-            picker = createEmojiPicker((emoji) => {
-                toggleLikeAction(post.id, likeBtn);
-                picker.remove();
-                picker = null;
-            });
-            likeWrapper.appendChild(picker);
-            keepPickerOnScreen(picker);
-            requestAnimationFrame(() => {
-                picker.style.opacity = '1';
-                picker.style.pointerEvents = 'auto';
-                picker.style.transform = 'translateY(0) scale(1)';
-            });
-            clearTimeout(timeout);
-        };
-        const hidePicker = () => {
-            if (!picker) return;
-            timeout = setTimeout(() => {
-                picker.style.opacity = '0';
-                picker.style.pointerEvents = 'none';
-                picker.style.transform = 'translateY(10px) scale(0.85)';
-                setTimeout(() => {
-                    if (picker && picker.parentNode) picker.remove();
-                    picker = null;
-                }, 220);
-            }, 2000);
-        };
-        // Remove old listeners by cloning? Simpler: replace wrapper events.
-        // We'll use a fresh approach: we'll attach new listeners, but need to clear old ones.
-        // We'll store a reference to the wrapper and remove old listeners.
-        // Easiest: replace the wrapper with a fresh one.
-        // But we can't easily remove old listeners without references.
-        // We'll just use a different approach: we'll attach once with a flag.
-        // For simplicity, we'll check if we already have listeners attached via a data attribute.
-        if (!likeWrapper.dataset.listenersAttached) {
-            likeWrapper.addEventListener('mouseenter', showPicker);
-            likeWrapper.addEventListener('mouseleave', hidePicker);
-            likeWrapper.dataset.listenersAttached = 'true';
-        } else {
-            // If already attached, we need to update the picker creation to use the latest postId.
-            // Since showPicker closes over post.id and likeBtn, it's fine.
-            // But we need to reset picker state? We'll just let it work.
-            // We can remove old listeners and reattach.
-            // Simpler: remove and reattach every time.
-            // We'll do that.
-            likeWrapper.removeEventListener('mouseenter', showPicker);
-            likeWrapper.removeEventListener('mouseleave', hidePicker);
-            likeWrapper.addEventListener('mouseenter', showPicker);
-            likeWrapper.addEventListener('mouseleave', hidePicker);
-        }
-        // But we must ensure showPicker uses the current postId and likeBtn.
-        // So we override the showPicker function each time.
-        // Actually, we can just attach new listeners each refresh.
-        // We'll clone and replace the wrapper? That's heavy.
-        // Instead, we'll store the handlers and remove them.
-        // For brevity, we'll just reattach with a new function each time.
-        // Let's store them in a property.
-        if (likeWrapper._cleanup) {
-            likeWrapper._cleanup();
-        }
         const newShowPicker = () => {
             if (picker) return;
             picker = createEmojiPicker((emoji) => {
@@ -484,15 +543,15 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         saveIcon.className = saved ? 'fas fa-bookmark' : 'fas fa-bookmark-o';
         saveBtn.onclick = async (e) => {
             e.stopPropagation();
-            const postId = saveBtn.dataset.id;
+            const pId = saveBtn.dataset.id;
             try {
-                const savedNow = await isPostSaved(postId);
+                const savedNow = await isPostSaved(pId);
                 if (savedNow) {
-                    await unsavePost(postId);
+                    await unsavePost(pId);
                     saveIcon.className = 'fas fa-bookmark-o';
                     toast('Post unsaved', 'info');
                 } else {
-                    await savePost(postId);
+                    await savePost(pId);
                     saveIcon.className = 'fas fa-bookmark';
                     toast('Post saved!', 'success');
                 }
@@ -504,22 +563,21 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         // ---- Delete button ----
         const deleteBtn = userInfoDiv.querySelector('.delete-post-btn');
         if (deleteBtn) {
-            deleteBtn.addEventListener('click', async (e) => {
+            deleteBtn.onclick = async (e) => {
                 e.stopPropagation();
-                const postId = deleteBtn.dataset.id;
+                const pId = deleteBtn.dataset.id;
                 if (!confirm('Delete this post?')) return;
                 try {
-                    await deletePost(postId);
+                    await deletePost(pId);
                     toast('Post deleted', 'success');
                     document.getElementById('postModal').style.display = 'none';
                 } catch (err) {
                     toast('Failed to delete: ' + err.message, 'error');
                 }
-            });
+            };
         }
 
         setModalLoading(false);
-
     } catch (err) {
         if (myToken !== loadToken) return;
         body.innerHTML = `<div style="padding:20px;color:red;">Failed to load post: ${err.message}</div>`;

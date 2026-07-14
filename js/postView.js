@@ -3,13 +3,155 @@ import { getSupabaseClient } from './supabase.js';
 import { toggleLike, addComment, deletePost, fetchPostById, fetchComments, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
 import { openReactionModal } from './reactionModal.js';
-// 🔽 Import feed updaters (both summary and button)
 import { updateReactionSummary, updateFeedLikeButton } from './home-loader.js';
 import { updateProfileSummary, updateProfileLikeButton } from './profile.js';
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
-// ---- Inject modal styles once ----
+// ============================================================
+// Custom notification & confirmation modals (local)
+// ============================================================
+
+function showNotificationModal(message, tone = 'info', duration = 2500) {
+    const existing = document.querySelector('.pv-notification');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'pv-notification';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: notifFadeIn 0.2s ease;
+    `;
+    const colors = {
+        success: { bg: '#d1fae5', border: '#34d399', text: '#065f46', icon: 'fa-check-circle' },
+        error: { bg: '#fce8ee', border: '#f87171', text: '#991b1b', icon: 'fa-circle-exclamation' },
+        info: { bg: '#e0f2fe', border: '#60a5fa', text: '#1e40af', icon: 'fa-info-circle' },
+    };
+    const c = colors[tone] || colors.info;
+
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 12px;
+            max-width: 420px;
+            width: 100%;
+            padding: 16px 20px;
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-left: 4px solid ${c.border};
+            pointer-events: auto;
+            background: ${c.bg};
+        ">
+            <i class="fas ${c.icon}" style="color: ${c.border}; font-size: 20px; flex-shrink: 0;"></i>
+            <span style="color: ${c.text}; font-size: 14px; font-weight: 500; line-height: 1.4; flex:1;">
+                ${escapeHtml(message)}
+            </span>
+            <button class="notif-close" style="
+                background: none; border: none; color: ${c.text};
+                cursor: pointer; font-size: 18px; padding: 0 4px; opacity:0.6;
+                transition: opacity 0.15s;
+            " aria-label="Close">&times;</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.notif-close');
+    const close = () => {
+        overlay.style.animation = 'notifFadeOut 0.2s ease forwards';
+        setTimeout(() => overlay.remove(), 250);
+    };
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+    const timer = setTimeout(close, duration);
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    overlay._close = close;
+    overlay._timer = timer;
+}
+
+function showConfirmModal(message, onConfirm, onCancel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'pv-confirm';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999998;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        animation: confirmFadeIn 0.15s ease;
+    `;
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            padding: 24px 28px;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        ">
+            <p style="margin: 0 0 20px; font-size: 15px; color: #1e293b; line-height: 1.5;">
+                ${escapeHtml(message)}
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmYes" style="
+                    background: #0d9488; color: #fff; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Yes</button>
+                <button id="confirmNo" style="
+                    background: #f1f5f9; color: #0f172a; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const yesBtn = overlay.querySelector('#confirmYes');
+    const noBtn = overlay.querySelector('#confirmNo');
+    const cleanup = () => overlay.remove();
+    yesBtn.addEventListener('click', () => { cleanup(); if (onConfirm) onConfirm(); });
+    noBtn.addEventListener('click', () => { cleanup(); if (onCancel) onCancel(); });
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); }
+    });
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { cleanup(); if (onCancel) onCancel(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
+function ensureModalStyles() {
+    if (document.getElementById('pvModalStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'pvModalStyles';
+    style.textContent = `
+        @keyframes notifFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes notifFadeOut { to { opacity: 0; transform: scale(0.98); } }
+        @keyframes confirmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .pv-confirm button#confirmYes:hover { background: #0b7f74; }
+        .pv-confirm button#confirmNo:hover { background: #e2e8f0; }
+        .pv-notification .notif-close:hover { opacity: 1 !important; }
+    `;
+    document.head.appendChild(style);
+}
+ensureModalStyles();
+
+// ---- Inject post view styles ----
 function ensureStyles() {
     if (document.getElementById('pv-styles')) return;
     const style = document.createElement('style');
@@ -99,8 +241,74 @@ function ensureStyles() {
         .pv-error-body p { margin: 0; font-size: 14px; }
 
         .pv-post-text { font-size: 15.5px; line-height: 1.65; color: #1e293b; margin: 0 0 4px; white-space: pre-wrap; }
-        .pv-media { margin-top: 14px; border-radius: 14px; overflow: hidden; background: #000; }
-        .pv-media img { display: block; width: 100%; max-height: 60vh; object-fit: contain; background: #000; }
+
+        /* ---- Media gallery ---- */
+        .pv-media-gallery {
+            position: relative;
+            margin-top: 14px;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #000;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pv-media-gallery img,
+        .pv-media-gallery video {
+            max-width: 100%;
+            max-height: 60vh;
+            object-fit: contain;
+            display: block;
+            cursor: pointer;
+        }
+        .pv-media-gallery .pv-nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+            z-index: 2;
+        }
+        .pv-media-gallery .pv-nav-btn:hover { background: rgba(0,0,0,0.8); }
+        .pv-media-gallery .pv-nav-btn.prev { left: 8px; }
+        .pv-media-gallery .pv-nav-btn.next { right: 8px; }
+        .pv-media-gallery .pv-media-counter {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 12px;
+        }
+        .pv-media-gallery .pv-media-badge {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .pv-media-gallery .pv-video-container {
+            width: 100%;
+        }
 
         .pv-comments-head {
             padding: 16px 18px 10px; font-size: 14.5px; font-weight: 700; color: #0f172a;
@@ -195,6 +403,23 @@ function ensureStyles() {
         }
     `;
     document.head.appendChild(style);
+}
+
+// ---- Fullscreen toggle helper ----
+function toggleElementFullscreen(element) {
+    if (!document.fullscreenElement) {
+        if (element.requestFullscreen) {
+            element.requestFullscreen().catch(err => {
+                console.warn('Fullscreen request failed:', err);
+            });
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(err => {
+                console.warn('Exit fullscreen failed:', err);
+            });
+        }
+    }
 }
 
 // ---- Reaction picker ----
@@ -302,6 +527,78 @@ async function updatePostViewSummary(postId) {
     }
 }
 
+// ---- Media gallery renderer with double-click fullscreen ----
+function renderMediaGallery(container, items, currentIndex) {
+    if (!items || !items.length) {
+        container.innerHTML = '';
+        return;
+    }
+    const item = items[currentIndex];
+    const isVideo = item.type === 'video';
+    const total = items.length;
+
+    let html = `<div class="pv-media-gallery" data-index="${currentIndex}">`;
+    if (isVideo) {
+        html += `<div class="pv-video-container" data-video-url="${escapeHtml(item.url)}"></div>`;
+    } else {
+        html += `<img src="${escapeHtml(item.url)}" alt="Media" loading="lazy">`;
+    }
+    if (total > 1) {
+        html += `
+            <button class="pv-nav-btn prev" data-dir="-1">&lsaquo;</button>
+            <button class="pv-nav-btn next" data-dir="1">&rsaquo;</button>
+            <span class="pv-media-counter">${currentIndex+1} / ${total}</span>
+        `;
+    }
+    html += `<span class="pv-media-badge"><i class="fas ${isVideo ? 'fa-video' : 'fa-image'}"></i> ${isVideo ? 'Video' : 'Image'}</span>`;
+    html += '</div>';
+    container.innerHTML = html;
+
+    // ---- Attach double-click fullscreen for image or video ----
+    if (isVideo) {
+        const vidContainer = container.querySelector('.pv-video-container');
+        if (vidContainer) {
+            const videoUrl = vidContainer.dataset.videoUrl;
+            if (videoUrl) {
+                renderVideoPlayer(vidContainer, videoUrl, { controls: true, autoplay: true }).catch(err => {
+                    console.warn('Failed to render video player:', err);
+                    vidContainer.innerHTML = `<div style="color:#dc2626;padding:16px;text-align:center;">Video playback not available</div>`;
+                });
+                // Listen for double-click on the video container (which contains the player)
+                vidContainer.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    const videoEl = vidContainer.querySelector('video');
+                    if (videoEl) toggleElementFullscreen(videoEl);
+                });
+            }
+        }
+    } else {
+        const img = container.querySelector('img');
+        if (img) {
+            img.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                toggleElementFullscreen(img);
+            });
+        }
+    }
+
+    // ---- Attach navigation events ----
+    const navBtns = container.querySelectorAll('.pv-nav-btn');
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dir = parseInt(btn.dataset.dir);
+            let newIndex = currentIndex + dir;
+            if (newIndex < 0) newIndex = items.length - 1;
+            if (newIndex >= items.length) newIndex = 0;
+            // Stop any playing video
+            const video = container.querySelector('video');
+            if (video) { video.pause(); video.currentTime = 0; }
+            renderMediaGallery(container, items, newIndex);
+        });
+    });
+}
+
 // ---- Main export ----
 export async function openPostView(postId) {
     ensureStyles();
@@ -309,7 +606,7 @@ export async function openPostView(postId) {
 
     const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!currentUser) {
-        alert('Please log in to view this post.');
+        showNotificationModal('Please log in to view this post.', 'error');
         return;
     }
 
@@ -426,7 +723,15 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
            </div>`
         : '';
 
-    // Header
+    // ---- Build media array ----
+    let mediaArr = [];
+    if (post.media && Array.isArray(post.media) && post.media.length) {
+        mediaArr = post.media;
+    } else if (post.media_url) {
+        mediaArr = [{ url: post.media_url, type: post.media_type || 'image' }];
+    }
+
+    // ---- Header ----
     modal.querySelector('.pv-user').innerHTML = `
         <div class="pv-avatar">
             ${avatarUrl ? `<img src="${avatarUrl}" alt="">` : (displayName[0] || 'U').toUpperCase()}
@@ -445,45 +750,36 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
         modal.querySelector('.pv-header-actions').prepend(deleteBtn);
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            if (!confirm('Delete this post?')) return;
-            try {
-                await deletePost(post.id);
-                closeModal();
-                const activePage = document.querySelector('.bottom-nav-item.active')?.dataset.page;
-                if (activePage === 'home') {
-                    if (typeof window.loadHomeFeed === 'function') {
-                        window.loadHomeFeed('homeContent');
-                    } else {
-                        window.location.reload();
+            showConfirmModal('Delete this post?', async () => {
+                try {
+                    await deletePost(post.id);
+                    closeModal();
+                    const activePage = document.querySelector('.bottom-nav-item.active')?.dataset.page;
+                    if (activePage === 'home') {
+                        if (typeof window.loadHomeFeed === 'function') {
+                            window.loadHomeFeed('homeContent');
+                        } else {
+                            window.location.reload();
+                        }
+                    } else if (activePage === 'profile') {
+                        if (typeof window.renderProfile === 'function') {
+                            window.renderProfile();
+                        }
                     }
-                } else if (activePage === 'profile') {
-                    if (typeof window.renderProfile === 'function') {
-                        window.renderProfile();
-                    }
+                    showNotificationModal('Post deleted.', 'success');
+                } catch (err) {
+                    showNotificationModal('Failed to delete: ' + err.message, 'error');
                 }
-                toast('Post deleted.', 'success');
-            } catch (err) {
-                alert('Failed to delete: ' + err.message);
-            }
+            });
         });
     }
 
-    // Media
-    let mediaHtml = '';
-    if (post.media_url) {
-        if (post.media_type === 'video') {
-            mediaHtml = `<div class="pv-media video-player-container" data-video-url="${post.media_url}"></div>`;
-        } else if (post.media_type === 'image') {
-            mediaHtml = `<div class="pv-media"><img src="${post.media_url}" alt="Post media"></div>`;
-        }
-    }
-
-    // Body
+    // ---- Body ----
     const body = modal.querySelector('.pv-body');
     body.innerHTML = `
         <div class="pv-left pv-content-in">
             <p class="pv-post-text">${escapeHtml(decryptedContent)}</p>
-            ${mediaHtml}
+            <div id="pvMediaContainer" class="pv-media-placeholder"></div>
         </div>
         <div class="pv-right pv-content-in">
             <div class="pv-comments-head"><i class="fas fa-comment-dots"></i> Comments</div>
@@ -510,14 +806,15 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
         </div>
     `;
 
-    // ---- Render video player if video ----
-    if (post.media_type === 'video') {
-        const videoContainer = modal.querySelector('.video-player-container');
-        if (videoContainer) {
-            renderVideoPlayer(videoContainer, post.media_url, { controls: true }).catch(err => {
-                console.warn('Failed to render video player:', err);
-                videoContainer.innerHTML = `<div style="color:#dc2626;padding:16px;text-align:center;">Video playback not available</div>`;
-            });
+    // ---- Render media gallery ----
+    const mediaContainer = document.getElementById('pvMediaContainer');
+    if (mediaContainer) {
+        if (mediaArr.length) {
+            modal._mediaItems = mediaArr;
+            modal._mediaIndex = 0;
+            renderMediaGallery(mediaContainer, mediaArr, 0);
+        } else {
+            mediaContainer.innerHTML = '';
         }
     }
 
@@ -556,11 +853,10 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
             await updatePostViewSummary(post.id);
             await updateReactionSummary(post.id);
             await updateProfileSummary(post.id);
-            // Update the like button on the feeds (count, emoji, state)
             updateFeedLikeButton(post.id, isLiked, result.reaction || '❤️', newCount);
             updateProfileLikeButton(post.id, isLiked, result.reaction || '❤️', newCount);
         } catch (err) {
-            alert('Failed to like: ' + err.message);
+            showNotificationModal('Failed to like: ' + err.message, 'error');
         } finally {
             likeBtn.disabled = false;
         }
@@ -592,7 +888,7 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
             updateFeedLikeButton(post.id, isLiked, reaction, newCount);
             updateProfileLikeButton(post.id, isLiked, reaction, newCount);
         } catch (err) {
-            alert('Failed to set reaction: ' + err.message);
+            showNotificationModal('Failed to set reaction: ' + err.message, 'error');
         } finally {
             likeBtn.disabled = false;
         }
@@ -614,17 +910,17 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
                 saveIcon.className = 'fas fa-bookmark-o';
                 saveText.textContent = 'Save';
                 saveBtn.classList.remove('saved');
-                toast('Post unsaved', 'info');
+                showNotificationModal('Post unsaved', 'info');
             } else {
                 await savePost(post.id);
                 isSaved = true;
                 saveIcon.className = 'fas fa-bookmark';
                 saveText.textContent = 'Saved';
                 saveBtn.classList.add('saved');
-                toast('Post saved!', 'success');
+                showNotificationModal('Post saved!', 'success');
             }
         } catch (err) {
-            alert('Failed to save: ' + err.message);
+            showNotificationModal('Failed to save: ' + err.message, 'error');
         } finally {
             saveBtn.disabled = false;
         }
@@ -644,8 +940,9 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
             const freshComments = await fetchComments(post.id);
             modal.querySelector('#commentsContainer').innerHTML = renderCommentsHtml(freshComments);
             commentInput.value = '';
+            showNotificationModal('Comment added!', 'success');
         } catch (err) {
-            alert('Failed to comment: ' + err.message);
+            showNotificationModal('Failed to comment: ' + err.message, 'error');
         } finally {
             commentSubmit.disabled = false;
         }
@@ -654,14 +951,6 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
     commentInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') submitComment();
     });
-}
-
-function toast(message, tone = 'info') {
-    if (typeof window.toast === 'function') {
-        window.toast(message, tone);
-    } else {
-        alert(message);
-    }
 }
 
 // ---- Comments renderer ----

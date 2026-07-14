@@ -12,12 +12,146 @@ let isLoading = false;
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
-// ---- Ensure spinner styles exist (only once) ----
-function ensureSpinnerStyles() {
-    if (document.getElementById('home-loader-spinner-styles')) return;
+// ---- Custom notification modal ----
+function showNotificationModal(message, tone = 'info', duration = 2500) {
+    const existing = document.querySelector('.notification-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'notification-modal-overlay';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: notifFadeIn 0.2s ease;
+    `;
+
+    const colors = {
+        success: { bg: '#d1fae5', border: '#34d399', text: '#065f46', icon: 'fa-check-circle' },
+        error: { bg: '#fce8ee', border: '#f87171', text: '#991b1b', icon: 'fa-circle-exclamation' },
+        info: { bg: '#e0f2fe', border: '#60a5fa', text: '#1e40af', icon: 'fa-info-circle' },
+    };
+    const c = colors[tone] || colors.info;
+
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 12px;
+            max-width: 420px;
+            width: 100%;
+            padding: 16px 20px;
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-left: 4px solid ${c.border};
+            pointer-events: auto;
+            background: ${c.bg};
+        ">
+            <i class="fas ${c.icon}" style="color: ${c.border}; font-size: 20px; flex-shrink: 0;"></i>
+            <span style="color: ${c.text}; font-size: 14px; font-weight: 500; line-height: 1.4; flex:1;">
+                ${escapeHtml(message)}
+            </span>
+            <button class="notif-close" style="
+                background: none; border: none; color: ${c.text};
+                cursor: pointer; font-size: 18px; padding: 0 4px; opacity:0.6;
+                transition: opacity 0.15s;
+            " aria-label="Close">&times;</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.notif-close');
+    const close = () => {
+        overlay.style.animation = 'notifFadeOut 0.2s ease forwards';
+        setTimeout(() => overlay.remove(), 250);
+    };
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+
+    const timer = setTimeout(close, duration);
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    overlay._close = close;
+    overlay._timer = timer;
+}
+
+// ---- Custom confirmation modal ----
+function showConfirmModal(message, onConfirm, onCancel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999998;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        animation: confirmFadeIn 0.15s ease;
+    `;
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            padding: 24px 28px;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        ">
+            <p style="margin: 0 0 20px; font-size: 15px; color: #1e293b; line-height: 1.5;">
+                ${escapeHtml(message)}
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmYes" style="
+                    background: #0d9488; color: #fff; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Yes</button>
+                <button id="confirmNo" style="
+                    background: #f1f5f9; color: #0f172a; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const yesBtn = overlay.querySelector('#confirmYes');
+    const noBtn = overlay.querySelector('#confirmNo');
+
+    const cleanup = () => overlay.remove();
+    yesBtn.addEventListener('click', () => { cleanup(); if (onConfirm) onConfirm(); });
+    noBtn.addEventListener('click', () => { cleanup(); if (onCancel) onCancel(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); } });
+
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { cleanup(); if (onCancel) onCancel(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
+// ---- Ensure modal styles and animations once ----
+function ensureStyles() {
+    if (document.getElementById('homeLoaderStyles')) return;
     const style = document.createElement('style');
-    style.id = 'home-loader-spinner-styles';
+    style.id = 'homeLoaderStyles';
     style.textContent = `
+        @keyframes notifFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes notifFadeOut { to { opacity: 0; transform: scale(0.98); } }
+        @keyframes confirmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .confirm-overlay button#confirmYes:hover { background: #0b7f74; }
+        .confirm-overlay button#confirmNo:hover { background: #e2e8f0; }
+        .notification-modal-overlay .notif-close:hover { opacity: 1 !important; }
+
         @keyframes homeSpin {
             to { transform: rotate(360deg); }
         }
@@ -44,9 +178,98 @@ function ensureSpinnerStyles() {
             color: #94a3b8;
             font-size: 14px;
         }
+
+        /* ---- Animation enhancements ---- */
+        .post-card {
+            transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1), background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .post-card:hover {
+            background: #fafbfc;
+            transform: translateY(-1px);
+        }
+
+        .post-actions button {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .post-actions button:active {
+            transform: scale(0.92);
+        }
+        .post-actions button .fa-heart,
+        .post-actions button .fa-bookmark,
+        .post-actions button .fa-bookmark-o,
+        .post-actions button .fa-comment {
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .post-actions button:hover .fa-heart { transform: scale(1.1); }
+        .post-actions button:hover .fa-bookmark { transform: scale(1.1); }
+        .post-actions button:hover .fa-bookmark-o { transform: scale(1.1); }
+        .post-actions button:hover .fa-comment { transform: scale(1.1); }
+
+        .like-btn.liked .fa-heart {
+            animation: heartPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes heartPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.5); }
+            100% { transform: scale(1); }
+        }
+
+        .save-btn.saved .fa-bookmark {
+            animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes bookmarkPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+
+        .reaction-summary {
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .reaction-summary:hover {
+            transform: scale(1.02);
+        }
+
+        .delete-post-btn {
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .delete-post-btn:active {
+            transform: scale(0.85);
+        }
+
+        .composer-submit {
+            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .composer-submit:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .composer-tools button {
+            transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+        }
+        .composer-tools button:active {
+            transform: scale(0.85);
+        }
+
+        .feed-tab {
+            transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease;
+        }
+        .feed-tab:active {
+            transform: scale(0.95);
+        }
+
+        /* Skeleton shimmer enhancement */
+        .skeleton-line {
+            animation: shimmer 1.4s ease infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 100% 50%; }
+            100% { background-position: 0 50%; }
+        }
     `;
     document.head.appendChild(style);
 }
+ensureStyles();
 
 // ---- Loading spinner HTML ----
 function renderLoadingSpinner() {
@@ -110,8 +333,6 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     }
     if (isLoading) return;
     isLoading = true;
-
-    ensureSpinnerStyles();
 
     if (!append) {
         container.innerHTML = renderLoadingSpinner();
@@ -214,14 +435,37 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         const displayEmoji = userReaction || '❤️';
         const isLiked = !!userReaction;
 
-        const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
-        const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
+        // ---- Build media array ----
+        let mediaArr = [];
+        if (post.media && Array.isArray(post.media) && post.media.length) {
+            mediaArr = post.media;
+        } else if (post.media_url) {
+            mediaArr = [{ url: post.media_url, type: post.media_type || 'image' }];
+        }
 
         let mediaHtml = '';
-        if (videoUrl) {
-            mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
-        } else if (imageUrl) {
-            mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+        if (mediaArr.length > 1) {
+            const cols = Math.min(mediaArr.length, 3);
+            mediaHtml = `
+                <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-top:8px;border-radius:12px;overflow:hidden;">
+                    ${mediaArr.slice(0, 3).map((m) => {
+                        const isVideo = m.type === 'video';
+                        if (isVideo) {
+                            return `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="aspect-ratio:1/1;"></div>`;
+                        } else {
+                            return `<img src="${escapeHtml(m.url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;">`;
+                        }
+                    }).join('')}
+                </div>
+                ${mediaArr.length > 3 ? `<div style="font-size:12px;color:#94a3b8;margin-top:4px;">+${mediaArr.length - 3} more</div>` : ''}
+            `;
+        } else if (mediaArr.length === 1) {
+            const m = mediaArr[0];
+            if (m.type === 'video') {
+                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="margin-top:8px;"></div>`;
+            } else {
+                mediaHtml = `<img src="${escapeHtml(m.url)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+            }
         }
 
         html += `
@@ -252,7 +496,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                     <button class="comment-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
                         <i class="fas fa-comment"></i> <span>${comments}</span>
                     </button>
-                    <button class="save-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
+                    <button class="save-btn ${saved ? 'saved' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${saved ? '#0d9488' : '#555'};cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
                         <i class="fas ${saved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
                     </button>
                 </div>
@@ -347,14 +591,18 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                 if (saved) {
                     await unsavePost(postId);
                     icon.className = 'fas fa-bookmark-o';
-                    toast('Post unsaved', 'info');
+                    btn.classList.remove('saved');
+                    btn.style.color = '#555';
+                    showNotificationModal('Post unsaved', 'info');
                 } else {
                     await savePost(postId);
                     icon.className = 'fas fa-bookmark';
-                    toast('Post saved!', 'success');
+                    btn.classList.add('saved');
+                    btn.style.color = '#0d9488';
+                    showNotificationModal('Post saved!', 'success');
                 }
             } catch (err) {
-                toast('Failed: ' + err.message, 'error');
+                showNotificationModal('Failed: ' + err.message, 'error');
             }
         });
     });
@@ -363,15 +611,16 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const postId = btn.dataset.id;
-            if (!confirm('Delete this post?')) return;
-            try {
-                await deletePost(postId);
-                toast('Post deleted', 'success');
-                currentOffset = 0;
-                await loadHomeFeed('homeContent', false);
-            } catch (err) {
-                toast('Failed to delete: ' + err.message, 'error');
-            }
+            showConfirmModal('Delete this post?', async () => {
+                try {
+                    await deletePost(postId);
+                    showNotificationModal('Post deleted', 'success');
+                    currentOffset = 0;
+                    await loadHomeFeed('homeContent', false);
+                } catch (err) {
+                    showNotificationModal('Failed to delete: ' + err.message, 'error');
+                }
+            });
         });
     });
 
@@ -386,7 +635,6 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
 
 // ============================================================
 // 🆕 LIVE UPDATE: Reaction summary chip
-// Called after every like/unlike/reaction change
 // ============================================================
 async function updateReactionSummary(postId) {
     const chip = document.querySelector(`.reaction-summary[data-post-id="${postId}"]`);
@@ -411,7 +659,7 @@ async function updateReactionSummary(postId) {
     }
 }
 
-// ---- Update the like button on a home feed post (no export here) ----
+// ---- Update the like button on a home feed post ----
 async function updateFeedLikeButton(postId, liked, reaction, count) {
     const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .like-btn`);
     if (!btn) return;
@@ -462,7 +710,7 @@ async function toggleLikeAction(postId, btn, reaction) {
 
         await updateReactionSummary(postId);
     } catch (err) {
-        toast('Failed to like: ' + err.message, 'error');
+        showNotificationModal('Failed to like: ' + err.message, 'error');
     }
 }
 
@@ -470,14 +718,6 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-function toast(message, tone = 'info') {
-    if (typeof window.toast === 'function') {
-        window.toast(message, tone);
-    } else {
-        alert(message);
-    }
 }
 
 // ---- Realtime ----
@@ -501,5 +741,5 @@ export async function initRealtimeFeed() {
     }
 }
 
-// ---- Single export of both helpers ----
+// ---- Single export ----
 export { updateReactionSummary, updateFeedLikeButton };

@@ -6,7 +6,7 @@
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
-import { createPost, toggleLike, deletePost, fetchReactionsSummary, fetchSavedPostIds } from './home-sb.js';
+import { createPost, toggleLike, deletePost, fetchReactionsSummary, fetchSavedPostIds, savePost, unsavePost, isPostSaved } from './home-sb.js';
 import { uploadProfileImage, updateProfile } from './profile-sb.js';
 import { uploadVideo } from './videoUpload.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
@@ -17,6 +17,268 @@ let currentProfileUser = null;
 let currentUser = null;
 let currentFeedType = 'user'; // 'user' or 'saved'
 let savedCount = 0;
+
+// ---- Custom notification modal (replaces toast/alert) ----
+function showNotificationModal(message, tone = 'info', duration = 2500) {
+    const existing = document.querySelector('.notification-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'notification-modal-overlay';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: notifFadeIn 0.2s ease;
+    `;
+
+    const colors = {
+        success: { bg: '#d1fae5', border: '#34d399', text: '#065f46', icon: 'fa-check-circle' },
+        error: { bg: '#fce8ee', border: '#f87171', text: '#991b1b', icon: 'fa-circle-exclamation' },
+        info: { bg: '#e0f2fe', border: '#60a5fa', text: '#1e40af', icon: 'fa-info-circle' },
+    };
+    const c = colors[tone] || colors.info;
+
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 12px;
+            max-width: 420px;
+            width: 100%;
+            padding: 16px 20px;
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-left: 4px solid ${c.border};
+            pointer-events: auto;
+            background: ${c.bg};
+        ">
+            <i class="fas ${c.icon}" style="color: ${c.border}; font-size: 20px; flex-shrink: 0;"></i>
+            <span style="color: ${c.text}; font-size: 14px; font-weight: 500; line-height: 1.4; flex:1;">
+                ${escapeHtml(message)}
+            </span>
+            <button class="notif-close" style="
+                background: none; border: none; color: ${c.text};
+                cursor: pointer; font-size: 18px; padding: 0 4px; opacity:0.6;
+                transition: opacity 0.15s;
+            " aria-label="Close">&times;</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.notif-close');
+    const close = () => {
+        overlay.style.animation = 'notifFadeOut 0.2s ease forwards';
+        setTimeout(() => overlay.remove(), 250);
+    };
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+
+    const timer = setTimeout(close, duration);
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    overlay._close = close;
+    overlay._timer = timer;
+}
+
+// ---- Custom confirmation modal (replaces browser confirm) ----
+function showConfirmModal(message, onConfirm, onCancel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999998;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        animation: confirmFadeIn 0.15s ease;
+    `;
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            padding: 24px 28px;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        ">
+            <p style="margin: 0 0 20px; font-size: 15px; color: #1e293b; line-height: 1.5;">
+                ${escapeHtml(message)}
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmYes" style="
+                    background: #0d9488; color: #fff; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Yes</button>
+                <button id="confirmNo" style="
+                    background: #f1f5f9; color: #0f172a; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const yesBtn = overlay.querySelector('#confirmYes');
+    const noBtn = overlay.querySelector('#confirmNo');
+
+    const cleanup = () => overlay.remove();
+    yesBtn.addEventListener('click', () => { cleanup(); if (onConfirm) onConfirm(); });
+    noBtn.addEventListener('click', () => { cleanup(); if (onCancel) onCancel(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); } });
+
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { cleanup(); if (onCancel) onCancel(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
+// ---- Inject styles for modals and animations once ----
+function ensureModalStyles() {
+    if (document.getElementById('profileModalStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'profileModalStyles';
+    style.textContent = `
+        @keyframes notifFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes notifFadeOut { to { opacity: 0; transform: scale(0.98); } }
+        @keyframes confirmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .confirm-overlay button#confirmYes:hover { background: #0b7f74; }
+        .confirm-overlay button#confirmNo:hover { background: #e2e8f0; }
+        .notification-modal-overlay .notif-close:hover { opacity: 1 !important; }
+
+        /* ---- Animation enhancements ---- */
+        .post-card {
+            transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1), background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .post-card:hover {
+            background: #fafbfc;
+            transform: translateY(-1px);
+        }
+
+        .post-actions button {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .post-actions button:active {
+            transform: scale(0.92);
+        }
+        .post-actions button .fa-heart,
+        .post-actions button .fa-bookmark,
+        .post-actions button .fa-bookmark-o,
+        .post-actions button .fa-comment {
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .post-actions button:hover .fa-heart { transform: scale(1.1); }
+        .post-actions button:hover .fa-bookmark { transform: scale(1.1); }
+        .post-actions button:hover .fa-bookmark-o { transform: scale(1.1); }
+        .post-actions button:hover .fa-comment { transform: scale(1.1); }
+
+        .like-btn.liked .fa-heart {
+            animation: heartPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes heartPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.5); }
+            100% { transform: scale(1); }
+        }
+
+        .save-btn.saved .fa-bookmark {
+            animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes bookmarkPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+
+        .reaction-summary {
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .reaction-summary:hover {
+            transform: scale(1.02);
+        }
+
+        .delete-post-btn {
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .delete-post-btn:active {
+            transform: scale(0.85);
+        }
+
+        .profile-avatar-wrap .overlay-btn,
+        .profile-cover .overlay-btn {
+            transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+        }
+        .profile-avatar-wrap .overlay-btn:hover,
+        .profile-cover .overlay-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .profile-bio-edit-btn {
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        .profile-bio-edit-btn:active {
+            transform: scale(0.9);
+        }
+
+        .composer-submit {
+            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .composer-submit:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .composer-tools button {
+            transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+        }
+        .composer-tools button:active {
+            transform: scale(0.85);
+        }
+
+        .media-remove-btn {
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+        .media-remove-btn:hover {
+            transform: scale(1.1);
+        }
+        .media-remove-btn:active {
+            transform: scale(0.85);
+        }
+
+        .feed-tab {
+            transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease;
+        }
+        .feed-tab:active {
+            transform: scale(0.95);
+        }
+
+        .profile-feed-section #profileFeed {
+            transition: opacity 0.25s ease;
+        }
+
+        /* Skeleton shimmer enhancement */
+        .skeleton-line {
+            animation: shimmer 1.4s ease infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 100% 50%; }
+            100% { background-position: 0 50%; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+ensureModalStyles();
 
 // ---- Emoji picker ----
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
@@ -69,7 +331,7 @@ function keepPickerOnScreen(picker) {
     });
 }
 
-// ---- 🆕 Helper: Live update reaction summary chip ----
+// ---- Helpers for live updates (exported) ----
 export async function updateProfileSummary(postId) {
     const chip = document.querySelector(`.profile-feed-section .reaction-summary[data-post-id="${postId}"]`);
     if (!chip) return;
@@ -91,7 +353,6 @@ export async function updateProfileSummary(postId) {
     }
 }
 
-// ---- 🆕 Helper: Live update the like button on the profile feed ----
 export async function updateProfileLikeButton(postId, liked, reaction, count) {
     const btn = document.querySelector(`.profile-feed-section .post-card[data-id="${postId}"] .like-btn`);
     if (!btn) return;
@@ -142,13 +403,13 @@ async function toggleLikeAction(postId, btn, reaction) {
         btn.style.transform = 'scale(1.25)';
         setTimeout(() => btn.style.transform = 'scale(1)', 180);
 
-        // ---- 🚀 Live update the reaction summary chip ----
         await updateProfileSummary(postId);
     } catch (err) {
-        toast('Failed to like: ' + err.message, 'error');
+        showNotificationModal('Failed to like: ' + err.message, 'error');
     }
 }
 
+// ---- Main render function ----
 export async function renderProfile(container) {
     if (!container) {
         container = document.getElementById('homeContent') || document.getElementById('pageContent');
@@ -231,7 +492,6 @@ export async function renderProfile(container) {
 
     currentProfileUser = profile;
 
-    // ---- Follower / following counts ----
     const { count: followers } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
@@ -249,11 +509,9 @@ export async function renderProfile(container) {
     const coverUrl = profile.cover_url || '';
     const joinDate = new Date(profile.created_at || Date.now()).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 
-    // ---- Fetch saved count for badge ----
     const savedIds = await fetchSavedPostIds();
     savedCount = savedIds.length;
 
-    // ---- Build profile HTML with improved tabs ----
     const html = `
         <div class="profile-page">
             <!-- Cover -->
@@ -319,13 +577,13 @@ export async function renderProfile(container) {
                             </div>
                             <button id="profilePostBtn" class="composer-submit" type="button">Post</button>
                         </div>
-                        <input type="file" id="profileMediaInput" accept="video/*,image/*" style="display:none;">
+                        <input type="file" id="profileMediaInput" accept="video/*,image/*" multiple style="display:none;">
                         <div id="profileUploadProgress" class="composer-upload-progress" style="display:none;"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- User's Posts with redesigned tabs -->
+            <!-- User's Posts with tabs -->
             <div class="profile-feed-section">
                 <div class="profile-feed-tabs feed-tabs" style="margin:0 var(--hc-gutter) 12px;">
                     <button class="feed-tab active" data-feed="user">
@@ -343,11 +601,10 @@ export async function renderProfile(container) {
 
     container.innerHTML = html;
 
-    // ---- Load posts (default: user's own) ----
     currentFeedType = 'user';
     await loadUserPosts(currentUser.id);
 
-    // ---- Tab switching with animation ----
+    // ---- Tab switching ----
     document.querySelectorAll('.feed-tab').forEach(tab => {
         tab.addEventListener('click', async () => {
             document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
@@ -377,9 +634,9 @@ export async function renderProfile(container) {
             const url = await uploadProfileImage(file, 'avatars');
             await updateProfile({ avatar_url: url });
             renderProfile(container);
-            toast('Avatar updated!', 'success');
+            showNotificationModal('Avatar updated!', 'success');
         } catch (err) {
-            toast('Failed to update avatar: ' + err.message, 'error');
+            showNotificationModal('Failed to update avatar: ' + err.message, 'error');
         }
     });
 
@@ -393,9 +650,9 @@ export async function renderProfile(container) {
             const url = await uploadProfileImage(file, 'covers');
             await updateProfile({ cover_url: url });
             renderProfile(container);
-            toast('Cover updated!', 'success');
+            showNotificationModal('Cover updated!', 'success');
         } catch (err) {
-            toast('Failed to update cover: ' + err.message, 'error');
+            showNotificationModal('Failed to update cover: ' + err.message, 'error');
         }
     });
 
@@ -422,13 +679,13 @@ export async function renderProfile(container) {
         try {
             await updateProfile({ bio: newBio });
             renderProfile(container);
-            toast('Bio updated!', 'success');
+            showNotificationModal('Bio updated!', 'success');
         } catch (err) {
-            toast('Failed to update bio: ' + err.message, 'error');
+            showNotificationModal('Failed to update bio: ' + err.message, 'error');
         }
     });
 
-    // ---- Composer with media ----
+    // ---- Composer with multiple media support ----
     const composer = document.getElementById('profileComposer');
     const postBtn = document.getElementById('profilePostBtn');
     const videoBtn = document.getElementById('profileVideoBtn');
@@ -438,12 +695,44 @@ export async function renderProfile(container) {
     const progress = document.getElementById('profileUploadProgress');
     const mediaPreview = document.getElementById('profileMediaPreview');
 
-    let pendingMedia = null;
+    let pendingMedia = [];
+
+    function renderMediaPreviews() {
+        if (!pendingMedia.length) {
+            mediaPreview.style.display = 'none';
+            mediaPreview.innerHTML = '';
+            return;
+        }
+        let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
+        for (let i = 0; i < pendingMedia.length; i++) {
+            const item = pendingMedia[i];
+            const isVideo = item.type === 'video';
+            const src = isVideo ? item.url : (item.previewUrl || item.url);
+            html += `
+                <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;">
+                    ${isVideo
+                        ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
+                        : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
+                    <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
+                </div>
+            `;
+        }
+        html += '</div>';
+        mediaPreview.innerHTML = html;
+        mediaPreview.style.display = 'block';
+
+        mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.index);
+                pendingMedia.splice(idx, 1);
+                renderMediaPreviews();
+            });
+        });
+    }
 
     function clearMediaPreview() {
-        pendingMedia = null;
-        mediaPreview.style.display = 'none';
-        mediaPreview.innerHTML = '';
+        pendingMedia = [];
+        renderMediaPreviews();
     }
 
     videoBtn.addEventListener('click', () => {
@@ -457,75 +746,61 @@ export async function renderProfile(container) {
     });
 
     gifBtn.addEventListener('click', () => {
-        toast('GIF support coming soon!', 'info');
+        showNotificationModal('GIF support coming soon!', 'info');
     });
 
     mediaInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            progress.classList.remove('is-error');
-            progress.style.display = 'flex';
-            progress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-            if (file.type.startsWith('video/')) {
-                const result = await uploadVideo(file);
-                pendingMedia = { url: result.url || result.storagePath, type: 'video' };
-                mediaPreview.innerHTML = `
-                    <span class="video-badge"><i class="fas fa-video"></i> Video</span>
-                    <video src="${escapeHtml(pendingMedia.url)}" muted></video>
-                    <button class="media-remove-btn" type="button" aria-label="Remove media"><i class="fas fa-times"></i></button>
-                `;
-            } else {
-                const reader = new FileReader();
-                const dataUrl = await new Promise((resolve) => {
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.readAsDataURL(file);
-                });
-                pendingMedia = { url: dataUrl, type: 'image' };
-                mediaPreview.innerHTML = `
-                    <img src="${dataUrl}" alt="Attached image">
-                    <button class="media-remove-btn" type="button" aria-label="Remove media"><i class="fas fa-times"></i></button>
-                `;
+        const files = e.target.files;
+        if (!files || !files.length) return;
+
+        progress.classList.remove('is-error');
+        progress.style.display = 'flex';
+        progress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                if (file.type.startsWith('video/')) {
+                    const result = await uploadVideo(file);
+                    pendingMedia.push({ url: result.url || result.storagePath, type: 'video' });
+                } else {
+                    const reader = new FileReader();
+                    const dataUrl = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(file);
+                    });
+                    pendingMedia.push({ url: dataUrl, type: 'image', previewUrl: dataUrl });
+                }
+            } catch (err) {
+                showNotificationModal('Failed to upload: ' + err.message, 'error');
             }
-            mediaPreview.style.display = 'block';
-            mediaPreview.querySelector('.media-remove-btn')?.addEventListener('click', clearMediaPreview);
-            progress.style.display = 'none';
-        } catch (err) {
-            progress.classList.add('is-error');
-            progress.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + err.message;
-        } finally {
-            mediaInput.value = '';
         }
+        renderMediaPreviews();
+        progress.style.display = 'none';
+        mediaInput.value = '';
     });
 
     postBtn.addEventListener('click', async () => {
         const text = composer.value.trim();
-        if (!text && !pendingMedia) {
-            toast('Write something or attach media first.', 'info');
+        if (!text && !pendingMedia.length) {
+            showNotificationModal('Write something or attach media first.', 'info');
             return;
-        }
-
-        let mediaUrl = null;
-        let mediaType = null;
-        if (pendingMedia) {
-            mediaUrl = pendingMedia.url;
-            mediaType = pendingMedia.type;
         }
 
         postBtn.disabled = true;
         postBtn.textContent = 'Posting...';
         try {
-            await createPost(text || '📎', mediaUrl, mediaType);
+            await createPostWithMedia(text, pendingMedia);
             composer.value = '';
             clearMediaPreview();
-            toast('Post published!', 'success');
+            showNotificationModal('Post published!', 'success');
             if (currentFeedType === 'user') {
                 await loadUserPosts(currentUser.id);
             } else {
                 await loadSavedPosts();
             }
         } catch (err) {
-            toast('Failed to post: ' + err.message, 'error');
+            showNotificationModal('Failed to post: ' + err.message, 'error');
         } finally {
             postBtn.disabled = false;
             postBtn.textContent = 'Post';
@@ -533,6 +808,33 @@ export async function renderProfile(container) {
     });
 }
 
+// ---- Helper: Create a post with multiple media ----
+async function createPostWithMedia(text, mediaArray) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('You must be logged in');
+
+    const { compressAndEncrypt } = await import('./home-sb.js');
+    const encryptedContent = await compressAndEncrypt(text);
+
+    const payload = {
+        user_id: user.id,
+        content: encryptedContent,
+        created_at: new Date().toISOString()
+    };
+
+    if (mediaArray.length) {
+        payload.media_url = mediaArray[0].url;
+        payload.media_type = mediaArray[0].type;
+        payload.media = mediaArray;
+    }
+
+    const { data, error } = await supabase.from('posts').insert(payload).select();
+    if (error) throw error;
+    return data[0];
+}
+
+// ---- Skeleton and feed load functions ----
 function skeletonFeedHtml(count = 3) {
     let html = '';
     for (let i = 0; i < count; i++) {
@@ -547,7 +849,6 @@ function skeletonFeedHtml(count = 3) {
     return html;
 }
 
-// ---- Load user's own posts ----
 async function loadUserPosts(userId) {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
@@ -563,22 +864,26 @@ async function loadUserPosts(userId) {
             .limit(50);
 
         if (error) throw error;
-
         if (!posts || posts.length === 0) {
-            feed.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-feather-alt"></i>
-                    <h3>No posts yet</h3>
-                    <p>Share what's on your mind above to get started.</p>
-                </div>
-            `;
+            feed.innerHTML = `<div class="empty-state"><i class="fas fa-feather-alt"></i><h3>No posts yet</h3><p>Share what's on your mind above to get started.</p></div>`;
             return;
         }
 
         const { decryptAndDecompress } = await import('./home-sb.js');
         for (const post of posts) {
             post.decryptedContent = await decryptAndDecompress(post.content);
+            if (post.media && typeof post.media === 'string') {
+                try { post.media = JSON.parse(post.media); } catch(e) { post.media = []; }
+            }
+            if (post.media && !Array.isArray(post.media)) post.media = [];
         }
+
+        // ---- Compute saved status for each post ----
+        const savedMap = {};
+        const savedPromises = posts.map(async post => {
+            savedMap[post.id] = await isPostSaved(post.id);
+        });
+        await Promise.all(savedPromises);
 
         const postIds = posts.map(p => p.id);
         let likesMap = {}, userReactionsMap = {}, summaryMap = {};
@@ -607,14 +912,13 @@ async function loadUserPosts(userId) {
             }
         }
 
-        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap);
+        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap);
         attachPostEventListeners(feed);
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load posts: ${escapeHtml(err.message)}</div>`;
     }
 }
 
-// ---- Load saved posts ----
 async function loadSavedPosts() {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
@@ -624,19 +928,11 @@ async function loadSavedPosts() {
         const supabase = await getSupabaseClient();
         const savedIds = await fetchSavedPostIds();
         savedCount = savedIds.length;
-
-        // Update badge
         const badge = document.getElementById('savedCountBadge');
         if (badge) badge.textContent = savedCount;
 
         if (!savedIds.length) {
-            feed.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-bookmark"></i>
-                    <h3>No saved posts</h3>
-                    <p>Save posts you find interesting to see them here.</p>
-                </div>
-            `;
+            feed.innerHTML = `<div class="empty-state"><i class="fas fa-bookmark"></i><h3>No saved posts</h3><p>Save posts you find interesting to see them here.</p></div>`;
             return;
         }
 
@@ -648,20 +944,22 @@ async function loadSavedPosts() {
 
         if (error) throw error;
         if (!posts || posts.length === 0) {
-            feed.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-bookmark"></i>
-                    <h3>No saved posts</h3>
-                    <p>Save posts you find interesting to see them here.</p>
-                </div>
-            `;
+            feed.innerHTML = `<div class="empty-state"><i class="fas fa-bookmark"></i><h3>No saved posts</h3><p>Save posts you find interesting to see them here.</p></div>`;
             return;
         }
 
         const { decryptAndDecompress } = await import('./home-sb.js');
         for (const post of posts) {
             post.decryptedContent = await decryptAndDecompress(post.content);
+            if (post.media && typeof post.media === 'string') {
+                try { post.media = JSON.parse(post.media); } catch(e) { post.media = []; }
+            }
+            if (post.media && !Array.isArray(post.media)) post.media = [];
         }
+
+        // ---- Compute saved status for each post (all true since they're from saved list) ----
+        const savedMap = {};
+        posts.forEach(post => { savedMap[post.id] = true; });
 
         const postIds = posts.map(p => p.id);
         let likesMap = {}, userReactionsMap = {}, summaryMap = {};
@@ -690,29 +988,19 @@ async function loadSavedPosts() {
             }
         }
 
-        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap);
+        feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap);
         attachPostEventListeners(feed);
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load saved posts: ${escapeHtml(err.message)}</div>`;
     }
 }
 
-// ---- Shared: render post cards ----
-function renderPostCards(posts, likesMap, userReactionsMap, summaryMap) {
+// ---- Updated renderPostCards with save button ----
+function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap = {}) {
     let html = '';
     for (const post of posts) {
         const time = new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         const isOwner = currentUser && post.user_id === currentUser.id;
-        const videoUrl = post.media_url && post.media_type === 'video' ? post.media_url : null;
-        const imageUrl = post.media_url && post.media_type === 'image' ? post.media_url : null;
-
-        let mediaHtml = '';
-        if (videoUrl) {
-            mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(videoUrl)}" style="margin-top:8px;"></div>`;
-        } else if (imageUrl) {
-            mediaHtml = `<img src="${escapeHtml(imageUrl)}" alt="Media">`;
-        }
-
         const avatarHtml = currentProfileUser?.avatar_url
             ? `<img src="${escapeHtml(currentProfileUser.avatar_url)}" alt="">`
             : escapeHtml((currentProfileUser?.display_name?.[0] || 'U').toUpperCase());
@@ -732,6 +1020,42 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap) {
                 <span class="reaction-total">${totalReactions}</span>
                </div>`
             : '';
+
+        const isSaved = savedMap[post.id] || false;
+
+        // ---- Media rendering ----
+        let mediaHtml = '';
+        const mediaArray = post.media || [];
+        if (mediaArray.length > 1) {
+            const cols = Math.min(mediaArray.length, 3);
+            mediaHtml = `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-top:8px;border-radius:12px;overflow:hidden;">`;
+            const displayItems = mediaArray.slice(0, 3);
+            for (const m of displayItems) {
+                if (m.type === 'video') {
+                    mediaHtml += `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="aspect-ratio:1/1;"></div>`;
+                } else {
+                    mediaHtml += `<img src="${escapeHtml(m.url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;">`;
+                }
+            }
+            if (mediaArray.length > 3) {
+                mediaHtml += `<div style="display:flex;align-items:center;justify-content:center;background:#f1f5f9;font-size:14px;font-weight:700;color:#64748b;aspect-ratio:1/1;border-radius:4px;">+${mediaArray.length - 3}</div>`;
+            }
+            mediaHtml += '</div>';
+        } else if (mediaArray.length === 1) {
+            const m = mediaArray[0];
+            if (m.type === 'video') {
+                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="margin-top:8px;"></div>`;
+            } else {
+                mediaHtml = `<img src="${escapeHtml(m.url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+            }
+        } else if (post.media_url) {
+            const isVideo = post.media_type === 'video';
+            if (isVideo) {
+                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(post.media_url)}" style="margin-top:8px;"></div>`;
+            } else {
+                mediaHtml = `<img src="${escapeHtml(post.media_url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+            }
+        }
 
         html += `
             <div class="post-card" data-id="${post.id}" style="cursor:pointer;">
@@ -757,8 +1081,8 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap) {
                     <button class="comment-btn" data-id="${post.id}">
                         <i class="fas fa-comment"></i> <span>0</span>
                     </button>
-                    <button class="share-btn" data-id="${post.id}">
-                        <i class="fas fa-share"></i>
+                    <button class="save-btn ${isSaved ? 'saved' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${isSaved ? '#0d9488' : '#555'};cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
+                        <i class="fas ${isSaved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
                     </button>
                 </div>
             </div>
@@ -767,15 +1091,13 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap) {
     return html;
 }
 
-// ---- Shared: attach event listeners to posts ----
+// ---- attachPostEventListeners with save button handler ----
 function attachPostEventListeners(feed) {
-    // Render video thumbnails
     feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
         const videoUrl = el.dataset.videoUrl;
         if (videoUrl) renderVideoThumbnail(el, videoUrl);
     });
 
-    // Reaction summary click
     feed.querySelectorAll('.reaction-summary').forEach(el => {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -784,7 +1106,6 @@ function attachPostEventListeners(feed) {
         });
     });
 
-    // Like with emoji picker
     feed.querySelectorAll('.like-wrapper').forEach(wrapper => {
         const btn = wrapper.querySelector('.like-btn');
         const postId = btn.dataset.id;
@@ -828,7 +1149,33 @@ function attachPostEventListeners(feed) {
         });
     });
 
-    // Comment, Share, Delete
+    // ---- Save button handler ----
+    feed.querySelectorAll('.save-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const postId = btn.dataset.id;
+            const icon = btn.querySelector('i');
+            try {
+                const saved = await isPostSaved(postId);
+                if (saved) {
+                    await unsavePost(postId);
+                    icon.className = 'fas fa-bookmark-o';
+                    btn.classList.remove('saved');
+                    btn.style.color = '#555';
+                    showNotificationModal('Post unsaved', 'info');
+                } else {
+                    await savePost(postId);
+                    icon.className = 'fas fa-bookmark';
+                    btn.classList.add('saved');
+                    btn.style.color = '#0d9488';
+                    showNotificationModal('Post saved!', 'success');
+                }
+            } catch (err) {
+                showNotificationModal('Failed: ' + err.message, 'error');
+            }
+        });
+    });
+
     feed.querySelectorAll('.comment-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -837,36 +1184,26 @@ function attachPostEventListeners(feed) {
         });
     });
 
-    feed.querySelectorAll('.share-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const postId = btn.dataset.id;
-            navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
-                .then(() => toast('Link copied!', 'info'))
-                .catch(() => {});
-        });
-    });
-
     feed.querySelectorAll('.delete-post-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const postId = btn.dataset.id;
-            if (!confirm('Delete this post?')) return;
-            try {
-                await deletePost(postId);
-                toast('Post deleted', 'success');
-                if (currentFeedType === 'user') {
-                    await loadUserPosts(currentUser.id);
-                } else {
-                    await loadSavedPosts();
+            showConfirmModal('Delete this post?', async () => {
+                try {
+                    await deletePost(postId);
+                    showNotificationModal('Post deleted', 'success');
+                    if (currentFeedType === 'user') {
+                        await loadUserPosts(currentUser.id);
+                    } else {
+                        await loadSavedPosts();
+                    }
+                } catch (err) {
+                    showNotificationModal('Failed to delete: ' + err.message, 'error');
                 }
-            } catch (err) {
-                toast('Failed to delete: ' + err.message, 'error');
-            }
+            });
         });
     });
 
-    // Click on post card – open modal
     feed.querySelectorAll('.post-card').forEach(card => {
         card.addEventListener('click', (e) => {
             if (e.target.closest('button')) return;
@@ -880,12 +1217,4 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text ?? '';
     return div.innerHTML;
-}
-
-function toast(message, tone = 'info') {
-    if (typeof window.toast === 'function') {
-        window.toast(message, tone);
-    } else {
-        alert(message);
-    }
 }
