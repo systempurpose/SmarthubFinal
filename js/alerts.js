@@ -1,9 +1,13 @@
 // ============================================================
 // alerts.js – Notifications (full height, centered empty state)
+// Real-time updates via Supabase Realtime
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
 import { decryptAndDecompress } from './home-sb.js';
+
+let subscription = null;
+let isSubscribed = false;
 
 // ---- Inject styles once ----
 function ensureStyles() {
@@ -70,8 +74,12 @@ function ensureStyles() {
     document.head.appendChild(style);
 }
 
+// ---- Main render function ----
 export async function renderAlerts(container) {
     ensureStyles();
+
+    // Clean up any previous subscription
+    cleanupAlerts();
 
     if (!container) {
         container = document.getElementById('homeContent') || document.getElementById('pageContent');
@@ -110,7 +118,17 @@ export async function renderAlerts(container) {
         return;
     }
 
+    // ---- Load initial notifications ----
+    await loadNotifications(list, countBadge, user, supabase);
+
+    // ---- Set up real-time subscription ----
+    await setupRealtimeSubscription(user, supabase, list, countBadge);
+}
+
+// ---- Load notifications (shared by initial load and real-time updates) ----
+async function loadNotifications(list, countBadge, user, supabase) {
     try {
+        // Fetch user's posts
         const { data: posts, error: postsError } = await supabase
             .from('posts')
             .select('id')
@@ -120,6 +138,7 @@ export async function renderAlerts(container) {
         const postIds = posts.map(p => p.id);
         if (!postIds.length) {
             list.innerHTML = emptyState();
+            countBadge.style.display = 'none';
             return;
         }
 
@@ -129,7 +148,7 @@ export async function renderAlerts(container) {
             .select('post_id, user_id, created_at, reaction')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(50);
         if (likeErr) throw likeErr;
 
         // ---- Fetch comments ----
@@ -138,7 +157,7 @@ export async function renderAlerts(container) {
             .select('post_id, user_id, content, created_at')
             .in('post_id', postIds)
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(50);
         if (commentErr) throw commentErr;
 
         // ---- Collect all user IDs ----
@@ -192,6 +211,7 @@ export async function renderAlerts(container) {
 
         if (!notifications.length) {
             list.innerHTML = emptyState();
+            countBadge.style.display = 'none';
             return;
         }
 
@@ -207,7 +227,6 @@ export async function renderAlerts(container) {
             if (n.type === 'like') {
                 const reactionEmoji = n.reaction || '❤️';
                 actionText = `${reactionEmoji} reacted to your post`;
-                // Show the reaction emoji in the badge instead of a generic heart
                 badgeContent = `<span class="al-reaction-emoji">${reactionEmoji}</span>`;
             } else {
                 actionText = 'commented on your post';
@@ -255,7 +274,75 @@ export async function renderAlerts(container) {
                 <span>Error loading notifications: ${escapeHtml(err.message)}</span>
             </div>
         `;
+        countBadge.style.display = 'none';
     }
+}
+
+// ---- Setup real-time subscription ----
+async function setupRealtimeSubscription(user, supabase, list, countBadge) {
+    if (isSubscribed) return;
+    isSubscribed = true;
+
+    try {
+        // Get the user's post IDs
+        const { data: posts } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('user_id', user.id);
+        const postIds = posts.map(p => p.id);
+        if (!postIds.length) return;
+
+        // Subscribe to likes on the user's posts
+        subscription = supabase
+            .channel('alerts-channel')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'likes',
+                    filter: `post_id=in.(${postIds.join(',')})`
+                },
+                async () => {
+                    // Refresh notifications on new like
+                    await loadNotifications(list, countBadge, user, supabase);
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'comments',
+                    filter: `post_id=in.(${postIds.join(',')})`
+                },
+                async () => {
+                    // Refresh notifications on new comment
+                    await loadNotifications(list, countBadge, user, supabase);
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[alerts] Real-time subscription active');
+                }
+            });
+    } catch (err) {
+        console.warn('[alerts] Realtime subscription error:', err);
+        // Fallback: no real-time, but the initial load still works
+    }
+}
+
+// ---- Cleanup function (exported) ----
+export function cleanupAlerts() {
+    if (subscription) {
+        try {
+            subscription.unsubscribe();
+        } catch (e) {
+            console.warn('[alerts] Unsubscribe error:', e);
+        }
+        subscription = null;
+    }
+    isSubscribed = false;
 }
 
 function emptyState() {

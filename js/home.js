@@ -109,7 +109,7 @@ export async function renderHome() {
             const page = item.dataset.page;
             document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));
             item.classList.add('active');
-            navigateHomePage(page);
+            navigateHomePage(page, {});
         });
     });
 }
@@ -141,7 +141,7 @@ function setupComposer() {
             const isVideo = item.type === 'video';
             const src = isVideo ? item.url : (item.previewUrl || item.url);
             html += `
-                <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;">
+                <div class="media-preview-item" data-index="${i}" style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;cursor:pointer;">
                     ${isVideo
                         ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
                         : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
@@ -152,6 +152,17 @@ function setupComposer() {
         html += '</div>';
         mediaPreview.innerHTML = html;
         mediaPreview.style.display = 'block';
+
+        mediaPreview.querySelectorAll('.media-preview-item').forEach(el => {
+            el.addEventListener('click', (e) => {
+                if (e.target.closest('.media-remove-btn')) return;
+                const index = parseInt(el.dataset.index);
+                const items = pendingMedia.map(m => ({ url: m.url || m.previewUrl, type: m.type }));
+                import('./mediaPreviewModal.js').then(module => {
+                    module.openMediaPreview(items, index);
+                });
+            });
+        });
 
         mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -215,14 +226,11 @@ function setupComposer() {
             return;
         }
 
-        // Process media: for images, we need to convert them to data URLs (or upload to storage)
-        // For videos, we already have the URL from uploadVideo.
         const mediaArray = [];
         for (const item of pendingMedia) {
             if (item.type === 'video' && item.url) {
                 mediaArray.push({ url: item.url, type: 'video' });
             } else if (item.type === 'image' && item.file) {
-                // Convert image to data URL
                 const reader = new FileReader();
                 const data = await new Promise((resolve) => {
                     reader.onload = (e) => resolve(e.target.result);
@@ -253,7 +261,7 @@ function setupComposer() {
     });
 }
 
-async function navigateHomePage(page) {
+async function navigateHomePage(page, params = {}) {
     if (page === currentPage) return;
     currentPage = page;
 
@@ -286,6 +294,14 @@ async function navigateHomePage(page) {
         } else if (page === 'profile') {
             const module = await import('./profile.js');
             module.renderProfile(content);
+        } else if (page === 'user-profile') {
+            const { userId } = params || {};
+            if (!userId) {
+                content.innerHTML = `<div class="page-error">User ID required.</div>`;
+                return;
+            }
+            const module = await import('./userProfileView.js');
+            module.renderUserProfileView(content, userId);
         } else {
             content.innerHTML = `<div class="empty-state"><i class="fas fa-compass"></i><h3>Page not found</h3><p>That section doesn't exist.</p></div>`;
         }
@@ -314,3 +330,4 @@ export function cleanupHome() {
 
 window.renderHome = renderHome;
 window.cleanupHome = cleanupHome;
+window.navigateHomePage = navigateHomePage;

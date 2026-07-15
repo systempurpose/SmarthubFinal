@@ -279,19 +279,6 @@ export async function addComment(postId, content) {
 }
 
 // ---- Saved Posts ----
-//
-// IMPORTANT: post IDs are persisted here as a JSON array inside a single
-// compressed text column (saved_posts.post_ids), not as individual rows.
-// Callers pass postId in from very different places — sometimes the raw
-// value straight off a Supabase row (post.id, which can be a number),
-// sometimes a value read out of an HTML `data-id="..."` attribute via
-// `.dataset.id` (which is ALWAYS a string). If we store one type and later
-// compare with `.includes()` against the other type, the strict-equality
-// check silently fails even though the post IS saved — e.g. saved as the
-// number 42, but checked against the string "42" (42 !== "42").
-//
-// Fix: normalize every ID to a string, both when writing and when reading,
-// so the comparison always compares like with like.
 export async function savePost(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -314,7 +301,6 @@ export async function savePost(postId) {
     }
 
     const idStr = String(postId);
-    // Normalize existing ids to strings too, in case older rows stored numbers.
     ids = ids.map(String);
 
     if (ids.includes(idStr)) return { action: 'already_saved' };
@@ -368,7 +354,6 @@ export async function unsavePost(postId) {
     return { action: 'unsaved' };
 }
 
-// ---- isPostSaved with internal error handling ----
 export async function isPostSaved(postId) {
     try {
         const supabase = await getSupabaseClient();
@@ -386,11 +371,10 @@ export async function isPostSaved(postId) {
         return ids.map(String).includes(idStr);
     } catch (e) {
         console.warn('[isPostSaved] Error:', e);
-        return false; // fallback: treat as not saved
+        return false;
     }
 }
 
-// ---- Fetch all saved post IDs for the current user ----
 export async function fetchSavedPostIds() {
     try {
         const supabase = await getSupabaseClient();
@@ -411,7 +395,7 @@ export async function fetchSavedPostIds() {
     }
 }
 
-// ---- Delete post with storage cleanup ----
+// ---- Delete post with storage cleanup (handles multiple media) ----
 function extractStoragePath(mediaUrl) {
     if (!mediaUrl) return null;
     const match = mediaUrl.match(/\/videos\/(videos\/user-[^\/]+\/[^?]+)/);
@@ -425,29 +409,52 @@ export async function deletePost(postId) {
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) throw new Error('Not logged in');
 
+    // Fetch the post with all media info
     const { data: post, error: fetchError } = await supabase
         .from('posts')
-        .select('user_id, media_url, media_type')
+        .select('user_id, media_url, media_type, media')
         .eq('id', postId)
         .single();
     if (fetchError) throw fetchError;
     if (post.user_id !== user.id) throw new Error('You can only delete your own posts');
 
+    // ---- Collect all video URLs to delete ----
+    const videoUrls = [];
+
+    // 1. Legacy single media (if it's a video)
     if (post.media_url && post.media_type === 'video') {
-        const storagePath = extractStoragePath(post.media_url);
-        if (storagePath) {
-            try {
-                await supabase.storage.from('videos').remove([storagePath]);
-            } catch (err) {
-                console.warn('[deletePost] Storage delete error:', err);
-            }
-            try {
-                await supabase.from('videos').delete().eq('storage_path', storagePath);
-            } catch (err) {
-                console.warn('[deletePost] Metadata delete error:', err);
+        videoUrls.push(post.media_url);
+    }
+
+    // 2. Multiple media from the JSONB array
+    if (post.media && Array.isArray(post.media)) {
+        for (const item of post.media) {
+            if (item.type === 'video' && item.url) {
+                videoUrls.push(item.url);
             }
         }
     }
+
+    // ---- Delete each video file from storage and metadata ----
+    for (const url of videoUrls) {
+        const storagePath = extractStoragePath(url);
+        if (storagePath) {
+            try {
+                await supabase.storage.from('videos').remove([storagePath]);
+                console.log(`[deletePost] Deleted storage: ${storagePath}`);
+            } catch (err) {
+                console.warn(`[deletePost] Storage delete error for ${storagePath}:`, err);
+            }
+            try {
+                await supabase.from('videos').delete().eq('storage_path', storagePath);
+                console.log(`[deletePost] Deleted metadata: ${storagePath}`);
+            } catch (err) {
+                console.warn(`[deletePost] Metadata delete error for ${storagePath}:`, err);
+            }
+        }
+    }
+
+    // ---- Delete the post itself ----
     await supabase.from('posts').delete().eq('id', postId);
     return { success: true };
 }
@@ -456,7 +463,6 @@ export async function deletePost(postId) {
 // 🆕 Reaction summary & follow/unfollow helpers
 // ============================================================
 
-// ---- fetchReactionsSummary with internal error handling ----
 export async function fetchReactionsSummary(postId) {
     try {
         const supabase = await getSupabaseClient();
@@ -473,7 +479,7 @@ export async function fetchReactionsSummary(postId) {
         return summary;
     } catch (e) {
         console.warn('[fetchReactionsSummary] Error:', e);
-        return {}; // fallback: empty summary
+        return {};
     }
 }
 

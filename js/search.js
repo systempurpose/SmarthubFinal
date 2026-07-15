@@ -1,11 +1,13 @@
 // ============================================================
 // search.js – Search with live suggestions + history (full height)
+// History uses sessionStorage – clears when browser/window is closed.
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
 import { decryptAndDecompress } from './home-sb.js';
+import { renderUserProfileView } from './userProfileView.js';
 
-const HISTORY_KEY = 'searchHistory';
+const HISTORY_KEY = 'searchHistory_session';
 const MAX_HISTORY = 10;
 
 // ---- Inject styles once ----
@@ -130,9 +132,10 @@ function ensureStyles() {
     document.head.appendChild(style);
 }
 
+// ---- Search history (sessionStorage) ----
 function getSearchHistory() {
     try {
-        const stored = localStorage.getItem(HISTORY_KEY);
+        const stored = sessionStorage.getItem(HISTORY_KEY);
         return stored ? JSON.parse(stored) : [];
     } catch { return []; }
 }
@@ -143,11 +146,11 @@ function addSearchHistory(query) {
     history = history.filter(item => item !== query);
     history.unshift(query);
     if (history.length > MAX_HISTORY) history = history.slice(0, MAX_HISTORY);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
 
 function clearSearchHistory() {
-    localStorage.removeItem(HISTORY_KEY);
+    sessionStorage.removeItem(HISTORY_KEY);
 }
 
 function renderHistoryInResults(resultsEl, onSelect) {
@@ -189,7 +192,7 @@ function renderHistoryInResults(resultsEl, onSelect) {
             e.stopPropagation();
             const query = btn.dataset.query;
             let history = getSearchHistory().filter(item => item !== query);
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
             renderHistoryInResults(resultsEl, onSelect);
         });
     });
@@ -202,6 +205,41 @@ function renderHistoryInResults(resultsEl, onSelect) {
     }
 }
 
+// ---- Navigate to user profile (read-only or own editable) ----
+function navigateToUser(userId, query) {
+    // Save the search query to history
+    if (query && query.length >= 2) {
+        addSearchHistory(query);
+    }
+
+    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!currentUser) {
+        if (typeof window.navigateHomePage === 'function') {
+            window.navigateHomePage('profile');
+        }
+        return;
+    }
+    // Compare as strings to avoid type mismatch (UUID vs string)
+    if (String(userId) === String(currentUser.id)) {
+        // My own profile – go to the editable profile page
+        if (typeof window.navigateHomePage === 'function') {
+            window.navigateHomePage('profile');
+        }
+    } else {
+        // Another user – go to read-only profile view
+        if (typeof window.navigateHomePage === 'function') {
+            window.navigateHomePage('user-profile', { userId: String(userId) });
+        } else {
+            // Fallback: directly import and render the profile view
+            const container = document.getElementById('homeContent') || document.getElementById('pageContent');
+            if (container) {
+                renderUserProfileView(container, String(userId));
+            }
+        }
+    }
+}
+
+// ---- Main render ----
 export async function renderSearch(container) {
     ensureStyles();
 
@@ -232,7 +270,6 @@ export async function renderSearch(container) {
         clearBtn.style.display = input.value.length ? 'flex' : 'none';
     }
 
-    // ---- Show history when input is empty and focused ----
     function showHistory() {
         renderHistoryInResults(results, (query) => {
             input.value = query;
@@ -242,7 +279,6 @@ export async function renderSearch(container) {
         });
     }
 
-    // Initial: show history
     showHistory();
 
     input.addEventListener('focus', () => {
@@ -376,11 +412,10 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
         suggestionsEl.querySelectorAll('.se-row[data-type="user"]').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.stopPropagation();
+                const userId = item.dataset.userId;
                 const query = input.value.trim();
-                input.value = item.dataset.name || query;
                 suggestionsEl.style.display = 'none';
-                addSearchHistory(query);
-                performSearch(query, resultsEl);
+                navigateToUser(userId, query);
             });
         });
         suggestionsEl.querySelectorAll('.se-row[data-type="post"]').forEach(item => {
@@ -475,9 +510,8 @@ async function performSearch(query, resultsEl) {
 
         resultsEl.querySelectorAll('.se-user-card').forEach(card => {
             card.addEventListener('click', () => {
-                if (typeof window.navigateTo === 'function') {
-                    window.navigateTo('profile', card.dataset.userId);
-                }
+                const userId = card.dataset.userId;
+                navigateToUser(userId, query);
             });
         });
         resultsEl.querySelectorAll('.se-post-card').forEach(card => {
@@ -500,7 +534,7 @@ async function performSearch(query, resultsEl) {
     }
 }
 
-// ---- Wrap the matched substring in a <mark> for visual scanning ----
+// ---- Highlight match ----
 function highlightMatch(text, query) {
     if (!text) return '';
     const safeText = text;

@@ -1357,3 +1357,10 @@ html, body {
 #postModal .modal-content::-webkit-scrollbar-thumb:hover {
     background: #a8b3c0;
 }
+/* ---- Media preview modal (composer) ---- */
+.media-preview-modal-overlay {
+    z-index: 999999 !important;
+}
+.media-preview-modal-overlay button {
+    outline: none;
+}

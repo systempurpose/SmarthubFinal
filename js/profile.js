@@ -698,37 +698,50 @@ export async function renderProfile(container) {
     let pendingMedia = [];
 
     function renderMediaPreviews() {
-        if (!pendingMedia.length) {
-            mediaPreview.style.display = 'none';
-            mediaPreview.innerHTML = '';
-            return;
-        }
-        let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
-        for (let i = 0; i < pendingMedia.length; i++) {
-            const item = pendingMedia[i];
-            const isVideo = item.type === 'video';
-            const src = isVideo ? item.url : (item.previewUrl || item.url);
-            html += `
-                <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;">
-                    ${isVideo
-                        ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
-                        : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
-                    <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
-                </div>
-            `;
-        }
-        html += '</div>';
-        mediaPreview.innerHTML = html;
-        mediaPreview.style.display = 'block';
-
-        mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const idx = parseInt(btn.dataset.index);
-                pendingMedia.splice(idx, 1);
-                renderMediaPreviews();
-            });
-        });
+    if (!pendingMedia.length) {
+        mediaPreview.style.display = 'none';
+        mediaPreview.innerHTML = '';
+        return;
     }
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
+    for (let i = 0; i < pendingMedia.length; i++) {
+        const item = pendingMedia[i];
+        const isVideo = item.type === 'video';
+        const src = isVideo ? item.url : (item.previewUrl || item.url);
+        html += `
+            <div class="media-preview-item" data-index="${i}" style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;cursor:pointer;">
+                ${isVideo
+                    ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
+                    : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
+                <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
+            </div>
+        `;
+    }
+    html += '</div>';
+    mediaPreview.innerHTML = html;
+    mediaPreview.style.display = 'block';
+
+    // ---- Click to preview ----
+    mediaPreview.querySelectorAll('.media-preview-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('.media-remove-btn')) return;
+            const index = parseInt(el.dataset.index);
+            const items = pendingMedia.map(m => ({ url: m.url || m.previewUrl, type: m.type }));
+            import('./mediaPreviewModal.js').then(module => {
+                module.openMediaPreview(items, index);
+            }).catch(err => console.warn('Failed to load preview modal:', err));
+        });
+    });
+
+    // ---- Remove button (unchanged) ----
+    mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.index);
+            pendingMedia.splice(idx, 1);
+            renderMediaPreviews();
+        });
+    });
+}
 
     function clearMediaPreview() {
         pendingMedia = [];

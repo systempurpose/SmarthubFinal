@@ -1342,6 +1342,6 @@
 'profile.resend': 'Resend Confirmation',
 'profile.avatar': 'Avatar',
 'nav.repairShorts': 'Repair Shorts',
-'nav.home': 'Home',
+'nav.home': 'Community',
     };
 })();
