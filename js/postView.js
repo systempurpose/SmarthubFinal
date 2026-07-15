@@ -3,8 +3,8 @@ import { getSupabaseClient } from './supabase.js';
 import { toggleLike, addComment, deletePost, fetchPostById, fetchComments, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
 import { openReactionModal } from './reactionModal.js';
-import { updateReactionSummary, updateFeedLikeButton } from './home-loader.js';
-import { updateProfileSummary, updateProfileLikeButton } from './profile.js';
+import { updateReactionSummary, updateFeedLikeButton, updateFeedSaveButton, loadHomeFeed } from './home-loader.js';
+import { updateProfileSummary, updateProfileLikeButton, updateProfileSaveButton, renderProfile } from './profile.js';
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
@@ -146,6 +146,16 @@ function ensureModalStyles() {
         .pv-confirm button#confirmYes:hover { background: #0b7f74; }
         .pv-confirm button#confirmNo:hover { background: #e2e8f0; }
         .pv-notification .notif-close:hover { opacity: 1 !important; }
+
+        /* ---- Bookmark pop animation ---- */
+        @keyframes bookmarkPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .pv-action-btn.saved i.fa-bookmark {
+            animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
     `;
     document.head.appendChild(style);
 }
@@ -278,7 +288,7 @@ function ensureStyles() {
             align-items: center;
             justify-content: center;
             transition: background 0.15s;
-            z-index: 2;
+            z-index: 10;
         }
         .pv-media-gallery .pv-nav-btn:hover { background: rgba(0,0,0,0.8); }
         .pv-media-gallery .pv-nav-btn.prev { left: 8px; }
@@ -292,6 +302,7 @@ function ensureStyles() {
             font-size: 12px;
             padding: 2px 10px;
             border-radius: 12px;
+            z-index: 10;
         }
         .pv-media-gallery .pv-media-badge {
             position: absolute;
@@ -305,6 +316,7 @@ function ensureStyles() {
             display: flex;
             align-items: center;
             gap: 4px;
+            z-index: 10;
         }
         .pv-media-gallery .pv-video-container {
             width: 100%;
@@ -564,7 +576,6 @@ function renderMediaGallery(container, items, currentIndex) {
                     console.warn('Failed to render video player:', err);
                     vidContainer.innerHTML = `<div style="color:#dc2626;padding:16px;text-align:center;">Video playback not available</div>`;
                 });
-                // Listen for double-click on the video container (which contains the player)
                 vidContainer.addEventListener('dblclick', (e) => {
                     e.stopPropagation();
                     const videoEl = vidContainer.querySelector('video');
@@ -658,7 +669,7 @@ export async function openPostView(postId) {
     let post, comments = [], userLike = null, summary = {}, isSaved = false;
     try {
         const supabase = await getSupabaseClient();
-        const [postResult, commentsResult, likeResult, summaryResult, savedResult] = await Promise.all([
+        const [postResult, commentsResult, likeResult, summaryResult] = await Promise.all([
             fetchPostById(postId),
             fetchComments(postId).catch(() => []),
             supabase.from('likes')
@@ -666,14 +677,20 @@ export async function openPostView(postId) {
                 .eq('post_id', postId)
                 .eq('user_id', currentUser.id)
                 .maybeSingle(),
-            fetchReactionsSummary(postId).catch(() => ({})),
-            isPostSaved(postId).catch(() => false)
+            fetchReactionsSummary(postId).catch(() => ({}))
         ]);
         post = postResult;
         comments = commentsResult;
         userLike = likeResult?.data || null;
         summary = summaryResult || {};
-        isSaved = savedResult;
+
+        // ---- Always re-check saved status fresh from Supabase on every open ----
+        isSaved = await isPostSaved(postId).catch((err) => {
+            console.warn('[postView] isPostSaved failed, defaulting to false:', err);
+            return false;
+        });
+        console.log('[postView] Initial saved status for post', postId, '=', isSaved);
+
     } catch (err) {
         console.error('Failed to fetch post:', err);
         if (closed) return;
@@ -756,15 +773,11 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
                     closeModal();
                     const activePage = document.querySelector('.bottom-nav-item.active')?.dataset.page;
                     if (activePage === 'home') {
-                        if (typeof window.loadHomeFeed === 'function') {
-                            window.loadHomeFeed('homeContent');
-                        } else {
-                            window.location.reload();
-                        }
+                        // ---- Refresh home feed with loading spinner ----
+                        await loadHomeFeed('homeContent', false);
                     } else if (activePage === 'profile') {
-                        if (typeof window.renderProfile === 'function') {
-                            window.renderProfile();
-                        }
+                        // ---- Refresh profile feed with loading skeleton ----
+                        await renderProfile();
                     }
                     showNotificationModal('Post deleted.', 'success');
                 } catch (err) {
@@ -794,8 +807,8 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
                         </button>
                     </div>
                     <button id="saveBtn" class="pv-action-btn ${isSaved ? 'saved' : ''}" data-post-id="${post.id}">
-                        <i class="fas ${isSaved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
-                        <span>${isSaved ? 'Saved' : 'Save'}</span>
+                        <i class="${isSaved ? 'fas fa-bookmark' : 'far fa-bookmark'}"></i>
+                        <span>${isSaved ? 'Unsave' : 'Save'}</span>
                     </button>
                 </div>
                 <div class="pv-comment-form">
@@ -907,7 +920,7 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
             if (isSaved) {
                 await unsavePost(post.id);
                 isSaved = false;
-                saveIcon.className = 'fas fa-bookmark-o';
+                saveIcon.className = 'far fa-bookmark';
                 saveText.textContent = 'Save';
                 saveBtn.classList.remove('saved');
                 showNotificationModal('Post unsaved', 'info');
@@ -915,10 +928,18 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
                 await savePost(post.id);
                 isSaved = true;
                 saveIcon.className = 'fas fa-bookmark';
-                saveText.textContent = 'Saved';
+                saveText.textContent = 'Unsave';
                 saveBtn.classList.add('saved');
                 showNotificationModal('Post saved!', 'success');
+                // Trigger bookmark pop animation
+                saveIcon.style.animation = 'none';
+                void saveIcon.offsetHeight;
+                saveIcon.style.animation = 'bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                setTimeout(() => { saveIcon.style.animation = ''; }, 350);
             }
+            // ---- Update the feed buttons ----
+            updateFeedSaveButton(post.id, isSaved);
+            updateProfileSaveButton(post.id, isSaved);
         } catch (err) {
             showNotificationModal('Failed to save: ' + err.message, 'error');
         } finally {

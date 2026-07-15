@@ -11,6 +11,159 @@ let mediaIndex = 0;
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
+// ============================================================
+// Custom notification & confirmation modals (local)
+// ============================================================
+
+function showNotificationModal(message, tone = 'info', duration = 2500) {
+    const existing = document.querySelector('.post-modal-notification');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'post-modal-notification';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: notifFadeIn 0.2s ease;
+    `;
+    const colors = {
+        success: { bg: '#d1fae5', border: '#34d399', text: '#065f46', icon: 'fa-check-circle' },
+        error: { bg: '#fce8ee', border: '#f87171', text: '#991b1b', icon: 'fa-circle-exclamation' },
+        info: { bg: '#e0f2fe', border: '#60a5fa', text: '#1e40af', icon: 'fa-info-circle' },
+    };
+    const c = colors[tone] || colors.info;
+
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 12px;
+            max-width: 420px;
+            width: 100%;
+            padding: 16px 20px;
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-left: 4px solid ${c.border};
+            pointer-events: auto;
+            background: ${c.bg};
+        ">
+            <i class="fas ${c.icon}" style="color: ${c.border}; font-size: 20px; flex-shrink: 0;"></i>
+            <span style="color: ${c.text}; font-size: 14px; font-weight: 500; line-height: 1.4; flex:1;">
+                ${escapeHtml(message)}
+            </span>
+            <button class="notif-close" style="
+                background: none; border: none; color: ${c.text};
+                cursor: pointer; font-size: 18px; padding: 0 4px; opacity:0.6;
+                transition: opacity 0.15s;
+            " aria-label="Close">&times;</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector('.notif-close');
+    const close = () => {
+        overlay.style.animation = 'notifFadeOut 0.2s ease forwards';
+        setTimeout(() => overlay.remove(), 250);
+    };
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+    const timer = setTimeout(close, duration);
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+
+    overlay._close = close;
+    overlay._timer = timer;
+}
+
+function showConfirmModal(message, onConfirm, onCancel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'post-modal-confirm';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 999998;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        animation: confirmFadeIn 0.15s ease;
+    `;
+    overlay.innerHTML = `
+        <div style="
+            background: #fff;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            padding: 24px 28px;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+            text-align: center;
+        ">
+            <p style="margin: 0 0 20px; font-size: 15px; color: #1e293b; line-height: 1.5;">
+                ${escapeHtml(message)}
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmYes" style="
+                    background: #0d9488; color: #fff; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Yes</button>
+                <button id="confirmNo" style="
+                    background: #f1f5f9; color: #0f172a; border: none;
+                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
+                    cursor: pointer; transition: background 0.15s;
+                ">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const yesBtn = overlay.querySelector('#confirmYes');
+    const noBtn = overlay.querySelector('#confirmNo');
+    const cleanup = () => overlay.remove();
+    yesBtn.addEventListener('click', () => { cleanup(); if (onConfirm) onConfirm(); });
+    noBtn.addEventListener('click', () => { cleanup(); if (onCancel) onCancel(); });
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) { cleanup(); if (onCancel) onCancel(); }
+    });
+    const escHandler = (e) => {
+        if (e.key === 'Escape') { cleanup(); if (onCancel) onCancel(); document.removeEventListener('keydown', escHandler); }
+    };
+    document.addEventListener('keydown', escHandler);
+}
+
+function ensureModalStyles() {
+    if (document.getElementById('postModalStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'postModalStyles';
+    style.textContent = `
+        @keyframes notifFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        @keyframes notifFadeOut { to { opacity: 0; transform: scale(0.98); } }
+        @keyframes confirmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .post-modal-confirm button#confirmYes:hover { background: #0b7f74; }
+        .post-modal-confirm button#confirmNo:hover { background: #e2e8f0; }
+        .post-modal-notification .notif-close:hover { opacity: 1 !important; }
+
+        /* ---- Bookmark pop animation ---- */
+        @keyframes bookmarkPop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .save-btn.saved i.fa-bookmark {
+            animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+    `;
+    document.head.appendChild(style);
+}
+ensureModalStyles();
+
 // ---- Emoji reaction picker ----
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
@@ -193,8 +346,9 @@ function ensureModal() {
                                         <i class="fas fa-heart"></i> <span class="like-count">0</span>
                                     </button>
                                 </div>
-                                <button class="save-btn" data-id="" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
-                                    <i class="fas fa-bookmark-o"></i>
+                                <button class="save-btn" data-id="" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
+                                    <i class="far fa-bookmark"></i>
+                                    <span>Save</span>
                                 </button>
                             </div>
                             <div style="display:flex;gap:8px;">
@@ -228,10 +382,10 @@ function ensureModal() {
             try {
                 await addComment(modalPostId, text);
                 commentInput.value = '';
-                toast('Comment added!', 'success');
+                showNotificationModal('Comment added!', 'success');
                 await refreshModal(modalPostId, { showLoading: false });
             } catch (err) {
-                toast('Failed to add comment: ' + err.message, 'error');
+                showNotificationModal('Failed to add comment: ' + err.message, 'error');
             }
         });
         commentInput.addEventListener('keydown', (e) => {
@@ -305,7 +459,7 @@ async function toggleLikeAction(postId, btn) {
         setTimeout(() => btn.style.transform = 'scale(1)', 200);
         await updateModalSummary(postId);
     } catch (err) {
-        toast('Failed to like: ' + err.message, 'error');
+        showNotificationModal('Failed to like: ' + err.message, 'error');
     }
 }
 
@@ -321,7 +475,6 @@ function renderMediaGallery(mediaDiv, items, index) {
 
     let html = `<div class="media-gallery" data-index="${index}">`;
     if (isVideo) {
-        // We'll render a container for the video player
         html += `<div id="galleryVideoContainer" data-video-url="${escapeHtml(item.url)}" style="width:100%;"></div>`;
     } else {
         html += `<img src="${escapeHtml(item.url)}" alt="Media">`;
@@ -337,7 +490,6 @@ function renderMediaGallery(mediaDiv, items, index) {
     html += '</div>';
     mediaDiv.innerHTML = html;
 
-    // If video, initialize video player
     if (isVideo) {
         const vidContainer = document.getElementById('galleryVideoContainer');
         if (vidContainer) {
@@ -351,7 +503,6 @@ function renderMediaGallery(mediaDiv, items, index) {
         }
     }
 
-    // Attach navigation events
     const navBtns = mediaDiv.querySelectorAll('.nav-btn');
     navBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -361,7 +512,6 @@ function renderMediaGallery(mediaDiv, items, index) {
             if (newIndex < 0) newIndex = items.length - 1;
             if (newIndex >= items.length) newIndex = 0;
             mediaIndex = newIndex;
-            // Stop any playing video
             const video = mediaDiv.querySelector('video');
             if (video) { video.pause(); video.currentTime = 0; }
             renderMediaGallery(mediaDiv, items, newIndex);
@@ -540,7 +690,12 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         // ---- Save button ----
         saveBtn.dataset.id = post.id;
         const saveIcon = saveBtn.querySelector('i');
-        saveIcon.className = saved ? 'fas fa-bookmark' : 'fas fa-bookmark-o';
+        const saveText = saveBtn.querySelector('span');
+        saveIcon.className = saved ? 'fas fa-bookmark' : 'far fa-bookmark';
+        saveText.textContent = saved ? 'Unsave' : 'Save';
+        saveBtn.classList.toggle('saved', saved);
+        saveBtn.style.color = saved ? '#0d9488' : '#555';
+
         saveBtn.onclick = async (e) => {
             e.stopPropagation();
             const pId = saveBtn.dataset.id;
@@ -548,15 +703,26 @@ async function refreshModal(postId, { showLoading = false } = {}) {
                 const savedNow = await isPostSaved(pId);
                 if (savedNow) {
                     await unsavePost(pId);
-                    saveIcon.className = 'fas fa-bookmark-o';
-                    toast('Post unsaved', 'info');
+                    saveIcon.className = 'far fa-bookmark';
+                    saveText.textContent = 'Save';
+                    saveBtn.classList.remove('saved');
+                    saveBtn.style.color = '#555';
+                    showNotificationModal('Post unsaved', 'info');
                 } else {
                     await savePost(pId);
                     saveIcon.className = 'fas fa-bookmark';
-                    toast('Post saved!', 'success');
+                    saveText.textContent = 'Unsave';
+                    saveBtn.classList.add('saved');
+                    saveBtn.style.color = '#0d9488';
+                    showNotificationModal('Post saved!', 'success');
+                    // Trigger bookmark pop animation
+                    saveIcon.style.animation = 'none';
+                    void saveIcon.offsetHeight;
+                    saveIcon.style.animation = 'bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    setTimeout(() => { saveIcon.style.animation = ''; }, 350);
                 }
             } catch (err) {
-                toast('Failed: ' + err.message, 'error');
+                showNotificationModal('Failed: ' + err.message, 'error');
             }
         };
 
@@ -566,14 +732,15 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             deleteBtn.onclick = async (e) => {
                 e.stopPropagation();
                 const pId = deleteBtn.dataset.id;
-                if (!confirm('Delete this post?')) return;
-                try {
-                    await deletePost(pId);
-                    toast('Post deleted', 'success');
-                    document.getElementById('postModal').style.display = 'none';
-                } catch (err) {
-                    toast('Failed to delete: ' + err.message, 'error');
-                }
+                showConfirmModal('Delete this post?', async () => {
+                    try {
+                        await deletePost(pId);
+                        showNotificationModal('Post deleted', 'success');
+                        document.getElementById('postModal').style.display = 'none';
+                    } catch (err) {
+                        showNotificationModal('Failed to delete: ' + err.message, 'error');
+                    }
+                });
             };
         }
 
@@ -590,12 +757,4 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
-
-function toast(message, tone = 'info') {
-    if (typeof window.toast === 'function') {
-        window.toast(message, tone);
-    } else {
-        alert(message);
-    }
 }

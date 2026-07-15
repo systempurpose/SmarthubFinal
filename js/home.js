@@ -1,11 +1,11 @@
 // js/home.js
 import { uploadVideo } from './videoUpload.js';
-import { loadHomeFeed, initRealtimeFeed } from './home-loader.js';
-import { createPost } from './home-sb.js';
+import { loadHomeFeed, initRealtimeFeed, showNotificationModal, showConfirmModal } from './home-loader.js';
+import { createPostWithMedia } from './home-sb.js';
 import { openPostView } from './postView.js';
 
 let realtimeSubscription = null;
-let pendingMedia = null;
+let pendingMedia = []; // now an array for multiple attachments
 let currentPage = 'home';
 
 export async function renderHome() {
@@ -48,7 +48,7 @@ export async function renderHome() {
                                 </div>
                                 <button class="composer-submit" id="composerSubmit" disabled>Post</button>
                             </div>
-                            <input type="file" id="composerFileInput" accept="video/*,image/*" style="display:none;">
+                            <input type="file" id="composerFileInput" accept="video/*,image/*" multiple style="display:none;">
                             <div id="composerUploadProgress" class="composer-upload-progress" style="display:none;"></div>
                         </div>
                     </div>
@@ -96,7 +96,6 @@ export async function renderHome() {
             btn.classList.add('active');
             const feedType = btn.dataset.feed;
             if (feedType === 'for-you') {
-                currentOffset = 0;
                 loadHomeFeed('homeContent');
             }
         });
@@ -113,13 +112,7 @@ export async function renderHome() {
             navigateHomePage(page);
         });
     });
-
-    if (typeof window.toast !== 'function') {
-        window.toast = (msg) => alert(msg);
-    }
 }
-
-let currentOffset = 0;
 
 function setupComposer() {
     const text = document.getElementById('composerText');
@@ -133,30 +126,48 @@ function setupComposer() {
 
     const refreshSubmitState = () => {
         const hasText = text.value.trim().length > 0;
-        submit.disabled = !hasText && !pendingMedia;
+        submit.disabled = !hasText && pendingMedia.length === 0;
     };
 
-    const renderMediaPreview = () => {
-        if (!pendingMedia) {
+    const renderMediaPreviews = () => {
+        if (!pendingMedia.length) {
+            mediaPreview.style.display = 'none';
             mediaPreview.innerHTML = '';
             return;
         }
-        const src = pendingMedia.type === 'video' ? pendingMedia.url : pendingMedia.previewUrl;
-        const isVideo = pendingMedia.type === 'video';
-        mediaPreview.innerHTML = `
-            <div class="media-preview">
-                ${isVideo
-                    ? `<video src="${src}" muted></video><span class="video-badge"><i class="fas fa-video"></i> Video</span>`
-                    : `<img src="${src}" alt="Attached image">`}
-                <button type="button" class="media-remove-btn" id="composerMediaRemove" aria-label="Remove attachment"><i class="fas fa-xmark"></i></button>
-            </div>
-        `;
-        document.getElementById('composerMediaRemove')?.addEventListener('click', () => {
-            pendingMedia = null;
-            renderMediaPreview();
-            refreshSubmitState();
+        let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
+        for (let i = 0; i < pendingMedia.length; i++) {
+            const item = pendingMedia[i];
+            const isVideo = item.type === 'video';
+            const src = isVideo ? item.url : (item.previewUrl || item.url);
+            html += `
+                <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;">
+                    ${isVideo
+                        ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
+                        : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
+                    <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
+                </div>
+            `;
+        }
+        html += '</div>';
+        mediaPreview.innerHTML = html;
+        mediaPreview.style.display = 'block';
+
+        mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.index);
+                pendingMedia.splice(idx, 1);
+                renderMediaPreviews();
+                refreshSubmitState();
+            });
         });
     };
+
+    function clearMediaPreview() {
+        pendingMedia = [];
+        renderMediaPreviews();
+        refreshSubmitState();
+    }
 
     text.addEventListener('input', refreshSubmitState);
 
@@ -170,66 +181,70 @@ function setupComposer() {
     });
 
     fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            progress.classList.remove('is-error');
-            progress.style.display = 'flex';
-            progress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-            if (file.type.startsWith('video/')) {
-                const result = await uploadVideo(file);
-                pendingMedia = { url: result.url, type: 'video' };
-                progress.innerHTML = '<i class="fas fa-circle-check"></i> Video attached';
-            } else {
-                const previewUrl = URL.createObjectURL(file);
-                pendingMedia = { file, type: 'image', previewUrl };
-                progress.innerHTML = '<i class="fas fa-circle-check"></i> Image attached';
+        const files = e.target.files;
+        if (!files || !files.length) return;
+
+        progress.classList.remove('is-error');
+        progress.style.display = 'flex';
+        progress.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                if (file.type.startsWith('video/')) {
+                    const result = await uploadVideo(file);
+                    pendingMedia.push({ url: result.url, type: 'video' });
+                } else {
+                    const previewUrl = URL.createObjectURL(file);
+                    pendingMedia.push({ file, type: 'image', previewUrl, url: null });
+                }
+            } catch (err) {
+                showNotificationModal('Failed to upload: ' + err.message, 'error');
             }
-            renderMediaPreview();
-            refreshSubmitState();
-            setTimeout(() => { progress.style.display = 'none'; }, 2500);
-        } catch (err) {
-            progress.classList.add('is-error');
-            progress.innerHTML = '<i class="fas fa-circle-exclamation"></i> ' + err.message;
-        } finally {
-            fileInput.value = '';
         }
+        renderMediaPreviews();
+        progress.style.display = 'none';
+        refreshSubmitState();
+        fileInput.value = '';
     });
 
     submit.addEventListener('click', async () => {
         const content = text.value.trim();
-        if (!content) return;
+        if (!content && pendingMedia.length === 0) {
+            showNotificationModal('Write something or attach media first.', 'info');
+            return;
+        }
 
-        let mediaUrl = null, mediaType = null;
-        if (pendingMedia) {
-            if (pendingMedia.type === 'video' && pendingMedia.url) {
-                mediaUrl = pendingMedia.url;
-                mediaType = 'video';
-            } else if (pendingMedia.type === 'image' && pendingMedia.file) {
+        // Process media: for images, we need to convert them to data URLs (or upload to storage)
+        // For videos, we already have the URL from uploadVideo.
+        const mediaArray = [];
+        for (const item of pendingMedia) {
+            if (item.type === 'video' && item.url) {
+                mediaArray.push({ url: item.url, type: 'video' });
+            } else if (item.type === 'image' && item.file) {
+                // Convert image to data URL
                 const reader = new FileReader();
                 const data = await new Promise((resolve) => {
                     reader.onload = (e) => resolve(e.target.result);
-                    reader.readAsDataURL(pendingMedia.file);
+                    reader.readAsDataURL(item.file);
                 });
-                mediaUrl = data;
-                mediaType = 'image';
+                mediaArray.push({ url: data, type: 'image' });
             }
-            pendingMedia = null;
-            renderMediaPreview();
         }
 
         submit.disabled = true;
         submit.textContent = 'Posting...';
         try {
-            await createPost(content, mediaUrl, mediaType);
-            toast('Post published', 'success');
+            await createPostWithMedia(content || '📎', mediaArray);
+            showNotificationModal('Post published!', 'success');
             text.value = '';
-            submit.disabled = true;
+            pendingMedia = [];
+            renderMediaPreviews();
+            refreshSubmitState();
             progress.style.display = 'none';
-            currentOffset = 0;
             await loadHomeFeed('homeContent');
         } catch (err) {
-            toast('Failed to post: ' + err.message, 'error');
+            showNotificationModal('Failed to post: ' + err.message, 'error');
         } finally {
             submit.disabled = false;
             submit.textContent = 'Post';
@@ -282,6 +297,12 @@ async function navigateHomePage(page) {
             </div>
         `;
     }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
 }
 
 export function cleanupHome() {

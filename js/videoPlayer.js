@@ -1,6 +1,7 @@
 // js/videoPlayer.js
 import { getPublicVideoUrl } from './videoUtils.js';
 import { decryptBlob, getPassphrase } from './supabase.js';
+import { decompressIfGzipped } from './videoCompression.js';
 
 // ---- Thumbnail cache ----
 const thumbnailCache = new Map();
@@ -130,6 +131,22 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
     });
 }
 
+/**
+ * Fetches, decrypts, and (if needed) losslessly decompresses a video from
+ * its public URL, returning a ready-to-use decoded Blob.
+ *
+ * Decompression is auto-detected via gzip magic bytes on the decrypted
+ * blob, so this works transparently for both new gzip-compressed uploads
+ * and any older uncompressed uploads already in storage.
+ */
+async function fetchDecryptedVideoBlob(publicUrl) {
+    const response = await fetch(publicUrl);
+    if (!response.ok) throw new Error('Failed to fetch video');
+    const encryptedBlob = await response.blob();
+    const passphrase = getPassphrase();
+    const decryptedBlob = await decryptBlob(encryptedBlob, passphrase);
+    return decompressIfGzipped(decryptedBlob);
+}
 
 export async function renderVideoPlayer(container, videoUrl, options = {}) {
     const el = typeof container === 'string' ? document.querySelector(container) : container;
@@ -177,11 +194,7 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
     wrapper.appendChild(loading);
 
     try {
-        const response = await fetch(publicUrl);
-        if (!response.ok) throw new Error('Failed to fetch video');
-        const encryptedBlob = await response.blob();
-        const passphrase = getPassphrase();
-        const decryptedBlob = await decryptBlob(encryptedBlob, passphrase);
+        const decryptedBlob = await fetchDecryptedVideoBlob(publicUrl);
         const blobUrl = URL.createObjectURL(decryptedBlob);
 
         const video = document.createElement('video');
@@ -499,11 +512,7 @@ export async function renderVideoThumbnail(container, videoUrl) {
     el.appendChild(loading);
 
     try {
-        const response = await fetch(publicUrl);
-        if (!response.ok) throw new Error('Failed to fetch video');
-        const encryptedBlob = await response.blob();
-        const passphrase = getPassphrase();
-        const decryptedBlob = await decryptBlob(encryptedBlob, passphrase);
+        const decryptedBlob = await fetchDecryptedVideoBlob(publicUrl);
         const blobUrl = URL.createObjectURL(decryptedBlob);
 
         let thumbnailDataUrl;

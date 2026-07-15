@@ -43,6 +43,30 @@ export async function createPost(content, mediaUrl = null, mediaType = null) {
     return data[0];
 }
 
+// ---- NEW: Create a post with multiple media (stored as JSON array) ----
+export async function createPostWithMedia(text, mediaArray) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('You must be logged in');
+
+    const encryptedContent = await compressAndEncrypt(text);
+    const payload = {
+        user_id: user.id,
+        content: encryptedContent,
+        created_at: new Date().toISOString()
+    };
+
+    if (mediaArray && mediaArray.length) {
+        payload.media_url = mediaArray[0].url;
+        payload.media_type = mediaArray[0].type;
+        payload.media = mediaArray; // JSONB column
+    }
+
+    const { data, error } = await supabase.from('posts').insert(payload).select();
+    if (error) throw error;
+    return data[0];
+}
+
 // Fetch posts with profile, like count, comment count, and current user's reaction
 export async function fetchPosts(limit = 20, offset = 0) {
     const supabase = await getSupabaseClient();
@@ -255,6 +279,19 @@ export async function addComment(postId, content) {
 }
 
 // ---- Saved Posts ----
+//
+// IMPORTANT: post IDs are persisted here as a JSON array inside a single
+// compressed text column (saved_posts.post_ids), not as individual rows.
+// Callers pass postId in from very different places — sometimes the raw
+// value straight off a Supabase row (post.id, which can be a number),
+// sometimes a value read out of an HTML `data-id="..."` attribute via
+// `.dataset.id` (which is ALWAYS a string). If we store one type and later
+// compare with `.includes()` against the other type, the strict-equality
+// check silently fails even though the post IS saved — e.g. saved as the
+// number 42, but checked against the string "42" (42 !== "42").
+//
+// Fix: normalize every ID to a string, both when writing and when reading,
+// so the comparison always compares like with like.
 export async function savePost(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -275,8 +312,13 @@ export async function savePost(postId) {
             ids = [];
         }
     }
-    if (ids.includes(postId)) return { action: 'already_saved' };
-    ids.push(postId);
+
+    const idStr = String(postId);
+    // Normalize existing ids to strings too, in case older rows stored numbers.
+    ids = ids.map(String);
+
+    if (ids.includes(idStr)) return { action: 'already_saved' };
+    ids.push(idStr);
     const compressed = LZString.compressToUTF16(JSON.stringify(ids));
     const { error } = await supabase
         .from('saved_posts')
@@ -308,8 +350,12 @@ export async function unsavePost(postId) {
     } catch (e) {
         ids = [];
     }
-    if (!ids.includes(postId)) return { action: 'not_saved' };
-    ids = ids.filter(id => id !== postId);
+
+    const idStr = String(postId);
+    ids = ids.map(String);
+
+    if (!ids.includes(idStr)) return { action: 'not_saved' };
+    ids = ids.filter(id => id !== idStr);
     const compressed = LZString.compressToUTF16(JSON.stringify(ids));
     const { error } = await supabase
         .from('saved_posts')
@@ -336,7 +382,8 @@ export async function isPostSaved(postId) {
         if (!saved) return false;
         const decompressed = LZString.decompressFromUTF16(saved.post_ids);
         const ids = decompressed ? JSON.parse(decompressed) : [];
-        return ids.includes(postId);
+        const idStr = String(postId);
+        return ids.map(String).includes(idStr);
     } catch (e) {
         console.warn('[isPostSaved] Error:', e);
         return false; // fallback: treat as not saved
@@ -356,7 +403,8 @@ export async function fetchSavedPostIds() {
             .maybeSingle();
         if (!saved) return [];
         const decompressed = LZString.decompressFromUTF16(saved.post_ids);
-        return decompressed ? JSON.parse(decompressed) : [];
+        const ids = decompressed ? JSON.parse(decompressed) : [];
+        return ids.map(String);
     } catch (e) {
         console.warn('[fetchSavedPostIds] Error:', e);
         return [];

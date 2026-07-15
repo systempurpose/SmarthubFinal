@@ -332,7 +332,7 @@ function keepPickerOnScreen(picker) {
 }
 
 // ---- Helpers for live updates (exported) ----
-export async function updateProfileSummary(postId) {
+async function updateProfileSummary(postId) {
     const chip = document.querySelector(`.profile-feed-section .reaction-summary[data-post-id="${postId}"]`);
     if (!chip) return;
     try {
@@ -353,7 +353,7 @@ export async function updateProfileSummary(postId) {
     }
 }
 
-export async function updateProfileLikeButton(postId, liked, reaction, count) {
+async function updateProfileLikeButton(postId, liked, reaction, count) {
     const btn = document.querySelector(`.profile-feed-section .post-card[data-id="${postId}"] .like-btn`);
     if (!btn) return;
     const countSpan = btn.querySelector('.like-count');
@@ -1082,13 +1082,28 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
                         <i class="fas fa-comment"></i> <span>0</span>
                     </button>
                     <button class="save-btn ${isSaved ? 'saved' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${isSaved ? '#0d9488' : '#555'};cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
-                        <i class="fas ${isSaved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
+                        <i class="${isSaved ? 'fas fa-bookmark' : 'far fa-bookmark'}"></i>
                     </button>
                 </div>
             </div>
         `;
     }
     return html;
+}
+// ---- Update the save button on the profile feed ----
+async function updateProfileSaveButton(postId, saved) {
+    const btn = document.querySelector(`.profile-feed-section .post-card[data-id="${postId}"] .save-btn`);
+    if (!btn) return;
+    const icon = btn.querySelector('i');
+    if (saved) {
+        icon.className = 'fas fa-bookmark';
+        btn.classList.add('saved');
+        btn.style.color = '#0d9488';
+    } else {
+        icon.className = 'far fa-bookmark';
+        btn.classList.remove('saved');
+        btn.style.color = '#555';
+    }
 }
 
 // ---- attachPostEventListeners with save button handler ----
@@ -1159,7 +1174,7 @@ function attachPostEventListeners(feed) {
                 const saved = await isPostSaved(postId);
                 if (saved) {
                     await unsavePost(postId);
-                    icon.className = 'fas fa-bookmark-o';
+                    icon.className = 'far fa-bookmark';
                     btn.classList.remove('saved');
                     btn.style.color = '#555';
                     showNotificationModal('Post unsaved', 'info');
@@ -1218,3 +1233,5 @@ function escapeHtml(text) {
     div.textContent = text ?? '';
     return div.innerHTML;
 }
+
+export { updateProfileSummary, updateProfileLikeButton, updateProfileSaveButton };

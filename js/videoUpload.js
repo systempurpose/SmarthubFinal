@@ -2,43 +2,50 @@
 import { getSupabaseClient, getPassphrase, encryptBlob } from './supabase.js';
 import { getCurrentUserId } from './sb-utils.js';
 import { saveVideoMetadata } from './video_sb.js';
-import { uploadAndCompressVideo } from './videoCompressor.js';
+import { compressBlobLossless, isCompressionSupported } from './videoCompression.js';
+
+// Lossless (gzip) compression instead of lossy ffmpeg re-encoding — quality
+// is never affected, decompression always returns the exact original file.
+// Video is already compressed by its own codec before it reaches here, so
+// gzip typically only shaves off a small amount (sometimes nothing). If
+// gzip doesn't actually make the file smaller, we skip it and upload the
+// original raw — no point paying compression time for a same-or-larger
+// result.
+const MIN_USEFUL_SAVINGS_RATIO = 0.98; // only keep compression if it gets below 98% of original size
 
 export async function uploadVideo(file, onProgress) {
     const userId = getCurrentUserId();
     if (!userId) throw new Error('Please log in to upload videos.');
 
-    let blobToEncrypt = null;
+    let blobToEncrypt = file;
     let originalSize = file.size;
     let compressedSize = file.size;
-    let compressionUsed = false;
+    let losslessCompressionUsed = false;
 
-    // ---- Try compression using the helper ----
-    try {
-        const result = await uploadAndCompressVideo(file, 1); // target ~1MB
-        // result contains: { path: '/uploads/compressed/filename.mp4' }
-        const compressedUrl = result.path;
-        const fileResp = await fetch(compressedUrl);
-        if (fileResp.ok) {
-            blobToEncrypt = await fileResp.blob();
-            compressedSize = blobToEncrypt.size;
-            compressionUsed = true;
-            console.log(`[uploadVideo] Compression OK: ${(originalSize/1024).toFixed(0)}KB → ${(compressedSize/1024).toFixed(0)}KB`);
-        } else {
-            throw new Error('Failed to fetch compressed file');
+    if (isCompressionSupported()) {
+        try {
+            const gzipped = await compressBlobLossless(file);
+            if (gzipped.size < originalSize * MIN_USEFUL_SAVINGS_RATIO) {
+                blobToEncrypt = gzipped;
+                compressedSize = gzipped.size;
+                losslessCompressionUsed = true;
+                console.log(`[uploadVideo] Lossless compression: ${(originalSize/1024).toFixed(0)}KB → ${(compressedSize/1024).toFixed(0)}KB (${(100 - (compressedSize/originalSize*100)).toFixed(1)}% smaller, no quality loss)`);
+            } else {
+                console.log(`[uploadVideo] Lossless compression saved <2%, uploading original uncompressed`);
+            }
+        } catch (err) {
+            console.warn('[uploadVideo] Lossless compression failed, using original:', err.message);
+            blobToEncrypt = file;
+            compressedSize = originalSize;
+            losslessCompressionUsed = false;
         }
-    } catch (err) {
-        console.warn('[uploadVideo] Compression failed, using original:', err.message);
-        blobToEncrypt = file;
-        compressedSize = originalSize;
-        compressionUsed = false;
+    } else {
+        console.log('[uploadVideo] CompressionStream not supported in this browser, uploading original uncompressed');
     }
 
-    // ---- Encrypt ----
     const passphrase = getPassphrase();
     const encryptedBlob = await encryptBlob(blobToEncrypt, passphrase);
 
-    // ---- Upload to Supabase Storage ----
     const supabase = await getSupabaseClient();
     const fileExt = file.name.split('.').pop() || 'mp4';
     const fileName = `${Date.now()}.${fileExt}`;
@@ -53,11 +60,9 @@ export async function uploadVideo(file, onProgress) {
         });
     if (uploadError) throw uploadError;
 
-    // ---- Get public URL ----
     const { data: urlData } = supabase.storage.from('videos').getPublicUrl(storagePath);
     const publicUrl = urlData.publicUrl;
 
-    // ---- Save metadata (optional) ----
     try {
         const videoData = {
             deviceId: null,
@@ -73,7 +78,12 @@ export async function uploadVideo(file, onProgress) {
             metadata: {
                 originalSize: originalSize,
                 compressedSize: compressedSize,
-                compressionUsed: compressionUsed,
+                // Note: this now describes LOSSLESS gzip compression, not
+                // the old lossy ffmpeg re-encoding. The player auto-detects
+                // gzip via magic bytes on decrypt, so this flag is
+                // informational (for stats/debugging) rather than required
+                // for correct playback.
+                losslessCompressionUsed: losslessCompressionUsed,
             },
         };
         await saveVideoMetadata(videoData);
@@ -81,7 +91,6 @@ export async function uploadVideo(file, onProgress) {
         console.warn('[uploadVideo] Metadata save failed:', err);
     }
 
-    // ---- Return public URL ----
     return {
         url: publicUrl,
         publicUrl: publicUrl,

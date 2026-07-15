@@ -334,6 +334,11 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     if (isLoading) return;
     isLoading = true;
 
+    // ---- ✅ Reset offset when loading fresh (not appending) ----
+    if (!append) {
+        currentOffset = 0;
+    }
+
     if (!append) {
         container.innerHTML = renderLoadingSpinner();
     } else {
@@ -497,7 +502,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                         <i class="fas fa-comment"></i> <span>${comments}</span>
                     </button>
                     <button class="save-btn ${saved ? 'saved' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${saved ? '#0d9488' : '#555'};cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
-                        <i class="fas ${saved ? 'fa-bookmark' : 'fa-bookmark-o'}"></i>
+                        <i class="${saved ? 'fas fa-bookmark' : 'far fa-bookmark'}"></i>
                     </button>
                 </div>
             </div>
@@ -590,7 +595,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                 const saved = await isPostSaved(postId);
                 if (saved) {
                     await unsavePost(postId);
-                    icon.className = 'fas fa-bookmark-o';
+                    icon.className = 'far fa-bookmark';
                     btn.classList.remove('saved');
                     btn.style.color = '#555';
                     showNotificationModal('Post unsaved', 'info');
@@ -720,6 +725,22 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ---- Update the save button on a home feed post ----
+async function updateFeedSaveButton(postId, saved) {
+    const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .save-btn`);
+    if (!btn) return;
+    const icon = btn.querySelector('i');
+    if (saved) {
+        icon.className = 'fas fa-bookmark';
+        btn.classList.add('saved');
+        btn.style.color = '#0d9488';
+    } else {
+        icon.className = 'far fa-bookmark';
+        btn.classList.remove('saved');
+        btn.style.color = '#555';
+    }
+}
+
 // ---- Realtime ----
 export async function initRealtimeFeed() {
     try {
@@ -731,6 +752,7 @@ export async function initRealtimeFeed() {
         const subscription = supabase
             .channel('public:posts')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
+                // Reload feed from the top (offset reset inside loadHomeFeed)
                 loadHomeFeed('homeContent', false);
             })
             .subscribe();
@@ -741,5 +763,7 @@ export async function initRealtimeFeed() {
     }
 }
 
-// ---- Single export ----
-export { updateReactionSummary, updateFeedLikeButton };
+// ---- Attach to window for global access ----
+window.loadHomeFeed = loadHomeFeed;
+// ---- Export helpers (including modal functions for use in home.js) ----
+export { updateReactionSummary, updateFeedLikeButton, updateFeedSaveButton, showNotificationModal, showConfirmModal };
