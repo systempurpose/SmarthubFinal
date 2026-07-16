@@ -3,10 +3,78 @@ import { uploadVideo } from './videoUpload.js';
 import { loadHomeFeed, initRealtimeFeed, showNotificationModal, showConfirmModal } from './home-loader.js';
 import { createPostWithMedia } from './home-sb.js';
 import { openPostView } from './postView.js';
+import './cursor.js';
 
 let realtimeSubscription = null;
-let pendingMedia = []; // now an array for multiple attachments
+let pendingMedia = [];
 let currentPage = 'home';
+let renderIdCounter = 0;
+window._hca_renderId = 0;
+
+function renderLoadingSkeleton() {
+    return `
+        <div class="feed-loading-skeleton" style="padding-top:20px;">
+            <div class="feed-loading-label">Loading...</div>
+            ${Array.from({ length: 3 }, () => `
+                <div class="skeleton-post">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        <div class="skeleton-line" style="width:38px; height:38px; border-radius:50%; flex-shrink:0; margin-bottom:0;"></div>
+                        <div style="flex:1;">
+                            <div class="skeleton-line" style="width:35%; height:12px; margin-bottom:4px;"></div>
+                            <div class="skeleton-line" style="width:20%; height:10px;"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-line" style="width:100%; height:14px; margin-bottom:6px;"></div>
+                    <div class="skeleton-line" style="width:85%; height:14px; margin-bottom:12px;"></div>
+                    <div class="skeleton-line" style="width:100%; aspect-ratio: 16/9; border-radius: var(--hc-radius-md, 14px); margin-bottom:12px;"></div>
+                    <div style="display:flex; gap:16px;">
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function ensureFadeStyles() {
+    if (document.getElementById('homeFadeStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'homeFadeStyles';
+    style.textContent = `
+        #homeContent.page-fade-in {
+            animation: pageFadeIn 0.25s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+        }
+        @keyframes pageFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .feed-loading-skeleton {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+        .feed-loading-label {
+            padding: 16px var(--hc-gutter, 20px) 4px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--hc-muted, #64748b);
+        }
+        .skeleton-post {
+            padding: 16px var(--hc-gutter, 20px);
+            border-bottom: 1px solid var(--hc-border, #e6eaf0);
+        }
+        .skeleton-post .skeleton-line {
+            margin-bottom: 8px;
+        }
+        .skeleton-post .skeleton-line:last-child {
+            margin-bottom: 0;
+        }
+    `;
+    document.head.appendChild(style);
+}
+ensureFadeStyles();
 
 export async function renderHome() {
     const container = document.getElementById('pageContent');
@@ -20,42 +88,48 @@ export async function renderHome() {
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
+    // ✅ COMPOSER IS DEFINITELY HERE – inside #homeContent, so it scrolls with the page
     const html = `
         <div class="home-container">
             <main class="home-main">
-
-                <div id="homeHeader" class="feed-header">
-                    <h2>Home</h2>
-                    <div class="feed-tabs">
-                        <button class="active" data-feed="for-you">For You</button>
-                        <button data-feed="following">Following</button>
-                    </div>
-                </div>
-
-                <div id="homeComposer" class="composer-card">
-                    <div class="composer-input">
-                        <div class="composer-avatar">
-                            ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}" alt="">` : avatarInitial.toUpperCase()}
+                <div id="homeContent">
+                    <!-- Header -->
+                    <div id="homeHeader" class="feed-header">
+                        <h2>Home</h2>
+                        <div class="feed-tabs">
+                            <button class="active" data-feed="for-you">For You</button>
+                            <button data-feed="following">Following</button>
                         </div>
-                        <div class="composer-body">
-                            <textarea id="composerText" rows="2" placeholder="What's on your mind? Share a repair tip..."></textarea>
-                            <div id="composerMediaPreview"></div>
-                            <div class="composer-actions">
-                                <div class="composer-tools">
-                                    <button id="composerVideoBtn" type="button" title="Add video" aria-label="Add video"><i class="fas fa-video"></i></button>
-                                    <button id="composerImageBtn" type="button" title="Add image" aria-label="Add image"><i class="fas fa-image"></i></button>
-                                    <button id="composerGifBtn" type="button" title="Add GIF" aria-label="Add GIF"><i class="fas fa-grin"></i></button>
-                                </div>
-                                <button class="composer-submit" id="composerSubmit" disabled>Post</button>
+                    </div>
+
+                    <!-- ✅ COMPOSER – restored and visible -->
+                    <div id="homeComposer" class="composer-card">
+                        <div class="composer-input">
+                            <div class="composer-avatar">
+                                ${currentUser?.avatar_url ? `<img src="${currentUser.avatar_url}" alt="">` : avatarInitial.toUpperCase()}
                             </div>
-                            <input type="file" id="composerFileInput" accept="video/*,image/*" multiple style="display:none;">
-                            <div id="composerUploadProgress" class="composer-upload-progress" style="display:none;"></div>
+                            <div class="composer-body">
+                                <textarea id="composerText" rows="2" placeholder="What's on your mind? Share a repair tip..."></textarea>
+                                <div id="composerMediaPreview"></div>
+                                <div class="composer-actions">
+                                    <div class="composer-tools">
+                                        <button id="composerVideoBtn" type="button" title="Add video"><i class="fas fa-video"></i></button>
+                                        <button id="composerImageBtn" type="button" title="Add image"><i class="fas fa-image"></i></button>
+                                        
+                                    </div>
+                                    <button class="composer-submit" id="composerSubmit" disabled>Post</button>
+                                </div>
+                                <input type="file" id="composerFileInput" accept="video/*,image/*" multiple style="display:none;">
+                                <div id="composerUploadProgress" class="composer-upload-progress" style="display:none;"></div>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Posts container -->
+                    <div id="feedPosts"></div>
                 </div>
 
-                <div id="homeContent"></div>
-
+                <!-- Bottom navigation -->
                 <nav class="home-bottom-nav">
                     <div class="nav-brand" aria-hidden="true">
                         <i class="fas fa-toolbox"></i>
@@ -79,10 +153,12 @@ export async function renderHome() {
 
     container.innerHTML = html;
 
-    // ---- Load home feed ----
-    await loadHomeFeed('homeContent');
+    // ---- Load Home feed into #feedPosts ----
+    const initialRenderId = ++renderIdCounter;
+    window._hca_renderId = initialRenderId;
+    await loadHomeFeed('feedPosts', false, initialRenderId);
 
-    // ---- Real-time subscription ----
+    // ---- Realtime ----
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
         realtimeSubscription = null;
@@ -96,13 +172,15 @@ export async function renderHome() {
             btn.classList.add('active');
             const feedType = btn.dataset.feed;
             if (feedType === 'for-you') {
-                loadHomeFeed('homeContent');
+                loadHomeFeed('feedPosts', false, window._hca_renderId);
             }
         });
     });
 
+    // ✅ Setup composer – this will find #composerText and hook it up
     setupComposer();
 
+    // ---- Navigation ----
     document.querySelectorAll('.bottom-nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -114,9 +192,13 @@ export async function renderHome() {
     });
 }
 
+// ---- setupComposer (unchanged, works with #composerText) ----
 function setupComposer() {
     const text = document.getElementById('composerText');
-    if (!text) return;
+    if (!text) {
+        console.warn('[Home] Composer textarea not found – check DOM');
+        return;
+    }
     const submit = document.getElementById('composerSubmit');
     const videoBtn = document.getElementById('composerVideoBtn');
     const imageBtn = document.getElementById('composerImageBtn');
@@ -250,7 +332,7 @@ function setupComposer() {
             renderMediaPreviews();
             refreshSubmitState();
             progress.style.display = 'none';
-            await loadHomeFeed('homeContent');
+            await loadHomeFeed('feedPosts', false, window._hca_renderId);
         } catch (err) {
             showNotificationModal('Failed to post: ' + err.message, 'error');
         } finally {
@@ -261,52 +343,80 @@ function setupComposer() {
     });
 }
 
+// ---- Navigation with cancellation ----
 async function navigateHomePage(page, params = {}) {
+    const thisRenderId = ++renderIdCounter;
+    window._hca_renderId = thisRenderId;
+
     if (page === currentPage) return;
     currentPage = page;
 
     const content = document.getElementById('homeContent');
-    if (!content) return;
+    const feedContainer = document.getElementById('feedPosts');
+    if (!content || !feedContainer) return;
 
     const header = document.getElementById('homeHeader');
     const composer = document.getElementById('homeComposer');
 
     if (page === 'home') {
+        // Show header and composer again
         if (header) header.style.display = 'block';
         if (composer) composer.style.display = 'block';
-        content.innerHTML = '';
-        await loadHomeFeed('homeContent');
+        feedContainer.innerHTML = '';
+        await loadHomeFeed('feedPosts', false, thisRenderId);
         return;
     } else {
+        // Hide header and composer when on other pages
         if (header) header.style.display = 'none';
         if (composer) composer.style.display = 'none';
     }
 
-    content.innerHTML = '<div class="spinner" style="margin:40px auto;"></div>';
+    // Show loading skeleton in feed container
+    feedContainer.classList.remove('page-fade-in');
+    feedContainer.innerHTML = renderLoadingSkeleton();
+
+    await new Promise(r => requestAnimationFrame(r));
+
+    if (thisRenderId !== window._hca_renderId) return;
 
     try {
+        let renderFn;
         if (page === 'search') {
             const module = await import('./search.js');
-            module.renderSearch(content);
+            if (thisRenderId !== window._hca_renderId) return;
+            renderFn = module.renderSearch;
         } else if (page === 'notifications') {
             const module = await import('./alerts.js');
-            module.renderAlerts(content);
+            if (thisRenderId !== window._hca_renderId) return;
+            renderFn = module.renderAlerts;
         } else if (page === 'profile') {
             const module = await import('./profile.js');
-            module.renderProfile(content);
+            if (thisRenderId !== window._hca_renderId) return;
+            renderFn = module.renderProfile;
         } else if (page === 'user-profile') {
             const { userId } = params || {};
             if (!userId) {
-                content.innerHTML = `<div class="page-error">User ID required.</div>`;
+                feedContainer.innerHTML = `<div class="page-error">User ID required.</div>`;
                 return;
             }
             const module = await import('./userProfileView.js');
-            module.renderUserProfileView(content, userId);
+            if (thisRenderId !== window._hca_renderId) return;
+            renderFn = (el) => module.renderUserProfileView(el, userId);
         } else {
-            content.innerHTML = `<div class="empty-state"><i class="fas fa-compass"></i><h3>Page not found</h3><p>That section doesn't exist.</p></div>`;
+            feedContainer.innerHTML = `<div class="empty-state"><i class="fas fa-compass"></i><h3>Page not found</h3><p>That section doesn't exist.</p></div>`;
+            return;
         }
+
+        if (thisRenderId !== window._hca_renderId) return;
+
+        await renderFn(feedContainer);
+
+        if (thisRenderId !== window._hca_renderId) return;
+
+        feedContainer.classList.add('page-fade-in');
     } catch (err) {
-        content.innerHTML = `
+        if (thisRenderId !== window._hca_renderId) return;
+        feedContainer.innerHTML = `
             <div class="page-error">
                 <p>Failed to load: ${err.message}</p>
                 <button onclick="window.renderHome()" class="btn-primary">Go Home</button>

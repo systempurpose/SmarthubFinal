@@ -69,7 +69,12 @@ function ensureStyles() {
         .al-center.al-error i { color: #f87171; }
         .al-center.al-error { color: #dc2626; }
         .al-spin { animation: al-spin 0.8s linear infinite; }
-        @keyframes al-spin { to { transform: rotate(360deg); } }
+        @keyframes al-spin { to { transform: rotate(360deg); } 
+        .emoji-picker span.emoji-hover {
+    animation: emojiFloat 0.5s ease-in-out infinite alternate;
+}
+
+
     `;
     document.head.appendChild(style);
 }

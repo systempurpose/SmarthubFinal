@@ -1,8 +1,13 @@
 // js/userProfileView.js – Read‑only profile view for other users
 import { getSupabaseClient } from './supabase.js';
-import { renderVideoThumbnail } from './videoPlayer.js';
-import { openPostView } from './postView.js';
+import { fetchSavedPostIds } from './home-sb.js';
+import {
+    ensureFBStyles,
+    renderFullPostCard,
+    attachFullPostCardHandlers
+} from './searchCards.js';
 import { openReactionModal } from './reactionModal.js';
+import { openPostView } from './postView.js';
 
 let targetUser = null;
 
@@ -21,13 +26,113 @@ function skeletonFeedHtml(count = 3) {
     return html;
 }
 
+// ---- Extra styles specific to this page (back bar + follow row) ----
+function ensureProfileViewStyles() {
+    if (document.getElementById('upv-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'upv-styles';
+    style.textContent = `
+        .upv-header-bar {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px var(--hc-gutter);
+            border-bottom: 1px solid var(--hc-border);
+            position: sticky; top: 0; z-index: 20;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(14px) saturate(1.4);
+            -webkit-backdrop-filter: blur(14px) saturate(1.4);
+        }
+        .upv-back-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: var(--hc-canvas); border: 1px solid var(--hc-border);
+            color: var(--hc-ink); font-size: 13.5px; font-weight: 700;
+            padding: 8px 14px; border-radius: 999px; cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+        }
+        .upv-back-btn:hover { background: var(--hc-accent-tint); border-color: var(--hc-accent-tint-strong); color: var(--hc-accent-hover); }
+        .upv-back-btn:active { transform: scale(0.96); }
+        .upv-header-name { font-weight: 800; font-size: 16px; color: var(--hc-ink); letter-spacing: -0.01em; }
+
+        .upv-identity-row {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+        }
+        .upv-follow-btn {
+            flex-shrink: 0; border: none; border-radius: 999px; padding: 10px 24px;
+            font-size: 13.5px; font-weight: 700; cursor: pointer; margin-top: 4px;
+            background: var(--hc-accent); color: #fff;
+            transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+        }
+        .upv-follow-btn:hover { background: var(--hc-accent-hover); }
+        .upv-follow-btn:active { transform: scale(0.96); }
+        .upv-follow-btn[data-following="true"] {
+            background: #fff; color: var(--hc-ink-soft); border: 1px solid var(--hc-border-strong);
+        }
+        .upv-follow-btn[data-following="true"]:hover {
+            background: var(--hc-like-bg); color: var(--hc-like); border-color: var(--hc-like);
+        }
+        .upv-follow-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .profile-stats { display: flex; gap: 16px; margin: 6px 0 0; font-size: 13.5px; color: var(--hc-muted); }
+        .profile-stats strong { color: var(--hc-ink); }
+    `;
+    document.head.appendChild(style);
+}
+
+// ---- Current user + follow helpers (same `follows` table used across the app) ----
+function getCurrentUser() {
+    try {
+        return JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    } catch {
+        return null;
+    }
+}
+
+async function isFollowing(supabase, followerId, followingId) {
+    if (!followerId) return false;
+    try {
+        const { data, error } = await supabase
+            .from('follows')
+            .select('follower_id')
+            .eq('follower_id', followerId)
+            .eq('following_id', followingId)
+            .maybeSingle();
+        if (error) throw error;
+        return !!data;
+    } catch (err) {
+        console.warn('[userProfileView] Could not load follow status:', err);
+        return false;
+    }
+}
+
+async function toggleFollow(supabase, followerId, followingId, wasFollowing) {
+    if (!followerId) throw new Error('Log in to follow people');
+    if (wasFollowing) {
+        const { error } = await supabase
+            .from('follows')
+            .delete()
+            .eq('follower_id', followerId)
+            .eq('following_id', followingId);
+        if (error) throw error;
+        return false;
+    } else {
+        const { error } = await supabase
+            .from('follows')
+            .insert({ follower_id: followerId, following_id: followingId });
+        if (error) throw error;
+        return true;
+    }
+}
+
 export async function renderUserProfileView(container, userId) {
+    ensureFBStyles();
+    ensureProfileViewStyles();
+
     if (!container) {
         container = document.getElementById('homeContent') || document.getElementById('pageContent');
         if (!container) return;
     }
 
     const supabase = await getSupabaseClient();
+    const currentUser = getCurrentUser();
 
     // Fetch the user's profile
     const { data: profile, error } = await supabase
@@ -69,13 +174,23 @@ export async function renderUserProfileView(container, userId) {
         .select('*', { count: 'exact', head: true })
         .eq('follower_id', userId);
 
+    // Is the current (logged-in) visitor already following this person?
+    const viewerIsFollowing = currentUser ? await isFollowing(supabase, currentUser.id, userId) : false;
+    const isOwnProfile = currentUser && String(currentUser.id) === String(userId);
+
+    const followBtnHtml = (currentUser && !isOwnProfile)
+        ? `<button type="button" class="upv-follow-btn" data-user-id="${userId}" data-following="${viewerIsFollowing}">
+               ${viewerIsFollowing ? 'Following' : 'Follow'}
+           </button>`
+        : '';
+
     const html = `
         <div class="profile-page">
-            <div class="profile-header-bar" style="display:flex; align-items:center; gap:12px; padding:16px var(--hc-gutter); border-bottom:1px solid var(--hc-border);">
-                <button class="back-btn" onclick="window.navigateHomePage('home')" style="background:none; border:none; font-size:16px; color:var(--hc-muted); cursor:pointer; display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; transition:background 0.15s;">
+            <div class="upv-header-bar">
+                <button class="upv-back-btn" onclick="window.navigateHomePage('home')" type="button">
                     <i class="fas fa-arrow-left"></i> Back
                 </button>
-                <span style="font-weight:700; font-size:16px;">${escapeHtml(displayName)}'s Profile</span>
+                <span class="upv-header-name">${escapeHtml(displayName)}'s Profile</span>
             </div>
             <!-- Cover -->
             <div class="profile-cover">
@@ -89,9 +204,14 @@ export async function renderUserProfileView(container, userId) {
                         ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(displayName)}'s avatar">`
                         : `<div class="profile-avatar-initial">${escapeHtml(displayName[0]?.toUpperCase() || 'U')}</div>`}
                 </div>
-                <div class="profile-identity">
-                    <h2 class="profile-display-name">${escapeHtml(displayName)}</h2>
-                    <p class="profile-username">@${escapeHtml(username)}</p>
+                <div class="profile-identity" style="flex:1;">
+                    <div class="upv-identity-row">
+                        <div>
+                            <h2 class="profile-display-name">${escapeHtml(displayName)}</h2>
+                            <p class="profile-username">@${escapeHtml(username)}</p>
+                        </div>
+                        ${followBtnHtml}
+                    </div>
                     <p class="profile-stats">
                         <span><strong>${followers || 0}</strong> followers</span>
                         <span><strong>${following || 0}</strong> following</span>
@@ -110,18 +230,41 @@ export async function renderUserProfileView(container, userId) {
             <!-- User's Posts -->
             <div class="profile-feed-section">
                 <h3 class="profile-section-title">Posts</h3>
-                <div id="profileFeed"></div>
+                <div id="profileFeed" class="fb-results-list"></div>
             </div>
         </div>
     `;
 
     container.innerHTML = html;
 
+    // ---- Follow button ----
+    const followBtn = container.querySelector('.upv-follow-btn');
+    if (followBtn) {
+        followBtn.addEventListener('click', async () => {
+            const wasFollowing = followBtn.dataset.following === 'true';
+            followBtn.disabled = true;
+            try {
+                const nowFollowing = await toggleFollow(supabase, currentUser.id, userId, wasFollowing);
+                followBtn.dataset.following = String(nowFollowing);
+                followBtn.textContent = nowFollowing ? 'Following' : 'Follow';
+                const followerCountEl = container.querySelector('.profile-stats strong');
+                if (followerCountEl) {
+                    const current = parseInt(followerCountEl.textContent) || 0;
+                    followerCountEl.textContent = nowFollowing ? current + 1 : Math.max(0, current - 1);
+                }
+            } catch (err) {
+                console.warn('[userProfileView] Follow toggle failed:', err);
+            } finally {
+                followBtn.disabled = false;
+            }
+        });
+    }
+
     // Load the user's posts
-    await loadUserPosts(userId);
+    await loadUserPosts(userId, currentUser);
 }
 
-async function loadUserPosts(userId) {
+async function loadUserPosts(userId, currentUser) {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
 
@@ -131,7 +274,7 @@ async function loadUserPosts(userId) {
         const supabase = await getSupabaseClient();
         const { data: posts, error } = await supabase
             .from('posts')
-            .select('*')
+            .select('id, content, user_id, created_at, media, media_url, media_type')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(50);
@@ -146,160 +289,61 @@ async function loadUserPosts(userId) {
         for (const post of posts) {
             post.decryptedContent = await decryptAndDecompress(post.content);
             if (post.media && typeof post.media === 'string') {
-                try { post.media = JSON.parse(post.media); } catch(e) { post.media = []; }
+                try { post.media = JSON.parse(post.media); } catch (e) { post.media = []; }
             }
             if (post.media && !Array.isArray(post.media)) post.media = [];
         }
 
         const postIds = posts.map(p => p.id);
-        let likesMap = {}, summaryMap = {};
+        let likesMap = {}, userReactionsMap = {}, summaryMap = {};
         if (postIds.length) {
             const { data: likes } = await supabase
                 .from('likes')
                 .select('post_id, reaction, user_id')
                 .in('post_id', postIds);
             if (likes) {
-                likesMap = likes.reduce((acc, l) => {
-                    acc[l.post_id] = (acc[l.post_id] || 0) + 1;
-                    return acc;
-                }, {});
-                const grouped = {};
                 likes.forEach(l => {
-                    if (!grouped[l.post_id]) grouped[l.post_id] = {};
+                    likesMap[l.post_id] = (likesMap[l.post_id] || 0) + 1;
+                    if (currentUser && l.user_id === currentUser.id) {
+                        userReactionsMap[l.post_id] = l.reaction || '❤️';
+                    }
+                    if (!summaryMap[l.post_id]) summaryMap[l.post_id] = {};
                     const r = l.reaction || '❤️';
-                    grouped[l.post_id][r] = (grouped[l.post_id][r] || 0) + 1;
+                    summaryMap[l.post_id][r] = (summaryMap[l.post_id][r] || 0) + 1;
                 });
-                summaryMap = grouped;
             }
         }
 
-        feed.innerHTML = renderPostCards(posts, likesMap, summaryMap);
-        attachPostEventListeners(feed);
+        let savedSet = new Set();
+        if (currentUser) {
+            try {
+                savedSet = new Set(await fetchSavedPostIds());
+            } catch (err) {
+                console.warn('[userProfileView] Could not load saved posts:', err);
+            }
+        }
+
+        let html = '';
+        for (const post of posts) {
+            const reaction = userReactionsMap[post.id];
+            html += renderFullPostCard(post, '', targetUser, {
+                likeCount: likesMap[post.id] || 0,
+                isLiked: !!reaction,
+                reactionEmoji: reaction || '❤️',
+                summary: summaryMap[post.id] || {},
+                isSaved: savedSet.has(post.id),
+                isOwner: false // visiting someone else's profile — never show delete here
+            });
+        }
+        feed.innerHTML = html;
+
+        attachFullPostCardHandlers(feed, {
+            onOpenPost: (postId) => openPostView(postId),
+            onOpenReactions: (postId) => openReactionModal(postId)
+        });
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load posts: ${escapeHtml(err.message)}</div>`;
     }
-}
-
-function renderPostCards(posts, likesMap, summaryMap) {
-    let html = '';
-    for (const post of posts) {
-        const time = new Date(post.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-        const avatarHtml = targetUser?.avatar_url
-            ? `<img src="${escapeHtml(targetUser.avatar_url)}" alt="">`
-            : escapeHtml((targetUser?.display_name?.[0] || 'U').toUpperCase());
-
-        const likeCount = likesMap[post.id] || 0;
-
-        const summary = summaryMap[post.id] || {};
-        const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
-        const summaryHtml = totalReactions > 0
-            ? `<div class="reaction-summary" data-post-id="${post.id}">
-                ${Object.entries(summary).map(([emoji, count]) =>
-                    `<span class="reaction-chip">${emoji} ${count}</span>`
-                ).join('')}
-                <span class="reaction-total">${totalReactions}</span>
-               </div>`
-            : '';
-
-        let mediaHtml = '';
-        const mediaArray = post.media || [];
-        if (mediaArray.length > 1) {
-            const cols = Math.min(mediaArray.length, 3);
-            mediaHtml = `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-top:8px;border-radius:12px;overflow:hidden;">`;
-            const displayItems = mediaArray.slice(0, 3);
-            for (const m of displayItems) {
-                if (m.type === 'video') {
-                    mediaHtml += `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="aspect-ratio:1/1;"></div>`;
-                } else {
-                    mediaHtml += `<img src="${escapeHtml(m.url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;">`;
-                }
-            }
-            if (mediaArray.length > 3) {
-                mediaHtml += `<div style="display:flex;align-items:center;justify-content:center;background:#f1f5f9;font-size:14px;font-weight:700;color:#64748b;aspect-ratio:1/1;border-radius:4px;">+${mediaArray.length - 3}</div>`;
-            }
-            mediaHtml += '</div>';
-        } else if (mediaArray.length === 1) {
-            const m = mediaArray[0];
-            if (m.type === 'video') {
-                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="margin-top:8px;"></div>`;
-            } else {
-                mediaHtml = `<img src="${escapeHtml(m.url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
-            }
-        } else if (post.media_url) {
-            const isVideo = post.media_type === 'video';
-            if (isVideo) {
-                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(post.media_url)}" style="margin-top:8px;"></div>`;
-            } else {
-                mediaHtml = `<img src="${escapeHtml(post.media_url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
-            }
-        }
-
-        html += `
-            <div class="post-card" data-id="${post.id}" style="cursor:pointer;">
-                <div class="post-header">
-                    <div class="post-avatar">${avatarHtml}</div>
-                    <span class="post-user">${escapeHtml(targetUser?.display_name || 'User')}</span>
-                    <span class="post-username">@${escapeHtml(targetUser?.username || 'user')}</span>
-                    <span class="post-time">${time}</span>
-                </div>
-                <div class="post-content">
-                    <p>${escapeHtml(post.decryptedContent)}</p>
-                    ${mediaHtml}
-                </div>
-                ${summaryHtml}
-                <div class="post-actions">
-                    <button class="comment-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
-                        <i class="fas fa-comment"></i> <span>0</span>
-                    </button>
-                    <button class="share-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
-                        <i class="fas fa-share"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-    return html;
-}
-
-function attachPostEventListeners(feed) {
-    feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
-        const videoUrl = el.dataset.videoUrl;
-        if (videoUrl) renderVideoThumbnail(el, videoUrl);
-    });
-
-    feed.querySelectorAll('.reaction-summary').forEach(el => {
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const postId = el.dataset.postId;
-            openReactionModal(postId);
-        });
-    });
-
-    feed.querySelectorAll('.comment-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const postId = btn.dataset.id;
-            openPostView(postId);
-        });
-    });
-
-    feed.querySelectorAll('.share-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const postId = btn.dataset.id;
-            navigator.clipboard.writeText(`Check out this post on SmartHub: #${postId}`)
-                .then(() => {})
-                .catch(() => {});
-        });
-    });
-
-    feed.querySelectorAll('.post-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            if (e.target.closest('button')) return;
-            const postId = card.dataset.id;
-            openPostView(postId);
-        });
-    });
 }
 
 function escapeHtml(text) {

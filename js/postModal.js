@@ -1,6 +1,21 @@
 // js/postModal.js
 import { getSupabaseClient } from './supabase.js';
-import { fetchPostById, fetchComments, toggleLike, addComment, deletePost, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
+import {
+    fetchPostById,
+    fetchComments,
+    toggleLike,
+    addComment,
+    deletePost,
+    savePost,
+    unsavePost,
+    isPostSaved,
+    fetchReactionsSummary,
+    addReply,
+    fetchCommentsWithReplies,
+    getCommentCount,
+    toggleCommentReaction,
+    fetchCommentReactions
+} from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
 import { openReactionModal } from './reactionModal.js';
 
@@ -8,7 +23,6 @@ let modalPostId = null;
 let loadToken = 0;
 let mediaItems = [];
 let mediaIndex = 0;
-
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
 // ============================================================
@@ -150,7 +164,6 @@ function ensureModalStyles() {
         .post-modal-confirm button#confirmNo:hover { background: #e2e8f0; }
         .post-modal-notification .notif-close:hover { opacity: 1 !important; }
 
-        /* ---- Bookmark pop animation ---- */
         @keyframes bookmarkPop {
             0% { transform: scale(1); }
             50% { transform: scale(1.3); }
@@ -159,6 +172,134 @@ function ensureModalStyles() {
         .save-btn.saved i.fa-bookmark {
             animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
+
+        /* ---- Comment styles with reactions and replies ---- */
+        .pv-comment-wrapper {
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .pv-comment-wrapper:last-child { border-bottom: none; }
+        .pv-comment-wrapper.pv-reply {
+            padding-left: 40px;
+            border-bottom: none;
+            border-left: 2px solid #e2e8f0;
+            margin-left: 12px;
+        }
+        .pv-comment {
+            display: flex; gap: 10px;
+        }
+        .pv-comment-avatar {
+            width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+            display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 12.5px;
+            background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+        }
+        .pv-comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .pv-comment-body { flex: 1; min-width: 0; }
+        .pv-comment-top {
+            display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+        }
+        .pv-comment-name { font-weight: 700; font-size: 13.5px; color: #0f172a; }
+        .pv-comment-username { color: #94a3b8; font-size: 12px; }
+        .pv-comment-time { color: #cbd5e1; font-size: 11px; }
+        .pv-comment-text { font-size: 13.5px; color: #334155; margin-top: 2px; line-height: 1.5; }
+
+        .pv-comment-actions {
+            display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap;
+        }
+        .pv-comment-reactions {
+            display: flex; gap: 3px; align-items: center; flex-wrap: wrap;
+        }
+        .pv-comment-reaction-btn {
+            background: none; border: 1px solid #e2e8f0; border-radius: 14px;
+            padding: 1px 8px; font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; gap: 2px;
+            transition: background 0.15s ease, border-color 0.15s ease;
+            color: #64748b;
+        }
+        .pv-comment-reaction-btn:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+        .pv-comment-reaction-btn.active {
+            background: #ccfbf1;
+            border-color: #0d9488;
+            color: #0d9488;
+        }
+        .pv-comment-reaction-btn .count {
+            font-size: 10px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+        .pv-comment-reaction-btn.active .count {
+            color: #0d9488;
+        }
+
+        .pv-comment-reply-btn {
+            background: none; border: none; color: #64748b;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+            padding: 2px 6px; border-radius: 4px;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .pv-comment-reply-btn:hover {
+            background: #f1f5f9;
+            color: #0d9488;
+        }
+
+        .pv-reply-input-container {
+            margin-top: 6px; display: flex; gap: 6px; align-items: center;
+        }
+        .pv-reply-input {
+            flex: 1; padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 16px;
+            font-size: 13px; outline: none; transition: border-color 0.15s;
+            background: #fafbfc;
+        }
+        .pv-reply-input:focus { border-color: #0d9488; background: #fff; }
+        .pv-reply-submit {
+            background: #0d9488; color: #fff; border: none; border-radius: 16px;
+            padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: background 0.15s ease, transform 0.12s ease;
+        }
+        .pv-reply-submit:hover:not(:disabled) { background: #0f766e; }
+        .pv-reply-submit:active:not(:disabled) { transform: scale(0.94); }
+        .pv-reply-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pv-reply-cancel {
+            background: none; border: none; color: #94a3b8; font-size: 12px;
+            cursor: pointer; padding: 4px 6px;
+        }
+        .pv-reply-cancel:hover { color: #64748b; }
+
+        .pv-emoji-picker {
+            position: absolute; bottom: calc(100% + 10px); left: 0;
+            background: #fff; border-radius: 24px; padding: 8px 10px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 2px 8px rgba(15, 23, 42, 0.08);
+            display: flex; gap: 2px; align-items: center;
+            z-index: 20; opacity: 0; pointer-events: none;
+            transform-origin: bottom left;
+            transform: translateY(10px) scale(0.85);
+            transition: opacity 0.18s cubic-bezier(0.2,0.7,0.3,1), transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .pv-emoji-picker.visible { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+        .pv-emoji-btn {
+            font-size: 22px; line-height: 1; cursor: pointer; padding: 6px 7px; border-radius: 12px;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
+        }
+        .pv-emoji-btn:hover { background: #f1f5f9; transform: scale(1.4) translateY(-5px); }
+
+        .post-modal-comment-emoji-picker {
+            display: inline-flex; gap: 2px; padding: 4px 6px;
+            background: #fff; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            transform: none; opacity: 1; pointer-events: auto;
+            position: relative;
+        }
+        .post-modal-comment-emoji-picker .pv-emoji-btn {
+            font-size: 18px;
+        }
+
+        .pv-empty {
+            color: #94a3b8; text-align: center; padding: 36px 12px; font-size: 13.5px;
+        }
+        .pv-empty i { font-size: 26px; color: #cbd5e1; }
     `;
     document.head.appendChild(style);
 }
@@ -167,35 +308,11 @@ ensureModalStyles();
 // ---- Emoji reaction picker ----
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
-    picker.className = 'emoji-picker';
-    picker.style.cssText = `
-        position:absolute; bottom:calc(100% + 10px); left:0;
-        background:white; border-radius:24px; padding:8px 10px;
-        box-shadow:0 14px 34px rgba(15,23,42,0.18), 0 2px 8px rgba(15,23,42,0.08);
-        display:flex; gap:2px; align-items:center;
-        z-index:100; opacity:0; pointer-events:none;
-        transform-origin: bottom left;
-        transform:translateY(10px) scale(0.85);
-        transition:opacity 0.18s cubic-bezier(0.2,0.7,0.3,1), transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
-        will-change:transform,opacity;
-    `;
-    EMOJIS.forEach((emoji) => {
+    picker.className = 'pv-emoji-picker';
+    EMOJIS.forEach(emoji => {
         const btn = document.createElement('span');
+        btn.className = 'pv-emoji-btn';
         btn.textContent = emoji;
-        btn.style.cssText = `
-            font-size:22px; line-height:1; cursor:pointer; padding:6px 7px; border-radius:12px;
-            display:inline-flex; align-items:center; justify-content:center;
-            transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1), background 0.15s ease;
-            transform: scale(1) translateY(0);
-        `;
-        btn.onmouseenter = () => {
-            btn.style.background = '#f1f5f9';
-            btn.style.transform = 'scale(1.4) translateY(-5px)';
-        };
-        btn.onmouseleave = () => {
-            btn.style.background = 'transparent';
-            btn.style.transform = 'scale(1) translateY(0)';
-        };
         btn.onclick = (e) => { e.stopPropagation(); onSelect(emoji); };
         picker.appendChild(btn);
     });
@@ -213,6 +330,38 @@ function keepPickerOnScreen(picker) {
     });
 }
 
+function attachReactionPicker(wrapper, btn, onReact) {
+    let picker = null;
+    let hideTimeout = null;
+
+    const show = () => {
+        if (picker) return;
+        picker = createEmojiPicker((emoji) => {
+            onReact(emoji);
+            hide(true);
+        });
+        wrapper.appendChild(picker);
+        keepPickerOnScreen(picker);
+        requestAnimationFrame(() => picker.classList.add('visible'));
+        clearTimeout(hideTimeout);
+    };
+    const hide = (immediate = false) => {
+        if (!picker) return;
+        const remove = () => {
+            picker.classList.remove('visible');
+            setTimeout(() => {
+                if (picker && picker.parentNode) picker.remove();
+                picker = null;
+            }, 220);
+        };
+        if (immediate) { remove(); return; }
+        hideTimeout = setTimeout(remove, 2000);
+    };
+
+    wrapper.addEventListener('mouseenter', show);
+    wrapper.addEventListener('mouseleave', () => hide(false));
+}
+
 // ---- Spinner and modal styles ----
 function ensureSpinnerStyles() {
     if (document.getElementById('postModalSpinnerStyles')) return;
@@ -221,17 +370,56 @@ function ensureSpinnerStyles() {
     style.textContent = `
         @keyframes postModalSpin { to { transform: rotate(360deg); } }
         @keyframes postModalFadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes postModalShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
         #postModalLoading {
             position:absolute; inset:0; background:rgba(255,255,255,0.9);
             backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center;
             z-index:5; opacity:0; pointer-events:none; transition:opacity 0.18s ease;
         }
         #postModalLoading.visible { opacity:1; pointer-events:auto; }
-        #postModalLoading .spinner-ring {
-            width:38px; height:38px; border-radius:50%;
-            border:3px solid #e2e8f0; border-top-color:#0d9488;
-            animation:postModalSpin 0.7s linear infinite;
+
+        .post-modal-skeleton {
+            display: flex; flex-direction: row; width: 100%; gap: 20px;
         }
+        .post-modal-skeleton-left {
+            flex: 2; display: flex; flex-direction: column; gap: 10px;
+        }
+        .post-modal-skeleton-right {
+            flex: 1; display: flex; flex-direction: column; gap: 10px;
+            border-left: 1px solid #e2e8f0; padding-left: 20px;
+        }
+        .post-modal-skel-line {
+            height: 12px; border-radius: 6px;
+            background: linear-gradient(90deg, #eef1f4 25%, #e4e8ec 37%, #eef1f4 63%);
+            background-size: 400% 100%;
+            animation: postModalShimmer 1.4s ease infinite;
+        }
+        .post-modal-skel-avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: linear-gradient(90deg, #eef1f4 25%, #e4e8ec 37%, #eef1f4 63%);
+            background-size: 400% 100%;
+            animation: postModalShimmer 1.4s ease infinite;
+            flex-shrink: 0;
+        }
+        .post-modal-skel-media {
+            aspect-ratio: 16/9;
+            border-radius: 12px;
+            background: linear-gradient(90deg, #eef1f4 25%, #e4e8ec 37%, #eef1f4 63%);
+            background-size: 400% 100%;
+            animation: postModalShimmer 1.4s ease infinite;
+            margin-top: 6px;
+        }
+        .post-modal-skel-actions {
+            display: flex; gap: 12px; margin-top: 6px;
+        }
+        .post-modal-skel-btn {
+            width: 40px; height: 16px; border-radius: 12px;
+            background: linear-gradient(90deg, #eef1f4 25%, #e4e8ec 37%, #eef1f4 63%);
+            background-size: 400% 100%;
+            animation: postModalShimmer 1.4s ease infinite;
+        }
+
         #postModalBody.content-loaded { animation:postModalFadeIn 0.25s ease; }
         .reaction-summary {
             display: flex; align-items: center; gap: 6px;
@@ -245,7 +433,6 @@ function ensureSpinnerStyles() {
         .reaction-chip { display: flex; align-items: center; gap: 2px; }
         .reaction-total { color: #94a3b8; margin-left: 4px; }
 
-        /* Media gallery navigation */
         .media-gallery {
             position: relative;
             border-radius: 12px;
@@ -327,36 +514,35 @@ function ensureModal() {
                 </div>
                 <div id="postModalBody" style="position:relative;flex:1;overflow-y:auto;display:flex;flex-direction:row;padding:16px 20px;min-height:240px;">
                     <div id="postModalLoading">
-                        <div class="spinner-ring"></div>
-                    </div>
-                    <!-- Left column -->
-                    <div id="modalLeft" style="flex:2;padding-right:20px;min-width:0;display:flex;flex-direction:column;">
-                        <div id="modalUserInfo" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"></div>
-                        <div id="modalText" style="font-size:15px;line-height:1.6;color:#1a1a1a;margin-bottom:12px;"></div>
-                        <div id="modalMedia" style="flex:1;"></div>
-                    </div>
-                    <!-- Right column -->
-                    <div id="modalRight" style="flex:1;display:flex;flex-direction:column;border-left:1px solid #e1e8ed;padding-left:20px;">
-                        <div id="modalComments" style="flex:1;overflow-y:auto;margin-bottom:12px;"></div>
-                        <div id="modalSummary" style="margin-bottom:6px;"></div>
-                        <div id="modalActions" style="border-top:1px solid #e1e8ed;padding-top:12px;">
-                            <div style="display:flex;gap:16px;margin-bottom:8px;">
-                                <div class="like-wrapper" style="position:relative;display:inline-block;">
-                                    <button class="like-btn" data-id="" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;transition:transform 0.2s;">
-                                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                                    </button>
+                        <div class="post-modal-skeleton">
+                            <div class="post-modal-skeleton-left">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <div class="post-modal-skel-avatar"></div>
+                                    <div style="flex:1;">
+                                        <div class="post-modal-skel-line" style="width:45%; height:14px;"></div>
+                                        <div class="post-modal-skel-line" style="width:25%; height:10px; margin-top:6px;"></div>
+                                    </div>
                                 </div>
-                                <button class="save-btn" data-id="" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
-                                    <i class="far fa-bookmark"></i>
-                                    <span>Save</span>
-                                </button>
+                                <div class="post-modal-skel-line" style="width:100%; height:16px;"></div>
+                                <div class="post-modal-skel-line" style="width:90%; height:16px;"></div>
+                                <div class="post-modal-skel-line" style="width:80%; height:16px;"></div>
+                                <div class="post-modal-skel-media"></div>
                             </div>
-                            <div style="display:flex;gap:8px;">
-                                <input type="text" id="commentInput" placeholder="Write a comment..." style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:20px;outline:none;font-size:13px;">
-                                <button id="postCommentBtn" class="btn-primary" style="padding:6px 16px;border-radius:20px;border:none;background:#0d9488;color:white;font-weight:600;cursor:pointer;">Post</button>
+                            <div class="post-modal-skeleton-right">
+                                <div class="post-modal-skel-line" style="width:60%; height:14px;"></div>
+                                <div class="post-modal-skel-line" style="width:100%; height:12px;"></div>
+                                <div class="post-modal-skel-line" style="width:90%; height:12px;"></div>
+                                <div class="post-modal-skel-line" style="width:80%; height:12px;"></div>
+                                <div style="flex:1;"></div>
+                                <div class="post-modal-skel-actions">
+                                    <div class="post-modal-skel-btn"></div>
+                                    <div class="post-modal-skel-btn"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                    <div id="modalLeft" style="flex:2;padding-right:20px;min-width:0;display:flex;flex-direction:column;"></div>
+                    <div id="modalRight" style="flex:1;display:flex;flex-direction:column;border-left:1px solid #e1e8ed;padding-left:20px;"></div>
                 </div>
             </div>
         `;
@@ -519,6 +705,254 @@ function renderMediaGallery(mediaDiv, items, index) {
     });
 }
 
+// ---- Render comments with reactions and replies ----
+function renderCommentsWithReplies(commentsData, postId, currentUser) {
+    if (!commentsData || commentsData.length === 0) {
+        return `<div class="pv-empty"><i class="fas fa-comment-slash"></i> No comments yet. Be the first!</div>`;
+    }
+
+    const renderCommentTree = (comments, isReply = false) => {
+        let html = '';
+        for (const c of comments) {
+            const cUser = c.profiles || {};
+            const cAvatar = cUser.avatar_url || '';
+            const cName = cUser.display_name || 'User';
+            const cUsername = cUser.username || '';
+            const cTime = new Date(c.created_at).toLocaleDateString();
+            const cContent = c.decryptedContent || '';
+
+            const reactionCounts = c.reactionCounts || {};
+            const userReaction = c.userReaction || null;
+            let reactionsHtml = '';
+            const reactionTypes = Object.keys(reactionCounts);
+            if (reactionTypes.length) {
+                reactionsHtml = reactionTypes.map(emoji => {
+                    const count = reactionCounts[emoji];
+                    const isActive = userReaction === emoji;
+                    return `<button class="pv-comment-reaction-btn ${isActive ? 'active' : ''}" data-comment-id="${c.id}" data-reaction="${emoji}">
+                        ${emoji} <span class="count">${count}</span>
+                    </button>`;
+                }).join('');
+            }
+            // Always show the "add reaction" button (➕)
+            reactionsHtml += `<button class="pv-comment-reaction-btn add-reaction" data-comment-id="${c.id}" title="Add reaction">➕</button>`;
+
+            const replyCount = c.replies ? c.replies.length : 0;
+            const hasReplies = replyCount > 0;
+
+            html += `
+                <div class="pv-comment-wrapper ${isReply ? 'pv-reply' : ''}" data-comment-id="${c.id}">
+                    <div class="pv-comment">
+                        <div class="pv-comment-avatar">
+                            ${cAvatar ? `<img src="${cAvatar}" alt="">` : (cName[0] || 'U').toUpperCase()}
+                        </div>
+                        <div class="pv-comment-body">
+                            <div class="pv-comment-top">
+                                <span class="pv-comment-name">${escapeHtml(cName)}</span>
+                                <span class="pv-comment-username">@${escapeHtml(cUsername)}</span>
+                                <span class="pv-comment-time">${cTime}</span>
+                            </div>
+                            <div class="pv-comment-text">${escapeHtml(cContent)}</div>
+                            <div class="pv-comment-actions">
+                                <div class="pv-comment-reactions">${reactionsHtml}</div>
+                                <button class="pv-comment-reply-btn" data-comment-id="${c.id}">Reply${hasReplies ? ` (${replyCount})` : ''}</button>
+                            </div>
+                            <div class="pv-reply-container" data-comment-id="${c.id}"></div>
+                        </div>
+                    </div>
+                    ${hasReplies ? renderCommentTree(c.replies, true) : ''}
+                </div>
+            `;
+        }
+        return html;
+    };
+
+    return renderCommentTree(commentsData);
+}
+
+// ---- Handle comment reaction ----
+async function handleCommentReaction(commentId, reaction, btn) {
+    try {
+        const result = await toggleCommentReaction(commentId, reaction);
+        const wrapper = btn.closest('.pv-comment-wrapper');
+        if (!wrapper) return;
+
+        const reactions = await fetchCommentReactions(commentId);
+        const counts = reactions.reduce((acc, r) => {
+            acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+            return acc;
+        }, {});
+        const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+        const userReaction = reactions.find(r => r.user_id === user?.id)?.reaction || null;
+
+        const reactionContainer = wrapper.querySelector('.pv-comment-reactions');
+        if (!reactionContainer) return;
+
+        let html = '';
+        const reactionTypes = Object.keys(counts);
+        if (reactionTypes.length) {
+            html = reactionTypes.map(emoji => {
+                const count = counts[emoji];
+                const isActive = userReaction === emoji;
+                return `<button class="pv-comment-reaction-btn ${isActive ? 'active' : ''}" data-comment-id="${commentId}" data-reaction="${emoji}">
+                    ${emoji} <span class="count">${count}</span>
+                </button>`;
+            }).join('');
+        }
+        html += `<button class="pv-comment-reaction-btn add-reaction" data-comment-id="${commentId}" title="Add reaction">➕</button>`;
+        reactionContainer.innerHTML = html;
+
+        // Re-bind events
+        reactionContainer.querySelectorAll('.pv-comment-reaction-btn').forEach(b => {
+            b.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const cId = b.dataset.commentId;
+                const rxn = b.dataset.reaction;
+                if (b.classList.contains('add-reaction')) {
+                    const parent = b.closest('.pv-comment-wrapper');
+                    if (parent) {
+                        const existingPicker = b.parentElement.querySelector('.post-modal-comment-emoji-picker');
+                        if (existingPicker) { existingPicker.remove(); return; }
+                        const picker = document.createElement('div');
+                        picker.className = 'post-modal-comment-emoji-picker';
+                        EMOJIS.forEach(emoji => {
+                            const span = document.createElement('span');
+                            span.className = 'pv-emoji-btn';
+                            span.textContent = emoji;
+                            span.onclick = async (e) => {
+                                e.stopPropagation();
+                                await handleCommentReaction(cId, emoji, b);
+                                picker.remove();
+                            };
+                            picker.appendChild(span);
+                        });
+                        b.parentElement.appendChild(picker);
+                        setTimeout(() => {
+                            document.addEventListener('click', function closePicker(e) {
+                                if (!picker.contains(e.target) && !b.contains(e.target)) {
+                                    picker.remove();
+                                    document.removeEventListener('click', closePicker);
+                                }
+                            });
+                        }, 10);
+                    }
+                    return;
+                }
+                if (rxn) {
+                    handleCommentReaction(cId, rxn, b);
+                }
+            });
+        });
+
+    } catch (err) {
+        showNotificationModal('Failed to react: ' + err.message, 'error');
+    }
+}
+
+// ---- Attach comment events ----
+function attachCommentEvents(container, postId, currentUser) {
+    if (!container) return;
+
+    // Reaction buttons
+    container.querySelectorAll('.pv-comment-reaction-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const commentId = btn.dataset.commentId;
+            const reaction = btn.dataset.reaction;
+
+            if (btn.classList.contains('add-reaction')) {
+                const existingPicker = btn.parentElement.querySelector('.post-modal-comment-emoji-picker');
+                if (existingPicker) { existingPicker.remove(); return; }
+                const picker = document.createElement('div');
+                picker.className = 'post-modal-comment-emoji-picker';
+                EMOJIS.forEach(emoji => {
+                    const span = document.createElement('span');
+                    span.className = 'pv-emoji-btn';
+                    span.textContent = emoji;
+                    span.onclick = async (e) => {
+                        e.stopPropagation();
+                        await handleCommentReaction(commentId, emoji, btn);
+                        picker.remove();
+                    };
+                    picker.appendChild(span);
+                });
+                btn.parentElement.appendChild(picker);
+                setTimeout(() => {
+                    document.addEventListener('click', function closePicker(e) {
+                        if (!picker.contains(e.target) && !btn.contains(e.target)) {
+                            picker.remove();
+                            document.removeEventListener('click', closePicker);
+                        }
+                    });
+                }, 10);
+                return;
+            }
+
+            if (reaction) {
+                await handleCommentReaction(commentId, reaction, btn);
+            }
+        });
+    });
+
+    // Reply buttons
+    container.querySelectorAll('.pv-comment-reply-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const commentId = btn.dataset.commentId;
+            const body = btn.closest('.pv-comment-body');
+            const container = body?.querySelector('.pv-reply-container');
+            if (!container) return;
+
+            const existing = container.querySelector('.pv-reply-input-container');
+            if (existing) { existing.remove(); return; }
+
+            const replyDiv = document.createElement('div');
+            replyDiv.className = 'pv-reply-input-container';
+            replyDiv.innerHTML = `
+                <input type="text" class="pv-reply-input" placeholder="Write a reply..." maxlength="500">
+                <button class="pv-reply-submit">Reply</button>
+                <button class="pv-reply-cancel">Cancel</button>
+            `;
+            container.appendChild(replyDiv);
+
+            const input = replyDiv.querySelector('.pv-reply-input');
+            const submitBtn = replyDiv.querySelector('.pv-reply-submit');
+            const cancelBtn = replyDiv.querySelector('.pv-reply-cancel');
+
+            input.focus();
+
+            const submitReply = async () => {
+                const text = input.value.trim();
+                if (!text) return;
+                submitBtn.disabled = true;
+                try {
+                    await addReply(commentId, text);
+                    const freshComments = await fetchCommentsWithReplies(modalPostId);
+                    const container = document.querySelector('#commentsContainer');
+                    if (container) {
+                        container.innerHTML = renderCommentsWithReplies(freshComments, modalPostId, currentUser);
+                        const badge = document.querySelector('#commentCountBadge');
+                        if (badge) badge.textContent = `(${freshComments.length})`;
+                        attachCommentEvents(container, modalPostId, currentUser);
+                    }
+                    showNotificationModal('Reply added!', 'success');
+                } catch (err) {
+                    showNotificationModal('Failed to reply: ' + err.message, 'error');
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            };
+
+            submitBtn.addEventListener('click', submitReply);
+            cancelBtn.addEventListener('click', () => replyDiv.remove());
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitReply();
+                if (e.key === 'Escape') replyDiv.remove();
+            });
+        });
+    });
+}
+
 export async function openPostModal(postId, focusComment = false) {
     modalPostId = postId;
     const modal = ensureModal();
@@ -548,7 +982,12 @@ async function refreshModal(postId, { showLoading = false } = {}) {
     if (showLoading) setModalLoading(true);
 
     try {
-        const post = await fetchPostById(postId);
+        // Use fetchCommentsWithReplies for nested replies
+        const [post, comments, summary] = await Promise.all([
+            fetchPostById(postId),
+            fetchCommentsWithReplies(postId).catch(() => []),
+            fetchReactionsSummary(postId).catch(() => ({}))
+        ]);
         if (myToken !== loadToken) return;
         if (!post) {
             body.innerHTML = '<div style="padding:20px;color:red;">Post not found.</div>';
@@ -556,17 +995,10 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             return;
         }
 
-        const [comments, summary] = await Promise.all([
-            fetchComments(postId).catch(() => []),
-            fetchReactionsSummary(postId).catch(() => ({}))
-        ]);
-        if (myToken !== loadToken) return;
-
         const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
         const isOwner = currentUser && post.user_id === currentUser.id;
         const saved = await isPostSaved(postId);
 
-        // ---- Build media array ----
         let mediaArr = [];
         if (post.media && Array.isArray(post.media) && post.media.length) {
             mediaArr = post.media;
@@ -576,7 +1008,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
         mediaItems = mediaArr;
         mediaIndex = 0;
 
-        // ---- Render user info ----
+        // User info
         userInfoDiv.innerHTML = `
             <div class="post-avatar" style="width:36px;height:36px;border-radius:50%;background:#c4c9d4;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0;">
                 ${post.profiles?.avatar_url ? `<img src="${post.profiles.avatar_url}" style="width:100%;height:100%;border-radius:50%;">` : (post.profiles?.display_name?.[0] || 'U').toUpperCase()}
@@ -588,34 +1020,37 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" style="margin-left:auto;background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;"><i class="fas fa-trash"></i></button>` : ''}
         `;
 
-        // ---- Render text ----
+        // Text
         textDiv.innerHTML = `<p style="margin:0;">${escapeHtml(post.decryptedContent || '')}</p>`;
 
-        // ---- Render media gallery ----
+        // Media
         if (mediaArr.length) {
             renderMediaGallery(mediaDiv, mediaArr, 0);
         } else {
             mediaDiv.innerHTML = '';
         }
 
-        // ---- Render comments ----
-        let commentsHtml = '';
-        if (comments.length === 0) {
-            commentsHtml = '<p style="color:#999;font-size:14px;">No comments yet.</p>';
-        } else {
-            commentsHtml = comments.map(c => `
-                <div style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-weight:600;">${escapeHtml(c.user_name)}</span>
-                        <span style="font-size:12px;color:#999;">${new Date(c.created_at).toLocaleString()}</span>
-                    </div>
-                    <p style="margin:4px 0 0;font-size:14px;">${escapeHtml(c.decryptedContent)}</p>
-                </div>
-            `).join('');
-        }
-        commentsDiv.innerHTML = commentsHtml;
+        // Comments with replies – render using the new renderer
+        const commentCount = comments.length;
+        commentsDiv.innerHTML = renderCommentsWithReplies(comments, postId, currentUser);
+        // Attach event listeners for reactions & replies
+        attachCommentEvents(commentsDiv, postId, currentUser);
 
-        // ---- Reaction summary ----
+        // Update comment count badge
+        let badge = document.querySelector('#commentCountBadge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.id = 'commentCountBadge';
+            badge.style.marginLeft = '6px';
+            badge.style.fontWeight = '400';
+            badge.style.fontSize = '13px';
+            badge.style.color = '#94a3b8';
+            const head = document.querySelector('.modal-header h3');
+            if (head) head.appendChild(badge);
+        }
+        badge.textContent = `(${commentCount})`;
+
+        // Reaction summary
         const totalReactions = Object.values(summary).reduce((a, b) => a + b, 0);
         if (totalReactions > 0) {
             summaryDiv.innerHTML = `
@@ -637,13 +1072,13 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             summaryDiv.innerHTML = '';
         }
 
-        // ---- Like button ----
+        // Like button
         likeBtn.dataset.id = post.id;
         likeBtn.querySelector('.like-count').textContent = post.likes_count || 0;
-        likeBtn.querySelector('i').className = `fas ${post.userLiked ? 'fa-heart liked' : 'fa-heart'}`;
-        likeBtn.classList.toggle('liked', post.userLiked || false);
+        likeBtn.querySelector('i').className = `fas ${post.userReaction ? 'fa-heart liked' : 'fa-heart'}`;
+        likeBtn.classList.toggle('liked', !!post.userReaction);
 
-        // ---- Emoji picker cleanup and reattach ----
+        // Emoji picker
         if (likeWrapper._cleanup) likeWrapper._cleanup();
         let picker = null;
         let timeout = null;
@@ -687,7 +1122,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             toggleLikeAction(post.id, likeBtn);
         };
 
-        // ---- Save button ----
+        // Save button
         saveBtn.dataset.id = post.id;
         const saveIcon = saveBtn.querySelector('i');
         const saveText = saveBtn.querySelector('span');
@@ -715,7 +1150,6 @@ async function refreshModal(postId, { showLoading = false } = {}) {
                     saveBtn.classList.add('saved');
                     saveBtn.style.color = '#0d9488';
                     showNotificationModal('Post saved!', 'success');
-                    // Trigger bookmark pop animation
                     saveIcon.style.animation = 'none';
                     void saveIcon.offsetHeight;
                     saveIcon.style.animation = 'bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -726,7 +1160,7 @@ async function refreshModal(postId, { showLoading = false } = {}) {
             }
         };
 
-        // ---- Delete button ----
+        // Delete button
         const deleteBtn = userInfoDiv.querySelector('.delete-post-btn');
         if (deleteBtn) {
             deleteBtn.onclick = async (e) => {

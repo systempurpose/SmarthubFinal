@@ -43,7 +43,6 @@ export async function createPost(content, mediaUrl = null, mediaType = null) {
     return data[0];
 }
 
-// ---- NEW: Create a post with multiple media (stored as JSON array) ----
 export async function createPostWithMedia(text, mediaArray) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -59,7 +58,7 @@ export async function createPostWithMedia(text, mediaArray) {
     if (mediaArray && mediaArray.length) {
         payload.media_url = mediaArray[0].url;
         payload.media_type = mediaArray[0].type;
-        payload.media = mediaArray; // JSONB column
+        payload.media = mediaArray;
     }
 
     const { data, error } = await supabase.from('posts').insert(payload).select();
@@ -67,7 +66,6 @@ export async function createPostWithMedia(text, mediaArray) {
     return data[0];
 }
 
-// Fetch posts with profile, like count, comment count, and current user's reaction
 export async function fetchPosts(limit = 20, offset = 0) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -84,7 +82,6 @@ export async function fetchPosts(limit = 20, offset = 0) {
     const userIds = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
     const postIds = posts.map(p => p.id);
 
-    // Profiles
     let profiles = [];
     if (userIds.length) {
         const { data: profileData } = await supabase
@@ -95,7 +92,6 @@ export async function fetchPosts(limit = 20, offset = 0) {
     }
     const profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
 
-    // Like counts and current user's reactions (if logged in)
     let likesMap = {};
     let userReactionsMap = {};
     if (postIds.length) {
@@ -118,7 +114,6 @@ export async function fetchPosts(limit = 20, offset = 0) {
         }
     }
 
-    // Comment counts
     let commentsMap = {};
     if (postIds.length) {
         const { data: comments } = await supabase
@@ -147,7 +142,6 @@ export async function fetchPosts(limit = 20, offset = 0) {
     return posts;
 }
 
-// ---- Fetch single post with manual join ----
 export async function fetchPostById(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -190,7 +184,6 @@ export async function fetchPostById(postId) {
     return post;
 }
 
-// ---- Fetch comments with manual join ----
 export async function fetchComments(postId) {
     const supabase = await getSupabaseClient();
     const { data: comments, error } = await supabase
@@ -218,7 +211,6 @@ export async function fetchComments(postId) {
     return comments;
 }
 
-// ---- Like toggle with reaction support ----
 export async function toggleLike(postId, reaction) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -263,7 +255,6 @@ export async function toggleLike(postId, reaction) {
     }
 }
 
-// ---- Add comment ----
 export async function addComment(postId, content) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -278,7 +269,234 @@ export async function addComment(postId, content) {
     return data[0];
 }
 
-// ---- Saved Posts ----
+// ============================================================
+// COMMENT REPLIES (encrypted) AND REACTIONS
+// ============================================================
+
+export async function addReply(commentId, text) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('You must be logged in');
+
+    const { data: parentComment, error: parentError } = await supabase
+        .from('comments')
+        .select('post_id')
+        .eq('id', commentId)
+        .single();
+    if (parentError) throw parentError;
+
+    const encryptedContent = await compressAndEncrypt(text);
+
+    const { data, error } = await supabase
+        .from('comments')
+        .insert({
+            post_id: parentComment.post_id,
+            user_id: user.id,
+            content: encryptedContent,
+            parent_comment_id: commentId,
+            created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+
+    // Decrypt for immediate use
+    data.decryptedContent = await decryptAndDecompress(data.content);
+
+    // Fetch the user's profile
+    const { data: profile } = await supabase
+        .from('social_profiles')
+        .select('display_name, username, avatar_url')
+        .eq('user_id', data.user_id)
+        .maybeSingle();
+    data.profiles = profile || {};
+
+    return data;
+}
+
+// ---- FIXED: manual joins, no nested select ----
+export async function fetchCommentsWithReplies(postId) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+
+    const { data: comments, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    if (!comments || comments.length === 0) return [];
+
+    const userIds = [...new Set(comments.map(c => c.user_id).filter(Boolean))];
+    let profileMap = {};
+    if (userIds.length) {
+        const { data: profiles } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, username, avatar_url')
+            .in('user_id', userIds);
+        if (profiles) {
+            profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]));
+        }
+    }
+
+    const commentIds = comments.map(c => c.id);
+    let reactionsMap = {};
+    if (commentIds.length) {
+        const { data: reactions } = await supabase
+            .from('comment_reactions')
+            .select('comment_id, reaction, user_id')
+            .in('comment_id', commentIds);
+        if (reactions) {
+            reactionsMap = reactions.reduce((acc, r) => {
+                if (!acc[r.comment_id]) acc[r.comment_id] = [];
+                acc[r.comment_id].push({ reaction: r.reaction, user_id: r.user_id });
+                return acc;
+            }, {});
+        }
+    }
+
+    for (const comment of comments) {
+        comment.decryptedContent = await decryptAndDecompress(comment.content);
+        comment.profiles = profileMap[comment.user_id] || { display_name: 'Unknown', username: '', avatar_url: '' };
+        comment.reactions = reactionsMap[comment.id] || [];
+        comment.reactionCounts = comment.reactions.reduce((acc, r) => {
+            acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+            return acc;
+        }, {});
+        comment.userReaction = user ? comment.reactions.find(r => r.user_id === user.id)?.reaction : null;
+        comment.replies = [];
+    }
+
+    const commentMap = {};
+    const topLevelComments = [];
+
+    for (const c of comments) {
+        commentMap[c.id] = c;
+        if (c.parent_comment_id) {
+            if (commentMap[c.parent_comment_id]) {
+                commentMap[c.parent_comment_id].replies.push(c);
+            }
+        } else {
+            topLevelComments.push(c);
+        }
+    }
+
+    return topLevelComments;
+}
+
+export async function getCommentCount(postId) {
+    const supabase = await getSupabaseClient();
+    const { count, error } = await supabase
+        .from('comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+        .is('parent_comment_id', null);
+    if (error) throw error;
+    return count || 0;
+}
+
+export async function toggleCommentReaction(commentId, reaction) {
+    const supabase = await getSupabaseClient();
+    const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    if (!user) throw new Error('You must be logged in');
+
+    const { data: existing, error: fetchError } = await supabase
+        .from('comment_reactions')
+        .select('id, reaction')
+        .eq('comment_id', commentId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    if (existing) {
+        if (existing.reaction === reaction) {
+            const { error } = await supabase
+                .from('comment_reactions')
+                .delete()
+                .eq('id', existing.id);
+            if (error) throw error;
+            return { action: 'unreacted', reaction };
+        } else {
+            const { error } = await supabase
+                .from('comment_reactions')
+                .update({ reaction })
+                .eq('id', existing.id);
+            if (error) throw error;
+            return { action: 'updated', reaction };
+        }
+    } else {
+        const { error } = await supabase
+            .from('comment_reactions')
+            .insert({ comment_id: commentId, user_id: user.id, reaction });
+        if (error) throw error;
+        return { action: 'reacted', reaction };
+    }
+}
+
+export async function fetchCommentReactions(commentId) {
+    const supabase = await getSupabaseClient();
+    const { data, error } = await supabase
+        .from('comment_reactions')
+        .select('reaction, user_id')
+        .eq('comment_id', commentId);
+    if (error) throw error;
+    return data || [];
+}
+
+// ---- NEW: fetch users who reacted to a comment ----
+export async function fetchCommentReactedUsers(commentId) {
+    const supabase = await getSupabaseClient();
+    const { data: reactions, error } = await supabase
+        .from('comment_reactions')
+        .select('user_id, reaction')
+        .eq('comment_id', commentId);
+    if (error) throw error;
+    if (!reactions || !reactions.length) return [];
+
+    const userIds = [...new Set(reactions.map(r => r.user_id))];
+    let profiles = {};
+    if (userIds.length) {
+        const { data: profs } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, avatar_url, username')
+            .in('user_id', userIds);
+        if (profs) {
+            profiles = Object.fromEntries(profs.map(p => [p.user_id, p]));
+        }
+    }
+
+    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    let followingMap = {};
+    if (currentUser) {
+        const { data: follows } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', currentUser.id);
+        if (follows) {
+            followingMap = Object.fromEntries(follows.map(f => [f.following_id, true]));
+        }
+    }
+
+    return reactions.map(row => {
+        const profile = profiles[row.user_id] || { display_name: 'Unknown', avatar_url: '', username: '' };
+        return {
+            user_id: row.user_id,
+            reaction: row.reaction || '❤️',
+            display_name: profile.display_name || 'User',
+            username: profile.username || '',
+            avatar_url: profile.avatar_url || '',
+            is_following: !!followingMap[row.user_id],
+        };
+    });
+}
+
+// ============================================================
+// Saved Posts
+// ============================================================
+
 export async function savePost(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -395,7 +613,6 @@ export async function fetchSavedPostIds() {
     }
 }
 
-// ---- Delete post with storage cleanup (handles multiple media) ----
 function extractStoragePath(mediaUrl) {
     if (!mediaUrl) return null;
     const match = mediaUrl.match(/\/videos\/(videos\/user-[^\/]+\/[^?]+)/);
@@ -409,7 +626,6 @@ export async function deletePost(postId) {
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
     if (!user) throw new Error('Not logged in');
 
-    // Fetch the post with all media info
     const { data: post, error: fetchError } = await supabase
         .from('posts')
         .select('user_id, media_url, media_type, media')
@@ -418,15 +634,10 @@ export async function deletePost(postId) {
     if (fetchError) throw fetchError;
     if (post.user_id !== user.id) throw new Error('You can only delete your own posts');
 
-    // ---- Collect all video URLs to delete ----
     const videoUrls = [];
-
-    // 1. Legacy single media (if it's a video)
     if (post.media_url && post.media_type === 'video') {
         videoUrls.push(post.media_url);
     }
-
-    // 2. Multiple media from the JSONB array
     if (post.media && Array.isArray(post.media)) {
         for (const item of post.media) {
             if (item.type === 'video' && item.url) {
@@ -435,7 +646,6 @@ export async function deletePost(postId) {
         }
     }
 
-    // ---- Delete each video file from storage and metadata ----
     for (const url of videoUrls) {
         const storagePath = extractStoragePath(url);
         if (storagePath) {
@@ -454,13 +664,12 @@ export async function deletePost(postId) {
         }
     }
 
-    // ---- Delete the post itself ----
     await supabase.from('posts').delete().eq('id', postId);
     return { success: true };
 }
 
 // ============================================================
-// 🆕 Reaction summary & follow/unfollow helpers
+// Reaction summary & follow/unfollow helpers
 // ============================================================
 
 export async function fetchReactionsSummary(postId) {

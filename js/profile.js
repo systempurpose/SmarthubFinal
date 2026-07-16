@@ -1,8 +1,5 @@
 // ============================================================
 // profile.js – Social Profile (full‑page scrollable)
-// Styling lives in home.css (shared with the Home feed) under
-// .composer-*, .post-*, .empty-state, .page-error/.page-login,
-// and the .profile-* chrome rules.
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
@@ -12,10 +9,11 @@ import { uploadVideo } from './videoUpload.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
 import { openPostView } from './postView.js';
 import { openReactionModal } from './reactionModal.js';
+import { burstLike, staggerFeedIn, bumpReactionChip, showToast } from './animations.js';
 
 let currentProfileUser = null;
 let currentUser = null;
-let currentFeedType = 'user'; // 'user' or 'saved'
+let currentFeedType = 'user';
 let savedCount = 0;
 
 // ---- Custom notification modal (replaces toast/alert) ----
@@ -145,7 +143,7 @@ function showConfirmModal(message, onConfirm, onCancel) {
     document.addEventListener('keydown', escHandler);
 }
 
-// ---- Inject styles for modals and animations once ----
+// ---- Inject styles for modals, animations, and skeleton ----
 function ensureModalStyles() {
     if (document.getElementById('profileModalStyles')) return;
     const style = document.createElement('style');
@@ -267,13 +265,36 @@ function ensureModalStyles() {
             transition: opacity 0.25s ease;
         }
 
-        /* Skeleton shimmer enhancement */
+        /* Skeleton shimmer (fallback if home.css not loaded) */
         .skeleton-line {
             animation: shimmer 1.4s ease infinite;
         }
         @keyframes shimmer {
             0% { background-position: 100% 50%; }
             100% { background-position: 0 50%; }
+        }
+
+        /* Skeleton container & label (used in profile and home) */
+        .feed-loading-skeleton {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+        .feed-loading-label {
+            padding: 16px var(--hc-gutter, 20px) 4px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--hc-muted, #64748b);
+        }
+        .skeleton-post {
+            padding: 16px var(--hc-gutter, 20px);
+            border-bottom: 1px solid var(--hc-border, #e6eaf0);
+        }
+        .skeleton-post .skeleton-line {
+            margin-bottom: 8px;
+        }
+        .skeleton-post .skeleton-line:last-child {
+            margin-bottom: 0;
         }
     `;
     document.head.appendChild(style);
@@ -287,7 +308,7 @@ function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
     picker.className = 'emoji-picker';
     picker.style.cssText = `
-        position:absolute; bottom:calc(100% + 10px); left:0;
+        position:absolute; bottom:calc(100% + 2px); left:0;
         background:white; border-radius:24px; padding:8px 10px;
         box-shadow:0 14px 34px rgba(15,23,42,0.18), 0 2px 8px rgba(15,23,42,0.08);
         display:flex; gap:2px; align-items:center;
@@ -303,18 +324,21 @@ function createEmojiPicker(onSelect) {
         btn.style.cssText = `
             font-size:22px; line-height:1; cursor:pointer; padding:6px 7px; border-radius:12px;
             display:inline-flex; align-items:center; justify-content:center;
-            transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1), background 0.15s ease;
-            transform: scale(1) translateY(0);
+            transition: background 0.15s ease;
+            transform: scale(1) translateY(0) rotate(0deg);
         `;
-        btn.onmouseenter = () => {
+        btn.addEventListener('mouseenter', () => {
             btn.style.background = '#f1f5f9';
-            btn.style.transform = 'scale(1.4) translateY(-5px)';
-        };
-        btn.onmouseleave = () => {
+            btn.classList.add('emoji-hover');
+        });
+        btn.addEventListener('mouseleave', () => {
             btn.style.background = 'transparent';
-            btn.style.transform = 'scale(1) translateY(0)';
-        };
-        btn.onclick = (e) => { e.stopPropagation(); onSelect(emoji); };
+            btn.classList.remove('emoji-hover');
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onSelect(emoji);
+        });
         picker.appendChild(btn);
     });
     return picker;
@@ -370,7 +394,7 @@ async function updateProfileLikeButton(postId, liked, reaction, count) {
     btn.style.color = liked ? '#e0245e' : '#555';
 }
 
-// ---- Toggle like with live summary update ----
+// ---- Toggle like with live summary update AND burst animation ----
 async function toggleLikeAction(postId, btn, reaction) {
     try {
         const result = await toggleLike(postId, reaction);
@@ -391,22 +415,53 @@ async function toggleLikeAction(postId, btn, reaction) {
         btn.classList.toggle('liked', liked);
         const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
         emojiSpan.className = 'reaction-emoji';
-        if (liked) {
-            const emoji = result.reaction || (reaction || '❤️');
-            emojiSpan.textContent = emoji;
-        } else {
-            emojiSpan.textContent = '❤️';
-        }
+        const chosenEmoji = liked ? (result.reaction || reaction || '❤️') : '❤️';
+        emojiSpan.textContent = chosenEmoji;
         if (!btn.querySelector('.reaction-emoji')) {
             btn.prepend(emojiSpan);
         }
-        btn.style.transform = 'scale(1.25)';
-        setTimeout(() => btn.style.transform = 'scale(1)', 180);
+
+        // ---- 🎉 Burst animation (same as home-loader) ----
+        if (liked) {
+            btn.classList.add('hca-liking');
+            btn.addEventListener('animationend', () => {
+                btn.classList.remove('hca-liking');
+            }, { once: true });
+            burstLike(btn, { emoji: chosenEmoji });
+        }
 
         await updateProfileSummary(postId);
     } catch (err) {
         showNotificationModal('Failed to like: ' + err.message, 'error');
     }
+}
+
+// ---- Skeleton rendering (Threads-inspired) ----
+function renderSkeletonFeed(count = 3) {
+    return `
+        <div class="feed-loading-skeleton">
+            <div class="feed-loading-label">Loading your feed...</div>
+            ${Array.from({ length: count }, () => `
+                <div class="skeleton-post">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        <div class="skeleton-line" style="width:38px; height:38px; border-radius:50%; flex-shrink:0; margin-bottom:0;"></div>
+                        <div style="flex:1;">
+                            <div class="skeleton-line" style="width:35%; height:12px; margin-bottom:4px;"></div>
+                            <div class="skeleton-line" style="width:20%; height:10px;"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-line" style="width:100%; height:14px; margin-bottom:6px;"></div>
+                    <div class="skeleton-line" style="width:85%; height:14px; margin-bottom:12px;"></div>
+                    <div class="skeleton-line" style="width:100%; aspect-ratio: 16/9; border-radius: var(--hc-radius-md, 14px); margin-bottom:12px;"></div>
+                    <div style="display:flex; gap:16px;">
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 // ---- Main render function ----
@@ -514,7 +569,6 @@ export async function renderProfile(container) {
 
     const html = `
         <div class="profile-page">
-            <!-- Cover -->
             <div class="profile-cover">
                 ${coverUrl ? `<img src="${escapeHtml(coverUrl)}" alt="Cover photo">` : ''}
                 <button class="profile-change-cover-btn overlay-btn" type="button">
@@ -523,7 +577,6 @@ export async function renderProfile(container) {
                 <input type="file" id="coverInput" accept="image/*" style="display:none;">
             </div>
 
-            <!-- Avatar + identity -->
             <div class="profile-header-row">
                 <div class="profile-avatar-wrap">
                     ${avatarUrl
@@ -545,7 +598,6 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- Bio (edit-in-place) -->
             <div class="profile-bio-section">
                 <div class="profile-bio-display" id="bioDisplay">
                     <p class="profile-bio-text" id="bioText">${bio ? escapeHtml(bio) : 'No bio yet — tell people about yourself.'}</p>
@@ -560,7 +612,6 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- Post Input with media attach -->
             <div class="composer-card">
                 <div class="composer-input">
                     <div class="profile-composer-avatar composer-avatar">
@@ -573,7 +624,7 @@ export async function renderProfile(container) {
                             <div class="composer-tools">
                                 <button id="profileVideoBtn" title="Attach video" type="button"><i class="fas fa-video"></i></button>
                                 <button id="profileImageBtn" title="Attach image" type="button"><i class="fas fa-image"></i></button>
-                                <button id="profileGifBtn" title="Add GIF" type="button"><i class="fas fa-grin"></i></button>
+                                <!-- GIF button removed -->
                             </div>
                             <button id="profilePostBtn" class="composer-submit" type="button">Post</button>
                         </div>
@@ -583,7 +634,6 @@ export async function renderProfile(container) {
                 </div>
             </div>
 
-            <!-- User's Posts with tabs -->
             <div class="profile-feed-section">
                 <div class="profile-feed-tabs feed-tabs" style="margin:0 var(--hc-gutter) 12px;">
                     <button class="feed-tab active" data-feed="user">
@@ -594,7 +644,9 @@ export async function renderProfile(container) {
                         <span class="saved-count-badge" id="savedCountBadge">${savedCount}</span>
                     </button>
                 </div>
-                <div id="profileFeed" style="transition: opacity 0.2s ease;"></div>
+                <div id="profileFeed" style="transition: opacity 0.2s ease;">
+                    ${renderSkeletonFeed(3)}
+                </div>
             </div>
         </div>
     `;
@@ -602,9 +654,8 @@ export async function renderProfile(container) {
     container.innerHTML = html;
 
     currentFeedType = 'user';
-    await loadUserPosts(currentUser.id);
+    loadUserPosts(currentUser.id);
 
-    // ---- Tab switching ----
     document.querySelectorAll('.feed-tab').forEach(tab => {
         tab.addEventListener('click', async () => {
             document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
@@ -623,7 +674,6 @@ export async function renderProfile(container) {
         });
     });
 
-    // ---- Cover / avatar update ----
     document.querySelector('.profile-change-avatar-btn')?.addEventListener('click', () => {
         document.getElementById('avatarInput').click();
     });
@@ -656,7 +706,6 @@ export async function renderProfile(container) {
         }
     });
 
-    // ---- Bio edit-in-place ----
     const bioDisplay = document.getElementById('bioDisplay');
     const bioEditRow = document.getElementById('bioEditRow');
     const bioEditBtn = document.getElementById('bioEditBtn');
@@ -685,12 +734,12 @@ export async function renderProfile(container) {
         }
     });
 
-    // ---- Composer with multiple media support ----
     const composer = document.getElementById('profileComposer');
     const postBtn = document.getElementById('profilePostBtn');
     const videoBtn = document.getElementById('profileVideoBtn');
     const imageBtn = document.getElementById('profileImageBtn');
-    const gifBtn = document.getElementById('profileGifBtn');
+    // GIF button removed – no need to reference it
+
     const mediaInput = document.getElementById('profileMediaInput');
     const progress = document.getElementById('profileUploadProgress');
     const mediaPreview = document.getElementById('profileMediaPreview');
@@ -698,50 +747,48 @@ export async function renderProfile(container) {
     let pendingMedia = [];
 
     function renderMediaPreviews() {
-    if (!pendingMedia.length) {
-        mediaPreview.style.display = 'none';
-        mediaPreview.innerHTML = '';
-        return;
-    }
-    let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
-    for (let i = 0; i < pendingMedia.length; i++) {
-        const item = pendingMedia[i];
-        const isVideo = item.type === 'video';
-        const src = isVideo ? item.url : (item.previewUrl || item.url);
-        html += `
-            <div class="media-preview-item" data-index="${i}" style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;cursor:pointer;">
-                ${isVideo
-                    ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
-                    : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
-                <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
-            </div>
-        `;
-    }
-    html += '</div>';
-    mediaPreview.innerHTML = html;
-    mediaPreview.style.display = 'block';
+        if (!pendingMedia.length) {
+            mediaPreview.style.display = 'none';
+            mediaPreview.innerHTML = '';
+            return;
+        }
+        let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
+        for (let i = 0; i < pendingMedia.length; i++) {
+            const item = pendingMedia[i];
+            const isVideo = item.type === 'video';
+            const src = isVideo ? item.url : (item.previewUrl || item.url);
+            html += `
+                <div class="media-preview-item" data-index="${i}" style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;cursor:pointer;">
+                    ${isVideo
+                        ? `<video src="${escapeHtml(src)}" muted style="width:100%;height:100%;object-fit:cover;"></video>`
+                        : `<img src="${escapeHtml(src)}" style="width:100%;height:100%;object-fit:cover;">`}
+                    <button class="media-remove-btn" data-index="${i}" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">&times;</button>
+                </div>
+            `;
+        }
+        html += '</div>';
+        mediaPreview.innerHTML = html;
+        mediaPreview.style.display = 'block';
 
-    // ---- Click to preview ----
-    mediaPreview.querySelectorAll('.media-preview-item').forEach(el => {
-        el.addEventListener('click', (e) => {
-            if (e.target.closest('.media-remove-btn')) return;
-            const index = parseInt(el.dataset.index);
-            const items = pendingMedia.map(m => ({ url: m.url || m.previewUrl, type: m.type }));
-            import('./mediaPreviewModal.js').then(module => {
-                module.openMediaPreview(items, index);
-            }).catch(err => console.warn('Failed to load preview modal:', err));
+        mediaPreview.querySelectorAll('.media-preview-item').forEach(el => {
+            el.addEventListener('click', (e) => {
+                if (e.target.closest('.media-remove-btn')) return;
+                const index = parseInt(el.dataset.index);
+                const items = pendingMedia.map(m => ({ url: m.url || m.previewUrl, type: m.type }));
+                import('./mediaPreviewModal.js').then(module => {
+                    module.openMediaPreview(items, index);
+                }).catch(err => console.warn('Failed to load preview modal:', err));
+            });
         });
-    });
 
-    // ---- Remove button (unchanged) ----
-    mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx = parseInt(btn.dataset.index);
-            pendingMedia.splice(idx, 1);
-            renderMediaPreviews();
+        mediaPreview.querySelectorAll('.media-remove-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.index);
+                pendingMedia.splice(idx, 1);
+                renderMediaPreviews();
+            });
         });
-    });
-}
+    }
 
     function clearMediaPreview() {
         pendingMedia = [];
@@ -758,9 +805,7 @@ export async function renderProfile(container) {
         mediaInput.click();
     });
 
-    gifBtn.addEventListener('click', () => {
-        showNotificationModal('GIF support coming soon!', 'info');
-    });
+    // GIF event listener removed
 
     mediaInput.addEventListener('change', async (e) => {
         const files = e.target.files;
@@ -847,25 +892,13 @@ async function createPostWithMedia(text, mediaArray) {
     return data[0];
 }
 
-// ---- Skeleton and feed load functions ----
-function skeletonFeedHtml(count = 3) {
-    let html = '';
-    for (let i = 0; i < count; i++) {
-        html += `
-            <div class="skeleton-post">
-                <div class="skeleton-line" style="width:40%;"></div>
-                <div class="skeleton-line" style="width:90%;"></div>
-                <div class="skeleton-line" style="width:70%;"></div>
-            </div>
-        `;
-    }
-    return html;
-}
-
+// ---- Load user posts (skeleton is already visible) ----
 async function loadUserPosts(userId) {
     const feed = document.getElementById('profileFeed');
-    if (!feed) return;
-    feed.innerHTML = skeletonFeedHtml();
+    if (!feed) {
+        console.warn('[profile] #profileFeed not found');
+        return;
+    }
 
     try {
         const supabase = await getSupabaseClient();
@@ -891,7 +924,6 @@ async function loadUserPosts(userId) {
             if (post.media && !Array.isArray(post.media)) post.media = [];
         }
 
-        // ---- Compute saved status for each post ----
         const savedMap = {};
         const savedPromises = posts.map(async post => {
             savedMap[post.id] = await isPostSaved(post.id);
@@ -935,7 +967,7 @@ async function loadUserPosts(userId) {
 async function loadSavedPosts() {
     const feed = document.getElementById('profileFeed');
     if (!feed) return;
-    feed.innerHTML = skeletonFeedHtml();
+    feed.innerHTML = renderSkeletonFeed(3);
 
     try {
         const supabase = await getSupabaseClient();
@@ -970,7 +1002,6 @@ async function loadSavedPosts() {
             if (post.media && !Array.isArray(post.media)) post.media = [];
         }
 
-        // ---- Compute saved status for each post (all true since they're from saved list) ----
         const savedMap = {};
         posts.forEach(post => { savedMap[post.id] = true; });
 
@@ -1008,7 +1039,7 @@ async function loadSavedPosts() {
     }
 }
 
-// ---- Updated renderPostCards with save button ----
+// ---- renderPostCards (unchanged) ----
 function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap = {}) {
     let html = '';
     for (const post of posts) {
@@ -1036,7 +1067,6 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
 
         const isSaved = savedMap[post.id] || false;
 
-        // ---- Media rendering ----
         let mediaHtml = '';
         const mediaArray = post.media || [];
         if (mediaArray.length > 1) {
@@ -1103,6 +1133,7 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
     }
     return html;
 }
+
 // ---- Update the save button on the profile feed ----
 async function updateProfileSaveButton(postId, saved) {
     const btn = document.querySelector(`.profile-feed-section .post-card[data-id="${postId}"] .save-btn`);
@@ -1119,7 +1150,7 @@ async function updateProfileSaveButton(postId, saved) {
     }
 }
 
-// ---- attachPostEventListeners with save button handler ----
+// ---- attachPostEventListeners (includes improved emoji picker) ----
 function attachPostEventListeners(feed) {
     feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
         const videoUrl = el.dataset.videoUrl;
@@ -1134,11 +1165,13 @@ function attachPostEventListeners(feed) {
         });
     });
 
+    // ---- Like with emoji picker (stays open when cursor moves to picker) ----
     feed.querySelectorAll('.like-wrapper').forEach(wrapper => {
         const btn = wrapper.querySelector('.like-btn');
         const postId = btn.dataset.id;
         let picker = null;
-        let timeout = null;
+        let closeTimeout = null;
+        let isPickerHovered = false;
 
         const showPicker = () => {
             if (picker) return;
@@ -1146,31 +1179,62 @@ function attachPostEventListeners(feed) {
                 toggleLikeAction(postId, btn, emoji);
                 picker.remove();
                 picker = null;
+                isPickerHovered = false;
+                clearTimeout(closeTimeout);
             });
             wrapper.appendChild(picker);
             keepPickerOnScreen(picker);
+
+            picker.style.bottom = 'calc(100% + 2px)';
+
+            picker.addEventListener('mouseenter', () => {
+                isPickerHovered = true;
+                clearTimeout(closeTimeout);
+            });
+            picker.addEventListener('mouseleave', () => {
+                isPickerHovered = false;
+                closeTimeout = setTimeout(() => {
+                    if (!isPickerHovered && picker && picker.parentNode) {
+                        hidePicker();
+                    }
+                }, 150);
+            });
+
             requestAnimationFrame(() => {
                 picker.style.opacity = '1';
                 picker.style.pointerEvents = 'auto';
                 picker.style.transform = 'translateY(0) scale(1)';
             });
-            clearTimeout(timeout);
-        };
-        const hidePicker = () => {
-            if (!picker) return;
-            timeout = setTimeout(() => {
-                picker.style.opacity = '0';
-                picker.style.pointerEvents = 'none';
-                picker.style.transform = 'translateY(10px) scale(0.85)';
-                setTimeout(() => {
-                    if (picker && picker.parentNode) picker.remove();
-                    picker = null;
-                }, 220);
-            }, 2000);
         };
 
-        wrapper.addEventListener('mouseenter', showPicker);
-        wrapper.addEventListener('mouseleave', hidePicker);
+        const hidePicker = () => {
+            clearTimeout(closeTimeout);
+            if (!picker) return;
+            picker.style.opacity = '0';
+            picker.style.pointerEvents = 'none';
+            picker.style.transform = 'translateY(10px) scale(0.85)';
+            setTimeout(() => {
+                if (picker && picker.parentNode) {
+                    picker.remove();
+                    picker = null;
+                    isPickerHovered = false;
+                }
+            }, 220);
+        };
+
+        wrapper.addEventListener('mouseenter', () => {
+            clearTimeout(closeTimeout);
+            showPicker();
+        });
+        wrapper.addEventListener('mouseleave', () => {
+            if (!isPickerHovered) {
+                closeTimeout = setTimeout(() => {
+                    if (!isPickerHovered && picker && picker.parentNode) {
+                        hidePicker();
+                    }
+                }, 150);
+            }
+        });
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleLikeAction(postId, btn);

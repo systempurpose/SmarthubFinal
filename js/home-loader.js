@@ -4,6 +4,7 @@ import { getSupabaseClient } from './supabase.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
 import { openPostView } from './postView.js';
 import { openReactionModal } from './reactionModal.js';
+import { burstLike, staggerFeedIn, bumpReactionChip, showToast } from './animations.js';
 
 let currentOffset = 0;
 const PAGE_SIZE = 20;
@@ -12,114 +13,19 @@ let isLoading = false;
 
 const EMOJIS = ['❤️', '😊', '😂', '😮', '😢', '😡'];
 
-// ---- Custom notification modal ----
 function showNotificationModal(message, tone = 'info', duration = 2500) {
-    const existing = document.querySelector('.notification-modal-overlay');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'notification-modal-overlay';
-    overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 999999;
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        animation: notifFadeIn 0.2s ease;
-    `;
-
-    const colors = {
-        success: { bg: '#d1fae5', border: '#34d399', text: '#065f46', icon: 'fa-check-circle' },
-        error: { bg: '#fce8ee', border: '#f87171', text: '#991b1b', icon: 'fa-circle-exclamation' },
-        info: { bg: '#e0f2fe', border: '#60a5fa', text: '#1e40af', icon: 'fa-info-circle' },
-    };
-    const c = colors[tone] || colors.info;
-
-    overlay.innerHTML = `
-        <div style="
-            background: #fff;
-            border-radius: 12px;
-            max-width: 420px;
-            width: 100%;
-            padding: 16px 20px;
-            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-left: 4px solid ${c.border};
-            pointer-events: auto;
-            background: ${c.bg};
-        ">
-            <i class="fas ${c.icon}" style="color: ${c.border}; font-size: 20px; flex-shrink: 0;"></i>
-            <span style="color: ${c.text}; font-size: 14px; font-weight: 500; line-height: 1.4; flex:1;">
-                ${escapeHtml(message)}
-            </span>
-            <button class="notif-close" style="
-                background: none; border: none; color: ${c.text};
-                cursor: pointer; font-size: 18px; padding: 0 4px; opacity:0.6;
-                transition: opacity 0.15s;
-            " aria-label="Close">&times;</button>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-
-    const closeBtn = overlay.querySelector('.notif-close');
-    const close = () => {
-        overlay.style.animation = 'notifFadeOut 0.2s ease forwards';
-        setTimeout(() => overlay.remove(), 250);
-    };
-    closeBtn.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) close();
-    });
-
-    const timer = setTimeout(close, duration);
-    const escHandler = (e) => {
-        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
-    };
-    document.addEventListener('keydown', escHandler);
-
-    overlay._close = close;
-    overlay._timer = timer;
+    showToast(message, tone, duration);
 }
 
-// ---- Custom confirmation modal ----
 function showConfirmModal(message, onConfirm, onCancel) {
     const overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
-    overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 999998;
-        background: rgba(15, 23, 42, 0.55);
-        backdrop-filter: blur(6px);
-        display: flex; align-items: center; justify-content: center;
-        padding: 20px;
-        animation: confirmFadeIn 0.15s ease;
-    `;
     overlay.innerHTML = `
-        <div style="
-            background: #fff;
-            border-radius: 16px;
-            max-width: 400px;
-            width: 100%;
-            padding: 24px 28px;
-            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
-            text-align: center;
-        ">
-            <p style="margin: 0 0 20px; font-size: 15px; color: #1e293b; line-height: 1.5;">
-                ${escapeHtml(message)}
-            </p>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="confirmYes" style="
-                    background: #0d9488; color: #fff; border: none;
-                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
-                    cursor: pointer; transition: background 0.15s;
-                ">Yes</button>
-                <button id="confirmNo" style="
-                    background: #f1f5f9; color: #0f172a; border: none;
-                    padding: 8px 28px; border-radius: 8px; font-weight: 700;
-                    cursor: pointer; transition: background 0.15s;
-                ">Cancel</button>
+        <div class="confirm-dialog">
+            <p class="confirm-message">${escapeHtml(message)}</p>
+            <div class="confirm-actions">
+                <button id="confirmYes" class="confirm-yes">Yes</button>
+                <button id="confirmNo" class="confirm-no">Cancel</button>
             </div>
         </div>
     `;
@@ -139,149 +45,171 @@ function showConfirmModal(message, onConfirm, onCancel) {
     document.addEventListener('keydown', escHandler);
 }
 
-// ---- Ensure modal styles and animations once ----
 function ensureStyles() {
     if (document.getElementById('homeLoaderStyles')) return;
     const style = document.createElement('style');
     style.id = 'homeLoaderStyles';
     style.textContent = `
-        @keyframes notifFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-        @keyframes notifFadeOut { to { opacity: 0; transform: scale(0.98); } }
         @keyframes confirmFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .confirm-overlay button#confirmYes:hover { background: #0b7f74; }
-        .confirm-overlay button#confirmNo:hover { background: #e2e8f0; }
-        .notification-modal-overlay .notif-close:hover { opacity: 1 !important; }
+        .confirm-overlay {
+            position: fixed; inset: 0; z-index: 999998;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            animation: confirmFadeIn 0.15s ease;
+        }
+        .confirm-dialog {
+            background: var(--hc-surface, #fff);
+            border-radius: var(--hc-radius-lg, 16px);
+            max-width: 400px;
+            width: 100%;
+            padding: 24px 28px;
+            box-shadow: var(--hc-shadow-lg, 0 24px 64px rgba(15,23,42,0.35));
+            text-align: center;
+        }
+        .confirm-message {
+            margin: 0 0 20px;
+            font-size: 15px;
+            color: var(--hc-ink, #1e293b);
+            line-height: 1.5;
+        }
+        .confirm-actions {
+            display: flex; gap: 10px; justify-content: center;
+        }
+        .confirm-yes, .confirm-no {
+            border: none;
+            padding: 8px 28px;
+            border-radius: var(--hc-radius-sm, 8px);
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+        .confirm-yes {
+            background: var(--hc-accent, #0d9488);
+            color: #fff;
+        }
+        .confirm-yes:hover { background: var(--hc-accent-hover, #0b7f74); }
+        .confirm-no {
+            background: var(--hc-canvas, #f1f5f9);
+            color: var(--hc-ink, #0f172a);
+        }
+        .confirm-no:hover { background: var(--hc-border, #e2e8f0); }
+        .confirm-yes:active, .confirm-no:active { transform: scale(0.96); }
 
-        @keyframes homeSpin {
-            to { transform: rotate(360deg); }
+        .emoji-picker {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 0;
+            background: var(--hc-surface, #fff);
+            border-radius: 24px;
+            padding: 8px 10px;
+            box-shadow: var(--hc-shadow-lg, 0 14px 34px rgba(15,23,42,0.18));
+            display: flex; gap: 2px; align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transform-origin: bottom left;
+            transform: translateY(10px) scale(0.85);
+            transition: opacity 0.18s var(--hc-ease, ease), transform 0.22s var(--hca-spring, ease);
+            will-change: transform, opacity;
         }
-        .home-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #e2e8f0;
-            border-top-color: #0d9488;
-            border-radius: 50%;
-            animation: homeSpin 0.7s linear infinite;
-        }
-        .feed-loading {
-            display: flex;
-            justify-content: center;
+        .emoji-picker span {
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 6px 7px;
+            border-radius: 12px;
+            display: inline-flex;
             align-items: center;
-            padding: 60px 0;
+            justify-content: center;
+            transition: transform 0.18s var(--hca-spring, ease), background 0.15s ease;
         }
+        .emoji-picker span:hover {
+            background: var(--hc-canvas, #f1f5f9);
+            transform: scale(1.4) translateY(-5px);
+        }
+
+        .feed-loading-skeleton {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+        .feed-loading-label {
+            padding: 16px var(--hc-gutter, 20px) 4px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--hc-muted, #64748b);
+        }
+        .skeleton-post {
+            padding: 16px var(--hc-gutter, 20px);
+            border-bottom: 1px solid var(--hc-border, #e6eaf0);
+        }
+        .skeleton-post .skeleton-line {
+            margin-bottom: 8px;
+        }
+        .skeleton-post .skeleton-line:last-child {
+            margin-bottom: 0;
+        }
+
         .feed-loading-more {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
+            display: flex; justify-content: center; align-items: center; gap: 8px;
             padding: 20px 0;
-            color: #94a3b8;
+            color: var(--hc-faint, #94a3b8);
             font-size: 14px;
         }
-
-        /* ---- Animation enhancements ---- */
-        .post-card {
-            transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1), background 0.15s ease, box-shadow 0.15s ease;
+        .feed-error {
+            padding: 32px var(--hc-gutter, 20px);
+            text-align: center;
+            color: var(--hc-danger, #dc2626);
+            font-size: 14px;
         }
-        .post-card:hover {
-            background: #fafbfc;
-            transform: translateY(-1px);
+        .emoji-picker span.emoji-hover {
+            animation: emojiPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
-
-        .post-actions button {
-            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-        }
-        .post-actions button:active {
-            transform: scale(0.92);
-        }
-        .post-actions button .fa-heart,
-        .post-actions button .fa-bookmark,
-        .post-actions button .fa-bookmark-o,
-        .post-actions button .fa-comment {
-            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .post-actions button:hover .fa-heart { transform: scale(1.1); }
-        .post-actions button:hover .fa-bookmark { transform: scale(1.1); }
-        .post-actions button:hover .fa-bookmark-o { transform: scale(1.1); }
-        .post-actions button:hover .fa-comment { transform: scale(1.1); }
-
-        .like-btn.liked .fa-heart {
-            animation: heartPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        @keyframes heartPop {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.5); }
-            100% { transform: scale(1); }
-        }
-
-        .save-btn.saved .fa-bookmark {
-            animation: bookmarkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        @keyframes bookmarkPop {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
-        }
-
-        .reaction-summary {
-            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-        }
-        .reaction-summary:hover {
-            transform: scale(1.02);
-        }
-
-        .delete-post-btn {
-            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
-        }
-        .delete-post-btn:active {
-            transform: scale(0.85);
-        }
-
-        .composer-submit {
-            transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .composer-submit:active:not(:disabled) {
-            transform: scale(0.95);
-        }
-
-        .composer-tools button {
-            transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
-        }
-        .composer-tools button:active {
-            transform: scale(0.85);
-        }
-
-        .feed-tab {
-            transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease;
-        }
-        .feed-tab:active {
-            transform: scale(0.95);
-        }
-
-        /* Skeleton shimmer enhancement */
-        .skeleton-line {
-            animation: shimmer 1.4s ease infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: 100% 50%; }
-            100% { background-position: 0 50%; }
+        @keyframes emojiPop {
+            0% { transform: scale(1) translateY(0) rotate(0deg); }
+            40% { transform: scale(1.6) translateY(-12px) rotate(-8deg); }
+            70% { transform: scale(1.2) translateY(-4px) rotate(4deg); }
+            100% { transform: scale(1.4) translateY(-6px) rotate(0deg); }
         }
     `;
     document.head.appendChild(style);
 }
 ensureStyles();
 
-// ---- Loading spinner HTML ----
-function renderLoadingSpinner() {
-    return `<div class="feed-loading"><div class="home-spinner"></div></div>`;
+function renderSkeletonFeed(count = 3) {
+    return `
+        <div class="feed-loading-skeleton">
+            <div class="feed-loading-label">Loading your feed...</div>
+            ${Array.from({ length: count }, () => `
+                <div class="skeleton-post">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                        <div class="skeleton-line" style="width:38px; height:38px; border-radius:50%; flex-shrink:0; margin-bottom:0;"></div>
+                        <div style="flex:1;">
+                            <div class="skeleton-line" style="width:35%; height:12px; margin-bottom:4px;"></div>
+                            <div class="skeleton-line" style="width:20%; height:10px;"></div>
+                        </div>
+                    </div>
+                    <div class="skeleton-line" style="width:100%; height:14px; margin-bottom:6px;"></div>
+                    <div class="skeleton-line" style="width:85%; height:14px; margin-bottom:12px;"></div>
+                    <div class="skeleton-line" style="width:100%; aspect-ratio: 16/9; border-radius: var(--hc-radius-md, 14px); margin-bottom:12px;"></div>
+                    <div style="display:flex; gap:16px;">
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                        <div class="skeleton-line" style="width:40px; height:16px; border-radius:12px;"></div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
-// ---- Emoji reaction picker ----
 function createEmojiPicker(onSelect) {
     const picker = document.createElement('div');
     picker.className = 'emoji-picker';
     picker.style.cssText = `
-        position:absolute; bottom:calc(100% + 10px); left:0;
+        position:absolute; bottom:calc(100% + 2px); left:0;
         background:white; border-radius:24px; padding:8px 10px;
         box-shadow:0 14px 34px rgba(15,23,42,0.18), 0 2px 8px rgba(15,23,42,0.08);
         display:flex; gap:2px; align-items:center;
@@ -291,30 +219,33 @@ function createEmojiPicker(onSelect) {
         transition:opacity 0.18s cubic-bezier(0.2,0.7,0.3,1), transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
         will-change:transform,opacity;
     `;
-    EMOJIS.forEach((emoji) => {
+    EMOJIS.forEach(emoji => {
         const btn = document.createElement('span');
         btn.textContent = emoji;
         btn.style.cssText = `
             font-size:22px; line-height:1; cursor:pointer; padding:6px 7px; border-radius:12px;
             display:inline-flex; align-items:center; justify-content:center;
-            transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1), background 0.15s ease;
-            transform: scale(1) translateY(0);
+            transition: background 0.15s ease;
+            transform: scale(1) translateY(0) rotate(0deg);
         `;
-        btn.onmouseenter = () => {
+        btn.addEventListener('mouseenter', () => {
             btn.style.background = '#f1f5f9';
-            btn.style.transform = 'scale(1.4) translateY(-5px)';
-        };
-        btn.onmouseleave = () => {
+            btn.classList.add('emoji-hover');
+        });
+        btn.addEventListener('mouseleave', () => {
             btn.style.background = 'transparent';
-            btn.style.transform = 'scale(1) translateY(0)';
-        };
-        btn.onclick = (e) => { e.stopPropagation(); onSelect(emoji); };
+            btn.classList.remove('emoji-hover');
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onSelect(emoji);
+        });
         picker.appendChild(btn);
     });
     return picker;
 }
 
-function keepPickerOnScreen(picker, wrapper) {
+function keepPickerOnScreen(picker) {
     requestAnimationFrame(() => {
         const rect = picker.getBoundingClientRect();
         if (rect.right > window.innerWidth - 8) {
@@ -325,7 +256,8 @@ function keepPickerOnScreen(picker, wrapper) {
     });
 }
 
-export async function loadHomeFeed(containerId = 'homeContent', append = false) {
+// ---- loadHomeFeed with cancellation support ----
+export async function loadHomeFeed(containerId = 'feedPosts', append = false, renderId = null) {
     const container = document.getElementById(containerId);
     if (!container) {
         console.warn('[loadHomeFeed] Container not found:', containerId);
@@ -334,13 +266,13 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     if (isLoading) return;
     isLoading = true;
 
-    // ---- ✅ Reset offset when loading fresh (not appending) ----
     if (!append) {
         currentOffset = 0;
     }
 
+    // Show skeleton only on initial load
     if (!append) {
-        container.innerHTML = renderLoadingSpinner();
+        container.innerHTML = renderSkeletonFeed(3);
     } else {
         const loadingMore = document.createElement('div');
         loadingMore.id = 'feed-loading-more';
@@ -352,6 +284,13 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
     try {
         const posts = await fetchPosts(PAGE_SIZE, currentOffset);
 
+        // ---- CANCELLATION CHECK ----
+        if (renderId !== null && renderId !== window._hca_renderId) {
+            console.log('[loadHomeFeed] Cancelled (renderId mismatch)');
+            isLoading = false;
+            return;
+        }
+
         if (append) {
             const loadingMore = document.getElementById('feed-loading-more');
             if (loadingMore) loadingMore.remove();
@@ -359,7 +298,7 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
 
         if (!append) {
             allPosts = posts;
-            container.innerHTML = '';
+            // Do NOT clear container – renderPosts will replace skeleton
         } else {
             allPosts = allPosts.concat(posts);
         }
@@ -386,6 +325,13 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
             }
         }
 
+        // Check again before rendering
+        if (renderId !== null && renderId !== window._hca_renderId) {
+            console.log('[loadHomeFeed] Cancelled before render');
+            isLoading = false;
+            return;
+        }
+
         await renderPosts(container, posts, append, currentUserId, summaryMap);
     } catch (err) {
         if (append) {
@@ -393,10 +339,34 @@ export async function loadHomeFeed(containerId = 'homeContent', append = false) 
             if (loadingMore) loadingMore.remove();
         }
         console.error('[loadHomeFeed] Error:', err);
-        container.innerHTML = `<div class="error">❌ Failed to load feed: ${err.message}</div>`;
+        container.innerHTML = `<div class="feed-error">Failed to load feed: ${escapeHtml(err.message)}</div>`;
     } finally {
         isLoading = false;
     }
+}
+
+function buildMediaHtml(mediaArr) {
+    if (!mediaArr.length) return '';
+
+    if (mediaArr.length > 1) {
+        const cols = Math.min(mediaArr.length, 3);
+        const cells = mediaArr.slice(0, 3).map((m) => {
+            if (m.type === 'video') {
+                return `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div>`;
+            }
+            return `<img src="${escapeHtml(m.url)}" alt="Media">`;
+        }).join('');
+        const overflow = mediaArr.length > 3
+            ? `<div class="post-media-overflow">+${mediaArr.length - 3} more</div>`
+            : '';
+        return `<div class="post-media-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div>${overflow}`;
+    }
+
+    const m = mediaArr[0];
+    if (m.type === 'video') {
+        return `<div class="post-media-single"><div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div></div>`;
+    }
+    return `<div class="post-media-single"><img src="${escapeHtml(m.url)}" alt="Media"></div>`;
 }
 
 async function renderPosts(container, posts, append, currentUserId, summaryMap) {
@@ -440,38 +410,13 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         const displayEmoji = userReaction || '❤️';
         const isLiked = !!userReaction;
 
-        // ---- Build media array ----
         let mediaArr = [];
         if (post.media && Array.isArray(post.media) && post.media.length) {
             mediaArr = post.media;
         } else if (post.media_url) {
             mediaArr = [{ url: post.media_url, type: post.media_type || 'image' }];
         }
-
-        let mediaHtml = '';
-        if (mediaArr.length > 1) {
-            const cols = Math.min(mediaArr.length, 3);
-            mediaHtml = `
-                <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-top:8px;border-radius:12px;overflow:hidden;">
-                    ${mediaArr.slice(0, 3).map((m) => {
-                        const isVideo = m.type === 'video';
-                        if (isVideo) {
-                            return `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="aspect-ratio:1/1;"></div>`;
-                        } else {
-                            return `<img src="${escapeHtml(m.url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;">`;
-                        }
-                    }).join('')}
-                </div>
-                ${mediaArr.length > 3 ? `<div style="font-size:12px;color:#94a3b8;margin-top:4px;">+${mediaArr.length - 3} more</div>` : ''}
-            `;
-        } else if (mediaArr.length === 1) {
-            const m = mediaArr[0];
-            if (m.type === 'video') {
-                mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="margin-top:8px;"></div>`;
-            } else {
-                mediaHtml = `<img src="${escapeHtml(m.url)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
-            }
-        }
+        const mediaHtml = buildMediaHtml(mediaArr);
 
         html += `
             <div class="post-card" data-id="${post.id}">
@@ -482,9 +427,9 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                     <span class="post-user">${escapeHtml(displayName)}</span>
                     ${username ? `<span class="post-username">${escapeHtml(username)}</span>` : ''}
                     <span class="post-time">${time}</span>
-                    ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" style="margin-left:auto;background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
+                    ${isOwner ? `<button class="delete-post-btn" data-id="${post.id}" title="Delete post"><i class="fas fa-trash"></i></button>` : ''}
                 </div>
-                <div class="post-body clickable" data-id="${post.id}" style="cursor:pointer;">
+                <div class="post-body clickable" data-id="${post.id}">
                     <div class="post-content">
                         <p>${escapeHtml(post.decryptedContent || '')}</p>
                         ${mediaHtml}
@@ -492,16 +437,16 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                 </div>
                 ${summaryHtml}
                 <div class="post-actions">
-                    <div class="like-wrapper" style="position:relative;display:inline-block;">
-                        <button class="like-btn ${isLiked ? 'liked' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${isLiked ? '#e0245e' : '#555'};cursor:pointer;transition:transform 0.2s;">
+                    <div class="like-wrapper">
+                        <button class="like-btn ${isLiked ? 'liked' : ''}" data-id="${post.id}">
                             <span class="reaction-emoji">${displayEmoji}</span>
                             <span class="like-count">${likes}</span>
                         </button>
                     </div>
-                    <button class="comment-btn" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:#555;cursor:pointer;">
+                    <button class="comment-btn" data-id="${post.id}">
                         <i class="fas fa-comment"></i> <span>${comments}</span>
                     </button>
-                    <button class="save-btn ${saved ? 'saved' : ''}" data-id="${post.id}" style="background:none;border:none;display:flex;align-items:center;gap:4px;font-size:14px;color:${saved ? '#0d9488' : '#555'};cursor:pointer;transition:color 0.15s ease, transform 0.15s ease;">
+                    <button class="save-btn ${saved ? 'saved' : ''}" data-id="${post.id}">
                         <i class="${saved ? 'fas fa-bookmark' : 'far fa-bookmark'}"></i>
                     </button>
                 </div>
@@ -509,13 +454,18 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         `;
     }
 
+    let newCards;
     if (append) {
+        const before = new Set(container.querySelectorAll('.post-card'));
         container.insertAdjacentHTML('beforeend', html);
+        newCards = [...container.querySelectorAll('.post-card')].filter(el => !before.has(el));
     } else {
         container.innerHTML = html;
+        newCards = [...container.querySelectorAll('.post-card')];
     }
 
-    // ---- Render video thumbnails ----
+    staggerFeedIn(newCards);
+
     const thumbContainers = container.querySelectorAll('.video-thumbnail-container');
     for (const el of thumbContainers) {
         const videoUrl = el.dataset.videoUrl;
@@ -524,7 +474,6 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         }
     }
 
-    // ---- Reaction summary click -> open modal ----
     container.querySelectorAll('.reaction-summary').forEach(el => {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -533,12 +482,13 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         });
     });
 
-    // ---- Like with emoji picker ----
+    // ---- Like with emoji picker (gap reduced, close delayed) ----
     container.querySelectorAll('.like-wrapper').forEach(wrapper => {
         const btn = wrapper.querySelector('.like-btn');
         const postId = btn.dataset.id;
         let picker = null;
-        let timeout = null;
+        let closeTimeout = null;
+        let isPickerHovered = false;
 
         const showPicker = () => {
             if (picker) return;
@@ -546,38 +496,68 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                 toggleLikeAction(postId, btn, emoji);
                 picker.remove();
                 picker = null;
+                isPickerHovered = false;
+                clearTimeout(closeTimeout);
             });
             wrapper.appendChild(picker);
-            keepPickerOnScreen(picker, wrapper);
+            keepPickerOnScreen(picker);
+
+            picker.style.bottom = 'calc(100% + 2px)';
+
+            picker.addEventListener('mouseenter', () => {
+                isPickerHovered = true;
+                clearTimeout(closeTimeout);
+            });
+            picker.addEventListener('mouseleave', () => {
+                isPickerHovered = false;
+                closeTimeout = setTimeout(() => {
+                    if (!isPickerHovered && picker && picker.parentNode) {
+                        hidePicker();
+                    }
+                }, 150);
+            });
+
             requestAnimationFrame(() => {
                 picker.style.opacity = '1';
                 picker.style.pointerEvents = 'auto';
                 picker.style.transform = 'translateY(0) scale(1)';
             });
-            clearTimeout(timeout);
-        };
-        const hidePicker = () => {
-            if (!picker) return;
-            timeout = setTimeout(() => {
-                picker.style.opacity = '0';
-                picker.style.pointerEvents = 'none';
-                picker.style.transform = 'translateY(10px) scale(0.85)';
-                setTimeout(() => {
-                    if (picker && picker.parentNode) picker.remove();
-                    picker = null;
-                }, 220);
-            }, 2000);
         };
 
-        wrapper.addEventListener('mouseenter', showPicker);
-        wrapper.addEventListener('mouseleave', hidePicker);
+        const hidePicker = () => {
+            clearTimeout(closeTimeout);
+            if (!picker) return;
+            picker.style.opacity = '0';
+            picker.style.pointerEvents = 'none';
+            picker.style.transform = 'translateY(10px) scale(0.85)';
+            setTimeout(() => {
+                if (picker && picker.parentNode) {
+                    picker.remove();
+                    picker = null;
+                    isPickerHovered = false;
+                }
+            }, 220);
+        };
+
+        wrapper.addEventListener('mouseenter', () => {
+            clearTimeout(closeTimeout);
+            showPicker();
+        });
+        wrapper.addEventListener('mouseleave', () => {
+            if (!isPickerHovered) {
+                closeTimeout = setTimeout(() => {
+                    if (!isPickerHovered && picker && picker.parentNode) {
+                        hidePicker();
+                    }
+                }, 150);
+            }
+        });
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleLikeAction(postId, btn);
         });
     });
 
-    // ---- Comment, Save, Delete ----
     container.querySelectorAll('.comment-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -597,13 +577,12 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                     await unsavePost(postId);
                     icon.className = 'far fa-bookmark';
                     btn.classList.remove('saved');
-                    btn.style.color = '#555';
                     showNotificationModal('Post unsaved', 'info');
                 } else {
                     await savePost(postId);
                     icon.className = 'fas fa-bookmark';
-                    btn.classList.add('saved');
-                    btn.style.color = '#0d9488';
+                    btn.classList.add('saved', 'hca-saving');
+                    btn.addEventListener('animationend', () => btn.classList.remove('hca-saving'), { once: true });
                     showNotificationModal('Post saved!', 'success');
                 }
             } catch (err) {
@@ -621,7 +600,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
                     await deletePost(postId);
                     showNotificationModal('Post deleted', 'success');
                     currentOffset = 0;
-                    await loadHomeFeed('homeContent', false);
+                    await loadHomeFeed('feedPosts', false, window._hca_renderId);
                 } catch (err) {
                     showNotificationModal('Failed to delete: ' + err.message, 'error');
                 }
@@ -629,7 +608,6 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         });
     });
 
-    // ---- Click on post body to open modal ----
     container.querySelectorAll('.post-body.clickable').forEach(el => {
         el.addEventListener('click', () => {
             const postId = el.dataset.id;
@@ -638,9 +616,6 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
     });
 }
 
-// ============================================================
-// 🆕 LIVE UPDATE: Reaction summary chip
-// ============================================================
 async function updateReactionSummary(postId) {
     const chip = document.querySelector(`.reaction-summary[data-post-id="${postId}"]`);
     if (!chip) return;
@@ -659,18 +634,19 @@ async function updateReactionSummary(postId) {
             ).join('')}
             <span class="reaction-total">${totalReactions}</span>
         `;
+        bumpReactionChip(chip);
     } catch (err) {
         console.warn('Failed to update reaction summary:', err);
     }
 }
 
-// ---- Update the like button on a home feed post ----
 async function updateFeedLikeButton(postId, liked, reaction, count) {
-    const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .like-btn`);
+    const btn = document.querySelector(`.post-card[data-id="${postId}"] .like-btn`);
     if (!btn) return;
     const countSpan = btn.querySelector('.like-count');
-    const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
-    if (!btn.querySelector('.reaction-emoji')) {
+    let emojiSpan = btn.querySelector('.reaction-emoji');
+    if (!emojiSpan) {
+        emojiSpan = document.createElement('span');
         emojiSpan.className = 'reaction-emoji';
         btn.prepend(emojiSpan);
     }
@@ -679,16 +655,15 @@ async function updateFeedLikeButton(postId, liked, reaction, count) {
     }
     emojiSpan.textContent = liked ? (reaction || '❤️') : '❤️';
     btn.classList.toggle('liked', liked);
-    btn.style.color = liked ? '#e0245e' : '#555';
 }
 
-// ---- Toggle like with live summary update ----
 async function toggleLikeAction(postId, btn, reaction) {
     try {
         const result = await toggleLike(postId, reaction);
         const countSpan = btn.querySelector('.like-count');
-        const emojiSpan = btn.querySelector('.reaction-emoji') || document.createElement('span');
-        if (!btn.querySelector('.reaction-emoji')) {
+        let emojiSpan = btn.querySelector('.reaction-emoji');
+        if (!emojiSpan) {
+            emojiSpan = document.createElement('span');
             emojiSpan.className = 'reaction-emoji';
             btn.prepend(emojiSpan);
         }
@@ -707,11 +682,11 @@ async function toggleLikeAction(postId, btn, reaction) {
         }
         countSpan.textContent = newCount;
         btn.classList.toggle('liked', liked);
-        const emoji = liked ? (result.reaction || reaction || '❤️') : '❤️';
-        emojiSpan.textContent = emoji;
-        btn.style.color = liked ? '#e0245e' : '#555';
-        btn.style.transform = 'scale(1.3)';
-        setTimeout(() => btn.style.transform = 'scale(1)', 200);
+        emojiSpan.textContent = liked ? (result.reaction || reaction || '❤️') : '❤️';
+
+        if (liked) {
+            burstLike(btn, { emoji: emojiSpan.textContent });
+        }
 
         await updateReactionSummary(postId);
     } catch (err) {
@@ -725,23 +700,19 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ---- Update the save button on a home feed post ----
 async function updateFeedSaveButton(postId, saved) {
-    const btn = document.querySelector(`.home-container .post-card[data-id="${postId}"] .save-btn`);
+    const btn = document.querySelector(`.post-card[data-id="${postId}"] .save-btn`);
     if (!btn) return;
     const icon = btn.querySelector('i');
     if (saved) {
         icon.className = 'fas fa-bookmark';
         btn.classList.add('saved');
-        btn.style.color = '#0d9488';
     } else {
         icon.className = 'far fa-bookmark';
         btn.classList.remove('saved');
-        btn.style.color = '#555';
     }
 }
 
-// ---- Realtime ----
 export async function initRealtimeFeed() {
     try {
         const supabase = await getSupabaseClient();
@@ -752,8 +723,7 @@ export async function initRealtimeFeed() {
         const subscription = supabase
             .channel('public:posts')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
-                // Reload feed from the top (offset reset inside loadHomeFeed)
-                loadHomeFeed('homeContent', false);
+                loadHomeFeed('feedPosts', false, window._hca_renderId);
             })
             .subscribe();
         return subscription;
@@ -763,7 +733,12 @@ export async function initRealtimeFeed() {
     }
 }
 
-// ---- Attach to window for global access ----
 window.loadHomeFeed = loadHomeFeed;
-// ---- Export helpers (including modal functions for use in home.js) ----
-export { updateReactionSummary, updateFeedLikeButton, updateFeedSaveButton, showNotificationModal, showConfirmModal };
+
+export {
+    updateReactionSummary,
+    updateFeedLikeButton,
+    updateFeedSaveButton,
+    showNotificationModal,
+    showConfirmModal
+};

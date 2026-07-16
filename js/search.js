@@ -1,17 +1,36 @@
 // ============================================================
 // search.js – Search with live suggestions + history (full height)
 // History uses sessionStorage – clears when browser/window is closed.
+// User + post rows now render Facebook-style via searchCards.js.
 // ============================================================
 
 import { getSupabaseClient } from './supabase.js';
-import { decryptAndDecompress } from './home-sb.js';
+import { decryptAndDecompress, fetchSavedPostIds } from './home-sb.js';
 import { renderUserProfileView } from './userProfileView.js';
+import { openReactionModal } from './reactionModal.js';
+import {
+    ensureFBStyles,
+    renderUserRow,
+    renderPostRow,
+    renderFullPostCard,
+    attachUserRowHandlers,
+    attachPostRowHandlers,
+    attachFullPostCardHandlers,
+    escapeHtml
+} from './searchCards.js';
 
 const HISTORY_KEY = 'searchHistory_session';
 const MAX_HISTORY = 10;
 
+// How many posts to pull down and scan client-side per search.
+// Post content is encrypted, so we can't filter with SQL `ilike` on it —
+// we have to fetch, decrypt, then match. Raise this if you have more
+// posts than that and want full-history search coverage.
+const POST_SCAN_LIMIT = 500;
+
 // ---- Inject styles once ----
 function ensureStyles() {
+    ensureFBStyles();
     if (document.getElementById('se-styles')) return;
     const style = document.createElement('style');
     style.id = 'se-styles';
@@ -44,33 +63,6 @@ function ensureStyles() {
             z-index: 100; display: none; box-shadow: 0 10px 24px rgba(15,23,42,0.12);
         }
 
-        .se-section-label {
-            padding: 8px 14px; font-weight: 700; font-size: 12px; letter-spacing: 0.03em;
-            text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid #f1f5f9;
-        }
-
-        .se-row {
-            padding: 9px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer;
-            transition: background 0.15s ease;
-        }
-        .se-row:hover { background: #f8fafc; }
-
-        .se-avatar {
-            width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
-            display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 12.5px;
-            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
-        }
-        .se-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-        .se-row-name { font-weight: 600; font-size: 14px; color: #1e293b; }
-        .se-row-sub { font-size: 12.5px; color: #64748b; }
-        .se-row-snippet {
-            font-size: 13.5px; color: #334155; white-space: nowrap; overflow: hidden;
-            text-overflow: ellipsis; flex: 1;
-        }
-        .se-row-icon { color: #94a3b8; font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; }
-        mark.se-hl { background: #ccfbf1; color: #0f766e; border-radius: 3px; padding: 0 1px; }
-
         .se-history-item {
             padding: 9px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
             gap: 8px; transition: background 0.15s ease; border-radius: 8px;
@@ -91,33 +83,6 @@ function ensureStyles() {
         .se-clear-all {
             background: none; border: none; color: #dc2626; cursor: pointer; font-weight: 600; font-size: 12.5px;
         }
-
-        .se-results-section-label {
-            padding: 6px 4px; font-weight: 700; font-size: 12.5px; color: #64748b;
-            text-transform: uppercase; letter-spacing: 0.03em; margin-top: 4px;
-            display: flex; align-items: center; gap: 6px;
-        }
-        .se-results-section-label i { color: #0d9488; }
-
-        .se-user-card {
-            padding: 10px 4px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center;
-            gap: 12px; cursor: pointer; border-radius: 10px; transition: background 0.15s ease;
-        }
-        .se-user-card:hover { background: #f8fafc; }
-        .se-user-avatar {
-            width: 38px; height: 38px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
-            display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;
-            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
-        }
-        .se-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-        .se-post-card {
-            padding: 12px 4px; border-bottom: 1px solid #f1f5f9; cursor: pointer;
-            border-radius: 10px; transition: background 0.15s ease;
-        }
-        .se-post-card:hover { background: #f8fafc; }
-        .se-post-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; font-size: 12.5px; color: #64748b; }
-        .se-post-text { margin: 0; font-size: 14.5px; color: #1e293b; line-height: 1.5; }
 
         .se-center {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -205,37 +170,133 @@ function renderHistoryInResults(resultsEl, onSelect) {
     }
 }
 
+// ---- Current user helper ----
+function getCurrentUser() {
+    try {
+        return JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    } catch {
+        return null;
+    }
+}
+
+// ---- Follow status + toggle ----
+// Assumes a `follows` table: follower_id (who clicks Follow), following_id (who gets followed).
+// Adjust the table/column names below if yours differ.
+async function getFollowingSet(supabase, currentUserId, candidateIds) {
+    if (!currentUserId || !candidateIds.length) return new Set();
+    try {
+        const { data, error } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', currentUserId)
+            .in('following_id', candidateIds);
+        if (error) throw error;
+        return new Set((data || []).map(r => r.following_id));
+    } catch (err) {
+        console.warn('[search] Could not load follow status:', err);
+        return new Set();
+    }
+}
+
+async function toggleFollow(supabase, currentUserId, targetUserId, wasFollowing) {
+    if (!currentUserId) throw new Error('Not logged in');
+    if (wasFollowing) {
+        const { error } = await supabase
+            .from('follows')
+            .delete()
+            .eq('follower_id', currentUserId)
+            .eq('following_id', targetUserId);
+        if (error) throw error;
+        return false;
+    } else {
+        const { error } = await supabase
+            .from('follows')
+            .insert({ follower_id: currentUserId, following_id: targetUserId });
+        if (error) throw error;
+        return true;
+    }
+}
+
+// ---- Bulk-fetch like counts / current user's reaction / grouped summary ----
+// Mirrors the same query profile.js runs for its own feed, so search results
+// show identical reaction data.
+async function fetchLikeData(supabase, postIds, currentUserId) {
+    const likesMap = {}, userReactionsMap = {}, summaryMap = {};
+    if (!postIds.length) return { likesMap, userReactionsMap, summaryMap };
+    try {
+        const { data: likes, error } = await supabase
+            .from('likes')
+            .select('post_id, reaction, user_id')
+            .in('post_id', postIds);
+        if (error) throw error;
+        (likes || []).forEach(l => {
+            likesMap[l.post_id] = (likesMap[l.post_id] || 0) + 1;
+            if (currentUserId && l.user_id === currentUserId) {
+                userReactionsMap[l.post_id] = l.reaction || '❤️';
+            }
+            if (!summaryMap[l.post_id]) summaryMap[l.post_id] = {};
+            const r = l.reaction || '❤️';
+            summaryMap[l.post_id][r] = (summaryMap[l.post_id][r] || 0) + 1;
+        });
+    } catch (err) {
+        console.warn('[search] Could not load like data:', err);
+    }
+    return { likesMap, userReactionsMap, summaryMap };
+}
+
+// ---- Fetch author profiles for a set of post user_ids (for FB-style post rows) ----
+async function fetchAuthors(supabase, userIds) {
+    const map = new Map();
+    const uniqueIds = [...new Set(userIds)];
+    if (!uniqueIds.length) return map;
+    try {
+        const { data, error } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, username, avatar_url')
+            .in('user_id', uniqueIds);
+        if (error) throw error;
+        (data || []).forEach(p => map.set(p.user_id, p));
+    } catch (err) {
+        console.warn('[search] Could not load post authors:', err);
+    }
+    return map;
+}
+
 // ---- Navigate to user profile (read-only or own editable) ----
 function navigateToUser(userId, query) {
-    // Save the search query to history
     if (query && query.length >= 2) {
         addSearchHistory(query);
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+    const currentUser = getCurrentUser();
     if (!currentUser) {
         if (typeof window.navigateHomePage === 'function') {
             window.navigateHomePage('profile');
         }
         return;
     }
-    // Compare as strings to avoid type mismatch (UUID vs string)
     if (String(userId) === String(currentUser.id)) {
-        // My own profile – go to the editable profile page
         if (typeof window.navigateHomePage === 'function') {
             window.navigateHomePage('profile');
         }
     } else {
-        // Another user – go to read-only profile view
         if (typeof window.navigateHomePage === 'function') {
             window.navigateHomePage('user-profile', { userId: String(userId) });
         } else {
-            // Fallback: directly import and render the profile view
             const container = document.getElementById('homeContent') || document.getElementById('pageContent');
             if (container) {
                 renderUserProfileView(container, String(userId));
             }
         }
+    }
+}
+
+async function openPost(postId) {
+    try {
+        const { openPostView } = await import('./postView.js');
+        openPostView(postId);
+    } catch (err) {
+        console.warn('[search] Could not open post view:', err);
     }
 }
 
@@ -336,7 +397,7 @@ export async function renderSearch(container) {
     });
 }
 
-// ---- Fetch suggestions ----
+// ---- Fetch suggestions (compact dropdown preview – capped, like FB's dropdown) ----
 async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
     if (!query || query.length < 2) {
         suggestionsEl.style.display = 'none';
@@ -347,6 +408,7 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
 
     try {
         const supabase = await getSupabaseClient();
+        const currentUser = getCurrentUser();
 
         const { data: users, error: userErr } = await supabase
             .from('social_profiles')
@@ -359,7 +421,7 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
             .from('posts')
             .select('id, content, user_id, created_at')
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(POST_SCAN_LIMIT);
         if (postErr) throw postErr;
 
         const decryptedPosts = [];
@@ -371,36 +433,30 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
                 }
             } catch (e) {}
         }
-        const matchedPosts = decryptedPosts.slice(0, 5);
+        const matchedPosts = decryptedPosts.slice(0, 5); // dropdown preview only – full list shown on Enter
+
+        const followingSet = currentUser
+            ? await getFollowingSet(supabase, currentUser.id, users.map(u => u.user_id))
+            : new Set();
+        const authors = await fetchAuthors(supabase, matchedPosts.map(p => p.user_id));
 
         let html = '';
         if (users.length) {
-            html += `<div class="se-section-label">Users</div>`;
+            html += `<div class="fb-section-label"><i class="fas fa-user"></i> People (${users.length})</div>`;
             for (const u of users) {
-                const name = u.display_name || u.username || 'User';
-                html += `
-                    <div class="se-row" data-type="user" data-user-id="${u.user_id}" data-name="${escapeHtml(name)}">
-                        <div class="se-avatar">
-                            ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : (name[0] || 'U').toUpperCase()}
-                        </div>
-                        <div style="min-width:0;">
-                            <div class="se-row-name">${highlightMatch(name, query)}</div>
-                            <div class="se-row-sub">@${escapeHtml(u.username || 'user')}</div>
-                        </div>
-                    </div>
-                `;
+                html += renderUserRow(u, {
+                    query,
+                    isFollowing: followingSet.has(u.user_id),
+                    isSelf: currentUser && String(currentUser.id) === String(u.user_id),
+                    small: true
+                });
             }
         }
         if (matchedPosts.length) {
-            html += `<div class="se-section-label">Posts</div>`;
+            if (users.length) html += `<hr class="fb-divider">`;
+            html += `<div class="fb-section-label"><i class="fas fa-file-lines"></i> Posts</div>`;
             for (const p of matchedPosts) {
-                const snippet = p.decryptedContent.substring(0, 60) + (p.decryptedContent.length > 60 ? '…' : '');
-                html += `
-                    <div class="se-row" data-type="post" data-post-id="${p.id}">
-                        <i class="fas fa-file-lines se-row-icon"></i>
-                        <div class="se-row-snippet">${highlightMatch(snippet, query)}</div>
-                    </div>
-                `;
+                html += renderPostRow(p, query, authors.get(p.user_id));
             }
         }
         if (!html) {
@@ -409,26 +465,21 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
         suggestionsEl.innerHTML = html;
         suggestionsEl.style.display = 'block';
 
-        suggestionsEl.querySelectorAll('.se-row[data-type="user"]').forEach(item => {
-            item.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const userId = item.dataset.userId;
-                const query = input.value.trim();
+        attachUserRowHandlers(suggestionsEl, {
+            onProfileClick: (userId) => {
                 suggestionsEl.style.display = 'none';
-                navigateToUser(userId, query);
-            });
+                navigateToUser(userId, input.value.trim());
+            },
+            onFollowToggle: async (userId, wasFollowing) => {
+                const me = getCurrentUser();
+                return toggleFollow(supabase, me && me.id, userId, wasFollowing);
+            }
         });
-        suggestionsEl.querySelectorAll('.se-row[data-type="post"]').forEach(item => {
-            item.addEventListener('click', async (e) => {
-                e.stopPropagation();
+        attachPostRowHandlers(suggestionsEl, {
+            onPostClick: (postId) => {
                 suggestionsEl.style.display = 'none';
-                try {
-                    const { openPostView } = await import('./postView.js');
-                    openPostView(item.dataset.postId);
-                } catch (err) {
-                    console.warn('[search] Could not open post view:', err);
-                }
-            });
+                openPost(postId);
+            }
         });
     } catch (err) {
         console.warn('[search] Suggestion error:', err);
@@ -437,65 +488,92 @@ async function fetchSuggestions(query, suggestionsEl, input, resultsEl) {
     }
 }
 
-// ---- Full search ----
+// ---- Full search (Enter) – shows every matching user + every matching post ----
 async function performSearch(query, resultsEl) {
     resultsEl.innerHTML = `<div class="se-center"><i class="fas fa-circle-notch se-spin"></i><span>Searching...</span></div>`;
     addSearchHistory(query);
     const supabase = await getSupabaseClient();
+    const currentUser = getCurrentUser();
+
     try {
         const { data: posts, error: postErr } = await supabase
             .from('posts')
-            .select('id, content, user_id, created_at')
+            .select('id, content, user_id, created_at, media, media_url, media_type')
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(POST_SCAN_LIMIT);
         if (postErr) throw postErr;
 
         const { data: users, error: userErr } = await supabase
             .from('social_profiles')
-            .select('display_name, username, avatar_url, user_id')
+            .select('display_name, username, avatar_url, user_id, bio')
             .ilike('display_name', `%${query}%`)
-            .limit(10);
+            .limit(20);
         if (userErr) throw userErr;
 
         const decryptedAll = await Promise.all(posts.map(async (p) => {
-            const decrypted = await decryptAndDecompress(p.content);
-            return { ...p, decryptedContent: decrypted };
+            try {
+                const decrypted = await decryptAndDecompress(p.content);
+                return { ...p, decryptedContent: decrypted };
+            } catch {
+                return { ...p, decryptedContent: '' };
+            }
         }));
+        // Every post whose decrypted content matches the query – no cap.
         const decryptedPosts = decryptedAll.filter(p =>
             p.decryptedContent.toLowerCase().includes(query.toLowerCase())
         );
+        // Normalize post.media (may be stored as a JSON string, same as profile.js)
+        decryptedPosts.forEach(p => {
+            if (p.media && typeof p.media === 'string') {
+                try { p.media = JSON.parse(p.media); } catch { p.media = []; }
+            }
+            if (p.media && !Array.isArray(p.media)) p.media = [];
+        });
+
+        const followingSet = currentUser
+            ? await getFollowingSet(supabase, currentUser.id, users.map(u => u.user_id))
+            : new Set();
+        const authors = await fetchAuthors(supabase, decryptedPosts.map(p => p.user_id));
+
+        const postIds = decryptedPosts.map(p => p.id);
+        const { likesMap, userReactionsMap, summaryMap } = await fetchLikeData(supabase, postIds, currentUser && currentUser.id);
+        let savedSet = new Set();
+        if (currentUser) {
+            try {
+                const savedIds = await fetchSavedPostIds();
+                savedSet = new Set(savedIds);
+            } catch (err) {
+                console.warn('[search] Could not load saved posts:', err);
+            }
+        }
 
         let html = '';
         if (users.length) {
-            html += `<div class="se-results-section-label"><i class="fas fa-user"></i> Users</div>`;
+            html += `<div class="fb-section-label"><i class="fas fa-user"></i> People (${users.length})</div>`;
             for (const u of users) {
-                const name = u.display_name || u.username || 'User';
-                html += `
-                    <div class="se-user-card" data-user-id="${u.user_id}">
-                        <div class="se-user-avatar">
-                            ${u.avatar_url ? `<img src="${u.avatar_url}" alt="">` : (name[0] || 'U').toUpperCase()}
-                        </div>
-                        <div>
-                            <div style="font-weight:700;font-size:14.5px;color:#1e293b;">${highlightMatch(name, query)}</div>
-                            <div style="color:#64748b;font-size:13px;">@${escapeHtml(u.username || 'user')}</div>
-                        </div>
-                    </div>
-                `;
+                html += renderUserRow(u, {
+                    query,
+                    isFollowing: followingSet.has(u.user_id),
+                    isSelf: currentUser && String(currentUser.id) === String(u.user_id)
+                });
             }
         }
         if (decryptedPosts.length) {
-            html += `<div class="se-results-section-label"><i class="fas fa-file-lines"></i> Posts</div>`;
+            if (users.length) html += `<hr class="fb-divider">`;
+            html += `<div class="fb-section-label"><i class="fas fa-file-lines"></i> Posts (${decryptedPosts.length})</div>`;
+            html += `<div class="fb-results-list">`;
             for (const p of decryptedPosts) {
-                html += `
-                    <div class="se-post-card" data-post-id="${p.id}">
-                        <div class="se-post-meta">
-                            <i class="fas fa-clock" style="font-size:11px;"></i>
-                            <span>${new Date(p.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <p class="se-post-text">${highlightMatch(p.decryptedContent, query)}</p>
-                    </div>
-                `;
+                const reaction = userReactionsMap[p.id];
+                html += renderFullPostCard(p, query, authors.get(p.user_id), {
+                    likeCount: likesMap[p.id] || 0,
+                    isLiked: !!reaction,
+                    reactionEmoji: reaction || '❤️',
+                    summary: summaryMap[p.id] || {},
+                    isSaved: savedSet.has(p.id),
+                    isOwner: currentUser && String(currentUser.id) === String(p.user_id)
+                });
             }
+            html += `</div>`;
         }
         if (!html) {
             resultsEl.innerHTML = `
@@ -508,21 +586,17 @@ async function performSearch(query, resultsEl) {
         }
         resultsEl.innerHTML = html;
 
-        resultsEl.querySelectorAll('.se-user-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const userId = card.dataset.userId;
-                navigateToUser(userId, query);
-            });
+        attachUserRowHandlers(resultsEl, {
+            onProfileClick: (userId) => navigateToUser(userId, query),
+            onFollowToggle: async (userId, wasFollowing) => {
+                const me = getCurrentUser();
+                return toggleFollow(supabase, me && me.id, userId, wasFollowing);
+            }
         });
-        resultsEl.querySelectorAll('.se-post-card').forEach(card => {
-            card.addEventListener('click', async () => {
-                try {
-                    const { openPostView } = await import('./postView.js');
-                    openPostView(card.dataset.postId);
-                } catch (err) {
-                    console.warn('[search] Could not open post view:', err);
-                }
-            });
+        attachFullPostCardHandlers(resultsEl, {
+            currentUserId: currentUser && currentUser.id,
+            onOpenPost: (postId) => openPost(postId),
+            onOpenReactions: (postId) => openReactionModal(postId)
         });
     } catch (err) {
         resultsEl.innerHTML = `
@@ -532,22 +606,4 @@ async function performSearch(query, resultsEl) {
             </div>
         `;
     }
-}
-
-// ---- Highlight match ----
-function highlightMatch(text, query) {
-    if (!text) return '';
-    const safeText = text;
-    const idx = safeText.toLowerCase().indexOf(query.toLowerCase());
-    if (idx === -1) return escapeHtml(safeText);
-    const before = escapeHtml(safeText.slice(0, idx));
-    const match = escapeHtml(safeText.slice(idx, idx + query.length));
-    const after = escapeHtml(safeText.slice(idx + query.length));
-    return `${before}<mark class="se-hl">${match}</mark>${after}`;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML;
 }

@@ -1,9 +1,8 @@
 // js/reactionModal.js
 import { getSupabaseClient } from './supabase.js';
-import { fetchReactedUsers } from './home-sb.js';
-import { followUser, unfollowUser, isFollowing } from './follow.js';
+import { fetchReactedUsers, fetchCommentReactedUsers } from './home-sb.js';
+import { followUser, unfollowUser } from './follow.js';
 
-// ---- Ensure modal styles (they are already in home.css, but we inject a fallback if missing) ----
 function ensureStyles() {
     if (document.getElementById('rm-styles')) return;
     const style = document.createElement('style');
@@ -51,6 +50,43 @@ function ensureStyles() {
         .rm-body {
             flex: 1; overflow-y: auto; padding: 8px 20px 16px;
         }
+
+        .rm-filter-bar {
+            display: flex;
+            gap: 6px;
+            padding: 0 0 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .rm-filter-btn {
+            background: #f1f5f9;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .rm-filter-btn:hover:not(.active) {
+            background: #e6fbf8;
+            color: #0d9488;
+        }
+        .rm-filter-btn.active {
+            background: #0d9488;
+            color: #fff;
+        }
+        .rm-filter-btn .count {
+            font-weight: 400;
+            font-size: 11px;
+            opacity: 0.7;
+        }
+        .rm-filter-btn.active .count { opacity: 0.9; }
 
         .rm-spinner {
             display: flex; align-items: center; justify-content: center;
@@ -107,38 +143,56 @@ function ensureStyles() {
 }
 
 /**
- * Open a modal showing all users who reacted to a post.
- * @param {string|number} postId - The post ID.
+ * Internal function to build and show a reaction modal
+ * @param {Array} users - list of user objects { user_id, reaction, display_name, username, avatar_url, is_following }
+ * @param {string} title - modal title (e.g. "Reactions" or "Comment Reactions")
  */
-export async function openReactionModal(postId) {
+function renderReactionModal(users, title = 'Reactions') {
     ensureStyles();
-
-    // Remove any existing reaction modal
     document.querySelectorAll('.rm-overlay').forEach(el => el.remove());
 
-    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
-    if (!currentUser) {
-        alert('Please log in to view reactions.');
+    if (!users || !users.length) {
+        // Use a simple alert or a toast if available
+        alert('No reactions yet.');
         return;
     }
 
-    // ---- Build modal shell ----
+    const currentUser = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
+
+    // Group by reaction
+    const groups = {};
+    users.forEach(u => {
+        const emoji = u.reaction || '❤️';
+        if (!groups[emoji]) groups[emoji] = [];
+        groups[emoji].push(u);
+    });
+
+    const sortedEmojis = Object.keys(groups).sort((a, b) => {
+        if (a === '❤️') return -1;
+        if (b === '❤️') return 1;
+        return a.localeCompare(b);
+    });
+
+    // Build modal shell
     const overlay = document.createElement('div');
     overlay.className = 'rm-overlay';
     overlay.innerHTML = `
         <div class="rm-card">
             <div class="rm-header">
-                <h3>Reactions</h3>
+                <h3>${title}</h3>
                 <button class="rm-close" title="Close">&times;</button>
             </div>
             <div class="rm-body" id="rmBody">
-                <div class="rm-spinner"><i class="fas fa-circle-notch"></i></div>
+                <div class="rm-filter-bar" id="rmFilterBar"></div>
+                <div id="rmUserList"></div>
             </div>
         </div>
     `;
     document.body.appendChild(overlay);
 
     const bodyEl = document.getElementById('rmBody');
+    const filterBar = document.getElementById('rmFilterBar');
+    const userList = document.getElementById('rmUserList');
     const closeBtn = overlay.querySelector('.rm-close');
 
     let closed = false;
@@ -146,9 +200,7 @@ export async function openReactionModal(postId) {
         if (closed) return;
         closed = true;
         overlay.classList.add('rm-closing');
-        setTimeout(() => {
-            overlay.remove();
-        }, 150);
+        setTimeout(() => overlay.remove(), 150);
     };
     closeBtn.addEventListener('click', closeModal);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
@@ -160,21 +212,37 @@ export async function openReactionModal(postId) {
     };
     document.addEventListener('keydown', escHandler);
 
-    try {
-        // ---- Fetch reacted users ----
-        const users = await fetchReactedUsers(postId);
-        if (!users.length) {
-            bodyEl.innerHTML = `<div class="rm-empty">No reactions yet.</div>`;
+    // Build filter buttons
+    const allBtn = document.createElement('button');
+    allBtn.className = 'rm-filter-btn active';
+    allBtn.dataset.filter = 'all';
+    allBtn.innerHTML = `All <span class="count">${users.length}</span>`;
+    filterBar.appendChild(allBtn);
+
+    sortedEmojis.forEach(emoji => {
+        const btn = document.createElement('button');
+        btn.className = 'rm-filter-btn';
+        btn.dataset.filter = emoji;
+        btn.innerHTML = `${emoji} <span class="count">${groups[emoji].length}</span>`;
+        filterBar.appendChild(btn);
+    });
+
+    // Render function
+    const renderList = (filter) => {
+        let filtered = users;
+        if (filter && filter !== 'all') {
+            filtered = users.filter(u => (u.reaction || '❤️') === filter);
+        }
+        if (!filtered.length) {
+            userList.innerHTML = `<div class="rm-empty">No users with that reaction.</div>`;
             return;
         }
-
-        // ---- Render user list ----
         let html = '';
-        for (const user of users) {
-            const isOwn = user.user_id === currentUser.id;
-            const isFollowingUser = user.is_following || false;
-            const followBtnLabel = isFollowingUser ? 'Following' : 'Follow';
-            const followBtnClass = isFollowingUser ? 'rm-follow-btn is-following' : 'rm-follow-btn';
+        for (const user of filtered) {
+            const isOwn = currentUser && user.user_id === currentUser.id;
+            const isFollowing = user.is_following || false;
+            const followLabel = isFollowing ? 'Following' : 'Follow';
+            const followClass = isFollowing ? 'rm-follow-btn is-following' : 'rm-follow-btn';
 
             const avatarHtml = user.avatar_url
                 ? `<img src="${user.avatar_url}" alt="${user.display_name}">`
@@ -188,15 +256,14 @@ export async function openReactionModal(postId) {
                         <div class="rm-username">@${escapeHtml(user.username || '')}</div>
                     </div>
                     <div class="rm-emoji">${user.reaction}</div>
-                    ${!isOwn ? `<button class="${followBtnClass}" data-user-id="${user.user_id}">${followBtnLabel}</button>` : ''}
+                    ${!isOwn ? `<button class="${followClass}" data-user-id="${user.user_id}">${followLabel}</button>` : ''}
                 </div>
             `;
         }
-        bodyEl.innerHTML = html;
+        userList.innerHTML = html;
 
-        // ---- Attach follow button events ----
-        const followBtns = bodyEl.querySelectorAll('.rm-follow-btn');
-        for (const btn of followBtns) {
+        // Follow button events
+        userList.querySelectorAll('.rm-follow-btn').forEach(btn => {
             const targetUserId = btn.dataset.userId;
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -218,15 +285,41 @@ export async function openReactionModal(postId) {
                     btn.disabled = false;
                 }
             });
-        }
+        });
+    };
+
+    // Filter button clicks
+    const filterBtns = filterBar.querySelectorAll('.rm-filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderList(btn.dataset.filter);
+        });
+    });
+
+    // Initial render
+    renderList('all');
+}
+
+// ---- Public API ----
+export async function openReactionModal(postId) {
+    try {
+        const users = await fetchReactedUsers(postId);
+        renderReactionModal(users, 'Reactions');
     } catch (err) {
         console.error('[reactionModal] Error:', err);
-        bodyEl.innerHTML = `
-            <div class="rm-empty" style="color:#dc2626;">
-                <i class="fas fa-triangle-exclamation"></i>
-                <p>Could not load reactions: ${escapeHtml(err.message)}</p>
-            </div>
-        `;
+        alert('Failed to load reactions: ' + err.message);
+    }
+}
+
+export async function openCommentReactionModal(commentId) {
+    try {
+        const users = await fetchCommentReactedUsers(commentId);
+        renderReactionModal(users, 'Comment Reactions');
+    } catch (err) {
+        console.error('[commentReactionModal] Error:', err);
+        alert('Failed to load comment reactions: ' + err.message);
     }
 }
 
