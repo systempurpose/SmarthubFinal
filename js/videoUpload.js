@@ -4,73 +4,91 @@ import { getCurrentUserId } from './sb-utils.js';
 import { saveVideoMetadata } from './video_sb.js';
 import { compressBlobLossless, isCompressionSupported } from './videoCompression.js';
 
-// Lossless (gzip) compression instead of lossy ffmpeg re-encoding — quality
-// is never affected, decompression always returns the exact original file.
-// Video is already compressed by its own codec before it reaches here, so
-// gzip typically only shaves off a small amount (sometimes nothing). If
-// gzip doesn't actually make the file smaller, we skip it and upload the
-// original raw — no point paying compression time for a same-or-larger
-// result.
-const MIN_USEFUL_SAVINGS_RATIO = 0.98; // only keep compression if it gets below 98% of original size
+const MIN_USEFUL_SAVINGS_RATIO = 0.98;
 
-export async function uploadVideo(file, onProgress) {
+/**
+ * Upload a media file (video or image) to Google Drive.
+ * @param {File} file - The file to upload
+ * @param {string} mediaType - 'video' or 'image' (used to select Drive folder)
+ * @param {Function} onProgress - Optional progress callback
+ */
+export async function uploadMedia(file, mediaType = 'video', onProgress) {
     const userId = getCurrentUserId();
-    if (!userId) throw new Error('Please log in to upload videos.');
+    if (!userId) throw new Error('Please log in to upload.');
 
+    // ---- 1. Lossless compression (only for videos, not for images) ----
     let blobToEncrypt = file;
     let originalSize = file.size;
     let compressedSize = file.size;
     let losslessCompressionUsed = false;
 
-    if (isCompressionSupported()) {
+    if (mediaType === 'video' && isCompressionSupported()) {
         try {
             const gzipped = await compressBlobLossless(file);
             if (gzipped.size < originalSize * MIN_USEFUL_SAVINGS_RATIO) {
                 blobToEncrypt = gzipped;
                 compressedSize = gzipped.size;
                 losslessCompressionUsed = true;
-                console.log(`[uploadVideo] Lossless compression: ${(originalSize/1024).toFixed(0)}KB → ${(compressedSize/1024).toFixed(0)}KB (${(100 - (compressedSize/originalSize*100)).toFixed(1)}% smaller, no quality loss)`);
+                console.log(`[uploadMedia] Lossless compression: ${(originalSize/1024).toFixed(0)}KB → ${(compressedSize/1024).toFixed(0)}KB (${(100 - (compressedSize/originalSize*100)).toFixed(1)}% smaller, no quality loss)`);
             } else {
-                console.log(`[uploadVideo] Lossless compression saved <2%, uploading original uncompressed`);
+                console.log(`[uploadMedia] Lossless compression saved <2%, uploading original uncompressed`);
             }
         } catch (err) {
-            console.warn('[uploadVideo] Lossless compression failed, using original:', err.message);
+            console.warn('[uploadMedia] Lossless compression failed, using original:', err.message);
             blobToEncrypt = file;
             compressedSize = originalSize;
             losslessCompressionUsed = false;
         }
+    } else if (mediaType !== 'video') {
+        console.log('[uploadMedia] Compression skipped for non-video media');
     } else {
-        console.log('[uploadVideo] CompressionStream not supported in this browser, uploading original uncompressed');
+        console.log('[uploadMedia] CompressionStream not supported in this browser, uploading original uncompressed');
     }
 
+    // ---- 2. Encryption ----
     const passphrase = getPassphrase();
     const encryptedBlob = await encryptBlob(blobToEncrypt, passphrase);
 
-    const supabase = await getSupabaseClient();
-    const fileExt = file.name.split('.').pop() || 'mp4';
+    if (!(encryptedBlob instanceof Blob) || encryptedBlob.size === 0) {
+        throw new Error('Encryption failed – invalid blob.');
+    }
+    console.log(`[uploadMedia] Encrypted blob size: ${(encryptedBlob.size / 1024).toFixed(0)}KB`);
+
+    // ---- 3. Prepare FormData ----
+    const formData = new FormData();
+    const fileExt = file.name.split('.').pop() || (mediaType === 'video' ? 'mp4' : 'jpg');
     const fileName = `${Date.now()}.${fileExt}`;
-    const storagePath = `videos/user-${userId}/${fileName}`;
+    formData.append('file', encryptedBlob, `${Date.now()}.encrypted.bin`);
+    formData.append('originalName', file.name);
+    formData.append('mediaType', mediaType);  // pass media type
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(storagePath, encryptedBlob, {
-            contentType: 'application/octet-stream',
-            cacheControl: '3600',
-            upsert: false,
-        });
-    if (uploadError) throw uploadError;
+    // ---- 4. Send to backend ----
+    const response = await fetch('/api/drive/upload', {
+        method: 'POST',
+        body: formData,
+    });
 
-    const { data: urlData } = supabase.storage.from('videos').getPublicUrl(storagePath);
-    const publicUrl = urlData.publicUrl;
+    if (!response.ok) {
+        let errorMsg = 'Upload failed';
+        try {
+            const errData = await response.json();
+            errorMsg = errData.error || errorMsg;
+        } catch (_) {}
+        throw new Error(`Server responded with ${response.status}: ${errorMsg}`);
+    }
 
+    const data = await response.json(); // { fileId, url, size }
+    console.log('[uploadMedia] Upload successful. File ID:', data.fileId);
+
+    // ---- 5. Save metadata in Supabase ----
     try {
         const videoData = {
             deviceId: null,
             originalName: file.name,
             compressedName: fileName,
-            storagePath: storagePath,
+            storagePath: data.fileId,
             fileSize: encryptedBlob.size,
-            mimeType: 'video/mp4',
+            mimeType: file.type || (mediaType === 'video' ? 'video/mp4' : 'image/jpeg'),
             encrypted: true,
             duration: null,
             width: null,
@@ -78,22 +96,32 @@ export async function uploadVideo(file, onProgress) {
             metadata: {
                 originalSize: originalSize,
                 compressedSize: compressedSize,
-                // Note: this now describes LOSSLESS gzip compression, not
-                // the old lossy ffmpeg re-encoding. The player auto-detects
-                // gzip via magic bytes on decrypt, so this flag is
-                // informational (for stats/debugging) rather than required
-                // for correct playback.
                 losslessCompressionUsed: losslessCompressionUsed,
+                driveFileId: data.fileId,
+                drivePublicUrl: data.url,
+                mediaType: mediaType,
             },
         };
         await saveVideoMetadata(videoData);
+        console.log('[uploadMedia] Metadata saved to Supabase.');
     } catch (err) {
-        console.warn('[uploadVideo] Metadata save failed:', err);
+        console.warn('[uploadMedia] Metadata save failed (non-critical):', err);
     }
 
     return {
-        url: publicUrl,
-        publicUrl: publicUrl,
-        storagePath: storagePath,
+        url: data.url,
+        publicUrl: data.url,
+        storagePath: data.fileId,
+        fileId: data.fileId,
     };
+}
+
+// ---- Legacy alias for video uploads ----
+export async function uploadVideo(file, onProgress) {
+    return uploadMedia(file, 'video', onProgress);
+}
+
+// ---- Image upload helper ----
+export async function uploadImage(file, onProgress) {
+    return uploadMedia(file, 'image', onProgress);
 }

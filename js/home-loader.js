@@ -2,6 +2,7 @@
 import { fetchPosts, toggleLike, subscribeToPosts, deletePost, savePost, unsavePost, isPostSaved, fetchReactionsSummary } from './home-sb.js';
 import { getSupabaseClient } from './supabase.js';
 import { renderVideoThumbnail } from './videoPlayer.js';
+import { getDecryptedImageBlobUrl } from './videoUtils.js'; // 🆕 import image decryption helper
 import { openPostView } from './postView.js';
 import { openReactionModal } from './reactionModal.js';
 import { burstLike, staggerFeedIn, bumpReactionChip, showToast } from './animations.js';
@@ -345,6 +346,7 @@ export async function loadHomeFeed(containerId = 'feedPosts', append = false, re
     }
 }
 
+// ---- 🆕 Build media HTML with data-image-url for images ----
 function buildMediaHtml(mediaArr) {
     if (!mediaArr.length) return '';
 
@@ -354,7 +356,8 @@ function buildMediaHtml(mediaArr) {
             if (m.type === 'video') {
                 return `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div>`;
             }
-            return `<img src="${escapeHtml(m.url)}" alt="Media">`;
+            // For images: use data-image-url so we can decrypt later
+            return `<img data-image-url="${escapeHtml(m.url)}" alt="Media" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#f0f0f0;">`;
         }).join('');
         const overflow = mediaArr.length > 3
             ? `<div class="post-media-overflow">+${mediaArr.length - 3} more</div>`
@@ -366,9 +369,31 @@ function buildMediaHtml(mediaArr) {
     if (m.type === 'video') {
         return `<div class="post-media-single"><div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div></div>`;
     }
-    return `<div class="post-media-single"><img src="${escapeHtml(m.url)}" alt="Media"></div>`;
+    // For images: use data-image-url
+    return `<div class="post-media-single"><img data-image-url="${escapeHtml(m.url)}" alt="Media" style="width:100%;max-height:500px;object-fit:contain;background:#f0f0f0;"></div>`;
 }
 
+// ---- 🆕 Load decrypted images ----
+async function loadDecryptedImages(container) {
+    const imageElements = container.querySelectorAll('img[data-image-url]');
+    for (const img of imageElements) {
+        const url = img.dataset.imageUrl;
+        if (!url) continue;
+        try {
+            const blobUrl = await getDecryptedImageBlobUrl(url);
+            img.src = blobUrl;
+            img.style.background = 'transparent';
+            // Revoke object URL when image is removed
+            img.addEventListener('remove', () => URL.revokeObjectURL(blobUrl));
+        } catch (err) {
+            console.warn('[loadDecryptedImages] Failed to load image:', err);
+            img.alt = 'Failed to load image';
+            img.style.background = '#fce8ee';
+        }
+    }
+}
+
+// ---- Render posts ----
 async function renderPosts(container, posts, append, currentUserId, summaryMap) {
     if (!posts || posts.length === 0) {
         if (!append) {
@@ -464,8 +489,10 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         newCards = [...container.querySelectorAll('.post-card')];
     }
 
+    // ---- Entrance animation ----
     staggerFeedIn(newCards);
 
+    // ---- Render video thumbnails ----
     const thumbContainers = container.querySelectorAll('.video-thumbnail-container');
     for (const el of thumbContainers) {
         const videoUrl = el.dataset.videoUrl;
@@ -474,6 +501,10 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         }
     }
 
+    // ---- 🆕 Load decrypted images ----
+    await loadDecryptedImages(container);
+
+    // ---- Reaction summary click ----
     container.querySelectorAll('.reaction-summary').forEach(el => {
         el.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -558,6 +589,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
         });
     });
 
+    // ---- Comment, Save, Delete ----
     container.querySelectorAll('.comment-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -616,6 +648,7 @@ async function renderPosts(container, posts, append, currentUserId, summaryMap) 
     });
 }
 
+// ---- Live update functions (unchanged) ----
 async function updateReactionSummary(postId) {
     const chip = document.querySelector(`.reaction-summary[data-post-id="${postId}"]`);
     if (!chip) return;

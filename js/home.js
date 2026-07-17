@@ -1,5 +1,5 @@
 // js/home.js
-import { uploadVideo } from './videoUpload.js';
+import { uploadMedia } from './videoUpload.js';  // <-- use uploadMedia
 import { loadHomeFeed, initRealtimeFeed, showNotificationModal, showConfirmModal } from './home-loader.js';
 import { createPostWithMedia } from './home-sb.js';
 import { openPostView } from './postView.js';
@@ -88,7 +88,6 @@ export async function renderHome() {
 
     const avatarInitial = currentUser?.name?.[0] || currentUser?.email?.[0] || 'U';
 
-    // ✅ COMPOSER IS DEFINITELY HERE – inside #homeContent, so it scrolls with the page
     const html = `
         <div class="home-container">
             <main class="home-main">
@@ -102,7 +101,7 @@ export async function renderHome() {
                         </div>
                     </div>
 
-                    <!-- ✅ COMPOSER – restored and visible -->
+                    <!-- Composer -->
                     <div id="homeComposer" class="composer-card">
                         <div class="composer-input">
                             <div class="composer-avatar">
@@ -115,7 +114,6 @@ export async function renderHome() {
                                     <div class="composer-tools">
                                         <button id="composerVideoBtn" type="button" title="Add video"><i class="fas fa-video"></i></button>
                                         <button id="composerImageBtn" type="button" title="Add image"><i class="fas fa-image"></i></button>
-                                        
                                     </div>
                                     <button class="composer-submit" id="composerSubmit" disabled>Post</button>
                                 </div>
@@ -153,19 +151,16 @@ export async function renderHome() {
 
     container.innerHTML = html;
 
-    // ---- Load Home feed into #feedPosts ----
     const initialRenderId = ++renderIdCounter;
     window._hca_renderId = initialRenderId;
     await loadHomeFeed('feedPosts', false, initialRenderId);
 
-    // ---- Realtime ----
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
         realtimeSubscription = null;
     }
     realtimeSubscription = await initRealtimeFeed();
 
-    // ---- Feed tabs ----
     document.querySelectorAll('.feed-tabs button').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.feed-tabs button').forEach(b => b.classList.remove('active'));
@@ -177,10 +172,8 @@ export async function renderHome() {
         });
     });
 
-    // ✅ Setup composer – this will find #composerText and hook it up
     setupComposer();
 
-    // ---- Navigation ----
     document.querySelectorAll('.bottom-nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -192,7 +185,7 @@ export async function renderHome() {
     });
 }
 
-// ---- setupComposer (unchanged, works with #composerText) ----
+// ---- setupComposer – uses uploadMedia for videos and images ----
 function setupComposer() {
     const text = document.getElementById('composerText');
     if (!text) {
@@ -284,12 +277,16 @@ function setupComposer() {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
-                if (file.type.startsWith('video/')) {
-                    const result = await uploadVideo(file);
+                let mediaType = 'image';
+                if (file.type.startsWith('video/')) mediaType = 'video';
+                // Use uploadMedia with the correct mediaType
+                const result = await uploadMedia(file, mediaType);
+                if (mediaType === 'video') {
                     pendingMedia.push({ url: result.url, type: 'video' });
                 } else {
+                    // For images, also store a preview (if we want to show it)
                     const previewUrl = URL.createObjectURL(file);
-                    pendingMedia.push({ file, type: 'image', previewUrl, url: null });
+                    pendingMedia.push({ file, type: 'image', previewUrl, url: result.url });
                 }
             } catch (err) {
                 showNotificationModal('Failed to upload: ' + err.message, 'error');
@@ -313,12 +310,23 @@ function setupComposer() {
             if (item.type === 'video' && item.url) {
                 mediaArray.push({ url: item.url, type: 'video' });
             } else if (item.type === 'image' && item.file) {
-                const reader = new FileReader();
-                const data = await new Promise((resolve) => {
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.readAsDataURL(item.file);
-                });
-                mediaArray.push({ url: data, type: 'image' });
+                // We already uploaded the image; we have the URL from the uploadMedia result.
+                // If we stored the URL in item.url, we can use it directly.
+                // In the handler above, we set item.url = result.url for images as well.
+                // But we stored it as item.url = result.url; let's use it.
+                // Actually we stored result.url as item.url, but we also stored the file for preview.
+                // Use the uploaded URL.
+                if (item.url) {
+                    mediaArray.push({ url: item.url, type: 'image' });
+                } else {
+                    // Fallback: read as data URL (shouldn't happen)
+                    const reader = new FileReader();
+                    const data = await new Promise((resolve) => {
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.readAsDataURL(item.file);
+                    });
+                    mediaArray.push({ url: data, type: 'image' });
+                }
             }
         }
 
@@ -359,19 +367,16 @@ async function navigateHomePage(page, params = {}) {
     const composer = document.getElementById('homeComposer');
 
     if (page === 'home') {
-        // Show header and composer again
         if (header) header.style.display = 'block';
         if (composer) composer.style.display = 'block';
         feedContainer.innerHTML = '';
         await loadHomeFeed('feedPosts', false, thisRenderId);
         return;
     } else {
-        // Hide header and composer when on other pages
         if (header) header.style.display = 'none';
         if (composer) composer.style.display = 'none';
     }
 
-    // Show loading skeleton in feed container
     feedContainer.classList.remove('page-fade-in');
     feedContainer.innerHTML = renderLoadingSkeleton();
 

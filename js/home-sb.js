@@ -613,6 +613,33 @@ export async function fetchSavedPostIds() {
     }
 }
 
+/**
+ * Extract file ID from a Google Drive URL
+ * Examples:
+ * - https://drive.google.com/uc?export=view&id=abc123
+ * - https://drive.google.com/file/d/abc123/view
+ * - https://lh3.googleusercontent.com/d/abc123
+ * Returns the file ID or null if not found.
+ */
+function extractDriveFileId(url) {
+    if (!url) return null;
+    // Try to match the 'id' query parameter
+    const match = url.match(/[?&]id=([^&]+)/);
+    if (match) return match[1];
+    // Try to match the /d/ pattern
+    const match2 = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match2) return match2[1];
+    // Try to match the /uc?id= pattern (already covered)
+    // Try to match googleusercontent pattern
+    const match3 = url.match(/\/d\/([^/?#]+)/);
+    if (match3) return match3[1];
+    return null;
+}
+
+/**
+ * Extract Supabase Storage path from a media URL.
+ * Used for legacy posts stored in Supabase Storage.
+ */
 function extractStoragePath(mediaUrl) {
     if (!mediaUrl) return null;
     const match = mediaUrl.match(/\/videos\/(videos\/user-[^\/]+\/[^?]+)/);
@@ -621,6 +648,9 @@ function extractStoragePath(mediaUrl) {
     return null;
 }
 
+// ============================================================
+// DELETE POST – with support for both Supabase Storage and Google Drive
+// ============================================================
 export async function deletePost(postId) {
     const supabase = await getSupabaseClient();
     const user = JSON.parse(localStorage.getItem('smarthub.user') || 'null');
@@ -634,26 +664,47 @@ export async function deletePost(postId) {
     if (fetchError) throw fetchError;
     if (post.user_id !== user.id) throw new Error('You can only delete your own posts');
 
-    const videoUrls = [];
+    // Collect all media URLs
+    const mediaUrls = [];
     if (post.media_url && post.media_type === 'video') {
-        videoUrls.push(post.media_url);
+        mediaUrls.push(post.media_url);
     }
     if (post.media && Array.isArray(post.media)) {
         for (const item of post.media) {
             if (item.type === 'video' && item.url) {
-                videoUrls.push(item.url);
+                mediaUrls.push(item.url);
             }
         }
     }
 
-    for (const url of videoUrls) {
+    // Process each URL
+    for (const url of mediaUrls) {
+        // 1. Check if it's a Google Drive URL
+        const driveFileId = extractDriveFileId(url);
+        if (driveFileId) {
+            try {
+                const response = await fetch(`/api/drive/${driveFileId}`, {
+                    method: 'DELETE',
+                });
+                if (response.ok) {
+                    console.log(`[deletePost] Deleted from Drive: ${driveFileId}`);
+                } else {
+                    console.warn(`[deletePost] Failed to delete from Drive ${driveFileId}: ${response.status}`);
+                }
+            } catch (err) {
+                console.warn(`[deletePost] Error deleting from Drive ${driveFileId}:`, err);
+            }
+            continue;
+        }
+
+        // 2. Otherwise, treat as Supabase Storage
         const storagePath = extractStoragePath(url);
         if (storagePath) {
             try {
                 await supabase.storage.from('videos').remove([storagePath]);
-                console.log(`[deletePost] Deleted storage: ${storagePath}`);
+                console.log(`[deletePost] Deleted from Supabase Storage: ${storagePath}`);
             } catch (err) {
-                console.warn(`[deletePost] Storage delete error for ${storagePath}:`, err);
+                console.warn(`[deletePost] Supabase Storage delete error for ${storagePath}:`, err);
             }
             try {
                 await supabase.from('videos').delete().eq('storage_path', storagePath);
@@ -661,9 +712,12 @@ export async function deletePost(postId) {
             } catch (err) {
                 console.warn(`[deletePost] Metadata delete error for ${storagePath}:`, err);
             }
+        } else {
+            console.warn(`[deletePost] Unrecognized media URL: ${url}`);
         }
     }
 
+    // Delete the post itself
     await supabase.from('posts').delete().eq('id', postId);
     return { success: true };
 }

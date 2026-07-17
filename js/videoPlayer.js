@@ -38,8 +38,6 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
             cleanup();
         };
 
-        // Used for both explicit failures and the watchdog — funnels
-        // through the retry count exactly like the old onError path did.
         const retry = (reason) => {
             if (settled) return;
             settled = true;
@@ -58,10 +56,6 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
             const dur = video.duration;
             const safeDur = (isFinite(dur) && dur > 0) ? dur : 1;
             const seekTime = Math.min(time, safeDur * 0.1);
-            // If the target time matches where the video already is, the
-            // browser treats the seek as a no-op and never fires 'seeked'
-            // — which previously hung the whole pipeline forever. Nudge
-            // it slightly so a real seek always happens.
             if (Math.abs(video.currentTime - seekTime) < 0.001) {
                 video.currentTime = seekTime + 0.001;
             } else {
@@ -94,11 +88,6 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
                 }
             };
 
-            // 'seeked' fires once the seek is logically complete, but the
-            // decoded frame isn't always painted yet for a blob-sourced
-            // video that's never played — drawing immediately can capture
-            // a black buffer. Wait for the real frame via
-            // requestVideoFrameCallback, falling back to a double rAF.
             if (video.requestVideoFrameCallback) {
                 video.requestVideoFrameCallback(() => draw());
             } else {
@@ -112,18 +101,10 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
         video.addEventListener('seeked', onSeeked);
         video.addEventListener('error', onError);
 
-        // Watchdog: the whole pipeline (metadata → seek → paint → draw)
-        // must settle within a bounded window, no matter which stage it's
-        // stuck at. The old timeout only guarded metadata loading and
-        // stopped protecting anything once 'loadedmetadata' fired, so a
-        // silently-skipped 'seeked' event (no-op seek) left the promise
-        // — and the UI's "Loading thumbnail..." state — hanging forever.
         const watchdog = setTimeout(() => {
             retry(new Error('Thumbnail generation timed out'));
         }, 6000);
 
-        // Video element must be attached to the DOM (off-screen) for some
-        // browsers to reliably decode a seeked frame for canvas capture.
         video.style.cssText = 'position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; top:-9999px; left:-9999px;';
         document.body.appendChild(video);
 
@@ -132,16 +113,12 @@ async function generateVideoThumbnail(videoUrl, time = 0.1, retries = 2) {
 }
 
 /**
- * Fetches, decrypts, and (if needed) losslessly decompresses a video from
- * its public URL, returning a ready-to-use decoded Blob.
- *
- * Decompression is auto-detected via gzip magic bytes on the decrypted
- * blob, so this works transparently for both new gzip-compressed uploads
- * and any older uncompressed uploads already in storage.
+ * Fetches, decrypts, and (if needed) decompresses a video from its public URL.
+ * Works for both Supabase Storage and Google Drive URLs.
  */
 async function fetchDecryptedVideoBlob(publicUrl) {
     const response = await fetch(publicUrl);
-    if (!response.ok) throw new Error('Failed to fetch video');
+    if (!response.ok) throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
     const encryptedBlob = await response.blob();
     const passphrase = getPassphrase();
     const decryptedBlob = await decryptBlob(encryptedBlob, passphrase);
@@ -160,7 +137,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
 
     el.innerHTML = '';
 
-    // Wrapper to contain video and controls
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `
         position: relative;
@@ -176,7 +152,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
     `;
     el.appendChild(wrapper);
 
-    // Loading spinner
     const loading = document.createElement('div');
     loading.className = 'video-loading';
     loading.textContent = 'Loading video...';
@@ -199,7 +174,7 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
 
         const video = document.createElement('video');
         video.className = options.className || 'video-player';
-        video.controls = false; // Native controls disabled
+        video.controls = false;
         video.autoplay = options.autoplay || false;
         video.preload = 'metadata';
         video.style.cssText = `
@@ -215,15 +190,8 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         source.src = blobUrl;
         source.type = 'video/mp4';
         video.appendChild(source);
-
-        // Explicitly kick off the load — appending a <source> after element
-        // creation doesn't reliably auto-trigger loading in every browser,
-        // which left the "Loading video..." state stuck forever since
-        // 'loadeddata' (which hides it below) would never fire.
         video.load();
 
-        // ---- Generate a real frame as the poster so the player never shows
-        // a plain black rectangle before playback starts ----
         if (options.poster) {
             video.poster = options.poster;
         } else {
@@ -232,7 +200,7 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
                 .catch((err) => console.warn('[renderVideoPlayer] Poster generation failed:', err));
         }
 
-        // ---- Center play/pause overlay ----
+        // ---- Overlay ----
         const overlay = document.createElement('div');
         overlay.style.cssText = `
             position: absolute;
@@ -256,7 +224,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         overlay.appendChild(playIcon);
         wrapper.appendChild(overlay);
 
-        // ---- Clickable overlay for play/pause ----
         const clickOverlay = document.createElement('div');
         clickOverlay.style.cssText = `
             position: absolute;
@@ -267,7 +234,7 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         `;
         wrapper.appendChild(clickOverlay);
 
-        // ---- Bottom control bar ----
+        // ---- Control bar ----
         const controlBar = document.createElement('div');
         controlBar.style.cssText = `
             position: absolute;
@@ -286,7 +253,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         `;
         wrapper.appendChild(controlBar);
 
-        // ---- Progress container ----
         const progressContainer = document.createElement('div');
         progressContainer.style.cssText = `
             flex: 1;
@@ -307,7 +273,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         });
         controlBar.appendChild(progressContainer);
 
-        // Progress fill
         const progressFill = document.createElement('div');
         progressFill.style.cssText = `
             height: 100%;
@@ -319,7 +284,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         `;
         progressContainer.appendChild(progressFill);
 
-        // ---- Time display ----
         const timeDisplay = document.createElement('span');
         timeDisplay.textContent = '0:00 / 0:00';
         timeDisplay.style.cssText = `
@@ -331,7 +295,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         `;
         controlBar.appendChild(timeDisplay);
 
-        // ---- Fullscreen button ----
         const fullscreenBtn = document.createElement('button');
         fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
         fullscreenBtn.style.cssText = `
@@ -351,7 +314,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         fullscreenBtn.addEventListener('mouseleave', () => fullscreenBtn.style.opacity = '0.9');
         controlBar.appendChild(fullscreenBtn);
 
-        // ---- Video event listeners ----
         video.addEventListener('loadeddata', () => {
             loading.style.display = 'none';
             updateTimeDisplay();
@@ -361,16 +323,11 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
             loading.style.color = '#dc2626';
         });
 
-        // ---- Play/pause toggle ----
         function togglePlay() {
-            if (video.paused) {
-                video.play();
-            } else {
-                video.pause();
-            }
+            if (video.paused) video.play();
+            else video.pause();
         }
 
-        // ---- Update play icon ----
         function updatePlayIcon() {
             if (video.paused) {
                 playIcon.className = 'fas fa-play';
@@ -386,23 +343,17 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         video.addEventListener('pause', updatePlayIcon);
         updatePlayIcon();
 
-        // ---- Click on video toggles play ----
         clickOverlay.addEventListener('click', (e) => {
             e.stopPropagation();
             togglePlay();
         });
 
-        // ---- Double-click to fullscreen ----
         clickOverlay.addEventListener('dblclick', (e) => {
             e.stopPropagation();
-            if (video.requestFullscreen) {
-                video.requestFullscreen();
-            } else if (video.webkitRequestFullscreen) {
-                video.webkitRequestFullscreen();
-            }
+            if (video.requestFullscreen) video.requestFullscreen();
+            else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
         });
 
-        // ---- Progress bar seek ----
         progressContainer.addEventListener('click', (e) => {
             if (!video.duration) return;
             const rect = progressContainer.getBoundingClientRect();
@@ -410,7 +361,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
             video.currentTime = percent * video.duration;
         });
 
-        // ---- Update progress and time ----
         function updateProgress() {
             if (!video.duration) return;
             const percent = (video.currentTime / video.duration) * 100;
@@ -425,17 +375,12 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
         }
         video.addEventListener('timeupdate', updateProgress);
 
-        // ---- Fullscreen button ----
         fullscreenBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (video.requestFullscreen) {
-                video.requestFullscreen();
-            } else if (video.webkitRequestFullscreen) {
-                video.webkitRequestFullscreen();
-            }
+            if (video.requestFullscreen) video.requestFullscreen();
+            else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
         });
 
-        // ---- Show/hide control bar on hover ----
         let hideTimeout = null;
         wrapper.addEventListener('mouseenter', () => {
             controlBar.style.opacity = '1';
@@ -447,7 +392,6 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
             }, 2000);
         });
 
-        // If video is playing, hide after 2s; if paused, keep visible
         video.addEventListener('play', () => {
             clearTimeout(hideTimeout);
             hideTimeout = setTimeout(() => {
@@ -459,10 +403,8 @@ export async function renderVideoPlayer(container, videoUrl, options = {}) {
             clearTimeout(hideTimeout);
         });
 
-        // ---- Attach video to wrapper ----
         wrapper.appendChild(video);
 
-        // ---- Cleanup ----
         video.addEventListener('remove', () => URL.revokeObjectURL(blobUrl));
         window.addEventListener('beforeunload', () => URL.revokeObjectURL(blobUrl));
 
@@ -494,7 +436,6 @@ export async function renderVideoThumbnail(container, videoUrl) {
         return;
     }
 
-    // Show loading
     const loading = document.createElement('div');
     loading.textContent = 'Loading thumbnail...';
     loading.style.cssText = `
@@ -520,14 +461,12 @@ export async function renderVideoThumbnail(container, videoUrl) {
             thumbnailDataUrl = await generateVideoThumbnail(blobUrl);
         } catch (err) {
             console.warn('[renderVideoThumbnail] Thumbnail generation failed:', err);
-            // Fallback: use a default placeholder
             thumbnailDataUrl = null;
         }
         URL.revokeObjectURL(blobUrl);
 
         el.innerHTML = '';
 
-        // Wrapper – compact size for feed
         const wrapper = document.createElement('div');
         wrapper.style.cssText = `
             position: relative;
@@ -544,7 +483,6 @@ export async function renderVideoThumbnail(container, videoUrl) {
         wrapper.dataset.videoUrl = videoUrl;
 
         if (thumbnailDataUrl) {
-            // Thumbnail image – preserves aspect ratio
             const img = document.createElement('img');
             img.src = thumbnailDataUrl;
             img.style.cssText = `
@@ -557,7 +495,6 @@ export async function renderVideoThumbnail(container, videoUrl) {
             `;
             wrapper.appendChild(img);
         } else {
-            // Fallback: show a play icon on dark background
             const fallback = document.createElement('div');
             fallback.style.cssText = `
                 display: flex;
@@ -574,7 +511,6 @@ export async function renderVideoThumbnail(container, videoUrl) {
             wrapper.appendChild(fallback);
         }
 
-        // Play icon overlay
         const icon = document.createElement('i');
         icon.className = 'fas fa-play-circle';
         icon.style.cssText = `

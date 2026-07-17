@@ -2,7 +2,8 @@
 js/encrypted-keys.js
 src/ai-encrypted-key.js
 js/ai-encrypted-key.js
-
+credentials/smarthub-drive-502702-20c9c1e8a839.json
+token.json
 # Dependencies
 node_modules/
 

@@ -16,7 +16,8 @@ import {
     fetchCommentReactions
 } from './home-sb.js';
 import { renderVideoPlayer } from './videoPlayer.js';
-import { openReactionModal, openCommentReactionModal } from './reactionModal.js';  // <-- import comment modal
+import { getDecryptedImageBlobUrl } from './videoUtils.js'; // 🆕 for image decryption
+import { openReactionModal, openCommentReactionModal } from './reactionModal.js';
 import { updateReactionSummary, updateFeedLikeButton, updateFeedSaveButton, loadHomeFeed } from './home-loader.js';
 import { updateProfileSummary, updateProfileLikeButton, updateProfileSaveButton, renderProfile } from './profile.js';
 import { burstLike } from './animations.js';
@@ -198,6 +199,12 @@ function ensureStyles() {
 
         .pv-overlay.pv-closing { animation: pv-fade-out 0.15s ease forwards; }
         .pv-overlay.pv-closing .pv-card { animation: pv-pop-out 0.15s ease forwards; }
+
+        .pv-image-placeholder.loading {
+    background: linear-gradient(90deg, #eef1f4 25%, #e4e8ec 37%, #eef1f4 63%);
+    background-size: 400% 100%;
+    animation: pv-shimmer 1.4s ease infinite;
+}
 
         .pv-card {
             background: #fff; border-radius: 20px; overflow: hidden;
@@ -712,7 +719,29 @@ async function updatePostViewSummary(postId) {
     }
 }
 
-// ---- Media gallery renderer with double-click fullscreen ----
+// ---- 🆕 Load decrypted images inside a container ----
+async function loadDecryptedImagesInContainer(container) {
+    if (!container) return;
+    const imageElements = container.querySelectorAll('img.pv-image-placeholder[data-image-url]');
+    for (const img of imageElements) {
+        const url = img.dataset.imageUrl;
+        if (!url) continue;
+        try {
+            const blobUrl = await getDecryptedImageBlobUrl(url);
+            img.src = blobUrl;
+            img.classList.remove('loading');
+            img.style.background = 'transparent';
+            img.addEventListener('remove', () => URL.revokeObjectURL(blobUrl));
+        } catch (err) {
+            console.warn('[loadDecryptedImagesInContainer] Failed to load image:', err);
+            img.classList.remove('loading');
+            img.alt = 'Failed to load image';
+            img.style.background = '#fce8ee';
+        }
+    }
+}
+
+// ---- Media gallery renderer with double-click fullscreen and image decryption ----
 function renderMediaGallery(container, items, currentIndex) {
     if (!items || !items.length) {
         container.innerHTML = '';
@@ -726,7 +755,13 @@ function renderMediaGallery(container, items, currentIndex) {
     if (isVideo) {
         html += `<div class="pv-video-container" data-video-url="${escapeHtml(item.url)}"></div>`;
     } else {
-        html += `<img src="${escapeHtml(item.url)}" alt="Media" loading="lazy">`;
+        // Image placeholder with shimmer loading animation
+        html += `<img class="pv-image-placeholder loading"
+                      data-image-url="${escapeHtml(item.url)}"
+                      src=""
+                      alt="Media"
+                      loading="lazy"
+                      style="max-width:100%; max-height:60vh; object-fit:contain; display:block; min-height:120px; background:transparent;">`;
     }
     if (total > 1) {
         html += `
@@ -739,6 +774,7 @@ function renderMediaGallery(container, items, currentIndex) {
     html += '</div>';
     container.innerHTML = html;
 
+    // ---- If video, render player ----
     if (isVideo) {
         const vidContainer = container.querySelector('.pv-video-container');
         if (vidContainer) {
@@ -756,6 +792,9 @@ function renderMediaGallery(container, items, currentIndex) {
             }
         }
     } else {
+        // ---- For images, decrypt and display ----
+        loadDecryptedImagesInContainer(container);
+        // Double-click fullscreen for images
         const img = container.querySelector('img');
         if (img) {
             img.addEventListener('dblclick', (e) => {
@@ -765,6 +804,7 @@ function renderMediaGallery(container, items, currentIndex) {
         }
     }
 
+    // ---- Navigation events ----
     const navBtns = container.querySelectorAll('.pv-nav-btn');
     navBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -779,7 +819,6 @@ function renderMediaGallery(container, items, currentIndex) {
         });
     });
 }
-
 // ---- Skeleton HTML ----
 function renderSkeletonBody() {
     return `
@@ -1250,7 +1289,7 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
         </div>
     `;
 
-    // Render media gallery
+    // ---- Render media gallery ----
     const mediaContainer = document.getElementById('pvMediaContainer');
     if (mediaContainer) {
         if (mediaArr.length) {
@@ -1262,7 +1301,7 @@ function renderPostContent(modal, post, comments, userLike, summary, isSaved, cu
         }
     }
 
-    // Summary click -> reaction modal
+    // ---- Summary click -> reaction modal ----
     const summaryEl = modal.querySelector('.reaction-summary');
     if (summaryEl) {
         summaryEl.addEventListener('click', (e) => {

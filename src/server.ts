@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { execFile } from 'node:child_process';
 import express, {Router, Request, Response } from 'express';
 import cors from 'cors';
@@ -22,6 +24,9 @@ import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import fetch from 'node-fetch';
+
+
+import driveRoutes from './routes/driveRoutes';
 function getSaltHex(): string {
     return process.env.ENCRYPTION_SALT || 'a1b2c3d4e5f67890a1b2c3d4e5f67890';
 }
@@ -193,6 +198,7 @@ import {
   verifySmartLinkSignature,
 } from './serverContext';
 const { searchAndEnrich } = require('./aiIntelligence.js');
+
 import { registerAiRoutes } from './routes/aiRoutes';
 import { registerConnectionCheckRoutes } from './routes/connectionCheckRoutes';
 import { registerDeviceRoutes } from './routes/deviceRoutes';
@@ -210,9 +216,7 @@ import { registerAndroidConnectivityRoutes } from './routes/androidConnectivityR
 import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { google } from 'googleapis';
 const { callMistralAI } = require('./ai-service.js');
 // ---- Helper to safely get error message ----
 const emailUser = process.env.EMAIL_USER;
@@ -241,7 +245,9 @@ interface VTResponse {
         };
     };
 }
-
+console.log('[Server] GOOGLE_CLIENT_ID from env:', process.env.GOOGLE_CLIENT_ID);
+console.log('[Server] GOOGLE_CLIENT_SECRET from env:', process.env.GOOGLE_CLIENT_SECRET);
+console.log('[Server] GOOGLE_REDIRECT_URI from env:', process.env.GOOGLE_REDIRECT_URI);
 // Helper to run PowerShell scripts without quoting issues
 async function runPowerShellScript(script: string, timeoutMs = 6000): Promise<string> {
     // Convert the script to UTF-16LE base64 (required for -EncodedCommand)
@@ -1355,7 +1361,7 @@ app.use('/js', express.static('js'));
 app.use('/api', largeFilesRoutes);
 app.use('/api', fileRoutes);
 app.use('/api', storageCategoryRoutes);
-
+app.use('/api/drive', driveRoutes);
 
 ensureBaseDirs();
 registerBsodRoutes(app);

@@ -5,8 +5,9 @@
 import { getSupabaseClient } from './supabase.js';
 import { createPost, toggleLike, deletePost, fetchReactionsSummary, fetchSavedPostIds, savePost, unsavePost, isPostSaved } from './home-sb.js';
 import { uploadProfileImage, updateProfile } from './profile-sb.js';
-import { uploadVideo } from './videoUpload.js';
+import { uploadMedia } from './videoUpload.js'; // 🆕 use uploadMedia instead of uploadVideo
 import { renderVideoThumbnail } from './videoPlayer.js';
+import { getDecryptedImageBlobUrl } from './videoUtils.js'; // 🆕 for image decryption
 import { openPostView } from './postView.js';
 import { openReactionModal } from './reactionModal.js';
 import { burstLike, staggerFeedIn, bumpReactionChip, showToast } from './animations.js';
@@ -464,6 +465,53 @@ function renderSkeletonFeed(count = 3) {
     `;
 }
 
+// ---- 🆕 Load decrypted images ----
+async function loadDecryptedImagesInProfile(container) {
+    if (!container) return;
+    const imageElements = container.querySelectorAll('img[data-image-url]');
+    for (const img of imageElements) {
+        const url = img.dataset.imageUrl;
+        if (!url) continue;
+        try {
+            const blobUrl = await getDecryptedImageBlobUrl(url);
+            img.src = blobUrl;
+            img.style.background = 'transparent';
+            img.addEventListener('remove', () => URL.revokeObjectURL(blobUrl));
+        } catch (err) {
+            console.warn('[loadDecryptedImagesInProfile] Failed to load image:', err);
+            img.alt = 'Failed to load image';
+            img.style.background = '#fce8ee';
+        }
+    }
+}
+
+// ---- 🆕 Build media HTML with data-image-url for images ----
+function buildMediaHtml(mediaArr) {
+    if (!mediaArr.length) return '';
+
+    if (mediaArr.length > 1) {
+        const cols = Math.min(mediaArr.length, 3);
+        const cells = mediaArr.slice(0, 3).map((m) => {
+            if (m.type === 'video') {
+                return `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div>`;
+            }
+            // 🆕 Use data-image-url for images
+            return `<img data-image-url="${escapeHtml(m.url)}" alt="Media" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#f0f0f0;">`;
+        }).join('');
+        const overflow = mediaArr.length > 3
+            ? `<div class="post-media-overflow">+${mediaArr.length - 3} more</div>`
+            : '';
+        return `<div class="post-media-grid" style="grid-template-columns:repeat(${cols},1fr);">${cells}</div>${overflow}`;
+    }
+
+    const m = mediaArr[0];
+    if (m.type === 'video') {
+        return `<div class="post-media-single"><div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}"></div></div>`;
+    }
+    // 🆕 Use data-image-url for images
+    return `<div class="post-media-single"><img data-image-url="${escapeHtml(m.url)}" alt="Media" style="width:100%;max-height:500px;object-fit:contain;background:#f0f0f0;"></div>`;
+}
+
 // ---- Main render function ----
 export async function renderProfile(container) {
     if (!container) {
@@ -624,7 +672,6 @@ export async function renderProfile(container) {
                             <div class="composer-tools">
                                 <button id="profileVideoBtn" title="Attach video" type="button"><i class="fas fa-video"></i></button>
                                 <button id="profileImageBtn" title="Attach image" type="button"><i class="fas fa-image"></i></button>
-                                <!-- GIF button removed -->
                             </div>
                             <button id="profilePostBtn" class="composer-submit" type="button">Post</button>
                         </div>
@@ -738,7 +785,6 @@ export async function renderProfile(container) {
     const postBtn = document.getElementById('profilePostBtn');
     const videoBtn = document.getElementById('profileVideoBtn');
     const imageBtn = document.getElementById('profileImageBtn');
-    // GIF button removed – no need to reference it
 
     const mediaInput = document.getElementById('profileMediaInput');
     const progress = document.getElementById('profileUploadProgress');
@@ -795,6 +841,7 @@ export async function renderProfile(container) {
         renderMediaPreviews();
     }
 
+    // ---- 🆕 Updated upload handler using uploadMedia ----
     videoBtn.addEventListener('click', () => {
         mediaInput.accept = 'video/*';
         mediaInput.click();
@@ -804,8 +851,6 @@ export async function renderProfile(container) {
         mediaInput.accept = 'image/*';
         mediaInput.click();
     });
-
-    // GIF event listener removed
 
     mediaInput.addEventListener('change', async (e) => {
         const files = e.target.files;
@@ -818,16 +863,15 @@ export async function renderProfile(container) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
-                if (file.type.startsWith('video/')) {
-                    const result = await uploadVideo(file);
-                    pendingMedia.push({ url: result.url || result.storagePath, type: 'video' });
+                const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+                // 🆕 Use uploadMedia with the correct mediaType
+                const result = await uploadMedia(file, mediaType);
+                if (mediaType === 'video') {
+                    pendingMedia.push({ url: result.url, type: 'video' });
                 } else {
-                    const reader = new FileReader();
-                    const dataUrl = await new Promise((resolve) => {
-                        reader.onload = (e) => resolve(e.target.result);
-                        reader.readAsDataURL(file);
-                    });
-                    pendingMedia.push({ url: dataUrl, type: 'image', previewUrl: dataUrl });
+                    // For images, store the uploaded URL and also a preview for the composer
+                    const previewUrl = URL.createObjectURL(file);
+                    pendingMedia.push({ file, type: 'image', previewUrl, url: result.url });
                 }
             } catch (err) {
                 showNotificationModal('Failed to upload: ' + err.message, 'error');
@@ -845,13 +889,23 @@ export async function renderProfile(container) {
             return;
         }
 
+        const mediaArray = [];
+        for (const item of pendingMedia) {
+            if (item.type === 'video' && item.url) {
+                mediaArray.push({ url: item.url, type: 'video' });
+            } else if (item.type === 'image' && item.url) {
+                // We already have the uploaded URL in item.url
+                mediaArray.push({ url: item.url, type: 'image' });
+            }
+        }
+
         postBtn.disabled = true;
         postBtn.textContent = 'Posting...';
         try {
-            await createPostWithMedia(text, pendingMedia);
+            await createPostWithMedia(text || '📎', mediaArray);
+            showNotificationModal('Post published!', 'success');
             composer.value = '';
             clearMediaPreview();
-            showNotificationModal('Post published!', 'success');
             if (currentFeedType === 'user') {
                 await loadUserPosts(currentUser.id);
             } else {
@@ -958,6 +1012,8 @@ async function loadUserPosts(userId) {
         }
 
         feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap);
+        // ---- 🆕 Decrypt images after rendering ----
+        await loadDecryptedImagesInProfile(feed);
         attachPostEventListeners(feed);
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load posts: ${escapeHtml(err.message)}</div>`;
@@ -1033,13 +1089,15 @@ async function loadSavedPosts() {
         }
 
         feed.innerHTML = renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap);
+        // ---- 🆕 Decrypt images after rendering ----
+        await loadDecryptedImagesInProfile(feed);
         attachPostEventListeners(feed);
     } catch (err) {
         feed.innerHTML = `<div class="page-error">Couldn't load saved posts: ${escapeHtml(err.message)}</div>`;
     }
 }
 
-// ---- renderPostCards (unchanged) ----
+// ---- renderPostCards with data-image-url ----
 function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap = {}) {
     let html = '';
     for (const post of posts) {
@@ -1067,6 +1125,7 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
 
         const isSaved = savedMap[post.id] || false;
 
+        // ---- Build media HTML with data-image-url ----
         let mediaHtml = '';
         const mediaArray = post.media || [];
         if (mediaArray.length > 1) {
@@ -1077,7 +1136,7 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
                 if (m.type === 'video') {
                     mediaHtml += `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="aspect-ratio:1/1;"></div>`;
                 } else {
-                    mediaHtml += `<img src="${escapeHtml(m.url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#000;">`;
+                    mediaHtml += `<img data-image-url="${escapeHtml(m.url)}" alt="Media" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#f0f0f0;">`;
                 }
             }
             if (mediaArray.length > 3) {
@@ -1089,14 +1148,14 @@ function renderPostCards(posts, likesMap, userReactionsMap, summaryMap, savedMap
             if (m.type === 'video') {
                 mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(m.url)}" style="margin-top:8px;"></div>`;
             } else {
-                mediaHtml = `<img src="${escapeHtml(m.url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+                mediaHtml = `<img data-image-url="${escapeHtml(m.url)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;background:#f0f0f0;">`;
             }
         } else if (post.media_url) {
             const isVideo = post.media_type === 'video';
             if (isVideo) {
                 mediaHtml = `<div class="video-thumbnail-container" data-video-url="${escapeHtml(post.media_url)}" style="margin-top:8px;"></div>`;
             } else {
-                mediaHtml = `<img src="${escapeHtml(post.media_url)}" style="max-width:100%;border-radius:12px;margin-top:8px;">`;
+                mediaHtml = `<img data-image-url="${escapeHtml(post.media_url)}" alt="Media" style="max-width:100%;border-radius:12px;margin-top:8px;background:#f0f0f0;">`;
             }
         }
 
@@ -1150,7 +1209,7 @@ async function updateProfileSaveButton(postId, saved) {
     }
 }
 
-// ---- attachPostEventListeners (includes improved emoji picker) ----
+// ---- attachPostEventListeners (unchanged, but we call loadDecryptedImagesInProfile before it) ----
 function attachPostEventListeners(feed) {
     feed.querySelectorAll('.video-thumbnail-container').forEach(el => {
         const videoUrl = el.dataset.videoUrl;
