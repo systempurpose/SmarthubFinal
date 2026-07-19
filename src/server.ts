@@ -24,7 +24,7 @@ import storageCategoryRoutes from './routes/storageCategoryRoutes';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import fetch from 'node-fetch';
-
+import * as LZString from 'lz-string';
 
 import driveRoutes from './routes/driveRoutes';
 function getSaltHex(): string {
@@ -427,6 +427,114 @@ app.get('/bluetooth/state/:id', async (req, res) => {
 // ---- Mobile Data state ----
 // ---- Mobile Data state ----
 // ---- Mobile Data state ----
+
+// ---- Search posts by tags ----
+// src/server.ts – replace the /api/posts/by-tags route
+// ---- Search posts by tags ----
+// ---- Search posts by content keywords ----
+
+// ---- Search posts by content keywords ----
+// ---- Search posts by content keywords ----
+// ---- Search posts by content keywords ----
+// ---- Search posts by content keywords ----
+app.get('/api/posts/by-content', async (req: Request, res: Response) => {
+    try {
+        const keywordsParam = req.query.keywords;
+        if (!keywordsParam) {
+            return res.status(400).json({ error: 'Missing keywords parameter' });
+        }
+        
+        // Force keywords to be an array of strings
+        let keywords: string[];
+        if (Array.isArray(keywordsParam)) {
+            keywords = keywordsParam.map(k => String(k));
+        } else {
+            keywords = [String(keywordsParam)];
+        }
+        keywords = keywords.filter(k => k.trim().length > 0);
+        if (keywords.length === 0) {
+            return res.json({ posts: [] });
+        }
+
+        const supabase = createClient(
+            process.env.SUPABASE_URL!,
+            process.env.SUPABASE_ANON_KEY!
+        );
+
+        const { data: postsData, error: postsError } = await supabase
+            .from('posts')
+            .select('id, content, user_id, created_at')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (postsError) {
+            console.error('[Search by content] Supabase error:', postsError);
+            return res.json({ posts: [] });
+        }
+
+        const passphrase = getPassphrase();
+        const matchedPosts = [];
+        const userIds = new Set();
+
+        for (const post of postsData) {
+            if (!post.content) continue;
+            try {
+                // 1. Decrypt
+                const decrypted = await decryptSecret(post.content, passphrase);
+                // 2. Decompress (if compressed)
+                let plaintext = decrypted;
+                try {
+                    const decompressed = LZString.decompressFromUTF16(decrypted);
+                    if (decompressed) {
+                        plaintext = decompressed;
+                    }
+                } catch (decompErr) {
+                    // If decompression fails, keep decrypted
+                }
+
+                // 3. Match keywords
+                const contentLower = plaintext.toLowerCase();
+                const match = keywords.some(kw => contentLower.includes(kw.toLowerCase()));
+                if (match) {
+                    matchedPosts.push({
+                        ...post,
+                        content: plaintext,
+                    });
+                    userIds.add(post.user_id);
+                }
+            } catch (decryptErr) {
+                // Skip posts that fail decryption
+            }
+        }
+
+        if (matchedPosts.length === 0) {
+            return res.json({ posts: [] });
+        }
+
+        // Fetch profiles from social_profiles
+        const { data: profilesData, error: profilesError } = await supabase
+            .from('social_profiles')
+            .select('user_id, display_name, username, avatar_url')
+            .in('user_id', Array.from(userIds));
+
+        const profileMap = new Map();
+        if (profilesData) {
+            profilesData.forEach(p => profileMap.set(p.user_id, p));
+        }
+
+        const resultPosts = matchedPosts.map(post => ({
+            ...post,
+            profiles: profileMap.get(post.user_id) || { display_name: 'User', username: '' }
+        }));
+
+        res.json({ posts: resultPosts.slice(0, 5) });
+    } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Search by content] Error:', errorMsg);
+        res.status(500).json({ error: errorMsg, posts: [] });
+    }
+});
+
 app.get('/mobile-data/state/:id', async (req, res) => {
     const deviceId = req.params.id;
     try {

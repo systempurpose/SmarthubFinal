@@ -1,5 +1,5 @@
 // js/home.js
-import { uploadMedia } from './videoUpload.js';  // <-- use uploadMedia
+import { uploadMedia } from './videoUpload.js';
 import { loadHomeFeed, initRealtimeFeed, showNotificationModal, showConfirmModal } from './home-loader.js';
 import { createPostWithMedia } from './home-sb.js';
 import { openPostView } from './postView.js';
@@ -155,6 +155,20 @@ export async function renderHome() {
     window._hca_renderId = initialRenderId;
     await loadHomeFeed('feedPosts', false, initialRenderId);
 
+    // ---- Check for postId in URL and open the post ----
+    const urlParams = new URLSearchParams(window.location.search);
+    const postId = urlParams.get('postId');
+    if (postId) {
+        // Remove the parameter to avoid re-opening on refresh
+        const newUrl = window.location.pathname + window.location.search.replace(/[?&]postId=[^&]*/, '');
+        window.history.replaceState({}, '', newUrl);
+
+        // Wait a moment for the feed to render, then open the post
+        setTimeout(() => {
+            openPostView(postId);
+        }, 300);
+    }
+
     if (realtimeSubscription) {
         realtimeSubscription.unsubscribe();
         realtimeSubscription = null;
@@ -279,12 +293,10 @@ function setupComposer() {
             try {
                 let mediaType = 'image';
                 if (file.type.startsWith('video/')) mediaType = 'video';
-                // Use uploadMedia with the correct mediaType
                 const result = await uploadMedia(file, mediaType);
                 if (mediaType === 'video') {
                     pendingMedia.push({ url: result.url, type: 'video' });
                 } else {
-                    // For images, also store a preview (if we want to show it)
                     const previewUrl = URL.createObjectURL(file);
                     pendingMedia.push({ file, type: 'image', previewUrl, url: result.url });
                 }
@@ -309,24 +321,8 @@ function setupComposer() {
         for (const item of pendingMedia) {
             if (item.type === 'video' && item.url) {
                 mediaArray.push({ url: item.url, type: 'video' });
-            } else if (item.type === 'image' && item.file) {
-                // We already uploaded the image; we have the URL from the uploadMedia result.
-                // If we stored the URL in item.url, we can use it directly.
-                // In the handler above, we set item.url = result.url for images as well.
-                // But we stored it as item.url = result.url; let's use it.
-                // Actually we stored result.url as item.url, but we also stored the file for preview.
-                // Use the uploaded URL.
-                if (item.url) {
-                    mediaArray.push({ url: item.url, type: 'image' });
-                } else {
-                    // Fallback: read as data URL (shouldn't happen)
-                    const reader = new FileReader();
-                    const data = await new Promise((resolve) => {
-                        reader.onload = (e) => resolve(e.target.result);
-                        reader.readAsDataURL(item.file);
-                    });
-                    mediaArray.push({ url: data, type: 'image' });
-                }
+            } else if (item.type === 'image' && item.url) {
+                mediaArray.push({ url: item.url, type: 'image' });
             }
         }
 

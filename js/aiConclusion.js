@@ -830,6 +830,82 @@ async function renderAIConclusion() {
                         console.warn('[AI] Could not save conclusion:', saveErr);
                     }
 
+                    // ========== NEW: Fetch similar posts from the feed ==========
+                    try {
+                        // Extract keywords from the conclusion
+                        const keywords = [];
+                        // From likelyCause
+                        if (c.likelyCause) {
+                            const words = c.likelyCause.split(' ').slice(0, 6);
+                            keywords.push(...words);
+                        }
+                        // From actions (first action)
+                        if (c.actions && c.actions.length) {
+                            const actionWords = c.actions[0].split(' ').slice(0, 4);
+                            keywords.push(...actionWords);
+                        }
+                        // From user input
+                        if (userInput) {
+                            const inputWords = userInput.split(' ').slice(0, 4);
+                            keywords.push(...inputWords);
+                        }
+                        // Device model from reports
+                        const modelReport = availableReports.find(r => r.data?.device_model);
+                        if (modelReport) {
+                            const modelName = modelReport.data.device_model;
+                            const modelParts = modelName.split(' ');
+                            if (modelParts.length > 1) {
+                                keywords.push(modelParts[0]); // brand
+                                keywords.push(modelName); // full model
+                            } else {
+                                keywords.push(modelName);
+                            }
+                        }
+
+                        // Clean keywords: remove duplicates, short words (<3), and common stopwords
+                        const stopwords = ['the', 'this', 'that', 'and', 'for', 'with', 'from', 'have', 'not', 'are', 'but', 'can', 'has', 'was', 'were', 'all', 'any', 'one', 'some', 'then', 'than', 'very', 'more', 'less', 'just', 'also', 'been', 'into', 'only', 'other', 'than'];
+                        const cleanKeywords = [...new Set(keywords.filter(t => t.length > 3 && !stopwords.includes(t.toLowerCase())))];
+                        cleanKeywords.splice(6); // limit to 6 keywords
+
+                        if (cleanKeywords.length > 0) {
+                            const params = new URLSearchParams();
+                            cleanKeywords.forEach(k => params.append('keywords', k));
+                            const similarResponse = await fetch(`/api/posts/by-content?${params.toString()}`);
+                            if (similarResponse.ok) {
+                                const similarData = await similarResponse.json();
+                                if (similarData.posts && similarData.posts.length > 0) {
+                                    let similarHtml = `
+                                        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+                                            <div style="font-weight: 600; font-size: 14px; color: #1f2937;">🔍 Similar posts on the feed</div>
+                                            <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                                    `;
+                                    similarData.posts.forEach(post => {
+                                        const displayName = post.profiles?.display_name || 'User';
+                                        const contentPreview = post.content ? post.content.substring(0, 80) : 'View post';
+                                        similarHtml += `
+                                            <a href="/?postId=${post.id}" style="display: block; padding: 8px 12px; background: #f8fafc; border-radius: 8px; text-decoration: none; color: #1f2937; border: 1px solid #e5e7eb; transition: background 0.15s;"
+                                               onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f8fafc'">
+                                                <div style="font-weight: 500; font-size: 13px;">${escapeHtml(displayName)}</div>
+                                                <div style="font-size: 12.5px; color: #4b5563;">${escapeHtml(contentPreview)}</div>
+                                            </a>
+                                        `;
+                                    });
+                                    similarHtml += `
+                                            </div>
+                                        </div>
+                                    `;
+                                    const resultContent = document.getElementById('aiResultContent');
+                                    if (resultContent) {
+                                        resultContent.insertAdjacentHTML('beforeend', similarHtml);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (similarErr) {
+                        console.warn('[AI] Could not fetch similar posts:', similarErr);
+                    }
+                    // ========== End of similar posts feature ==========
+
                 } else {
                     throw new Error(data.error || t('ai.result.noConclusion', 'No conclusion generated.'));
                 }
