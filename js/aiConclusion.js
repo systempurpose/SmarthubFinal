@@ -1,7 +1,7 @@
 // js/aiConclusion.js
-// Displays AI conclusion with optional on-the-fly translation.
+// Displays AI conclusion with optional on‑the‑fly translation.
 
-import { translateConclusionLocal, translateTextLocal } from './localTranslator.js';
+import { translateConclusionLocal, translateTextLocal } from './localTranslator.mjs';
 
 // ---- Helpers ----
 function escapeHtml(str) {
@@ -47,7 +47,6 @@ function timeAgo(iso) {
     return t('ai.time.daysAgo', '{days} days ago').replace('{days}', days);
 }
 
-// ---- FIXED: handles non‑string inputs to prevent 'text.trim is not a function' ----
 function cleanSummary(text) {
     if (text == null) return '';
     if (typeof text !== 'string') text = String(text);
@@ -171,6 +170,40 @@ function confidenceRing(percent, color) {
     `;
 }
 
+// ---- Provider/model definitions ----
+const PROVIDERS = {
+    mistral: {
+        label: 'Mistral AI',
+        icon: '🧠',
+        models: [
+            { value: 'open-mistral-7b', label: 'Mistral 7B' },
+            { value: 'open-mixtral-8x7b', label: 'Mixtral 8x7B' },
+            { value: 'mistral-small-latest', label: 'Mistral Small' },
+            { value: 'mistral-medium-latest', label: 'Mistral Medium' },
+            { value: 'codestral-latest', label: 'Codestral' },
+        ]
+    },
+    gemini: {
+        label: 'Google Gemini',
+        icon: '✨',
+        models: [
+            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+            { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+            { value: 'gemini-2.0-pro', label: 'Gemini 2.0 Pro' },
+        ]
+    },
+    groq: {
+        label: 'Groq (Fast)',
+        icon: '⚡',
+        models: [
+            { value: 'llama3-70b-8192', label: 'Llama 3 70B' },
+            { value: 'llama3-8b-8192', label: 'Llama 3 8B' },
+            { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+            { value: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+        ]
+    }
+};
+
 // ---- Main render function ----
 async function renderAIConclusion() {
     const container = document.getElementById('pageContent');
@@ -293,18 +326,7 @@ async function renderAIConclusion() {
 
     const { reports: availableReports, existingConclusion } = await loadAllData();
 
-    const modelOptions = [
-        { value: 'open-mistral-7b', label: 'Mistral 7B', group: 'Free' },
-        { value: 'open-mixtral-8x7b', label: 'Mixtral 8x7B', group: 'Free' },
-        { value: 'mistral-small-latest', label: 'Mistral Small', group: 'Latest' },
-        { value: 'mistral-medium-latest', label: 'Mistral Medium', group: 'Latest' },
-        { value: 'codestral-latest', label: 'Codestral', group: 'Latest' },
-    ];
-    const groupedModels = modelOptions.reduce((acc, m) => {
-        (acc[m.group] = acc[m.group] || []).push(m);
-        return acc;
-    }, {});
-
+    // ---- Build provider and model dropdowns ----
     let reportsHtml = '';
     if (availableReports.length === 0) {
         reportsHtml = `
@@ -320,6 +342,18 @@ async function renderAIConclusion() {
             </div>
         `;
     } else {
+        // Build provider options
+        const providerOptions = Object.entries(PROVIDERS).map(([key, p]) =>
+            `<option value="${key}">${p.icon} ${p.label}</option>`
+        ).join('');
+
+        // Build model options (will be populated dynamically)
+        const defaultProvider = 'mistral';
+        const defaultModels = PROVIDERS[defaultProvider].models;
+        const modelOptions = defaultModels.map(m =>
+            `<option value="${m.value}">${m.label}</option>`
+        ).join('');
+
         reportsHtml = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
                 <p style="color: #6B7280; font-size: 14px; margin: 0;">${t('ai.selectPrompt', 'Select reports to include:')}</p>
@@ -354,16 +388,18 @@ async function renderAIConclusion() {
                 `).join('')}
             </div>
 
-            <!-- Model selection -->
+            <!-- Provider and Model selection -->
             <div style="margin-top: 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; background: #f8fafc; border-radius: 10px; border: 1px solid #e5e7eb;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label for="aiProviderSelect" style="font-weight: 500; font-size: 13px; color: #1f2937;">🤖 ${t('ai.provider.label', 'Provider:')}</label>
+                    <select id="aiProviderSelect" style="padding: 6px 12px; border-radius: 7px; border: 1px solid #d1d5db; background: white; font-size: 13px; outline: none; cursor: pointer;">
+                        ${providerOptions}
+                    </select>
+                </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label for="aiModelSelect" style="font-weight: 500; font-size: 13px; color: #1f2937;">🧠 ${t('ai.model.label', 'Model:')}</label>
                     <select id="aiModelSelect" style="padding: 6px 12px; border-radius: 7px; border: 1px solid #d1d5db; background: white; font-size: 13px; outline: none; cursor: pointer;">
-                        ${Object.entries(groupedModels).map(([group, models]) => `
-                            <optgroup label="${group}">
-                                ${models.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
-                            </optgroup>
-                        `).join('')}
+                        ${modelOptions}
                     </select>
                 </div>
             </div>
@@ -425,6 +461,24 @@ async function renderAIConclusion() {
 
     container.innerHTML = html;
 
+    // ---- Populate models based on provider selection ----
+    const providerSelect = document.getElementById('aiProviderSelect');
+    const modelSelect = document.getElementById('aiModelSelect');
+
+    function populateModels(providerKey) {
+        const provider = PROVIDERS[providerKey];
+        if (!provider) return;
+        modelSelect.innerHTML = provider.models.map(m =>
+            `<option value="${m.value}">${m.label}</option>`
+        ).join('');
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function() {
+            populateModels(this.value);
+        });
+    }
+
     // ---- Render conclusion WITH translation (async now) ----
     async function renderConclusion(c, userInput, selectedIds, originalLang = window._activeLang || 'en') {
         const safeConclusion = c || {};
@@ -477,7 +531,7 @@ async function renderAIConclusion() {
             }
         }
 
-        // ---- Build HTML (identical to your working version, just using displayConclusion/displayUserInput) ----
+        // ---- Build HTML ----
         let conclusionHtml = '';
 
         let sevColor = '#0d6efd', sevBg = '#eff6ff', sevLabel = null, confPercent = null;
@@ -667,6 +721,7 @@ async function renderAIConclusion() {
 
                 const userInput = document.getElementById('aiUserInput')?.value?.trim() || '';
                 const lang = window._activeLang || 'en';
+                const provider = document.getElementById('aiProviderSelect')?.value || 'mistral';
                 const model = document.getElementById('aiModelSelect')?.value || 'open-mistral-7b';
 
                 const payload = {
@@ -674,6 +729,7 @@ async function renderAIConclusion() {
                     selectedReports: selectedIds,
                     userInput: userInput,
                     lang: lang,
+                    provider: provider,
                     model: model,
                     reports: availableReports
                         .filter(r => selectedIds.includes(r.id))
@@ -765,6 +821,8 @@ async function renderAIConclusion() {
                             nextStep: c.nextStep || '',
                             details: (typeof c.details === 'string' ? c.details : (c.details ? JSON.stringify(c.details) : '')),
                             lang: lang,
+                            provider: provider,
+                            model: model,
                         });
                         console.log('[AI] Conclusion saved to Supabase');
                         localStorage.setItem('smartHubAIConclusion', JSON.stringify(c));

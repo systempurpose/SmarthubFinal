@@ -217,7 +217,9 @@ import { registerAppBehaviorRoutes } from './routes/appBehaviorRoutes';
 import hardwareRoutes from './routes/hardwareRoutes';
 import repairRoutes from './routes/repairRoutes';
 import { google } from 'googleapis';
-const { callMistralAI } = require('./ai-service.js');
+
+// ADD this:
+const { callMistralAI, callGeminiAI, callGroqAI } = require('./ai-service');
 // ---- Helper to safely get error message ----
 const emailUser = process.env.EMAIL_USER;
 const emailPass = process.env.EMAIL_PASS;
@@ -501,6 +503,34 @@ app.get('/mobile-data/state/:id', async (req, res) => {
         res.status(500).json({ error: String(err) });
     }
 });
+// In server.ts – near other API routes
+
+app.get('/api/search/ifixit', async (req, res) => {
+    const query = req.query.q as string;
+    const limit = parseInt(req.query.limit as string) || 3;
+    if (!query) return res.status(400).json({ error: 'Missing query' });
+
+    const apiKey = process.env.IFIXIT_API_KEY;
+    if (!apiKey) return res.json({ guides: [] });
+
+    try {
+        const response = await fetch(
+            `https://api.ifixit.com/v2/guides?query=${encodeURIComponent(query)}&limit=${limit}`,
+            { headers: { 'Authorization': `Bearer ${apiKey}` } }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('[iFixit Proxy]', err.message);
+            res.status(500).json({ error: err.message });
+        } else {
+            console.error('[iFixit Proxy] Unknown error:', err);
+            res.status(500).json({ error: 'Unknown error' });
+        }
+    }
+});
 
 // TEMPORARY: Public endpoint for testing (no auth)
 app.get('/api/test-scan', async (req, res) => {
@@ -755,20 +785,40 @@ function getErrorMessage(err: unknown): string {
 
 app.post('/ai-adb-conclude', async (req: Request, res: Response) => {
     try {
-        const { selectedReports, userInput, lang, reports, deviceId, model } = req.body;
+        const {
+            selectedReports,
+            userInput,
+            lang,
+            reports,
+            deviceId,
+            model,
+            provider = 'mistral',
+            searchContext: frontendSearchContext   // NEW: pre-built context from frontend
+        } = req.body;
 
         if (!selectedReports || selectedReports.length === 0) {
             return res.status(400).json({ error: 'No reports selected.' });
         }
 
-        // 1. Decrypt AI key
-        const apiKey = await getAIKey();
-        const aiModel = model || process.env.AI_MODEL || 'open-mistral-7b';
+        // ---- 1. Get search context (from frontend or backend) ----
+        let searchContext = { context: '', query: '', results: [] };
 
-        // 2. Perform web search to enrich the context
-        const searchContext = await searchAndEnrich(userInput, selectedReports, reports);
+        if (frontendSearchContext && typeof frontendSearchContext === 'string') {
+            // Frontend already built a context string – use it directly
+            searchContext.context = frontendSearchContext;
+            searchContext.query = userInput || 'unknown query';
+            searchContext.results = []; // we don't have structured results from frontend
+        } else {
+            // Fallback to backend search (DuckDuckGo via aiIntelligence)
+            try {
+                searchContext = await searchAndEnrich(userInput, selectedReports, reports);
+            } catch (err) {
+                console.warn('[AI] Backend search enrichment failed:', err);
+                searchContext = { context: '', query: '', results: [] };
+            }
+        }
 
-        // 3. Build the final prompt (improved with summary fallback)
+        // ---- 2. Build prompt ----
         let userPrompt = `Selected diagnostic reports: ${selectedReports.join(', ')}.\n`;
         if (userInput) userPrompt += `User symptoms/notes: ${userInput}\n`;
         userPrompt += `\nScan data (summarised):\n`;
@@ -778,23 +828,59 @@ app.post('/ai-adb-conclude', async (req: Request, res: Response) => {
             userPrompt += `Report "${key}": ${summary}\n`;
         }
         if (searchContext.context) {
-            userPrompt += `\nWeb search results for similar issues:\n${searchContext.context}\n`;
+            userPrompt += `\n${searchContext.context}\n`; // Use context directly
         }
         userPrompt += `\nBased on the above information, provide a diagnostic conclusion. Return JSON only.`;
 
-        // 4. Call Mistral with the correct parameter name
-        const conclusion = await callMistralAI({
-            apiKey,
-            model: aiModel,
-            userInput: userPrompt,   // ← THIS IS THE KEY FIX
-            reports,
-            selectedReports,
-            lang: lang || 'en'
-        });
+        // ---- 3. Call provider ----
+        let conclusion;
+        switch (provider) {
+            case 'gemini': {
+                const apiKey = process.env.GEMINI_API_KEY;
+                if (!apiKey) throw new Error('GEMINI_API_KEY is not set in .env');
+                conclusion = await callGeminiAI({
+                    apiKey,
+                    model: model || 'gemini-2.0-flash',
+                    userInput: userPrompt,
+                    reports,
+                    selectedReports,
+                    lang: lang || 'en'
+                });
+                break;
+            }
+            case 'groq': {
+                const apiKey = process.env.GROQ_API_KEY;
+                if (!apiKey) throw new Error('GROQ_API_KEY is not set in .env');
+                conclusion = await callGroqAI({
+                    apiKey,
+                    model: model || 'llama3-70b-8192',
+                    userInput: userPrompt,
+                    reports,
+                    selectedReports,
+                    lang: lang || 'en'
+                });
+                break;
+            }
+            case 'mistral':
+            default: {
+                const apiKey = await getAIKey();  // decrypts from env
+                const mistralModel = model || process.env.AI_MODEL || 'open-mistral-7b';
+                conclusion = await callMistralAI({
+                    apiKey,
+                    model: mistralModel,
+                    userInput: userPrompt,
+                    reports,
+                    selectedReports,
+                    lang: lang || 'en'
+                });
+                break;
+            }
+        }
 
-        // 5. Return result (with safe fallback if conclusion is malformed)
+        // ---- 4. Return unified result ----
         res.json({
             ok: true,
+            provider,
             conclusion: {
                 humanSummary: conclusion.humanSummary || 'No clear conclusion.',
                 likelyCause: conclusion.likelyCause || '',

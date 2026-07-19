@@ -1,4 +1,4 @@
-// js/localTranslator.js
+// js/localTranslator.mjs
 //
 // Free, dynamic EN <-> FIL translation using public translation APIs.
 // No API key required. Falls back through multiple free providers.
@@ -8,12 +8,17 @@
 
 const LANG_MAP = { fil: 'tl', en: 'en' }; // MyMemory/Google use 'tl' for Filipino
 
+// ---- Simple in-memory cache ----
+const cache = new Map();
+
 /**
  * Provider 1: MyMemory (free, no key required).
+ * Limits: 100 req/day (anonymous) or 1000 req/day (with email) + character limits.
  */
 async function translateWithMyMemory(text, sourceLang, targetLang) {
     const src = LANG_MAP[sourceLang] || sourceLang;
     const tgt = LANG_MAP[targetLang] || targetLang;
+    // Optional: add &de=your-email@example.com to increase limits
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${src}|${tgt}`;
 
     const res = await fetch(url);
@@ -29,6 +34,7 @@ async function translateWithMyMemory(text, sourceLang, targetLang) {
 
 /**
  * Provider 2: Unofficial free Google Translate endpoint (fallback only).
+ * Heavily rate-limited, may block IP temporarily.
  */
 async function translateWithGoogleFree(text, sourceLang, targetLang) {
     const src = LANG_MAP[sourceLang] || sourceLang;
@@ -39,9 +45,6 @@ async function translateWithGoogleFree(text, sourceLang, targetLang) {
     if (!res.ok) throw new Error(`Google free endpoint HTTP ${res.status}`);
 
     const data = await res.json();
-
-    // Expected shape: [[["translated chunk","original chunk",...], ...], ...]
-    // Guard every step — a malformed/empty response must not throw here.
     const chunks = Array.isArray(data) ? data[0] : null;
     if (!Array.isArray(chunks) || chunks.length === 0) {
         throw new Error('Google free endpoint returned no translation');
@@ -52,14 +55,39 @@ async function translateWithGoogleFree(text, sourceLang, targetLang) {
         .map((chunk) => chunk[0])
         .join('');
 
-    if (!translated) {
-        throw new Error('Google free endpoint returned no translation');
-    }
+    if (!translated) throw new Error('Google free endpoint returned no translation');
     return translated;
 }
 
-// Simple in-memory cache so repeated identical strings don't re-hit the network.
-const cache = new Map();
+/**
+ * Provider 3: LibreTranslate (free, no key required, more generous limits).
+ * Public instance may have rate limits but is a good third fallback.
+ */
+async function translateWithLibreTranslate(text, sourceLang, targetLang) {
+    const src = LANG_MAP[sourceLang] || sourceLang;
+    const tgt = LANG_MAP[targetLang] || targetLang;
+    const url = 'https://libretranslate.com/translate';
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            q: text,
+            source: src,
+            target: tgt,
+            format: 'text'
+        })
+    });
+
+    if (!response.ok) throw new Error(`LibreTranslate HTTP ${response.status}`);
+
+    const data = await response.json();
+    const translated = data?.translatedText;
+    if (!translated || typeof translated !== 'string') {
+        throw new Error('LibreTranslate returned no translation');
+    }
+    return translated;
+}
 
 /**
  * Translate a single string dynamically (works on arbitrary/AI-generated text).
@@ -75,12 +103,17 @@ export async function translateTextLocal(text, targetLang = 'fil', sourceLang = 
     const cacheKey = `${sourceLang}|${targetLang}|${text}`;
     if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-    const providers = [translateWithMyMemory, translateWithGoogleFree];
+    // Order: MyMemory → Google free → LibreTranslate
+    const providers = [
+        translateWithMyMemory,
+        translateWithGoogleFree,
+        translateWithLibreTranslate
+    ];
 
     for (const provider of providers) {
         try {
             const result = await provider(text, sourceLang, targetLang);
-            if (result && typeof result === 'string') {
+            if (result && typeof result === 'string' && result.trim().length > 0) {
                 cache.set(cacheKey, result);
                 return result;
             }
@@ -90,6 +123,8 @@ export async function translateTextLocal(text, targetLang = 'fil', sourceLang = 
     }
 
     console.warn('[LocalTranslator] All translation providers failed, returning original text.');
+    // Return original text as ultimate fallback
+    cache.set(cacheKey, text); // cache the original so we don't keep trying
     return text;
 }
 
